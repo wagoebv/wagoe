@@ -191,6 +191,10 @@
  :user/oidc-account-unavailable "Dit account kan nu niet inloggen."
  :user/oidc-mfa-invalid        "Ongeldige code"
  :user/mfa-enrolment-required  "Voor deze aanmelding is tweestapsverificatie nodig, maar die is voor uw account niet ingesteld. Vraag een beheerder."
+ :user/mfa-enrolment-title     "Tweestapsverificatie instellen"
+ :user/mfa-enrolment-intro     "Uw wachtwoord klopt. Deze app vraagt ook een tweede stap, en uw account heeft die nog niet: stel hem in en meld u daarmee aan."
+ :user/mfa-enrolment-sign-in   "Aanmelden"
+ :user/mfa-enrolment-invalid-code "Die code klopt niet. Vul de code in die uw app nu toont."
  :user/error-locked            {:one "Te veel mislukte pogingen, probeer het over {n} minuut opnieuw"
                                 :many "Te veel mislukte pogingen, probeer het over {n} minuten opnieuw"}
 
@@ -258,6 +262,8 @@
  :user/audit-empty-state-filtered "Geen auditlogboeken voor deze filters."
  :user/audit-column-target     "Doelgebruiker"
  :user/audit-column-result     "Resultaat"
+ :user/audit-count             {:one "{count} regel" :many "{count} regels"}
+ :user/audit-ip-loopback       "deze machine"
  :user/audit-filter-result-label "Resultaat"
  :user/audit-filter-target-email "E-mail doelgebruiker"
  :user/audit-filter-actor-email  "E-mail uitvoerder"
@@ -344,13 +350,15 @@
 
  ;; Groups
  :user.groups/page-title "Groepen"
- :user.groups/heading "Groepen"
  :user.groups/description "Leden van een groep hebben de rechten van de rollen van die groep. Iedereen omvat elke aangemelde gebruiker. De beheerdersrol heeft geen groep nodig."
  :user.groups/field-name "Naam"
  :user.groups/field-description "Omschrijving"
  :user.groups/column-members "Leden"
  :user.groups/column-roles "Rollen"
  :user.groups/empty "Nog geen groepen."
+ :user.groups/search-placeholder "Groepen zoeken…"
+ :user.groups/members-everyone "Alle gebruikers"
+ :user.groups/count {:one "{count} groep" :many "{count} groepen"}
  :user.groups/create-heading "Nieuwe groep"
  :user.groups/button-create "Groep aanmaken"
  :user.groups/group-page-title "Groep {name}"
@@ -428,6 +436,9 @@
  :user.roles/flash-saved "Rol opgeslagen."
  :user.roles/flash-deleted "Rol verwijderd."
  :user.roles/flash-duplicated "Rol gekopieerd."
+ :user.roles/search-placeholder "Rollen zoeken…"
+ :user.roles/empty "Nog geen rollen."
+ :user.roles/count {:one "{count} rol" :many "{count} rollen"}
  :user.permissions/page-title "Rechten"
  :user.permissions/nav-description "Elk recht dat de modules declareren, en wie het heeft."
  :user.permissions/description "Elk recht dat de ingeschakelde modules declareren, per module. Open er een om te zien wie het heeft."
@@ -438,6 +449,9 @@
  :user.permissions/roles-heading "Rollen met dit recht"
  :user.permissions/no-roles "Geen rol heeft dit recht."
  :user.permissions/not-found "Dat recht bestaat niet."
+ :user.permissions/search-placeholder "Rechten en rollen zoeken…"
+ :user.permissions/empty "Geen module declareert een recht."
+ :user.permissions/count {:one "{count} recht" :many "{count} rechten"}
  :user.rights/tab "Rechten"
  :user.rights/page-title "Rechten van {name}"
  :user.rights/groups-heading "Groepen"
@@ -455,6 +469,9 @@
  :user.rights/scope-resolved-none "(geen, dus geen rechten)"
  :user.rights/scope-resolve-failed "(kon niet worden bepaald)"
  :user.rights/user-not-found "Die gebruiker bestaat niet."
+ :user.lists/group-none "Overig"
+ :user.lists/button-open "Openen"
+ :user.lists/no-matches "Niets komt overeen met “{search}”."
  :user/tab-sessions "Sessies"
  :admin/tab-details "Gegevens"
 
@@ -792,6 +809,8 @@
  :workflow/audit-column-context          "Context"
  :workflow/empty-state-no-instances       "Geen workflowexemplaren"
  :workflow/empty-state-instances-description "Er zijn nog geen workflowexemplaren aangemaakt."
+ :workflow/empty-state-no-matches "Geen workflowexemplaar voldoet aan deze filters."
+ :workflow/button-open-instance "Exemplaar openen"
  :workflow/column-instance-id             "Exemplaar-ID"
  :workflow/column-workflow                "Workflow"
  :workflow/column-entity-type             "Entiteitstype"

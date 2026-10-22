@@ -90,9 +90,8 @@ apply to passwords set from then on; existing passwords keep working.
 
 === Create a group
 
-. Go to *Groups*.
-. Under *New group*, give it a name and a short description of who belongs in
-  it.
+. Go to *Groups* and choose *New group*.
+. Give it a name and a short description of who belongs in it.
 . Choose *Create group*. Its page opens.
 
 === Add or remove members
@@ -129,8 +128,9 @@ users themselves stay. Everyone cannot be deleted.
 
 == Roles
 
-Go to *Roles*. The list shows each role, how many permissions it holds, and its
-source: *Code* or *Managed*.
+Go to *Roles*. The list shows each role by module, how many permissions it
+holds, and its source: *Code* or *Managed*. Type in the search box to narrow it;
+a column header sorts it.
 
 === Code roles
 
@@ -144,7 +144,8 @@ image::access/code-role.png[A code role's page]
 
 === Make a managed role
 
-. Under *New role*, give it a name such as `support/agent`, and a description.
+. On *Roles*, choose *New role*. Give it a name such as `support/agent`, and a
+  description.
 . Tick the permissions it holds. They are grouped by module.
 . Choose *Create role*.
 
@@ -200,14 +201,15 @@ After any change, check it one of these ways.
 The user's Rights tab::
 Open the user and choose *Rights*. *Groups* lists each group and why they are
 in it: *Added*, *Everyone* or *Identity provider*. *Effective permissions*
-lists every permission with the role, group and scope it comes from. A scope
+lists, by module, each role a group gives with its permissions and scope. A scope
 taken from the member shows the value it resolved to and its source, or
 *(none, so no rights)*. A platform admin's tab says they pass every check.
 +
 image::access/user-rights.png[A user's Rights tab]
 
 Who holds a permission or role::
-*Permissions* lists every permission the app has. Open one, or a role on the
+*Permissions* lists every permission the app has, by module; search for a
+permission or a role. Open one, or a role on the
 *Roles* page, to see the roles, groups and users holding it. Members from an
 identity provider are not in the users list; see the group's page.
 +
@@ -220,7 +222,7 @@ window. The admin's sidebar and dashboard show only what they may read.
 The audit trail::
 *Audit Trail* lists who added whom to which group, which roles were assigned,
 sign-ins, deactivations and more, with the administrator who did it. Filter on
-the action or result. Only platform admins see it.
+the action, the result or an email. Only platform admins see it.
 
 The route report::
 On the server, `clojure -M:run authz-report` prints every route with the

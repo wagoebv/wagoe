@@ -324,13 +324,17 @@
   ;; Throws :conflict and :hard-deletion-not-allowed.
 
   (authenticate-user [this user-credentials])
-  ;; user-credentials: {:email :password :ip-address :user-agent :mfa-code}
+  ;; user-credentials: {:email :password :ip-address :user-agent :mfa-code
+  ;;                    :registration?}, the last true just after registering.
   ;; Returns, on success, {:authenticated true :user … :session …
   ;;                       :session-token "…" :jwt-token "…"};
   ;; on a pending second factor, {:authenticated false :requires-mfa? true
   ;;                              :user … :message "…"};
   ;; otherwise {:authenticated false :reason <keyword> :message "…"
-  ;;            :retry-after <Instant-or-nil>}.
+  ;;            :retry-after <Instant-or-nil>}. On :mfa-enrolment-required it
+  ;; adds the :user and their :password-fingerprint when the password alone may
+  ;; set up the factor: on registering, or within :mfa-reset-enrolment-hours
+  ;; (72) of an admin reset.
   ;; Does not throw on a bad password — it returns the failure shape.
 
   (validate-session [this session-token])
@@ -501,5 +505,6 @@
 (defprotocol ILoginLayout
   (login-page [this title body opts]))
   ;; The whole page around Wagoe's sign-in forms: login, MFA, registration.
-  ;; opts: :page (:login, :mfa, :oidc-mfa, :oidc-continue, :register), :request,
+  ;; opts: :page (:login, :mfa, :oidc-mfa, :oidc-continue, :register,
+  ;; :mfa-enrolment), :request,
   ;; :user, :flash, :return-to, :logo-url. Returns Hiccup for the full page.

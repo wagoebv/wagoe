@@ -1,5 +1,6 @@
 (ns wagoe.e2e.html.admin-accessibility-test
-  "The admin list, drawer and detail page have no serious axe violations; a
+  "The admin list, drawer, detail page and the access and workflow lists
+   have no serious axe violations; a
    sort header is a column header with a button the keyboard sorts with; focus
    returns to the row after the drawer closes and stays on the control after a
    sort or page swap."
@@ -27,7 +28,11 @@
    offending nodes of each. After the load transitions: mid-fade, axe measures
    colours nobody reads."
   [pg]
-  (page/evaluate pg "Promise.all(document.getAnimations().map(a => a.finished.catch(() => null)))")
+  ;; Timed ones only: a scroll-driven one, daisyUI's page-has-scroll while a
+  ;; modal is open, never finishes
+  (page/evaluate pg "Promise.all(document.getAnimations()
+                       .filter(a => a.timeline === document.timeline && a.effect.getComputedTiming().endTime !== Infinity)
+                       .map(a => a.finished.catch(() => null)))")
   (when (page/evaluate pg "typeof axe === 'undefined'")
     (page/evaluate pg @axe-source))
   (page/evaluate pg "axe.run(document, {resultTypes: ['violations']}).then(r => r.violations
@@ -64,6 +69,27 @@
         (page/navigate pg (admin/app-url (page/evaluate pg "document.querySelector('tr.clickable-row').dataset.href")))
         (page/wait-for-load-state pg)
         (is (empty? (serious-violations pg)))))))
+
+(deftest ^:integration ^:e2e the-access-and-workflow-lists-pass-axe
+  (spel/with-testing-page [pg]
+    (admin/login-as-admin! pg fx/*seed*)
+    (doseq [scheme [:light :dark]
+            [w h]  [[1280 800] [390 844]]
+            path   ["/web/admin/groups" "/web/admin/roles" "/web/admin/permissions"
+                    "/web/audit" "/web/admin/workflows"
+                    (str "/web/users/" (-> fx/*seed* :user :id) "/rights")]]
+      (page/emulate-media! pg {:color-scheme scheme})
+      (page/set-viewport-size! pg w h)
+      (page/navigate pg (admin/app-url path))
+      (page/wait-for-load-state pg)
+      (testing (str (name scheme) " " w "px: " path)
+        (is (empty? (serious-violations pg)))))
+    (testing "the New group dialog"
+      (page/navigate pg (admin/admin-url "/groups"))
+      (page/wait-for-load-state pg)
+      (loc/click (page/locator pg "button[data-modal-open='group-create-modal']"))
+      (wait-for! pg "document.getElementById('group-create-modal').open" "dialog open")
+      (is (empty? (serious-violations pg))))))
 
 (deftest ^:integration ^:e2e sort-headers-are-column-headers-the-keyboard-sorts
   (spel/with-testing-page [pg]

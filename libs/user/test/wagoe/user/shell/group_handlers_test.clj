@@ -177,6 +177,33 @@
         (is (not (str/includes? page "group-member-form")))
         (is (str/includes? page "group-role-form"))))))
 
+(deftest ^:integration the-list-is-searched-and-sorted-from-its-url
+  (with-app nil
+    (fn [{:keys [app gsvc admin]}]
+      (group-service/migrate! gsvc)
+      (doseq [n ["Finance" "Sales"]] (app (req admin :post "/web/admin/groups" {"name" n})))
+      (let [get-list (fn [qs headers]
+                       (app (assoc (req admin :get "/web/admin/groups") :query-string qs
+                                   :query-params (into {} (map #(str/split % #"=")) (str/split qs #"&"))
+                                   :headers headers)))
+            page     (get-list "search=fin" {})
+            fragment (get-list "search=fin&sort=name&dir=desc"
+                               {"hx-request" "true" "hx-target" "groups-table-container"})]
+        (testing "the page: in the shell, the search in its box, only what matches"
+          (is (str/includes? (:body page) "admin-shell"))
+          (is (str/includes? (:body page) "value=\"fin\""))
+          (is (str/includes? (:body page) "Finance"))
+          (is (not (str/includes? (:body page) "Sales"))))
+        (testing "the list's own controls get the list alone, and the count out of band"
+          (is (not (str/includes? (:body fragment) "admin-shell")))
+          (is (str/includes? (:body fragment) "id=\"groups-table-container\""))
+          (is (re-find #"<span[^>]*id=\"groups-table-container-count\"[^>]*hx-swap-oob|<span[^>]*hx-swap-oob[^>]*id=\"groups-table-container-count\""
+                       (:body fragment)))
+          (is (str/includes? (:body fragment) "aria-sort=\"descending\""))
+          (is (= "HX-Request, HX-Target" (get-in fragment [:headers "Vary"]))))
+        (testing "Everyone's members are all users, not a blank"
+          (is (str/includes? (:body (get-list "search=everyone" {})) "members-everyone")))))))
+
 (deftest ^:integration provider-members-are-shown-when-asked
   (with-app nil
     (fn [{:keys [app admin]}]

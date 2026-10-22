@@ -269,6 +269,17 @@
       (is (= {:type "forbidden" :message "Reading workflow instances needs the workflow/read permission"}
              (select-keys (:error (body-data response)) [:type :message]))))))
 
+(deftest ^:unit a-signed-in-browser-refused-gets-the-403-not-the-login-form
+  ;; Signing in again would only lead back here.
+  (let [handler  ((user-middleware/authenticate-if-present user-service)
+                  (reitit/compile-routes [["/web" (sut/workflow-routes *service* group-service)]] {}))
+        token    (token-for {:id (UUID/randomUUID) :email "u@example.com" :role :user})
+        response (handler {:request-method :get
+                           :uri            (str "/web/workflow/instances/" (:id (new-instance)))
+                           :headers        {"authorization" (str "Bearer " token)}})]
+    (is (= 403 (:status response)))
+    (is (nil? (get-in response [:headers "Location"])))))
+
 (deftest ^:unit every-api-route-refuses-a-caller-outside-the-tenant
   (let [tenant-a (UUID/randomUUID)
         tenant-b (UUID/randomUUID)
@@ -581,6 +592,34 @@
       (let [body (:body (sut/handle-list-instances-web (listing-store (constantly [])) reg nil
                                                        {:query-params {"state" "On hold"}}))]
         (is (str/includes? body "<option selected=\"selected\" value=\"on-hold\">On hold</option>"))))))
+
+(deftest ^:unit the-admin-list-sorts-and-answers-its-controls-with-the-table
+  (let [seen     (atom nil)
+        instance {:id (UUID/randomUUID) :workflow-id :order :entity-type :order :entity-id (UUID/randomUUID)
+                  :current-state :paid :updated-at "2026-10-22T10:00:00Z"}
+        store    (listing-store (fn [opts] (reset! seen opts) [instance]))
+        reg      (registry/create-workflow-registry)
+        list!    (fn [qp headers]
+                   (sut/handle-list-instances-web store reg nil {:query-params qp :headers headers}))]
+    (testing "newest first unless a column is asked for"
+      (list! {} {})
+      (is (= [:updated-at :desc] ((juxt :sort :dir) @seen)))
+      (list! {"sort" "entity-id"} {})
+      (is (= [:updated-at :desc] ((juxt :sort :dir) @seen)) "not a column the store sorts by")
+      (list! {"sort" "current-state"} {})
+      (is (= [:current-state :asc] ((juxt :sort :dir) @seen))))
+    (let [page     (list! {"sort" "workflow-id" "dir" "desc" "entity-type" "order"} {})
+          fragment (list! {"sort" "workflow-id" "dir" "desc" "entity-type" "order"}
+                          {"hx-request" "true" "hx-target" "workflows-table-container"})]
+      (testing "the page: the filters live, no Search button"
+        (is (str/includes? (:body page) "id=\"workflow-filter-entity-type\""))
+        (is (not (str/includes? (:body page) "workflow-filter-form")))
+        (is (not (str/includes? (:body page) "button-search"))))
+      (testing "its controls get the table alone, sorted, keeping the filters"
+        (is (str/starts-with? (:body fragment) "<div id=\"workflows-table-container\""))
+        (is (str/includes? (:body fragment) "aria-sort=\"descending\""))
+        (is (str/includes? (:body fragment) "entity-type=order"))
+        (is (= "HX-Request, HX-Target" (get-in fragment [:headers "Vary"])))))))
 
 (deftest ^:unit the-state-filter-keeps-a-registered-id-as-it-is
   ;; Lower-casing every value turned :inReview into :inreview, which matches nothing.

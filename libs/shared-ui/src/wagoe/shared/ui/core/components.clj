@@ -374,9 +374,11 @@
 
 (defn tone-badge
   "A badge in `tone` (:neutral :info :success :warning :danger), styled as the
-   admin's enum cells are (`c-badge tone-*` in wagoe-admin.css)."
-  [text tone]
-  (badge text {:variant tone :class (str "c-badge tone-" (name tone))}))
+   admin's enum cells are (`c-badge tone-*` in wagoe-admin.css), `class`
+   added."
+  ([text tone] (tone-badge text tone nil))
+  ([text tone class]
+   (badge text {:variant tone :class (str "c-badge tone-" (name tone) (when class (str " " class)))})))
 
 ;; =============================================================================
 ;; Message Components

@@ -20,7 +20,9 @@
 
 (defn- create-role! [pg role-name permissions]
   (page/navigate pg (admin/admin-url "/roles"))
-  (page/wait-for-selector pg "form.role-create-form" {:timeout 10000.0})
+  ;; The form is in the dialog the New button opens
+  (page/wait-for-selector pg "button[data-modal-open='role-create-modal']" {:timeout 10000.0})
+  (loc/click (page/locator pg "button[data-modal-open='role-create-modal']"))
   (loc/fill (page/locator pg "#role-name") role-name)
   (doseq [p permissions]
     (loc/check (page/locator pg (str "form.role-create-form input[value='" p "']"))))
@@ -57,7 +59,8 @@
     (create-role! pg "tenants/clerk" ["admin.tenants/read"])
 
     (page/navigate pg (admin/admin-url "/groups"))
-    (page/wait-for-selector pg "form.group-create-form" {:timeout 10000.0})
+    (page/wait-for-selector pg "button[data-modal-open='group-create-modal']" {:timeout 10000.0})
+    (loc/click (page/locator pg "button[data-modal-open='group-create-modal']"))
     (loc/fill (page/locator pg "#group-name") "Finance")
     (loc/click (page/locator pg "form.group-create-form button[type='submit']"))
     (page/wait-for-selector pg "form.group-member-form" {:timeout 10000.0})

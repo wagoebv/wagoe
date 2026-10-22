@@ -135,7 +135,7 @@
   "Let user_audit_log's action CHECK take every `audit-actions` value on a
    database created before one was added: `:permanent-delete` (BOU-682),
    `:session-revoked` (BOU-698), `:data-export` (BOU-735),
-   `:mfa-disabled` (BOU-782).
+   `:mfa-disabled` (BOU-782), `:mfa-enabled` (BOU-815).
    Without it that audit entry is refused, and the refusal only warns. H2
    re-applies its checks at every boot already."
   [ctx]
@@ -278,6 +278,7 @@
           (update :deleted-at type-conversion/string->instant)
           (update :last-login type-conversion/string->instant)
           (update :mfa-enabled-at type-conversion/string->instant)
+          (update :mfa-reset-at type-conversion/string->instant)
           (update :lockout-until type-conversion/string->instant)
           ;; Preferences
           (update :notifications-email db-bool)
@@ -439,6 +440,7 @@
                              :a.mfa_backup_codes
                              :a.mfa_backup_codes_used
                              :a.mfa_enabled_at
+                             :a.mfa_reset_at
                              :a.failed_login_count
                              :a.lockout_until
                              :a.created_at
@@ -483,6 +485,7 @@
                              :a.mfa_backup_codes
                              :a.mfa_backup_codes_used
                              :a.mfa_enabled_at
+                             :a.mfa_reset_at
                              :a.failed_login_count
                              :a.lockout_until
                              :a.created_at
@@ -578,6 +581,7 @@
                                   :a.mfa_backup_codes
                                   :a.mfa_backup_codes_used
                                   :a.mfa_enabled_at
+                                  :a.mfa_reset_at
                                   :a.failed_login_count
                                   :a.lockout_until
                                   :a.created_at
@@ -632,7 +636,7 @@
              auth-fields (select-keys user-with-metadata
                                       [:id :email :password-hash :active
                                        :mfa-enabled :mfa-secret :mfa-backup-codes
-                                       :mfa-backup-codes-used :mfa-enabled-at
+                                       :mfa-backup-codes-used :mfa-enabled-at :mfa-reset-at
                                        :failed-login-count :lockout-until
                                        :created-at :updated-at :deleted-at])
 
@@ -660,6 +664,7 @@
                                                :mfa-backup-codes :mfa_backup_codes
                                                :mfa-backup-codes-used :mfa_backup_codes_used
                                                :mfa-enabled-at :mfa_enabled_at
+                                               :mfa-reset-at :mfa_reset_at
                                                :failed-login-count :failed_login_count
                                                :lockout-until :lockout_until
                                                :created-at :created_at
@@ -711,7 +716,7 @@
 
              ;; Define which fields belong to each table
              auth-field-keys #{:email :password-hash :active :mfa-enabled :mfa-secret
-                               :mfa-backup-codes :mfa-backup-codes-used :mfa-enabled-at
+                               :mfa-backup-codes :mfa-backup-codes-used :mfa-enabled-at :mfa-reset-at
                                :failed-login-count :lockout-until :updated-at :deleted-at}
 
              profile-field-keys #{:tenant-id :name :role :avatar-url :login-count
@@ -743,6 +748,7 @@
                                                    :mfa-backup-codes :mfa_backup_codes
                                                    :mfa-backup-codes-used :mfa_backup_codes_used
                                                    :mfa-enabled-at :mfa_enabled_at
+                                                   :mfa-reset-at :mfa_reset_at
                                                    :failed-login-count :failed_login_count
                                                    :lockout-until :lockout_until
                                                    :updated-at :updated_at
@@ -792,6 +798,7 @@
                                                  :mfa-backup-codes :mfa_backup_codes
                                                  :mfa-backup-codes-used :mfa_backup_codes_used
                                                  :mfa-enabled-at :mfa_enabled_at
+                                                 :mfa-reset-at :mfa_reset_at
                                                  :failed-login-count :failed_login_count
                                                  :lockout-until :lockout_until
                                                  :updated-at :updated_at

@@ -80,11 +80,14 @@
                :entity-type   - filter by entity type keyword
                :entity-id     - filter by entity id (UUID)
                :current-state - filter by current state keyword
+               :sort, :dir    - order by :workflow-id, :entity-type,
+                                :current-state, :created-at or :updated-at,
+                                :asc or :desc; a store may ignore them
                :limit         - max results (default 50)
                :offset        - pagination offset (default 0)
 
      Returns:
-       Vector of WorkflowInstance maps, newest first")
+       Vector of WorkflowInstance maps, newest first unless sorted")
 
   (delete-instance! [this instance-id]
     "Delete an instance and its audit log, for an entity that is gone.

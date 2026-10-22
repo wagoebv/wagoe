@@ -1048,9 +1048,7 @@
   box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.2);
 }
 
-/* Actions column */
-.admin-content .data-table th:last-child,
-.admin-content .data-table td:last-child,
+/* Actions column: by class, not position, so a last column of data keeps its width */
 .admin-content .data-table th.actions-header,
 .admin-content .data-table td.actions-cell {
   width: 80px;

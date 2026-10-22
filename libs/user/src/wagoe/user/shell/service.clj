@@ -419,10 +419,11 @@
       :email (:email user-credentials)}
      (fn [{:keys [params]}]
        (let [user-credentials (:user-credentials params)
-             {:keys [email password ip-address user-agent mfa-code]} user-credentials
-             login-context {:ip-address ip-address
-                            :user-agent user-agent
-                            :mfa-code mfa-code}
+             {:keys [email password ip-address user-agent mfa-code registration?]} user-credentials
+             login-context (cond-> {:ip-address ip-address
+                                    :user-agent user-agent
+                                    :mfa-code mfa-code}
+                             registration? (assoc :registration? true))
 
              ;; Service-level lockout gate: look up user and check lockout BEFORE
              ;; delegating to auth-shell, providing belt-and-suspenders enforcement.
@@ -507,10 +508,13 @@
                  ;; is the layer that flattens it, so `login` keeps answering
                  ;; {:authenticated false :reason … :message … :retry-after …}
                  ;; to every existing caller (BOU-323).
-                 {:authenticated false
-                  :reason (get-in auth-result [:error :type])
-                  :message (get-in auth-result [:error :message])
-                  :retry-after (get-in auth-result [:error :retry-after])}))))))
+                 (cond-> {:authenticated false
+                          :reason (get-in auth-result [:error :type])
+                          :message (get-in auth-result [:error :message])
+                          :retry-after (get-in auth-result [:error :retry-after])}
+                   ;; Only a right password gets here with a user: one to enrol.
+                   (:user auth-result) (assoc :user (:user auth-result)
+                                              :password-fingerprint (:password-fingerprint auth-result)))))))))
      {:system {:user-repository user-repository
                :session-repository session-repository
                :audit-repository audit-repository
@@ -913,7 +917,8 @@
   (reset-user-mfa [_ user-id]
     (let [user (existing-user user-repository user-id)]
       (if (:mfa-enabled user)
-        (do (.update-user user-repository (assoc (mfa-core/prepare-mfa-disablement user) :id user-id))
+        (do (.update-user user-repository (assoc (mfa-core/prepare-mfa-disablement user)
+                                                 :id user-id :mfa-reset-at (current-timestamp)))
             (audit-quietly! audit-repository audit-core/mfa-reset-audit-entry user-id (:email user))
             true)
         false))))

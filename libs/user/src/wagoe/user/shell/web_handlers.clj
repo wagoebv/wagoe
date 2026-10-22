@@ -35,6 +35,7 @@
             [wagoe.user.shell.landing :as landing]
             [wagoe.user.shell.middleware :as user-middleware]
             [wagoe.user.shell.mfa :as mfa]
+            [wagoe.user.shell.mfa-enrolment :as enrolment]
             [wagoe.user.shell.oidc :as oidc]
             [clojure.edn :as edn]
             [clojure.string :as str]
@@ -420,6 +421,29 @@
 (defn- session-cookie [config session-token]
   {:value session-token :http-only true :secure (secure-cookies? config) :same-site :strict :path "/"})
 
+(def ^:private enrolment-cookie "mfa-enrolment")
+
+(defn- enrolment-ticket-cookie [config value]
+  {:value value :http-only true :secure (secure-cookies? config) :same-site :strict
+   :path user-ui/mfa-enrolment-path :max-age enrolment/ttl-seconds})
+
+(def ^:private enrolment-cookie-cleared {:value "" :max-age 0 :path user-ui/mfa-enrolment-path})
+
+(defn- enrolment-needed?
+  "Whether a refused sign-in was refused only for want of a second factor,
+   the password being right."
+  [auth-result]
+  (and (= :mfa-enrolment-required (:reason auth-result)) (:user auth-result)))
+
+(defn- start-enrolment
+  "To the second-factor setup, with the ticket that proves the password."
+  [config auth-result return-to]
+  (-> (response/redirect user-ui/mfa-enrolment-path :see-other)
+      (assoc-in [:cookies enrolment-cookie]
+                (enrolment-ticket-cookie config (enrolment/ticket (:user auth-result)
+                                                                  (:password-fingerprint auth-result)
+                                                                  (when (redirect/local-path? return-to) return-to))))))
+
 (defn login-page-handler
   "GET /web/login - render login page."
   [config]
@@ -501,6 +525,9 @@
                                  :max-age 0
                                  :path "/"}))))
 
+              (enrolment-needed? auth-result)
+              (start-enrolment config auth-result raw-return-to)
+
               ;; MFA required - show MFA code input
               (:requires-mfa? auth-result)
               (do
@@ -559,6 +586,85 @@
       (-> (response/redirect "/")
           (assoc :cookies {"session-token"
                            {:value "" :max-age 0 :path "/"}})))))
+
+;; =============================================================================
+;; Second-factor setup before signing in
+;; =============================================================================
+
+(defn- read-backup-codes
+  "The backup codes the setup form carries back, or nil unless they are a
+   vector of strings."
+  [s]
+  (when s
+    (try (let [codes (edn/read-string s)]
+           (when (and (vector? codes) (every? string? codes)) codes))
+         (catch Exception e
+           (log/warn "Failed to parse backup codes" {:error (.getMessage e)})
+           nil))))
+
+(defn- enrolment-claims [mfa-service request]
+  (enrolment/claims (get-in request [:cookies enrolment-cookie :value]) (:user-repository mfa-service)))
+
+(defn- enrolment-expired
+  "Back to sign in: the ticket is gone, or the second factor is on already."
+  []
+  (-> (response/redirect "/web/login" :see-other)
+      (assoc-in [:cookies enrolment-cookie] enrolment-cookie-cleared)))
+
+(defn mfa-enrolment-page-handler
+  "GET /web/login/mfa-setup - the authenticator setup for a user the app
+   requires a second factor of, who has none."
+  [mfa-service config]
+  (fn [request]
+    (let [claims (enrolment-claims mfa-service request)
+          setup  (when claims (mfa/setup-mfa mfa-service (:user-id claims)))]
+      (if (:success? setup)
+        (html-response request
+                       (user-ui/mfa-enrolment-page setup {} (sign-in-opts config request (:return-to claims))))
+        (enrolment-expired)))))
+
+(defn mfa-enrolment-submit-handler
+  "POST /web/login/mfa-setup - check the first code and turn the second factor
+   on. The user then signs in with it."
+  [mfa-service config]
+  (fn [request]
+    (if-let [claims (enrolment-claims mfa-service request)]
+      (let [form         (:form-params request)
+            secret       (get form "secret")
+            ;; Parsed only once the ticket admits the caller: the route is public.
+            backup-codes (read-backup-codes (get form "backup-codes"))
+            opts         (sign-in-opts config request (:return-to claims))
+            ;; A plain form post, so a whole page rather than a fragment
+            error-page   (fn [message status]
+                           (html-response request
+                                          (layout/pilot-page-layout [:t :common/error-title]
+                                                                    (ui/error-message message))
+                                          status))]
+        (if-not (and secret backup-codes)
+          (error-page [:t :user/error-mfa-setup-missing] 400)
+          (let [result (mfa/enable-mfa mfa-service (:user-id claims) secret backup-codes
+                                       (get form "verification-code"))]
+            (cond
+              (:success? result)
+              (do (mfa/audit-enrolment! mfa-service (:user-id claims) (:email claims) (login-context request))
+                  (-> (html-response request (user-ui/mfa-enrolment-done-page backup-codes opts))
+                      (assoc-in [:cookies enrolment-cookie] enrolment-cookie-cleared)))
+
+              (= :invalid-code (get-in result [:error :type]))
+              (html-response request
+                             (user-ui/mfa-enrolment-page
+                              (mfa/setup-view mfa-service secret (:email claims) backup-codes)
+                              {:verification-code [[:t :user/mfa-enrolment-invalid-code]]}
+                              opts)
+                             400)
+
+              ;; Already on, from another tab, or the account is gone
+              (= :cannot-enable (get-in result [:error :type]))
+              (enrolment-expired)
+
+              :else
+              (error-page (mfa-error-message result) 500)))))
+      (enrolment-expired))))
 
 ;; =============================================================================
 ;; OpenID Connect sign-in
@@ -759,6 +865,9 @@
                 ;; Automatically authenticate the newly registered user
                 auth-data {:email (:email user-result)
                            :password (get prepared-data :password)
+                           ;; The account was made just now: it may set up a
+                           ;; second factor the app requires with the password.
+                           :registration? true
                            :remember false
                            :ip-address (client-ip/request-ip request)
                            :user-agent (get-in request [:headers "user-agent"])}
@@ -776,8 +885,9 @@
                                                  "Take a moment to review your profile and set up "
                                                  "Multi-Factor Authentication for enhanced security.")})
                     (assoc-in [:cookies "session-token"] (session-cookie config session-token))))
-              ;; Shouldn't happen, but fallback to login page
-              (response/redirect "/web/login")))
+              (if (enrolment-needed? auth-result)
+                (start-enrolment config auth-result raw-return-to)
+                (response/redirect "/web/login"))))
           ;; The service applies the configured password policy, which the
           ;; request schema does not know, so its refusal is a form error too
           ;; (BOU-552).
@@ -1648,12 +1758,7 @@
             ;; Get setup data from form (hidden fields)
             secret (get form-data "secret")
             backup-codes-str (get form-data "backup-codes")
-            backup-codes (when backup-codes-str
-                           (try
-                             (edn/read-string backup-codes-str)
-                             (catch Exception e
-                               (log/warn "Failed to parse backup codes" {:error (.getMessage e)})
-                               nil)))]
+            backup-codes (read-backup-codes backup-codes-str)]
         (log/info "MFA verify request" {:user-id user-id
                                         :verification-code verification-code
                                         :has-secret? (boolean secret)
@@ -1671,10 +1776,8 @@
                                                                   {:user current-user
                                                                    :flash {:success "Two-factor authentication enabled successfully"}}))
               ;; Invalid code - regenerate QR code data URL from the submitted secret
-              (let [issuer (get-in mfa-service [:config :issuer] "Wagoe Framework")
-                    account-name (:email current-user)
-                    totp-uri (mfa/generate-totp-uri secret account-name issuer)
-                    qr-code-url (mfa/generate-qr-code-data-url totp-uri)]
+              (let [{:keys [qr-code-url issuer account-name]}
+                    (mfa/setup-view mfa-service secret (:email current-user) backup-codes)]
                 (html-response request
                                (profile-ui/mfa-qr-code-step secret qr-code-url issuer account-name backup-codes
                                                             {:verification-code ["Invalid verification code. Please try again."]})

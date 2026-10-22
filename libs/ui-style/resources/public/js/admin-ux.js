@@ -798,11 +798,14 @@ document.addEventListener('alpine:init', function () {
     return Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 14);
   }
 
-  // A failed request shows a toast, unless its response asked for one.
+  // A failed request shows a toast, unless its response asked for one or its
+  // element is marked data-quiet-failure: an enhancement the page reads fine
+  // without, such as a label lookup.
   // A re-rendered 400/422 form never gets here: forms.js swaps it and clears
   // isError, so htmx fires no responseError for it.
   function toastFailure(detail) {
     if (!detail) return;
+    if (detail.elt && detail.elt.closest && detail.elt.closest('[data-quiet-failure]')) return;
     var xhr = detail.xhr;
     if (!xhr || /showToast/.test(xhr.getResponseHeader('HX-Trigger') || '')) return;
     var region = document.getElementById('toasts');

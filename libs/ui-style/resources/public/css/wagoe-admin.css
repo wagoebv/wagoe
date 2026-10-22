@@ -1386,12 +1386,11 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 
 /* .admin-content pads it already; the grid gap spaces the filter form */
 .workflow-page { display: grid; gap: var(--space-5); padding: 0; }
-.workflow-page .workflow-filter-form { margin-bottom: 0; }
 /* Not an entity list: no checkbox, sticky identifier or actions column */
 .admin-content .workflow-page .data-table { table-layout: auto; }
-.admin-content .workflow-page .data-table :is(th, td) {
-  width: auto; position: static; text-align: left; box-shadow: none;
-}
+.admin-content .workflow-page .data-table :is(th, td) { width: auto; text-align: left; box-shadow: none; }
+/* Not th: a sort button's hit area spans its positioned header cell */
+.admin-content .workflow-page .data-table td { position: static; }
 .workflow-card {
   background: var(--surface-0);
   border: 1px solid var(--border-default);
@@ -1416,6 +1415,33 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 .workflow-details dd { margin: 0; }
 
 .admin-content .audit-table th.field-created-at { width: 11rem; }
+
+/* -----------------------------------------------------------------------------
+   Groups, roles and permissions lists (wagoe.user.core.rights-ui)
+   ----------------------------------------------------------------------------- */
+
+.rights-list-page .list-intro { margin: 0; color: var(--text-muted); font-size: var(--text-sm); }
+/* Not an entity list: no checkbox or sticky identifier column */
+.admin-content .rights-list-page .data-table,
+.admin-content .workflow-page .entity-list-page .data-table { table-layout: auto; }
+.admin-content .rights-list-page .data-table td { position: static; box-shadow: none; }
+/* A module's heading row in a list grouped by module */
+.admin-content .data-table tbody tr.list-group-row,
+.admin-content .data-table tbody tr.list-group-row:hover { background: var(--surface-1) !important; }
+.admin-content .data-table tbody tr.list-group-row th {
+  height: auto;
+  padding-block: 6px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.list-create-modal { max-width: 40rem; }
+/* A detail page's tables wrap rather than cut a scope or a list of codes */
+.admin-content .rights-page .data-table { table-layout: auto; }
+.admin-content .rights-page .data-table td { white-space: normal; overflow-wrap: break-word; }
+/* Its Remove buttons fit their column rather than spill out of it */
+.admin-content .rights-page .data-table td.actions-cell { width: 1%; min-width: 0; max-width: none; }
 
 /* -----------------------------------------------------------------------------
    9. The list on a narrow screen: each row a compact card. The title heads it,
@@ -1546,6 +1572,52 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
     margin: 0;
   }
   .admin-content .entity-list-page .data-table tbody tr td.actions-cell .row-nav-hint { opacity: 1; color: var(--text-muted); }
+
+  /* No checkbox to make room for */
+  .admin-content .entity-list-page .data-table tbody tr:not(:has(> td.checkbox-cell), .list-group-row):nth-child(n) { padding-left: 14px; }
+  /* A module's heading row heads its cards */
+  .admin-content :is(.entity-list-page, .rights-page) .data-table tbody tr.list-group-row:nth-child(n) {
+    display: block;
+    margin: 12px 0 6px;
+    padding: 0;
+    border: 0 !important;
+    background: none !important;
+  }
+  .admin-content :is(.entity-list-page, .rights-page) .data-table tbody tr.list-group-row th { display: block; padding: 0; border: 0 !important; background: none !important; }
+  .admin-content .rights-list-page .data-table tbody td.c-title code { font-size: 14px; }
+
+  /* A detail page's tables: a row a card, its actions beside the fields */
+  .admin-content .rights-page .data-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 2px 12px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    box-shadow: none;
+  }
+  .admin-content .rights-page .data-table tbody td {
+    grid-column: 1;
+    width: auto;
+    padding: 0;
+    border: 0;
+  }
+  .admin-content .rights-page .data-table tbody td:not(.actions-cell)::before {
+    display: inline;
+    margin-right: 4px;
+    font-size: 12px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .admin-content .rights-page .data-table tbody td.actions-cell {
+    grid-column: 2;
+    grid-row: 1 / span 4;
+    width: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
 
   /* The pager: one line, sticky under the cards */
   .admin-content .entity-list-page .table-pagination {

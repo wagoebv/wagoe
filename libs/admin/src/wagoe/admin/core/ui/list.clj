@@ -54,8 +54,7 @@
   "The toolbar's record count. A table fragment carries it out of band, so
    it follows search and filters."
   [total-count]
-  [:span {:id "record-count-badge" :class "record-count-badge"}
-   [:t :admin/entity-card-count {:count total-count} total-count]])
+  (table-ui/count-badge "record-count-badge" total-count))
 
 (defn- workflow-column?
   "An entity with a workflow gets a column for its state (BOU-563)."

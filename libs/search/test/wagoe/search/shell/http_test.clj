@@ -36,7 +36,14 @@
       (doseq [[path method] [["/search" :get] ["/search/:index-id" :get]
                              ["/search/:index-id/search" :post]]]
         (is (= 403 (answer web path method user)) path)
-        (is (= 200 (answer web path method adm)) path)))))
+        (is (= 200 (answer web path method adm)) path)))
+
+    (testing "a signed-in user refused a page gets the 403, not the login form"
+      (let [data    (some (fn [[p d]] (when (= p "/search") d)) web)
+            handler (reduce (fn [h mw] (mw h)) (constantly {:status 200}) (reverse (:middleware data)))
+            resp    (handler {:request-method :get :uri "/web/admin/search" :user user})]
+        (is (= 403 (:status resp)))
+        (is (nil? (get-in resp [:headers "Location"])))))))
 
 ;; =============================================================================
 ;; As served: the platform's router, coercion and error handling (BOU-586)

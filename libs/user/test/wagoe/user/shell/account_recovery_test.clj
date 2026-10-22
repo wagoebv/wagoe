@@ -3,6 +3,7 @@
    who lost it, audited with the admin as actor."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [support.test-db :as test-db]
+            [wagoe.user.core.mfa :as mfa-core]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.persistence :as persistence]
             [wagoe.user.shell.service :as user-service]
@@ -62,7 +63,12 @@
     (is (true? (as-admin #(ports/reset-user-mfa svc (:id u)))))
     (let [after (.find-user-by-id repo (:id u))]
       (is (false? (boolean (:mfa-enabled after))))
-      (is (nil? (:mfa-secret after))))
+      (is (nil? (:mfa-secret after)))
+      (is (inst? (:mfa-reset-at after)) "stored, so sign-in may set a new one up"))
+    (testing "turning a second factor on closes the window"
+      (.update-user repo (assoc (mfa-core/prepare-mfa-enablement u "S2" ["h2"] (Instant/now)) :id (:id u)))
+      (is (nil? (:mfa-reset-at (.find-user-by-id repo (:id u)))))
+      (.update-user repo (assoc (mfa-core/prepare-mfa-disablement u) :id (:id u))))
     (let [entry (last-entry audit (:id u))]
       (is (= [:mfa-disabled (:id admin) (:id u)] [(:action entry) (:actor-id entry) (:target-user-id entry)])))
     (is (false? (ports/reset-user-mfa svc (:id u))) "already off")))
