@@ -391,6 +391,12 @@ document.addEventListener('alpine:init', function () {
       }
     });
 
+    // A failed page request swaps nothing: the flag must not move focus on
+    // the next, unrelated settle
+    document.addEventListener('htmx:afterRequest', function (event) {
+      if (!(event.detail && event.detail.successful)) pagerFocused = false;
+    });
+
     // htmx refocuses a pager button by its id after the swap; one that is now
     // disabled (next, on the last page) cannot take it, so the current page does
     document.addEventListener('htmx:afterSettle', function () {

@@ -453,6 +453,9 @@
   cursor: pointer;
   border-radius: 4px;
 }
+/* The whole header cell is the hit area, as when the th was the control. The
+   button's `all: unset` leaves it static, so this spans the positioned th */
+.admin-content .data-table th.sortable-header .sort-button::after { content: ""; position: absolute; inset: 0; }
 .data-table th.sortable-header .sort-button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 .admin-content .data-table tbody tr.clickable-row:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
 .admin-content .data-table th.sortable-header--active .sort-label { color: var(--text-primary); }
@@ -499,7 +502,7 @@ th.c-money, th.c-number, th.c-percent, th.c-count { text-align: right !important
 .admin-content .data-table td.editable:hover a { color: var(--text-primary); text-decoration: underline; }
 
 /* daisyUI dims an inactive tab to half opacity, under 4.5:1 */
-.record-tabs .tab:not(.tab-active) { color: var(--text-muted); }
+.record-tabs .tab:not(.tab-active):not(:hover) { color: var(--text-muted); }
 
 .c-title a { font-weight: 500; color: var(--text-primary); text-decoration: none; }
 .c-title a:hover { color: var(--accent-primary); text-decoration: underline; }

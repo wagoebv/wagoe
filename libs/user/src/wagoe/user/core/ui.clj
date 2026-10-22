@@ -85,7 +85,7 @@
   [user]
   (let [href (str "/web/users/" (:id user))]
     [:tr {:class "clickable-row" :data-href href}
-     [:td.checkbox-cell [:input (alpine/row-checkbox-attrs (:id user) (or (:name user) (:email user)))]]
+     [:td.checkbox-cell [:input (alpine/row-checkbox-attrs (:id user) (or (not-empty (:name user)) (:email user)))]]
      (map (fn [{:keys [field] col-class :class} cell]
             [:td {:class (str "field-" (name field) (when col-class (str " " col-class)))}
              (if (= :name field) [:a {:href href} cell] cell)])

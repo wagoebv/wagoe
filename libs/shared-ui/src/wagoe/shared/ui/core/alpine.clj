@@ -269,7 +269,7 @@
    Args:
      id: Record ID value
      title: What the row is called, for the box's accessible name
-            (\"Select <title>\"); the id when absent
+            (\"Select <title>\"); the id when blank
 
    Returns:
      Map of attributes for individual row checkbox"
@@ -278,7 +278,7 @@
    {:type "checkbox"
     :name "ids[]"
     :value (str id)
-    :aria-label [:t :admin/select-row {:title (str (or title id))}]
+    :aria-label [:t :admin/select-row {:title (if (str/blank? (str title)) (str id) (str title))}]
     :x-model "selectedIds"
     :x-on:click.stop ""}))
 

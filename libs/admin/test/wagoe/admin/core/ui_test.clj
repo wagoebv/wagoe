@@ -1481,7 +1481,8 @@
     (testing "The create button's name is its translated text"
       (let [page (ui/entity-list-page :users [sample-record] sample-entity-config
                                       {:page 1 :page-size 20} 1 sample-permissions nil)]
-        (is (not (str/includes? (str page) "Create new")))))))
+        (is (str/includes? (str page) ":admin/button-new"))
+        (is (not (str/includes? (str page) ":admin/button-create-new")))))))
 
 (deftest ^:unit accessibility-semantic-html-test
   (testing "Pages use semantic HTML elements"
