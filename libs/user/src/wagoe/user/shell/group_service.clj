@@ -60,7 +60,7 @@
   (when (and scope-schema (= :map (m/type scope-schema)))
     {:scopes (into {}
                    (map (fn [[k props child]]
-                          [k (cond-> {:label (name k) :schema child :source :groups-schema}
+                          [k (cond-> {:label (group-core/scope-key-label k props) :schema child :source :groups-schema}
                                (:wagoe/entity props) (assoc :entity (:wagoe/entity props)))]))
                    (m/children scope-schema))}))
 

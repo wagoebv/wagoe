@@ -20,8 +20,10 @@
             [wagoe.shared.ui.core.form :as form]
             [wagoe.shared.ui.core.htmx :as htmx]
             [wagoe.shared.ui.core.toast :as toast]
+            [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.web.table :as web-table]
+            [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.oidc :as oidc-core]
             [wagoe.user.core.password-policy :as password-policy]
             [wagoe.user.core.ui :as user-ui]
@@ -512,7 +514,8 @@
               (let [error-message (cond
                                     ;; Only a lockout carries :retry-after, whatever its :reason.
                                     (:retry-after auth-result)
-                                    "Too many failed attempts, please try again in 15 minutes"
+                                    (let [n (auth-core/minutes-locked (:retry-after auth-result) (current-time))]
+                                      [:t :user/error-locked {:n n} n])
 
                                     (= :mfa-verification-failed (:reason auth-result))
                                     "Invalid MFA code"
@@ -1030,6 +1033,14 @@
 ;; Session Management Handlers
 ;; =============================================================================
 
+(defn account-recovery-allowed?
+  "Whether `actor` may unlock user `target-id` or reset their second factor: a
+   platform admin, as for the audit trail, and not on their own account, whose
+   second factor the profile turns off with a password or code."
+  [actor target-id]
+  (and (access/platform-admin? actor)
+       (not (access/same-id? (:id actor) target-id))))
+
 (defn user-sessions-page-handler
   "Handler for user sessions management page (GET /web/users/:id/sessions).
    
@@ -1053,6 +1064,7 @@
             _ (log/info "Sessions retrieved:" {:count (count sessions)})
             current-session-id (get-in request [:session :id])
             opts {:user (:user request)
+                  :account-recovery? (account-recovery-allowed? (:user request) user-id)
                   :current-time (current-time)
                   :zone-id (current-zone-id)
                   :flash (:flash request)}]
@@ -1123,6 +1135,39 @@
       (catch Exception e
         (-> (server-error request e "Error revoking all sessions")
             (with-error-toast request :common/error-generic))))))
+
+(defn- account-recovery-handler
+  "POST to `(change user-service user-id)`, an IUserAccountRecovery call,
+   back to the user's sessions page with `done` or `nothing`, the toast for
+   true or false."
+  [user-service change done nothing]
+  (fn [request]
+    (if-let [user-id (parse-uuid (str (get-in request [:path-params :id])))]
+      (try
+        (let [back (str "/web/users/" user-id "/sessions")]
+          (if (change user-service user-id)
+            (redirect-with-toast request back :success done)
+            (redirect-with-toast request back :info nothing)))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :user-not-found (:type (ex-data e)))
+            (-> (html-response request (ui/error-message [:t :user.rights/user-not-found]) 404)
+                (with-error-toast request :user.rights/user-not-found))
+            (-> (server-error request e "Account recovery failed")
+                (with-error-toast request :common/error-generic)))))
+      (-> (html-response request (ui/error-message "Invalid user ID") 400)
+          (with-error-toast request "Invalid user ID")))))
+
+(defn unlock-user-handler
+  "POST /web/users/:id/unlock: ends the user's sign-in lockout (admin)."
+  [user-service _config]
+  (account-recovery-handler user-service user-ports/unlock-user
+                            :user/toast-account-unlocked :user/toast-account-not-locked))
+
+(defn reset-mfa-handler
+  "POST /web/users/:id/mfa/reset: turns off the user's second factor (admin)."
+  [user-service _config]
+  (account-recovery-handler user-service user-ports/reset-user-mfa
+                            :user/toast-mfa-reset :user/toast-mfa-not-on))
 
 ;; =============================================================================
 ;; Audit Trail Handlers

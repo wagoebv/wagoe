@@ -42,18 +42,23 @@ Users turn two-factor authentication (MFA) on and off themselves, under
 *Profile & Security*. Turning it off asks for their password or a current
 code; a backup code counts.
 
-There is no button for an administrator to reset someone's MFA. A user who
-has lost both the device and the backup codes needs a developer to switch MFA
-off for the account.
+A user who has lost both the device and the backup codes cannot turn it off
+themselves. Open their *Sessions* tab and choose *Reset two-factor
+authentication* under *Sign-in*. They sign in with their password alone until
+they set it up again. The reset is in the audit trail, with you as actor. Your
+own account is not reset here: turn yours off under *Profile & Security*.
+
+Check:: The *Sessions* tab says *Two-factor authentication is off*.
 
 === Locked accounts
 
 Five wrong passwords in a row lock an account for 15 minutes. Wrong MFA codes
 and a wrong current password on the change-password form count too. The user
-sees *Too many failed attempts, please try again in 15 minutes*; the API
-answers 429 with a `Retry-After` header.
+sees *Too many failed attempts, please try again in 15 minutes*, with the
+minutes still left; the API answers 429 with a `Retry-After` header.
 
-The lock ends by itself; there is no unlock button. A successful sign-in
+The lock ends by itself. To end it sooner, open the user's *Sessions* tab and
+choose *Unlock* under *Sign-in*; that is audited too. A successful sign-in
 resets the count. A developer sets both numbers in `config.edn`:
 
 [source,clojure]

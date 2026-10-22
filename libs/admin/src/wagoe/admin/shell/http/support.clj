@@ -660,6 +660,12 @@
              nil))
       id))
 
+(defn entity-label
+  "What row `id` of `entity-name` is called: its label, or the id when it
+   cannot be read."
+  [admin-service entity-name entity-cfg id]
+  (current-label admin-service entity-name entity-cfg nil id))
+
 (defn- zone-text
   "A zone id as typed: `New_York` matches `new york`."
   [s]

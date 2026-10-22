@@ -191,6 +191,8 @@
  :user/oidc-account-unavailable "Dit account kan nu niet inloggen."
  :user/oidc-mfa-invalid        "Ongeldige code"
  :user/mfa-enrolment-required  "Voor deze aanmelding is tweestapsverificatie nodig, maar die is voor uw account niet ingesteld. Vraag een beheerder."
+ :user/error-locked            {:one "Te veel mislukte pogingen, probeer het over {n} minuut opnieuw"
+                                :many "Te veel mislukte pogingen, probeer het over {n} minuten opnieuw"}
 
  :user/created-label-email     "E-mail:"
  :user/created-label-name      "Naam:"
@@ -234,6 +236,19 @@
  :user/toast-session-not-found "Sessie niet gevonden of al beëindigd"
  :user/toast-sessions-revoked "Andere sessies ingetrokken"
  :user/page-sessions-title     "Sessies voor {name}"
+ :user/sign-in-title           "Aanmelden"
+ :user/account-locked          {:one "Vergrendeld na te veel mislukte pogingen; gaat vanzelf weer open over {n} minuut"
+                                :many "Vergrendeld na te veel mislukte pogingen; gaat vanzelf weer open over {n} minuten"}
+ :user/account-not-locked      "Niet vergrendeld"
+ :user/button-unlock           "Ontgrendelen"
+ :user/mfa-status-on           "Tweestapsverificatie staat aan"
+ :user/mfa-status-off          "Tweestapsverificatie staat uit"
+ :user/button-reset-mfa        "Tweestapsverificatie resetten"
+ :user/confirm-reset-mfa       "Tweestapsverificatie voor deze gebruiker uitzetten? Die meldt zich dan alleen met het wachtwoord aan, tot die het opnieuw instelt."
+ :user/toast-account-unlocked  "Account ontgrendeld"
+ :user/toast-account-not-locked "Het account was niet vergrendeld"
+ :user/toast-mfa-reset         "Tweestapsverificatie uitgezet"
+ :user/toast-mfa-not-on        "Tweestapsverificatie stond al uit"
 
  :user/audit-actor-system      "Systeem"
  :user/audit-view-details      "Details bekijken"
