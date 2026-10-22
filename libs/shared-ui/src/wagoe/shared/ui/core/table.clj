@@ -354,7 +354,10 @@
                  :class       "select"}]
       [:div {:class "card-sort"}
        [:select (assoc attrs :name "sort" :aria-label [:t :admin/sort-by])
-        (when-not sort [:option {:value ""} [:t :admin/sort-by]])
+        ;; Sorted by no column on offer (the default sort is often the id):
+        ;; the placeholder, not a first option the list is not sorted by
+        (when-not (some #(= sort (:field %)) sortable)
+          [:option {:value ""} [:t :admin/sort-by]])
         (for [{:keys [field label]} sortable]
           [:option {:value (name field) :selected (= field sort)} label])]
        [:select (assoc attrs :name "dir" :aria-label [:t :admin/sort-direction])

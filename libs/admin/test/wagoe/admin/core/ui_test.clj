@@ -796,6 +796,16 @@
       (is (not (str/includes? (:hx-get field-attrs) "sort=")))
       (is (= "closest .card-sort" (:hx-include field-attrs))))))
 
+(deftest ^:unit the-sort-select-says-so-when-sorted-by-a-column-it-lacks
+  (let [table   (ui/entity-table :users [sample-record] sample-entity-config
+                                 {:page 1 :page-size 20 :sort :id :dir :asc} 1 sample-permissions)
+        sort-ui (some #(when (and (vector? %) (= "card-sort" (:class (second %)))) %)
+                      (tree-seq vector? seq table))
+        [[_ _ & field-opts]] (filter vector? (drop 2 sort-ui))
+        options (->> field-opts (mapcat #(if (seq? %) % [%])) (filter vector?))]
+    (is (= "" (:value (second (first options)))) "the placeholder comes first")
+    (is (not-any? (comp :selected second) options) "and no field claims to be the sort")))
+
 (deftest ^:unit entity-list-page-test
   (testing "Complete entity list page"
     (let [records [sample-record]

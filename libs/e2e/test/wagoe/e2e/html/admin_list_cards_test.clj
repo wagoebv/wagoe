@@ -13,8 +13,8 @@
 
 (def ^:private card-geometry
   "Per card: [height, visible cells that overlap one another, cells whose
-   content is clipped vertically, whether the title is above the rest,
-   background]."
+   content is clipped vertically, whether the title is above the rest, whether
+   it fits the list's width, background]."
   "Array.from(document.querySelectorAll('table.data-table tbody tr')).map(tr => {
      const cells = Array.from(tr.querySelectorAll('td:not(.checkbox-cell):not(.actions-cell)'))
        .filter(td => td.getClientRects().length > 0)
@@ -33,6 +33,7 @@
              overlaps,
              cells.filter(c => c.clipped).map(c => c.cls),
              !!title && cells.every(c => c === title || c.r.top >= title.r.bottom - 0.5),
+             tr.getBoundingClientRect().right <= document.querySelector('.entity-list-page').getBoundingClientRect().right + 0.5,
              getComputedStyle(tr).backgroundColor];
    })")
 
@@ -54,11 +55,12 @@
 
 (defn- check-cards! [pg]
   (let [cards (page/evaluate pg card-geometry)]
-    (is (seq cards))
-    (doseq [[height overlaps clipped title-first?] cards]
+    (is (< 1 (count cards)) "cards enough to compare")
+    (doseq [[height overlaps clipped title-first? fits?] cards]
       (is (empty? overlaps) "no cell overlaps another")
       (is (empty? clipped) "no value is cut off")
       (is (true? title-first?) "the title heads the card")
+      (is (true? fits?) "the card fits the list's width")
       (is (< height 120) (str "a compact card, not " height "px")))
     (is (= 1 (count (set (map last cards)))) "every card has the same background")))
 
@@ -70,11 +72,15 @@
       (testing (str w "px, " (name scheme))
         (page/set-viewport-size! pg w h)
         (page/emulate-media! pg {:color-scheme scheme})
-        (page/navigate pg (admin/admin-url "/users?page-size=1"))
+        ;; Both seeded users, so "the same background" compares two cards
+        (page/navigate pg (admin/admin-url "/users"))
         (page/wait-for-load-state pg)
         ;; A hovered card has its own background
         (loc/hover (page/locator pg ".admin-topbar"))
         (check-cards! pg)
+        ;; One per page, for a pager
+        (page/navigate pg (admin/admin-url "/users?page-size=1"))
+        (page/wait-for-load-state pg)
         (let [[last-bottom pager-top pager-on-top?] (page/evaluate pg pager-geometry)]
           (is (<= last-bottom (+ pager-top 0.5)) "the pager covers no card")
           (is (true? pager-on-top?) "nothing is drawn over the pager"))))))
