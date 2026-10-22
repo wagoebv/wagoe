@@ -273,6 +273,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin list accessibility** (BOU-803): sort headers are column headers with a sort button and `aria-sort`, checkboxes
+  are named, and focus returns after the drawer or a sort/page swap. Tests clicking `th.sortable-header` click its button.
 - **Page chrome and user error pages were English in every locale** (BOU-805): navigation, theme toggle, toasts and
   sibling nav now translate. A page rendered with `components/render-html` shows them in English.
 - **`(explain-entity :e)` was missing from a generated app's REPL** (BOU-805). Add the one-line `explain-entity` from

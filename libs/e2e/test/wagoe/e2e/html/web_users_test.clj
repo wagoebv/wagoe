@@ -74,7 +74,7 @@
       (page/navigate pg (admin/app-url "/web/users"))
       (page/wait-for-load-state pg)
       (let [before (page/evaluate pg "history.length")]
-        (loc/click (page/locator pg "#users-table-container th.field-email"))
+        (loc/click (page/locator pg "#users-table-container th.field-email .sort-button"))
         (await! pg "location.pathname === '/web/users' && location.search.includes('sort=email')")
         (is (= (inc before) (page/evaluate pg "history.length")))
         (page/evaluate pg (str "window.e2eSettled = false;"
