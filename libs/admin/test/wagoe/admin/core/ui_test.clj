@@ -367,6 +367,28 @@
 ;; Form Widget Tests
 ;; =============================================================================
 
+(defn- number-input-steps
+  "The step of every number input in `hiccup`, nil where it has none."
+  [hiccup]
+  (->> (tree-seq coll? seq hiccup)
+       (filter #(and (vector? %) (keyword? (first %)) (str/starts-with? (name (first %)) "input")
+                     (= "number" (:type (second %)))))
+       (map (comp :step second))))
+
+(deftest ^:unit a-decimal-number-input-takes-fractions
+  (let [decimal {:type :decimal :widget :number-input :label "Price"}
+        int     {:type :int :widget :number-input :label "Qty"}]
+    (testing "the full form"
+      (is (= ["any"] (number-input-steps (ui/render-field-widget :price 12.5M decimal nil))))
+      (is (= [nil] (number-input-steps (ui/render-field-widget :qty 1 int nil)))))
+    (testing "inline edit, and inline edit after an error"
+      (is (= ["any"] (number-input-steps (ui/render-inline-edit-form :products 1 :price 12.5M decimal))))
+      (is (= ["any"] (number-input-steps (ui/render-inline-edit-form-with-error :products 1 :price "x" decimal ["bad"] nil))))
+      (is (= [nil] (number-input-steps (ui/render-inline-edit-form :products 1 :qty 1 int)))))
+    (testing "the list filter"
+      (is (= ["any"] (number-input-steps (ui/render-filter-value-inputs :price decimal :eq {:value "1"}))))
+      (is (= ["any" "any"] (number-input-steps (ui/render-filter-value-inputs :price decimal :between {})))))))
+
 (deftest ^:unit render-field-widget-test
   (testing "Render form input widgets based on field configuration"
     (testing "Text input widget"

@@ -108,6 +108,7 @@
        (= widget-type :number-input)
        (ui/text-input field-name value
                       (merge {:type "number"
+                              :step (base/number-input-step field-type)
                               :placeholder placeholder
                               :required required?
                               :readonly readonly?
@@ -195,12 +196,16 @@
 
        ;; File upload
        (= widget-type :file-input)
-       [:input {:type "file"
-                :id (name field-name)
-                :name (name field-name)
-                :required required?
-                :disabled readonly?
-                :class "form-control"}]
+       (list
+        [:input {:type "file"
+                 :id (name field-name)
+                 :name (name field-name)
+                 ;; Left empty on an edit, the stored file is kept.
+                 :required (and required? (nil? value))
+                 :disabled readonly?
+                 :class "form-control"}]
+        (when (bytes? value)
+          [:small.file-stored [:t :admin/file-stored {:n (alength ^bytes value)}]]))
 
        ;; Hidden field
        (= widget-type :hidden)
@@ -546,25 +551,28 @@
      (if read-only?
        {:data-readonly "true"}
        (merge {hx-attr form-action
-             :hx-target "body"
-             :hx-swap "outerHTML"
-             ;; Dirty tracking and ⌘S / Ctrl+S for the save bar (admin-ux.js)
-             :x-data "dirtyForm"
-             :x-on:input "track()"
-             :x-on:change "track()"
-             :x-on:keydown.meta.s.window.prevent "save()"
-             :x-on:keydown.ctrl.s.window.prevent "save()"
-             ;; The form's own save only: a field's live check bubbles up here too
-             "hx-on::afterRequest" (str "if (event.detail.successful && event.detail.elt === this) { localStorage.setItem('"
-                                        optional-details-key
-                                        "', 'false'); }")}
-            ;; After a successful edit, push the same URL (including return_to) so the
-            ;; browser stays on the detail page with context intact
-            (when is-edit?
-              {:hx-push-url form-action
-               ;; ⌘↵ / Ctrl+↵: save, then back to the list
-               :x-on:keydown.meta.enter.window.prevent "saveAndBack()"
-               :x-on:keydown.ctrl.enter.window.prevent "saveAndBack()"})))
+               :hx-target "body"
+               :hx-swap "outerHTML"
+               ;; Dirty tracking and ⌘S / Ctrl+S for the save bar (admin-ux.js)
+               :x-data "dirtyForm"
+               :x-on:input "track()"
+               :x-on:change "track()"
+               :x-on:keydown.meta.s.window.prevent "save()"
+               :x-on:keydown.ctrl.s.window.prevent "save()"
+               ;; The form's own save only: a field's live check bubbles up here too
+               "hx-on::afterRequest" (str "if (event.detail.successful && event.detail.elt === this) { localStorage.setItem('"
+                                          optional-details-key
+                                          "', 'false'); }")}
+              ;; htmx sends url-encoded otherwise, and the file never arrives
+              (when (some #(= :file-input (get-in entity-config [:fields % :widget])) editable-fields)
+                {:hx-encoding "multipart/form-data"})
+              ;; After a successful edit, push the same URL (including return_to) so the
+              ;; browser stays on the detail page with context intact
+              (when is-edit?
+                {:hx-push-url form-action
+                 ;; ⌘↵ / Ctrl+↵: save, then back to the list
+                 :x-on:keydown.meta.enter.window.prevent "saveAndBack()"
+                 :x-on:keydown.ctrl.enter.window.prevent "saveAndBack()"})))
      ;; No longer need hidden _method field since HTMX sends proper HTTP method
      ;; The zone the :instant fields above were rendered in. The handler parses
      ;; them back in exactly this zone; reading it from the cookie instead would

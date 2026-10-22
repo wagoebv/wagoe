@@ -82,7 +82,10 @@
 
     (testing "Binary types"
       (is (= :binary (introspection/infer-field-type "BYTEA")))
-      (is (= :binary (introspection/infer-field-type "BLOB"))))
+      (is (= :binary (introspection/infer-field-type "BLOB")))
+      (testing "as H2 and MySQL name them"
+        (doseq [t ["BINARY VARYING" "BINARY LARGE OBJECT" "VARBINARY(255)" "LONGBLOB" "MEDIUMBLOB" "TINYBLOB"]]
+          (is (= :binary (introspection/infer-field-type t)) t))))
 
     (testing "JSON/CLOB types"
       (is (= :json (introspection/infer-field-type "JSON")))

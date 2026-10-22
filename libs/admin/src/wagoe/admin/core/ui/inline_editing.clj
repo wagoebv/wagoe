@@ -112,7 +112,7 @@
      Hiccup form structure"
   [entity-name record-id field value field-config & [display]]
   (let [widget-type (inline-widget field-config)
-        _field-type (:type field-config :string)
+        step (base/number-input-step (:type field-config))
         required? (:required field-config false)
         _cancel-url (str "/web/admin/" (name entity-name) "/" record-id "/" (name field) "/cancel")]
     [:form.inline-edit-form
@@ -150,6 +150,7 @@
        (= widget-type :number-input)
        [:input.inline-input
         {:type "number"
+         :step step
          :name (name field)
          :value (str value)
          :required required?
@@ -185,7 +186,7 @@
 (defn- inline-edit-form-with-error
   [entity-name record-id field value field-config errors display]
   (let [widget-type (inline-widget field-config)
-        _field-type (:type field-config :string)
+        step (base/number-input-step (:type field-config))
         required? (:required field-config false)]
     [:div.inline-edit-error
      [:form.inline-edit-form
@@ -222,6 +223,7 @@
         (= widget-type :number-input)
         [:input.inline-input.error
          {:type "number"
+          :step step
           :name (name field)
           :value (str value)
           :required required?

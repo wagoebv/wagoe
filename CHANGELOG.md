@@ -273,6 +273,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Admin inline edit: Save did nothing, and the cell came back as a UUID or raw enum name** (BOU-799). Inline and
   related-record cells now match the list; an enum edits as a select. Nothing to change.
+- **Admin forms take a fraction in a decimal field and upload the file in a binary one** (BOU-798). Nothing to
+  change; an H2 `BYTEA` or MySQL `VARBINARY`/`*BLOB` column now gets a file input too.
 - **Admin dark mode showed the old navy palette when the OS was dark** (BOU-797); the topbar initials and the
   unsaved-changes dot were invisible. A theme file's `:root` now also wins over an OS-dark preference.
 - **The admin sidebar fell back to closed** (BOU-796): it is now open or closed, changed only by its one toggle; the pin
