@@ -459,7 +459,7 @@
    would sort before it. That trades a rare collision for a permanent ordering
    hazard."
   [used now]
-  (loop [id (let [n (Long/parseLong now)] (if (odd? n) (inc n) n))]
+  (loop [id (let [n (parse-long now)] (if (odd? n) (inc n) n))]
     (if (contains? used (str id))
       (recur (+ id 2))
       (str id))))
