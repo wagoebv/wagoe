@@ -694,9 +694,9 @@
    `foreign-key-options` finds them, or nil when it is neither a foreign key
    nor a timezone. Reads only the parent of that field."
   [admin-service schema-provider config entity-name field values]
-  (let [entity-configs (all-entity-configs schema-provider)]
-    (if (timezone-field? (get entity-configs entity-name) field)
-      (timezone-combobox entity-name field values)
+  (if (timezone-field? (ports/get-entity-config schema-provider entity-name) field)
+    (timezone-combobox entity-name field values)
+    (let [entity-configs (all-entity-configs schema-provider)]
       (when-let [parent (get (introspection/declared-parents entity-name entity-configs) field)]
         ;; Only `field`, so a second key to the same parent is not read
         (get (foreign-key-options admin-service config (select-keys entity-configs [entity-name parent])

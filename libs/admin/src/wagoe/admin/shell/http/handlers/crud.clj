@@ -444,9 +444,9 @@
 
 (defn field-options-handler
   "GET /:entity/options/:field?q= — the options of a foreign key's combobox:
-   the parent rows whose label contains the typed text, or for a field of
-   a timezone field the zones. The user has to be able to view the entity and
-   the parent whose labels this lists."
+   the parent rows whose label contains the typed text, or for a timezone
+   field the zones. The user has to be able to view the entity and the parent
+   whose labels this lists."
   [admin-service schema-provider _config]
   (fn [request]
     (let [[user entity-name entity-cfg] (support/viewable-entity! schema-provider request)

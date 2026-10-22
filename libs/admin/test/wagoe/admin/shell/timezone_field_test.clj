@@ -7,6 +7,7 @@
             [wagoe.admin.shell.http.handlers.crud :as crud]
             [wagoe.admin.shell.http.handlers.detail :as detail]
             [wagoe.i18n.shell.catalogue :as catalogue]
+            [wagoe.shared.ui.core.combobox :as combobox]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.database :as db]
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
@@ -58,7 +59,7 @@
 (deftest ^:unit zones-are-searched-as-typed
   (is (some #{["America/New_York" "America/New_York"]} (support/search-timezones "new york")))
   (is (= [["Europe/Amsterdam" "Europe/Amsterdam"]] (support/search-timezones "AMSTERDAM")))
-  (is (= 20 (count (support/search-timezones nil))) "no text: the first page of zones"))
+  (is (= combobox/limit (count (support/search-timezones nil))) "no text: the first page of zones"))
 
 (deftest ^:integration a-timezone-is-picked-from-the-zones
   (let [{:keys [schema svc]} *sys*
