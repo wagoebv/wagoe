@@ -105,9 +105,7 @@
         mig-dir           (db/create-destination)
         used-ids          (into #{} (keep migration-id/id-of) (.list (io/file mig-dir)))
         migration-ts      (migration-id/next-id
-                           used-ids
-                           (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
-                                    (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))
+                           used-ids (java.time.LocalDateTime/now java.time.ZoneOffset/UTC))
         migration-content (gen/generate-migration-file ctx migration-ts)
         up-path           (format "%s%s-add-%s-table.up.sql" mig-dir migration-ts module-name)
         down-path         (format "%s%s-add-%s-table.down.sql" mig-dir migration-ts module-name)

@@ -15,17 +15,16 @@
   (second (re-find #"^(\d+)-" file-name)))
 
 (defn next-id
-  "First even-second id at or after `now` (a yyyyMMddHHmmss string) not in
-   `used`.
+  "First even-second yyyyMMddHHmmss id at or after `now`, a UTC LocalDateTime,
+   not in `used`.
 
    Two migrations made in one second would share an id, and migratus then
    refuses the whole run, so step forward until the id is free. Stepping
    seconds rather than adding sub-second digits keeps ids 14 digits: a longer
    one would sort after every existing migration forever."
-  [used now]
-  (let [t (LocalDateTime/parse now id-format)]
-    (loop [t (cond-> t (odd? (.getSecond t)) (.plusSeconds 1))]
-      (let [id (.format t id-format)]
-        (if (contains? used id)
-          (recur (.plusSeconds t 2))
-          id)))))
+  [used ^LocalDateTime now]
+  (loop [^LocalDateTime t (cond-> now (odd? (.getSecond now)) (.plusSeconds 1))]
+    (let [id (.format t id-format)]
+      (if (contains? used id)
+        (recur (.plusSeconds t 2))
+        id))))

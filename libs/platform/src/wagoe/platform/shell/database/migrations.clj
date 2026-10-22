@@ -264,8 +264,7 @@
 (defn create-destination
   "The directory `bb migrate create` writes to: the one `migrations/` resolves
    to, so a `resources/migrations` takes the file while the config still says
-   `migrations/`. Reporting the
-   config value is why `bb migrate create` printed \"Migration files created in:
+   `migrations/`. Reporting the config value is why `bb migrate create` printed \"Migration files created in:
    migrations/\" for files it had written to resources/.
 
    A jar cannot be written to, so it falls back to the project directory — the
@@ -824,8 +823,7 @@
         _    (.mkdirs d)
         id   (migration-id/next-id
               (into #{} (keep migration-id/id-of) (.list d))
-              (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
-                       (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))
+              (java.time.LocalDateTime/now java.time.ZoneOffset/UTC))
         base (migratus-migrations/->kebab-case (str id "-" name))]
     (doseq [ext [".up.sql" ".down.sql"]]
       (.createNewFile (io/file d (str base ext))))))
@@ -859,8 +857,7 @@
     ;; `get-migration-config` below.
     (when-not (with-resolved-dir #(capturing-source % project-migration-dir))
       (ensure-project-migration-dir!))
-    ;; For its refusal of a split migrations directory.
-    (get-migration-config)
+    (refuse-shadowed-migration-dirs!)
     ;; Resolved after the mkdir above, which may have just created the
     ;; directory that now answers to the name. The CLI prints it and tells the
     ;; user to edit the files there.

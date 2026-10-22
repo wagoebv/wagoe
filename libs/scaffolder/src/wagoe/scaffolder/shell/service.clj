@@ -96,8 +96,7 @@
   ([] (get-next-migration-number "."))
   ([output-dir]
    (migration-id/next-id (existing-migration-ids output-dir)
-                         (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
-                                  (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))))
+                         (java.time.LocalDateTime/now java.time.ZoneOffset/UTC))))
 
 (defn- existing-migration-for
   "The id of this module's create-<table> migration, if one is already there.
@@ -116,8 +115,7 @@
   "One fresh migration id per table, in order and all distinct. With `force?` a
    table's existing create migration keeps its id, as for a single entity."
   [output-dir force? tables]
-  (let [now (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
-                     (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss"))
+  (let [now (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
         used (existing-migration-ids output-dir)]
     (reduce (fn [ids table]
               (conj ids (or (when force? (existing-migration-for output-dir table))
