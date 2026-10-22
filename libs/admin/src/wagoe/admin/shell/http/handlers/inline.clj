@@ -27,11 +27,8 @@
   [admin-service config request user entity-name entity-config record field]
   (admin-ui/field-cell entity-name record entity-config field
                        (permissions/get-entity-permissions user entity-name entity-config)
-                       (cond-> (support/display-options config request)
-                         (satisfies? ports/IListOverview admin-service)
-                         (assoc :overview (ports/list-overview admin-service entity-name
-                                                               {:overview/fields [field]}
-                                                               [record])))
+                       (support/display-with-overview admin-service config request entity-name
+                                                      {:overview/fields [field]} [record])
                        (list-return-to request entity-name)))
 
 (defn inline-edit-widget-handler

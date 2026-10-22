@@ -358,13 +358,17 @@
     23 "0.001"
     nil))
 
+(defn value-name
+  "An enum value as the string the config names it by: `:paid`, `\"paid\"`
+   and `paid` are all \"paid\"."
+  [value]
+  (if (keyword? value) (name value) (str value)))
+
 (defn option-label
-  "The label `:options` gives an enum `value`, or nil. `:paid`, `\"paid\"`
-   and `paid` name the same option."
+  "The label `:options` gives an enum `value`, or nil."
   [field-config value]
-  (let [vname #(if (keyword? %) (name %) (str %))]
-    (some (fn [[k label]] (when (= (vname value) (vname k)) label))
-          (:options field-config))))
+  (some (fn [[k label]] (when (= (value-name value) (value-name k)) label))
+        (:options field-config)))
 
 (defn ^{:deprecated "1.0.2"} render-field-value
   "Deprecated: no admin page renders through this any more. Use

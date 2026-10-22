@@ -6,6 +6,7 @@
   (:require [wagoe.core.utils.text :as text]
             [wagoe.admin.core.ui.base :as base]
             [wagoe.admin.core.ui.cells :as cells]
+            [wagoe.admin.core.ui.list :as list]
             [wagoe.admin.core.forms :as forms]
             [wagoe.admin.core.schema-introspection :as introspection]
             [wagoe.shared.ui.core.combobox :as combobox]
@@ -720,15 +721,10 @@
                   :let [edit-url (str "/web/admin/" entity "/" (get record (:primary-key child-cfg :id))
                                       (when return-qs (str "?" return-qs)))]]
               [:tr
-               ;; The list's cells, by display role (ADR-040)
-               (for [{:keys [field config role relation label] role-class :class} cols]
-                 [:td {:class (str "field-" (name field) " " role-class) :data-label label}
-                  (cells/cell field record {:role          role
-                                            :field-config  config
-                                            :entity-config child-cfg
-                                            :relation      relation
-                                            :display       display
-                                            :href          (when editable? edit-url)})])
+               ;; The list's cells, read-only (ADR-040)
+               (for [column cols]
+                 (list/entity-cell entity record child-cfg nil display column
+                                   (when editable? edit-url)))
                (when editable?
                  [:td
                   [:a.button.secondary {:href edit-url}

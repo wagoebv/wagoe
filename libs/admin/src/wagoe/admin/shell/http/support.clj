@@ -516,6 +516,19 @@
      :date-time-format (:date-time-format config)
      :date-format      (:date-format config)}))
 
+(defn overview
+  "What the cells of `records` need (ADR-040), or nil when the service does
+   not provide it."
+  [admin-service entity-name options records]
+  (when (satisfies? ports/IListOverview admin-service)
+    (ports/list-overview admin-service entity-name options records)))
+
+(defn display-with-overview
+  "The display options, with the overview of `records`."
+  [admin-service config request entity-name options records]
+  (assoc (display-options config request)
+         :overview (overview admin-service entity-name options records)))
+
 (defn form-zone-options
   "The zones to parse a submitted form's :instant fields in, and `params`
    without the `__zone` field that carried them.
@@ -624,34 +637,34 @@
    (foreign-key-options admin-service config entity-configs entity-name
                         (get-in entity-configs [entity-name :editable-fields]) values))
   ([admin-service config entity-configs entity-name fields values]
-   (let [entity-config (get entity-configs entity-name)
-         page-size     (get-in config [:pagination :max-page-size] 200)]
-     (into {}
-           (for [[field parent] (introspection/declared-parents entity-name entity-configs)
-                 :when (some #{field} fields)
-                 :let  [parent-cfg (get entity-configs parent)
-                        label      (label-field parent-cfg)
-                        page       (try (ports/list-entities admin-service parent
-                                                             {:limit page-size :sort label :sort-dir :asc})
-                                        (catch Exception e
-                                          (log/warn e "foreign key left as a text input: parent rows unreadable"
-                                                    {:entity entity-name :field field :parent parent})
-                                          ::unreadable))
-                        rows       (:records page)
-                        current    (some-> (get values field) str)
-                        readable?  (not= ::unreadable page)
-                        fits?      (and readable? (<= (:total-count page 0) (count rows)))]
-                 :when (and readable? (or fits? (text-label? parent-cfg)))]
-             (if-not fits?
-               [field {:url   (options-url entity-name field)
-                       :label (when current (current-label admin-service parent parent-cfg rows current))}]
-               (let [options (mapv #(row->option parent-cfg %) rows)]
-                 [field (cond->> (cond-> options
+  (let [entity-config (get entity-configs entity-name)
+        page-size     (get-in config [:pagination :max-page-size] 200)]
+    (into {}
+          (for [[field parent] (introspection/declared-parents entity-name entity-configs)
+                :when (some #{field} fields)
+                :let  [parent-cfg (get entity-configs parent)
+                       label      (label-field parent-cfg)
+                       page       (try (ports/list-entities admin-service parent
+                                                            {:limit page-size :sort label :sort-dir :asc})
+                                       (catch Exception e
+                                         (log/warn e "foreign key left as a text input: parent rows unreadable"
+                                                   {:entity entity-name :field field :parent parent})
+                                         ::unreadable))
+                       rows       (:records page)
+                       current    (some-> (get values field) str)
+                       readable?  (not= ::unreadable page)
+                       fits?      (and readable? (<= (:total-count page 0) (count rows)))]
+                :when (and readable? (or fits? (text-label? parent-cfg)))]
+            (if-not fits?
+              [field {:url   (options-url entity-name field)
+                      :label (when current (current-label admin-service parent parent-cfg rows current))}]
+              (let [options (mapv #(row->option parent-cfg %) rows)]
+                [field (cond->> (cond-> options
                                   ;; A parent the list does not show (soft-deleted): kept,
                                   ;; so saving the form does not change it.
-                                   (and current (not-any? #(= current (first %)) options))
-                                   (conj [current current]))
-                          (not (get-in entity-config [:fields field :required])) (into [["" "—"]]))])))))))
+                                  (and current (not-any? #(= current (first %)) options))
+                                  (conj [current current]))
+                         (not (get-in entity-config [:fields field :required])) (into [["" "—"]]))])))))))
 
 (defn- all-entity-configs [schema-provider]
   (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)]))
@@ -943,10 +956,9 @@
                                                     :has-more? (> (count rows) panel-size))
                                        (:editable rel) (assoc :return-to parent-url)
                                        ;; Relation titles for its cells (ADR-040)
-                                       (and (seq page) (satisfies? ports/IListOverview admin-service))
-                                       (assoc :overview (ports/list-overview admin-service (:entity rel)
-                                                                             {:overview/fields (:fields rel)}
-                                                                             page)))
+                                       (seq page)
+                                       (assoc :overview (overview admin-service (:entity rel)
+                                                                  {:overview/fields (:fields rel)} page)))
                                      page]))
                                 has-many-rels))
 

@@ -26,11 +26,7 @@
   [id]
   (some-> id str))
 
-(defn value-name
-  "An enum value as the string the config names it by: `:paid`, `\"paid\"`
-   and `paid` are all \"paid\"."
-  [value]
-  (if (keyword? value) (name value) (str value)))
+(def value-name base/value-name)
 
 ;; -----------------------------------------------------------------------------
 ;; Per role

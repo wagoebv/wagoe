@@ -84,5 +84,5 @@
 
  {:ticket "BOU-799"
   :since  "1.0.2"
-  :note   "wagoe.admin.core.ui/render-field-value is wagoe.admin.core.ui.cells/cell."
-  :manual "cells/cell takes the record and a context with the display role, not the value and field config."}]
+  :note   "wagoe.admin.core.ui/render-field-value is wagoe.admin.core.ui.cells/cell; render-inline-edit-cell is field-cell."
+  :manual "Both take the record and its entity config, not one value and its field config."}]

@@ -257,7 +257,8 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`jwt-authentication-middleware` and `protect-with-jwt` without a user service** (BOU-682): they trust the token, so a
   deactivated user passes. Pass the user service first; the 1-arity warns once and goes in 2.0.
 
-- **Admin `render-field-value`** (BOU-799): no page renders through it. Use `cells/cell`; it goes in 2.0.
+- **Admin `render-field-value` and `render-inline-edit-cell`** (BOU-799): no page renders through them. Use
+  `cells/cell` and `field-cell`; they go in 2.0.
 
 ### Removed
 

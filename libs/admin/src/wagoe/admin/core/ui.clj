@@ -74,7 +74,7 @@
 (def filter-drawer filters/filter-drawer)
 
 ;; --- inline-editing: double-click cell editing ---
-(def render-inline-edit-cell inline-editing/render-inline-edit-cell)
+(def ^{:deprecated "1.0.2"} render-inline-edit-cell inline-editing/render-inline-edit-cell)
 (def render-inline-edit-form inline-editing/render-inline-edit-form)
 (def render-inline-edit-form-with-error inline-editing/render-inline-edit-form-with-error)
 

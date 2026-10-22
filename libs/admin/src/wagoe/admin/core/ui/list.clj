@@ -85,7 +85,7 @@
         classes (str "field-" (name field) " " (:class column))
         editable? (and (:can-edit permissions)
                        data?
-                       (not (contains? (set (:readonly-fields entity-config)) field))
+                       (not (some #{field} (:readonly-fields entity-config)))
                        (not= field primary-key))]
     (if editable?
       [:td {:class (str classes " editable")
