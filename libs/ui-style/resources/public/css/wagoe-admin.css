@@ -1298,7 +1298,7 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: var(--space-3);
 }
-.admin-home .entity-card { animation: none; box-shadow: none; }
+.admin-home .entity-card { box-shadow: none; }
 .admin-home .entity-card:hover { transform: none; box-shadow: none; border-color: var(--color-primary); }
 .admin-home .entity-card-link { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); }
 .admin-home .entity-card-head { justify-content: flex-start; gap: var(--space-2); margin: 0; }
@@ -1311,10 +1311,11 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
-.entity-card-summary { display: grid; gap: 2px; margin: 0; font-size: var(--text-sm); }
-.entity-card-summary > div { display: flex; justify-content: space-between; gap: var(--space-2); }
-.entity-card-summary dt { color: var(--text-muted); }
-.entity-card-summary dd { margin: 0; font-variant-numeric: tabular-nums; }
+/* The list page's summary, smaller and stacked */
+.entity-card .list-summary { display: grid; gap: 2px; font-size: var(--text-sm); }
+.entity-card .list-summary-item { flex-direction: row; justify-content: space-between; gap: var(--space-2); }
+.entity-card .list-summary-item dt { font-size: inherit; }
+.entity-card .list-summary-item dd { font-family: inherit; font-size: inherit; font-weight: 400; }
 .admin-home .entity-card-description {
   font-size: var(--text-xs);
   overflow: hidden;

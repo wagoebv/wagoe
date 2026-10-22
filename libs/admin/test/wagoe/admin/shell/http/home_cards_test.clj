@@ -46,16 +46,12 @@
                   (if (= :admin (:role user :admin))
                     (if count-of (count-of e) 7)
                     (throw (ex-info "counted for a non-admin" {:entity e}))))
-        service (if overview
-                  #_{:clj-kondo/ignore [:missing-protocol-method]}
-                  (reify
-                    admin-ports/IAdminService
-                    (count-entities [_ e _] (counted e))
-                    admin-ports/IListOverview
-                    (list-overview [_ e _ _] (overview e)))
-                  #_{:clj-kondo/ignore [:missing-protocol-method]}
-                  (reify admin-ports/IAdminService
-                    (count-entities [_ e _] (counted e))))
+        service #_{:clj-kondo/ignore [:missing-protocol-method]}
+                (reify
+                  admin-ports/IAdminService
+                  (count-entities [_ e _] (counted e))
+                  admin-ports/IListOverview
+                  (list-overview [_ e _ _] (when overview (overview e))))
         handler (list-handlers/admin-home-handler service schema {} user-service)]
     ;; Through the pipeline every route runs, which binds what is mounted,
     ;; inside the navigation the platform binds.

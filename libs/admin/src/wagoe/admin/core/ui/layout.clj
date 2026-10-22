@@ -6,7 +6,7 @@
    home, 403/404 error pages and the `build-table-url` helper."
   (:require [wagoe.admin.core.schema-introspection :as introspection]
             [wagoe.admin.core.ui.base :as base]
-            [wagoe.admin.core.ui.cells :as cells]
+            [wagoe.admin.core.ui.list :as list]
             [wagoe.platform.core.http.nav :as nav]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
@@ -85,14 +85,7 @@
            [:span.entity-card-count [:t :admin/entity-card-count {:count n} n]]
            [:span.entity-card-count {:title [:t :admin/dashboard-count-failed]} "—"])])
       (when (seq summary)
-        [:dl.entity-card-summary
-         (for [{:keys [label value role field]} summary]
-           [:div
-            [:dt label]
-            [:dd {:class (cells/cell-class role)}
-             (if (some? value)
-               (cells/format-aggregate value role (get-in entity-config [:fields field]) entity-config display)
-               "—")]])])
+        (list/summary-line entity-config (assoc-in display [:overview :summary] summary)))
       (when description
         [:div.entity-card-description description])]]))
 
@@ -102,8 +95,6 @@
   [:a {:href href :class "dashboard-link" :title description}
    (icons/icon icon {:size 16})
    [:span.dashboard-link-label label]])
-
-(def ^:private audit-path "/web/audit")
 
 (defn- activity-entry
   [{:keys [action actor-email target-user-email created-at]} {:keys [now display]}]
@@ -116,19 +107,19 @@
    (when created-at
      [:time.dashboard-activity-when {:datetime (str created-at)
                                      :title    (base/format-instant created-at display)}
-      (or (when now (base/relative-instant created-at now display))
+      (or (base/relative-instant created-at now display)
           (base/format-instant created-at display))])])
 
 (defn- activity-panel
-  "The last audit entries, or why there are none. `activity`: {:entries [..]}
-   or {:error? true}."
-  [{:keys [entries error?]} opts]
+  "The last audit entries, or why there are none. `activity`: {:href trail
+   :entries [..]}, or :error? instead of :entries."
+  [{:keys [href entries error?]} opts]
   [:section.dashboard-activity {:aria-labelledby "admin-home-activity"}
    [:div.dashboard-activity-head
     [:h2.admin-home-section-title {:id "admin-home-activity"}
      (icons/icon :clock {:size 18})
      [:span [:t :admin/dashboard-activity]]]
-    [:a.dashboard-activity-all {:href audit-path} [:t :admin/audit-trail-title]]]
+    [:a.dashboard-activity-all {:href href} [:t :admin/audit-trail-title]]]
    (cond
      error?          [:p.dashboard-activity-empty [:t :admin/dashboard-activity-failed]]
      (empty? entries) [:p.dashboard-activity-empty [:t :admin/dashboard-activity-empty]]

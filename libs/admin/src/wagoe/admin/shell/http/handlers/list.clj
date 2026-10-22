@@ -9,10 +9,9 @@
    [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
-   [wagoe.platform.core.http.access :as access]
-   [wagoe.platform.core.http.pages :as pages]
    [wagoe.platform.database :as db]
    [wagoe.shared.ui.core.htmx :as htmx]
+   [wagoe.user.core.ui :as user-ui]
    [wagoe.user.ports :as user-ports]
    [clojure.tools.logging :as log]
    [ring.util.response :as ring-response])
@@ -53,13 +52,19 @@
          (log/warn e "admin dashboard query failed" {:part part})
          nil)))
 
+(def ^:private parallel-counts
+  "How many entities the dashboard counts at once: each takes a pool connection."
+  8)
+
 (defn- in-parallel
-  "`(f x)` for each of `xs`, concurrently unless a transaction is open on this
-   thread (a tenant request's): its connection may not be shared by threads."
+  "`(f x)` for each of `xs`, a few at a time, or one by one when a transaction
+   is open on this thread (a tenant request's): its connection may not be
+   shared by threads."
   [f xs]
   (if (db/current-transaction)
     (mapv f xs)
-    (mapv deref (mapv #(future (f %)) xs))))
+    (into [] (mapcat #(mapv deref (mapv (fn [x] (future (f x))) %)))
+          (partition-all parallel-counts xs))))
 
 (defn- entity-stats
   "{:count n :summary [..]} for `entity`, each part nil when its query fails."
@@ -67,19 +72,19 @@
   {:count   (isolated [entity :count] #(ports/count-entities admin-service entity {}))
    :summary (when (and (seq (:summary (get entity-configs entity)))
                        (satisfies? ports/IListOverview admin-service))
-              (:summary (isolated [entity :summary] #(ports/list-overview admin-service entity {} []))))})
-
-(def ^:private audit-path "/web/audit")
+              (:summary (isolated [entity :summary] #(ports/list-overview admin-service entity {:overview/summary-only? true} []))))})
 
 (defn- recent-activity
-  "The last audit entries for a user who may open the audit trail, else nil."
-  [user-service user]
-  (when (and user-service (access/platform-admin? user) (pages/mounted? audit-path))
+  "The last audit entries, when `groups` (the user's sidebar) has the audit
+   trail: it is there only when mounted and the user may open it."
+  [user-service groups]
+  (when-let [trail (and user-service
+                        (some #(when (= user-ui/audit-url (:href %)) %) (mapcat :items groups)))]
     (if-let [result (isolated :activity #(user-ports/list-audit-logs user-service
                                                                      {:limit 10 :sort-by :created-at
                                                                       :sort-direction :desc :count? false}))]
-      {:entries (:audit-logs result)}
-      {:error? true})))
+      {:href (:href trail) :entries (:audit-logs result)}
+      {:href (:href trail) :error? true})))
 
 (defn admin-home-handler
   "The dashboard: the sidebar's sections, an entity tile with its count and
@@ -105,7 +110,7 @@
        (support/html-response request
                               (admin-ui/admin-layout
                                (admin-ui/dashboard groups stats
-                                                   {:activity       (recent-activity user-service user)
+                                                   {:activity       (recent-activity user-service groups)
                                                     :entity-configs entity-configs
                                                     :display        (support/display-options config request)
                                                     :now            (Instant/now)})
