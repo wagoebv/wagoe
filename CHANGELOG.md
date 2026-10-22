@@ -273,6 +273,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Admin inline edit: Save did nothing, and the cell came back as a UUID or raw enum name** (BOU-799). Inline and
   related-record cells now match the list; an enum edits as a select. Nothing to change.
+- **Admin dark mode showed the old navy palette when the OS was dark** (BOU-797); the topbar initials and the
+  unsaved-changes dot were invisible. A theme file's `:root` now also wins over an OS-dark preference.
 - **The admin sidebar fell back to closed** (BOU-796): it is now open or closed, changed only by its one toggle; the pin
   and hover-expand are gone. A browser that pinned it closed keeps it closed.
 - **Admin: a required yes/no field could not be saved unticked** (BOU-793), so a user could not be deactivated
