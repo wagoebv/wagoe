@@ -536,7 +536,6 @@
  :admin/button-new                 "New {entity}"
  :admin/sibling-prev               "Previous  [  ·  ⌥↑ in a field"
  :admin/sibling-next               "Next  ]  ·  ⌥↓ in a field"
- :admin/aria-create-new            "Create new {entity}"
  :admin/button-delete-selected     "Delete selected"
  :admin/confirm-delete-selected    "Are you sure you want to delete selected records?"
  :admin/button-refresh             "Refresh list"

@@ -120,20 +120,12 @@
   (boolean (some #(re-find #"^\[\s*:t[\s\]]" %)
                  (parsing/unclosed-forms preceding-code))))
 
-(defn- def-docstring?
-  "Whether the literal is the docstring of a `(def name \"doc\" value)`: a
-   string straight after the name with more of the form after it.
-   `(def title \"Users\")` is a value, and still reported."
-  [content {:keys [preceding-code end]}]
-  (and (re-find #"\(def\s+(?:\^\S+\s+)*[^\s()\[\]{}]+\s*$" preceding-code)
-       (not (re-find #"^(?:\s|;[^\n]*)*\)" (subs content end)))))
-
 (defn scan-violations
   "Unexternalised user-visible literals in `content`.
 
    Pure, so the rules are testable without a source tree. An all-caps word
    (`\"POST\"`) is not prose; a literal that is, but stays untranslated, is
-   kept off the report by an `i18n-ignore` comment on its line.
+   kept off the report by an `i18n-ignore: <why>` comment on its line.
 
    Returns a seq of {:line int :text str}."
   [content]
@@ -143,10 +135,10 @@
           :when (not (re-matches #"[A-Z]+" (:text lit)))
           :when (not (:regex? lit))
           :when (not (parsing/docstring? lit))
-          :when (not (def-docstring? content lit))
           :when (not (re-find pattern-arg (:preceding-code lit)))
+          :when (not (parsing/def-docstring? content lit))
           :when (not (inside-marker? lit))
-          :when (not (str/includes? (nth lines (dec (:line lit)) "") "i18n-ignore"))]
+          :when (not (re-find #"i18n-ignore:\s*\S" (nth lines (dec (:line lit)) "")))]
       {:line (:line lit) :text (:text lit)})))
 
 (defn scan
@@ -156,8 +148,7 @@
    Hiccup elsewhere (shell/web_handlers, shared-ui) is not scanned, so a clean
    run is not proof the whole codebase is externalised."
   []
-  (let [ui-files   (mapcat #(concat (fs/glob % "**/core/ui.clj") (fs/glob % "**/core/ui/*.clj"))
-                           (ui-src-dirs))
+  (let [ui-files   (mapcat #(fs/glob % "**/core/{ui.clj,ui/*.clj}") (ui-src-dirs))
         violations (for [f ui-files
                          v (scan-violations (slurp (str f)))]
                      (assoc v :file (str f)))]

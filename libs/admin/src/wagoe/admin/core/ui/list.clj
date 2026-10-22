@@ -474,7 +474,7 @@
             :href (base/entity-create-url entity-name entity-config
                                           (when (:create-redirect-url entity-config)
                                             (base/current-list-url entity-name table-query filters)))
-            :aria-label [:t :admin/aria-create-new {:entity (name entity-name)}]}
+            :aria-label [:t :admin/button-create-new {:entity (name entity-name)}]}
            (icons/icon :plus {:size 18})
            [:t :admin/button-new {:entity (introspection/singular-label entity-config entity-name)}]])]]]
 

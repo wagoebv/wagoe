@@ -536,7 +536,6 @@
  :admin/button-new                 "Nieuwe {entity}"
  :admin/sibling-prev               "Vorige  [  ·  ⌥↑ in een veld"
  :admin/sibling-next               "Volgende  ]  ·  ⌥↓ in een veld"
- :admin/aria-create-new            "Nieuwe {entity} aanmaken"
  :admin/button-delete-selected     "Geselecteerde verwijderen"
  :admin/confirm-delete-selected    "Weet u zeker dat u de geselecteerde records wilt verwijderen?"
  :admin/button-refresh             "Lijst vernieuwen"

@@ -174,6 +174,16 @@
   [{:keys [preceding-code]}]
   (boolean (re-find docstring-position (str preceding-code))))
 
+(defn def-docstring?
+  "Whether a `string-literals` entry of `content` is the docstring of a
+   `(def name \"doc\" value)`: right after the name, with more of the form after
+   it. `(def title \"Users\")` is a value."
+  [content {:keys [preceding-code end]}]
+  (and (re-find #"\(def\s+(?:\^\S+\s+)*[^\s()\[\]{}]+\s*$" (str preceding-code))
+       (not (-> (re-matcher #"(?:\s|;[^\n]*)*\)" content)
+                (.region (int end) (count content))
+                (.lookingAt)))))
+
 ;; ---------------------------------------------------------------------------
 ;; ns form parsing
 ;; ---------------------------------------------------------------------------

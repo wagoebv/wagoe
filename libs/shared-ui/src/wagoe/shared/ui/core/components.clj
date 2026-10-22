@@ -483,19 +483,22 @@
    :common/home-description          "This is a modular application built with Clojure."
    :common/home-manage-users         "Manage Users"})
 
+(defn marker?
+  "Whether `x` is a [:t key …] marker."
+  [x]
+  (and (vector? x) (= :t (first x)) (keyword? (second x))))
+
+(defn plain-marker
+  "Marker [:t k params] as text from `catalogue`, else the key's name."
+  [catalogue [_ k params]]
+  (reduce-kv (fn [s pk pv] (str/replace s (str "{" (name pk) "}") (str pv)))
+             (get catalogue k (name k))
+             (or params {})))
+
 (defn- plain-markers
-  "`hiccup` with each [:t k params] marker in English: from `english`, else the
-   key's name."
+  "`hiccup` with each marker in English."
   [hiccup]
-  (walk/postwalk
-   (fn [node]
-     (if (and (vector? node) (= :t (first node)) (keyword? (second node)))
-       (let [[_ k params] node]
-         (reduce-kv (fn [s pk pv] (str/replace s (str "{" (name pk) "}") (str pv)))
-                    (get english k (name k))
-                    (or params {})))
-       node))
-   hiccup))
+  (walk/postwalk #(if (marker? %) (plain-marker english %) %) hiccup))
 
 (defn render-html
   "Convert Hiccup data structure to HTML string. A [:t …] marker left in it

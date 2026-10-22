@@ -125,7 +125,11 @@
   (testing "an i18n-ignore comment keeps its line off the report, and only its line"
     (is (= [{:line 2 :text "Page Down"}]
            (i18n/scan-violations
-            "(defn f [] [[\"Page Up\"] ; i18n-ignore: key caps\n [\"Page Down\"]])")))))
+            "(defn f [] [[\"Page Up\"] ; i18n-ignore: key caps\n [\"Page Down\"]])"))))
+
+  (testing "an i18n-ignore without a reason does not count"
+    (is (= [{:line 1 :text "Page Up"}]
+           (i18n/scan-violations "(defn f [] [\"Page Up\"]) ; i18n-ignore")))))
 
 ;; =============================================================================
 ;; The extractor the scan is built on
