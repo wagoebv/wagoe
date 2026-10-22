@@ -548,3 +548,16 @@
     (is (str/includes? page "/web/auth/oidc/google/start?return-to=%2Fweb%2Fprofile"))
     (is (str/includes? page "[:t :user/oidc-sign-in-with {:provider \"Google\"}]")))
   (is (not (str/includes? (pr-str (ui/login-page {} {} {})) "/web/auth/oidc"))))
+
+(deftest ^:unit an-admin-can-unlock-and-reset-from-the-sessions-page
+  (let [now    (java.time.Instant/now)
+        admin  {:user {:role :admin} :account-recovery? true :current-time now}
+        locked (assoc sample-user :lockout-until (.plusSeconds now 600) :mfa-enabled true)
+        posts  #(set (keep :hx-post (attrs-of % :hx-post)))]
+    (is (= #{"/web/users/123/unlock" "/web/users/123/mfa/reset"}
+           (posts (ui/user-sessions-page locked [] nil admin))))
+    (is (str/includes? (pr-str (ui/user-sessions-page locked [] nil admin)) "[:t :user/account-locked {:n 10} 10]"))
+    (is (empty? (posts (ui/user-sessions-page (assoc sample-user :mfa-enabled false) [] nil admin)))
+        "nothing to unlock or reset")
+    (is (empty? (posts (ui/user-sessions-page locked [] nil {:user {:role :user} :current-time now})))
+        "not for a user looking at their own sessions")))

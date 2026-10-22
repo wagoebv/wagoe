@@ -80,9 +80,13 @@
 (deftest ^:unit the-scope-map-is-declared-to-the-registry
   (let [{:keys [scopes]} (sut/declared-scopes
                           (sut/prepare-settings {:scope [:map [:domain-id {:optional true :wagoe/entity :domains} :int]]}))]
-    (is (= {:label "domain-id" :source :groups-schema :entity :domains}
+    (is (= {:label "Domain" :source :groups-schema :entity :domains}
            (dissoc (:domain-id scopes) :schema)))
     (is (= :int (m/form (get-in scopes [:domain-id :schema])))))
+  (is (= "Cost centre" (get-in (sut/declared-scopes
+                                 (sut/prepare-settings {:scope [:map [:centre {:title "Cost centre"} :string]]}))
+                                [:scopes :centre :label]))
+      "a :title wins")
   (is (nil? (sut/declared-scopes (sut/prepare-settings {:scope [:map-of :keyword :any]})))))
 
 (deftest ^:unit grants-are-checked-against-the-registrys-scope-keys

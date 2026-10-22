@@ -84,11 +84,11 @@
                                  (access/correlation-id request (str (random-uuid))))))
 
 (defn create-forbidden-response
-  "403 for an API request; a /web request is redirected to the login page."
+  "403 for a signed-in caller who may not: the error body for an API request,
+   a page for a /web one. Not the login form, which they are past."
   ([message reason] (create-forbidden-response message reason nil))
   ([message _reason request]
-   (access/forbidden-response message request
-                              (access/correlation-id request (str (random-uuid))))))
+   (access/refusal-response 403 "forbidden" message (access/correlation-id request (str (random-uuid))))))
 
 ;; =============================================================================
 ;; JWT Authentication Middleware

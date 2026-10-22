@@ -371,8 +371,8 @@
                     migratus/pending-list (fn [arg]
                                             (swap! calls conj [:pending-list arg])
                                             ["20260325010101-example"])
-                    migratus/create (fn [arg name]
-                                      (swap! calls conj [:create arg name]))
+                    migrations/write-migration-pair! (fn [dir name]
+                                                       (swap! calls conj [:create dir name]))
                     migratus/reset (fn [arg] (swap! calls conj [:reset arg]))
                     migratus/init (fn [arg] (swap! calls conj [:init arg]))]
         (is (nil? (migrations/migrate)))
@@ -394,25 +394,15 @@
                (with-redefs [migrations/resolved-migration-dir (fn [& _] (io/file migrations/project-migration-dir))]
                  (migrations/create-migration "add-users"))))
         (is (nil? (migrations/init)))
-        ;; Every read operation gets the discovered config verbatim. `create` is
-        ;; the exception: migratus/create casts :migration-dir to String, so it
-        ;; receives the narrowed config instead.
-        ;;
-        ;; This assertion previously expected `[:create config …]` — the vector
-        ;; — so it pinned the ClassCastException in place as though it were the
-        ;; intended behaviour (BOU-271). A test can hold a bug still as firmly
-        ;; as it can catch one.
         (is (= [[:migrate config]
                 [:rollback config]
                 [:rollback-until config 20260325010101]
                 [:pending-list config]
                 [:completed-list config]
                 [:pending-list config]
-                [:create (migrations/create-config config) "add-users"]
+                [:create "migrations/" "add-users"]
                 [:init config]]
-               @calls))
-        (is (string? (:migration-dir (second (first (filter #(= :create (first %)) @calls)))))
-            "create must receive a directory string, not the discovered vector")))))
+               @calls))))))
 
 (deftest ^:unit migration-operations-wrap-failures-consistently
   (testing "migration operations keep useful ex-data on failure"
@@ -422,7 +412,7 @@
                     migratus/migrate (fn [_] (throw (ex-info "migrate boom" {})))
                     migratus/rollback (fn [_] (throw (ex-info "rollback last boom" {})))
                     migratus/rollback-until-just-after (fn [_ _] (throw (ex-info "rollback boom" {})))
-                    migratus/create (fn [_ _] (throw (ex-info "create boom" {})))
+                    migrations/write-migration-pair! (fn [_ _] (throw (ex-info "create boom" {})))
                     migratus/reset (fn [_] (throw (ex-info "reset boom" {})))
                     migratus/init (fn [_] (throw (ex-info "init boom" {})))
                     migratus/completed-list (fn [_] (throw (ex-info "completed boom" {})))
@@ -507,12 +497,15 @@
 ;; get-migration-config would pass while create stayed broken, which is what
 ;; happened.
 
+(def ^:private create-config
+  #_{:clj-kondo/ignore [:deprecated-var]} migrations/create-config)
+
 (deftest ^:unit create-config-gives-migratus-a-single-directory-string
   (testing "the vector the read config carries is narrowed to one string"
     (let [read-config {:store :database
                        :migration-dir ["migrations/" "wagoe/user/migrations/"]
                        :db {:datasource ::fake}}
-          created     (migrations/create-config read-config)]
+          created     (create-config read-config)]
       (is (string? (:migration-dir created))
           "migratus/create casts :migration-dir to String — a vector throws")
       (is (= migrations/project-migration-dir (:migration-dir created))
@@ -523,7 +516,7 @@
                        :migration-dir ["migrations/"]
                        :migration-table-name "schema_migrations"
                        :db {:datasource ::fake}}
-          created     (migrations/create-config read-config)]
+          created     (create-config read-config)]
       (is (= (dissoc read-config :migration-dir)
              (dissoc created :migration-dir))
           "create-config must only narrow the directory, not reshape the config")))
@@ -532,7 +525,7 @@
     ;; A dependency contributing a migration directory must not change where a
     ;; user's own migration is written.
     (is (= migrations/project-migration-dir
-           (:migration-dir (migrations/create-config
+           (:migration-dir (create-config
                             {:migration-dir ["some/library/migrations/" "migrations/"]}))))))
 
 ;; BOU-274: migrations in two directories, only one of them read.
@@ -773,6 +766,21 @@
   (testing "the default is the directory the CLI tells the user to edit"
     (is (= "migrations/" migrations/project-migration-dir))))
 
+(deftest ^:unit write-migration-pair-uses-a-free-even-id
+  ;; migratus/create stamped the current second; at an odd one that can be a
+  ;; framework migration's id, and boot refuses the pair.
+  (with-temp-dir
+    (fn [root]
+      (let [dir (io/file root "migrations")]
+        (migrations/write-migration-pair! dir "AddWidgets")
+        (migrations/write-migration-pair! dir "add widgets")
+        (let [names (sort (.list dir))
+              ids   (distinct (map #(re-find #"^\d+" %) names))]
+          (is (= 4 (count names)))
+          (is (= 2 (count ids)) "a second create in the same second gets its own id")
+          (is (every? #(even? (parse-long (subs % 12))) ids) "app ids end in an even second")
+          (is (every? #(re-matches #"\d{14}-add-widgets\.(up|down)\.sql" %) names)))))))
+
 (deftest ^:unit create-migration-reports-where-it-actually-wrote
   ;; The reviewed version of this fix refused to create at all when
   ;; resources/migrations existed. That would have broken this repository, which
@@ -787,10 +795,9 @@
   (testing "resources/migrations wins, and is what gets reported"
     (let [calls (atom [])]
       (with-redefs [migrations/resolved-migration-dir (fn [& _] (io/file "resources/migrations"))
-                    migrations/get-migration-config (fn [] {:migration-dir ["migrations/"]})
                     migrations/ensure-project-migration-dir!
                     (fn [& _] (swap! calls conj :made-dir))
-                    migratus/create (fn [& _] (swap! calls conj :created))]
+                    migrations/write-migration-pair! (fn [& _] (swap! calls conj :created))]
         (let [result (migrations/create-migration "add-widgets")]
           (is (:success result))
           (is (= "resources/migrations/" (:directory result))
@@ -801,10 +808,9 @@
   (testing "without a resources directory the project directory is used and reported"
     (let [calls (atom [])]
       (with-redefs [migrations/resolved-migration-dir (fn [& _] (io/file migrations/project-migration-dir))
-                    migrations/get-migration-config (fn [] {:migration-dir ["migrations/"]})
                     migrations/ensure-project-migration-dir!
                     (fn [& _] (swap! calls conj :made-dir))
-                    migratus/create (fn [config n] (swap! calls conj [:created (:migration-dir config) n]))]
+                    migrations/write-migration-pair! (fn [dir n] (swap! calls conj [:created dir n]))]
         (let [result (migrations/create-migration "add-widgets")]
           (is (= "migrations/" (:directory result)))
           (is (= [:made-dir [:created "migrations/" "add-widgets"]] @calls)
@@ -812,17 +818,30 @@
 
   (testing "an existing split refuses before anything is written"
     ;; This is the case the review was aiming at. It is caught by the read
-    ;; guard, which create goes through: migratus/create throws here, so if the
+    ;; guard, which create goes through: the writer throws here, so if the
     ;; refusal did not happen first this test would report that instead.
     (with-redefs [migrations/resolved-migration-dir (fn [& _] (io/file "resources/migrations"))
                   migrations/shadowed-migration-dirs
                   (fn ([] {:root ["a.up.sql"] :resources []})
                     ([_ _] {:root ["a.up.sql"] :resources []}))
-                  migratus/create (fn [& _] (throw (ex-info "must not write" {})))]
+                  migrations/write-migration-pair! (fn [& _] (throw (ex-info "must not write" {})))]
       (let [ex (is (thrown? clojure.lang.ExceptionInfo
                             (migrations/create-migration "add-widgets")))]
         (is (= :migration-dir-conflict (:type (ex-data ex)))
             "creating must not add to a set of migrations nothing will read"))))
+
+  (testing "a jar capturing the name refuses rather than write files nothing reads"
+    (with-temp-dir
+      (fn [root]
+        (let [jar (io/file root "lib.jar")]
+          (with-open [out (java.util.jar.JarOutputStream. (io/output-stream jar))]
+            (.putNextEntry out (java.util.jar.JarEntry. "migrations/"))
+            (.closeEntry out))
+          (with-redefs [migrations/resolved-migration-dir (fn [& _] (java.util.jar.JarFile. jar))
+                        migrations/write-migration-pair! (fn [& _] (throw (ex-info "must not write" {})))]
+            (let [ex (is (thrown? clojure.lang.ExceptionInfo
+                                  (migrations/create-migration "add-widgets")))]
+              (is (= :migration-dir-conflict (:type (ex-data ex))))))))))
 
   (testing "create-destination reports the resolved source, not a fixed string"
     (with-temp-dir
@@ -838,8 +857,7 @@
               "a directory that wins is where the files actually land")))))
 
   (testing "a jar cannot be written to, so the project directory is reported"
-    ;; migratus/create fails on its own here; what matters is that this does not
-    ;; hand the CLI a jar path to tell the user to go and edit.
+    ;; What matters is that this does not hand the CLI a jar path to tell the user to go and edit.
     (with-temp-dir
       (fn [root]
         (let [jar (io/file root "app.jar")]
