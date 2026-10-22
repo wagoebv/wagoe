@@ -9,6 +9,7 @@
    application judges the scope."
   (:require [clojure.string :as str]
             [malli.core :as m]
+            [wagoe.core.utils.text :as text]
             [malli.error :as me]))
 
 (def everyone-id
@@ -35,8 +36,7 @@
    `:title`, else its name without `-id`, `:domain-id` as \"Domain\"."
   [k props]
   (or (:title props)
-      (let [s (str/replace (str/replace (name k) #"-id$" "") "-" " ")]
-        (str (str/upper-case (subs s 0 1)) (subs s 1)))))
+      (text/capitalize (str/replace (str/replace (name k) #"-id$" "") "-" " "))))
 
 (defn holds?
   "Whether `grants` hold `permission`, in any scope."
