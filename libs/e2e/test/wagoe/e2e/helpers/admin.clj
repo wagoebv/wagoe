@@ -134,12 +134,18 @@
   [pg]
   (loc/count-elements (page/locator pg "table.data-table tbody tr")))
 
+(defn after-swap!
+  "Call `f`, which makes htmx replace what `selector` matches, and wait for
+   the swap."
+  [pg selector f]
+  (let [marked (mark-stale! pg selector)]
+    (f)
+    (await-swap! pg marked selector)))
+
 (defn after-table-swap!
   "Call `f`, which makes htmx replace the list table, and wait for the swap."
   [pg f]
-  (let [marked (mark-stale! pg "#entity-table-container")]
-    (f)
-    (await-swap! pg marked "#entity-table-container")))
+  (after-swap! pg "#entity-table-container" f))
 
 (defn search!
   "Fill the search input, trigger the HTMX request, and wait for the table to

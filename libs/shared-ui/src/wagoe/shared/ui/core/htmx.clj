@@ -8,6 +8,11 @@
   (let [[own children] (if (map? (first more)) [(first more) (rest more)] [{} more])]
     (into [tag (merge own attrs)] children)))
 
+(def vary
+  "The Vary header value of a response serving a page and its fragment from
+   one URL; see `fragment-request?`."
+  "HX-Request, HX-Target")
+
 (defn fragment-request?
   "Whether a request is an htmx control asking for one of `target-ids`, so a
    handler serving the page and its fragment from one URL answers with the

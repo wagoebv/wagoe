@@ -239,7 +239,13 @@
           page2 (ports/list-instances @test-store {:limit 2 :offset 2})]
       (is (>= (count all) 2))
       (is (= 2 (count page1)))
-      (is (not= (:id (first page1)) (:id (first page2)))))))
+      (is (not= (:id (first page1)) (:id (first page2))))))
+
+  (testing "sorts by a column it is asked for, either way; ignores one it does not know"
+    (let [states #(mapv :current-state (ports/list-instances @test-store %))]
+      (is (= (sort (states {})) (states {:sort :current-state})))
+      (is (= (reverse (sort (states {}))) (states {:sort :current-state :dir :desc})))
+      (is (= (states {}) (states {:sort :id}))))))
 
 ;; =============================================================================
 ;; delete-instance! and the admin's port (BOU-563)

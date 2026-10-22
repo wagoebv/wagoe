@@ -1,7 +1,9 @@
 (ns wagoe.shared.ui.core.table
   "Shared table UI helpers (sorting, paging) for Hiccup-based web UIs."
   (:require [wagoe.core.utils.type-conversion :as tc]
+            [wagoe.core.utils.text :as text]
             [wagoe.shared.ui.core.htmx :as htmx]
+            [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.modal :as modal]
             [clojure.string :as str]))
 
@@ -14,8 +16,8 @@
   [{:keys [sort dir page page-size search]}]
   {"sort"      (when sort (name sort))
    "dir"       (when dir (name dir))
-   "page"      (str page)
-   "page-size" (str page-size)
+   "page"      (some-> page str)
+   "page-size" (some-> page-size str)
    "search"    (when-not (str/blank? search) search)})
 
 (defn- url-encode [s]
@@ -378,6 +380,51 @@
                            :hx-trigger  "input changed delay:300ms, search"}
                      attrs)])))
 
+(defn toolbar-search
+  "A list toolbar's search box: a `filter-input` (same opts, :id its input's
+   id) behind the search icon."
+  [{:keys [id placeholder label] :as opts}]
+  [:div.toolbar-search
+   (filter-input (-> opts
+                     (assoc :label (or label placeholder))
+                     (update :attrs merge {:type "text" :class "search-input" :id id})))
+   [:span {:class "search-icon" :aria-hidden "true"} (icons/icon :search {:size 15})]])
+
+(defn count-badge
+  "A list toolbar's count, \"12 records\" or in a plural catalogue entry
+   `label` of its own. A fragment carries it out of band (`htmx/oob`) so it
+   follows the search; put it in an aria-live container."
+  ([id total-count] (count-badge id total-count :admin/entity-card-count))
+  ([id total-count label]
+   [:span {:id id :class "record-count-badge"}
+    [:t label {:count total-count} total-count]]))
+
+(defn- nil-last
+  "`compare`, or its reverse when `desc?`, with nil after any value either way."
+  [desc?]
+  (fn [a b]
+    (cond (nil? a) (if (nil? b) 0 1)
+          (nil? b) -1
+          desc?    (compare b a)
+          :else    (compare a b))))
+
+(defn query-rows
+  "A list held in memory, searched and sorted as `table-query` says: the rows
+   whose `(search-text row)` holds every word of :search, ignoring case, by
+   `((get sort-keys (:sort table-query)) row)` in :dir, nil last. A :sort not
+   in `sort-keys` keeps the order given."
+  [rows {:keys [search sort dir]} {:keys [search-text sort-keys]}]
+  (let [words  (when-not (str/blank? search) (str/split (text/lower-case (str/trim search)) #"\s+"))
+        hit?   (fn [row]
+                 (let [text (text/lower-case (str (search-text row)))]
+                   (every? #(str/includes? text %) words)))
+        rows   (cond->> rows words (filter hit?))
+        key-fn (get sort-keys sort)]
+    (if key-fn
+      ;; Each key once, not once per comparison
+      (->> rows (map (juxt key-fn identity)) (sort-by first (nil-last (= :desc dir))) (map second))
+      rows)))
+
 (defn next-page-url
   "The URL of the page after `table-query`'s, or nil on the last page."
   [path table-query filters total-count]
@@ -481,6 +528,69 @@
          (for [_ head-after] [:th])])]
      [:tbody rows]
      tfoot]))
+
+(defn column-cells
+  "`cells` as the [:td]s under `columns`, as `data-table` takes them: each
+   with its field class and its label, which heads it on a narrow screen."
+  [columns cells]
+  (map (fn [{:keys [field label] col-class :class} cell]
+         [:td {:class (str "field-" (name field) (when col-class (str " " col-class))) :data-label label}
+          cell])
+       columns cells))
+
+(defn list-row
+  "A `data-table` row opening `href` on a click: its `cells` under `columns`,
+   then a chevron link named `open-label`. `attrs` add to the row's."
+  [{:keys [href attrs columns cells open-label]}]
+  [:tr (merge-with #(str %1 " " %2) {:class "clickable-row" :data-href href} attrs)
+   (column-cells columns cells)
+   [:td.actions-cell
+    [:a.row-nav-hint {:href href :aria-label open-label}
+     (icons/icon :chevron-right {:size 14})]]])
+
+(defn grouped-rows
+  "`items` as `(row item)` under a heading row per group `group-of` names,
+   groups by name, items in their order; `none-label` heads the nil group,
+   last."
+  [items {:keys [group-of row n-cols none-label]}]
+  (for [[g items] (sort-by (fn [[g]] [(nil? g) g]) (group-by group-of items))
+        r (cons [:tr {:class "list-group-row"} [:th {:colspan n-cols} (or g none-label)]]
+                (map row items))]
+    r))
+
+(defn list-body
+  "A `data-table` list in the container `id` its controls re-render, with a
+   sort select for narrow screens, or what to say when it is empty: `empty`,
+   or with a search or filters, `empty-filtered` and a link to `url` clearing
+   them. Holds the sort for controls outside it to send along."
+  [{:keys [id url columns rows table-query filters empty empty-filtered clear-label]}]
+  (let [target (str "#" id)]
+    [:div {:id id}
+     [:div {:class "table-state" :hidden true}
+      (hidden-inputs (select-keys (table-query->params table-query) ["sort" "dir"]))]
+     (cond
+       (and (empty? rows) (or (seq filters) (:search table-query)))
+       [:div.empty-state {:class "empty-state-filtered"}
+        [:div.empty-state-icon (icons/icon :filter {:size 32})]
+        [:p empty-filtered]
+        [:a.button.secondary {:href url} clear-label]]
+
+       (empty? rows)
+       [:div.empty-state {:class "p-10 text-center"}
+        [:div.empty-state-icon (icons/icon :inbox {:size 48})]
+        [:p empty]]
+
+       :else
+       [:div
+        (sort-select {:url url :hx-target target :table-query table-query :filters filters :columns columns})
+        [:div {:class "table-wrapper ui-table-wrapper"}
+         (data-table {:url         url
+                      :hx-target   target
+                      :table-query table-query
+                      :filters     filters
+                      :columns     columns
+                      :head-after  [[:th.actions-header [:span.sr-only [:t :common/column-actions]]]]
+                      :rows        rows})]])]))
 
 (defn bulk-bar
   "The bar that appears once rows are selected: how many, what to do with

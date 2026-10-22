@@ -58,7 +58,11 @@
 
 (defn list-roles [group-service]
   (fn [request]
-    (roles-page request group-service 200 {})))
+    (let [roles (ports/list-roles group-service)]
+      (group-handlers/list-response
+       request rights-ui/roles-list roles
+       #(rights-ui/roles-page roles (registry-permissions group-service)
+                              (assoc (page-opts request) :table-query %))))))
 
 (defn create-role [group-service]
   (fn [request]
@@ -142,11 +146,11 @@
 
 (defn list-permissions [group-service]
   (fn [request]
-    (html-response request
-                   (rights-ui/permissions-page (registry-permissions group-service)
-                                               (ports/list-roles group-service)
-                                               (page-opts request))
-                   200)))
+    (let [registry (registry-permissions group-service)
+          roles    (ports/list-roles group-service)]
+      (group-handlers/list-response
+       request rights-ui/permissions-list (rights-ui/permission-items registry roles)
+       #(rights-ui/permissions-page registry roles (assoc (page-opts request) :table-query %))))))
 
 (defn show-permission [group-service]
   (fn [request]
@@ -196,6 +200,7 @@
         (html-response request
                        (rights-ui/rights-page user (ports/user-groups group-service user) grants
                                               (assoc (page-opts request)
+                                                     :registry (registry-permissions group-service)
                                                      :platform-admin? (access/platform-admin? user)
                                                      :scope-info (assoc (group-handlers/scope-info group-service)
                                                                         :resolved (resolve-sources group-service user grants))))

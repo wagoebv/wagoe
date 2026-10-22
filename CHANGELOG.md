@@ -201,6 +201,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Groups, roles, permissions and workflow instances are searchable, sortable admin lists** (BOU-807); roles and a
+  user's rights group by module, audit badges and IPs read quieter. Nothing to change.
 - **Admin dashboard tiles line up**: at most four a row, counts on one line, other pages as tiles too. 25 more Lucide
   icons for an entity's `:icon`, e.g. `landmark`, `map-pin`, `history` (`wagoe.shared.ui.core.icons/available-icons`).
 - **`/web/users/:id` redirects to `/web/admin/users/:id`** (BOU-804), which has the Details, Sessions and Rights

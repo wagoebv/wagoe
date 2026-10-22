@@ -1,5 +1,6 @@
 (ns wagoe.shared.ui.core.table-test
-  (:require [wagoe.shared.ui.core.table :as table-ui]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
 
@@ -304,7 +305,7 @@
     (testing ":push-url? false leaves the address bar alone"
       (is (every? #(contains? #{nil "false"} %) (push (table-ui/data-table (assoc opts :push-url? false)))))
       (is (every? #(contains? #{nil "false"} %) (push (table-ui/pagination {:table-query {:page 1 :page-size 1} :total-count 3
-                                                   :base-url "/o" :hx-target "#o" :push-url? false})))))))
+                                                                            :base-url "/o" :hx-target "#o" :push-url? false})))))))
 
 (deftest ^:unit bulk-bar-test
   (let [bar  (table-ui/bulk-bar {:form-attrs {:hx-post "/o/bulk"}
@@ -318,3 +319,29 @@
     (testing "the modal sits beside the form, not in it"
       (is (seq (tagged :dialog bar)))
       (is (empty? (tagged :dialog form))))))
+
+(deftest ^:unit rows-in-memory-are-searched-and-sorted
+  (let [rows [{:n "Beta" :k 2} {:n "alpha" :k nil} {:n "Gamma ray" :k 1}]
+        q    (fn [tq] (map :n (table-ui/query-rows rows tq {:search-text :n
+                                                            :sort-keys   {:n #(text/lower-case (:n %)) :k :k}})))]
+    (is (= ["Beta" "alpha" "Gamma ray"] (q {})) "unsorted: as given")
+    (is (= ["alpha" "Beta" "Gamma ray"] (q {:sort :n})))
+    (is (= ["Gamma ray" "Beta" "alpha"] (q {:sort :n :dir :desc})))
+    (testing "nil last either way"
+      (is (= ["Gamma ray" "Beta" "alpha"] (q {:sort :k})))
+      (is (= ["Beta" "Gamma ray" "alpha"] (q {:sort :k :dir :desc}))))
+    (testing "every word, ignoring case"
+      (is (= ["Gamma ray"] (q {:search " RAY gam "})))
+      (is (empty? (q {:search "ray beta"}))))
+    (is (= ["Beta" "alpha" "Gamma ray"] (q {:sort :unknown})) "a sort it has no key for")))
+
+(deftest ^:unit the-count-names-what-it-counts
+  (is (= [:span {:id "c" :class "record-count-badge"} [:t :admin/entity-card-count {:count 3} 3]]
+         (table-ui/count-badge "c" 3)))
+  (is (= [:t :user.roles/count {:count 1} 1] (last (table-ui/count-badge "c" 1 :user.roles/count)))))
+
+(deftest ^:unit the-toolbar-search-is-a-labelled-filter-input
+  (let [[_ input] (table-ui/toolbar-search {:id "s" :name "search" :value "x" :placeholder "Search…"
+                                            :url "/l" :hx-target "#l"})]
+    (is (= ["s" "search" "x" "Search…" "/l" "search-input"]
+           ((juxt :id :name :value :aria-label :hx-get :class) (second input))))))
