@@ -862,8 +862,8 @@
       (is (str/includes? (str page) "search-input"))
       (is (str/includes? (str page) "/web/admin/users/new"))
 
-      ;; Should show record count; the topbar names the page, so no label
-      (is (str/includes? (str page) "[:span {:id \"record-count-badge\", :class \"record-count-badge\"} \"1\"]"))
+      ;; The count, labelled, in a live region a swap of the badge leaves
+      (is (str/includes? (str page) "[:div.record-meta {:aria-live \"polite\"} [:span {:id \"record-count-badge\", :class \"record-count-badge\"} [:t :admin/entity-card-count {:count 1} 1]]]"))
 
       ;; Should have the table
       (is (str/includes? (str page) "user@example.com")))))

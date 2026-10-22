@@ -155,3 +155,14 @@
     (is (= {:field :total :type :decimal :role :money :source "name rule: total" :list? true}
            (some #(when (= :total (:field %)) %) (:fields explained))))
     (is (re-find #"\* total\s+money\s+name rule: total" text))))
+
+(deftest ^:unit default-sort-is-newest-then-title-then-key
+  (is (= [:created-at :desc] (display/default-sort (entity {:id :uuid :name :string :created-at :instant}))))
+  (is (= [:name :asc] (display/default-sort (entity {:id :uuid :name :string}))))
+  (is (= [:id :asc] (display/default-sort (entity {:id :uuid :amount :decimal}))))
+  (testing "derived only when asked: an explicit :default-sort is left alone"
+    (let [cfg (entity {:id :uuid :name :string} :default-sort :id :default-sort-dir :desc)]
+      (is (= [:name :asc] ((juxt :default-sort :default-sort-dir)
+                           (display/with-display cfg {:derive-default-sort? true}))))
+      (is (= [:id :desc] ((juxt :default-sort :default-sort-dir)
+                          (display/with-display cfg {:derive-default-sort? false})))))))

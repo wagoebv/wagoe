@@ -93,6 +93,8 @@
     (page/wait-for-load-state pg)
     (is (loc/is-visible? (page/locator pg ".card-sort select[name='sort']")))
     (admin/sort-by-select! pg "sort" "name")
+    ;; The direction select keeps the default sort's desc
+    (admin/sort-by-select! pg "dir" "asc")
     (let [ascending (titles pg)]
       (is (< 1 (count ascending)))
       (admin/sort-by-select! pg "dir" "desc")
