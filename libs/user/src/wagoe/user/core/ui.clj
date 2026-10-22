@@ -53,6 +53,11 @@
 ;; User Table Components
 ;; =============================================================================
 
+(defn- tone-badge
+  "An enum tone badge (ADR-040) with `class` added."
+  [text tone class]
+  (update-in (ui/tone-badge text tone) [1 :class] str " " class))
+
 (defn user-row
   "The cells of a user's row: name, email, role and status, the badges
    styled as the admin's enum cells.
@@ -64,15 +69,13 @@
      Vector of cell values for table row (some as Hiccup structures)"
   [user]
   (let [role (or (:role user) :user)
-        active? (boolean (:active user))
-        badge (fn [text tone class]
-                (update-in (ui/tone-badge text tone) [1 :class] str " " class))]
+        active? (boolean (:active user))]
     [(:name user)
      (:email user)
-     (badge (-> role name text/capitalize) (if (= :admin role) :info :neutral) "user-role-badge")
-     (badge (if active? [:t :user/badge-active] [:t :user/badge-inactive])
-            (if active? :success :warning)
-            "user-status-badge")]))
+     (tone-badge (-> role name text/capitalize) (if (= :admin role) :info :neutral) "user-role-badge")
+     (tone-badge (if active? [:t :user/badge-active] [:t :user/badge-inactive])
+                 (if active? :success :warning)
+                 "user-status-badge")]))
 
 (def ^:private user-columns
   ;; The columns of `user-row`, in its order
@@ -1128,8 +1131,7 @@
                   (:group-join :grant-add) :info
                   (:group-leave :grant-remove) :warning
                   :neutral)]
-    (ui/badge (text/capitalize (str/replace action-name "-" " ")) {:variant variant
-                                                                   :class "audit-action-badge"})))
+    (tone-badge (text/capitalize (str/replace action-name "-" " ")) variant "audit-action-badge")))
 
 (defn result-badge
   "Display result status with appropriate styling.
@@ -1143,12 +1145,38 @@
    Pure: true"
   [result]
   (if (= result :success)
-    (ui/badge [:t :common/audit-success] {:variant :success
-                                          :class "audit-result-badge"
-                                          :icon (icons/icon :check-circle {:size 15})})
-    (ui/badge [:t :common/audit-failure] {:variant :danger
-                                          :class "audit-result-badge"
-                                          :icon (icons/icon :x-circle {:size 15})})))
+    (tone-badge [:t :common/audit-success] :success "audit-result-badge")
+    (tone-badge [:t :common/audit-failure] :danger "audit-result-badge")))
+
+(defn- compress-ipv6
+  "An IPv6 address in its short form: no leading zeros, the longest run of two
+   or more zero groups as ::."
+  [ip]
+  (let [groups (str/split ip #":" -1)]
+    (if (or (not= 8 (count groups)) (some str/blank? groups) (str/includes? ip "."))
+      ip
+      (let [groups (mapv #(str/replace % #"^0+(?=.)" "") groups)
+            runs   (->> (partition-by #(= "0" (second %)) (map-indexed vector groups))
+                        (filter #(= "0" (second (first %))))
+                        (filter #(> (count %) 1)))
+            [start len] (some->> (seq runs)
+                                (reduce #(if (> (count %2) (count %1)) %2 %1))
+                                ((juxt ffirst count)))]
+        (if start
+          (str (str/join ":" (subvec groups 0 start)) "::" (str/join ":" (subvec groups (+ start len))))
+          (str/join ":" groups))))))
+
+(defn format-ip
+  "An IP address as the audit trail shows it: no URL brackets, IPv6 short,
+   loopback named.
+
+   Pure: true"
+  [ip]
+  (when-not (str/blank? ip)
+    (let [address (compress-ipv6 (text/lower-case (str/replace ip #"^\[|\]$" "")))]
+      (if (or (= "::1" address) (str/starts-with? address "127."))
+        (list [:span.c-mono address] " (" [:t :user/audit-ip-loopback] ")")
+        [:span.c-mono address]))))
 
 (defn format-audit-timestamp
   "Format timestamp for audit log display.
@@ -1168,7 +1196,7 @@
         (str/replace #"Z$" ""))))
 
 (def ^:private audit-columns
-  [{:field :created-at :label [:t :common/audit-timestamp]}
+  [{:field :created-at :label [:t :common/audit-timestamp] :class "c-title"}
    {:field :action :label [:t :common/audit-action] :sortable? false}
    {:field :actor :label [:t :common/audit-actor] :sortable? false}
    {:field :target :label [:t :user/audit-column-target] :sortable? false}
@@ -1193,14 +1221,16 @@
     (conj
      ;; The labels head a cell when a narrow screen shows rows as cards
      (into [:tr]
-           (map (fn [{:keys [label]} content] [:td {:data-label label} content])
+           (map (fn [{:keys [field label] col-class :class} content]
+                  [:td {:class (str "field-" (name field) (when col-class (str " " col-class))) :data-label label}
+                   content])
                 audit-columns
                 [(format-audit-timestamp created-at)
                  (action-badge action)
                  (or (:actor-email audit-log) [:em [:t :user/audit-actor-system]])
                  (or (:target-user-email audit-log) "-")
                  (result-badge result)
-                 (or (:ip-address audit-log) "-")]))
+                 (or (format-ip (:ip-address audit-log)) "-")]))
      [:td.actions-cell
       [:button.button.small.secondary.audit-detail-trigger
        (merge (modal/open-attrs "audit-detail-modal")
@@ -1250,7 +1280,7 @@
   "The toolbar's entry count. The table fragment carries it out of band, so
    it follows the filters."
   [total-count]
-  [:span {:id "audit-record-count" :class "record-count-badge"} (str total-count)])
+  (table-ui/count-badge "audit-record-count" total-count :user/audit-count))
 
 (defn audit-logs-table
   "The audit table, its pagination or an empty state, in the container the
@@ -1364,7 +1394,7 @@
    [:div.entity-list-page {:class "space-y-4"}
     [:div.table-toolbar-container
      [:div.toolbar-row-actions
-      [:div.record-meta (audit-count-badge total-count)]
+      [:div.record-meta {:aria-live "polite"} (audit-count-badge total-count)]
       (audit-filters filters)]]
     (audit-logs-table audit-logs table-query total-count filters)
     (audit-detail-modal)]

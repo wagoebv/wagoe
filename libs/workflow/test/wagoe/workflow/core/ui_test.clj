@@ -52,6 +52,23 @@
         (is (some #(= "/app" (:href (second %)))
                   (nodes (ui/instances-page [] {} {}))))))))
 
+(deftest ^:unit the-instances-are-a-shared-data-table
+  (let [table (ui/instances-table [instance] {:sort :updated-at :dir :desc} {"state" "paid"})
+        rows  (filter #(tag? % :tr) (nodes table))]
+    (is (some #(tag? % :table.data-table) (nodes table)))
+    (is (some #(= "card-sort" (:class (second %))) (nodes table)) "a sort select for narrow screens")
+    (testing "a row opens its instance without inline script, its cells labelled for a card"
+      (let [row (last rows)]
+        (is (= "/web/admin/workflows/00000000-0000-0000-0000-000000000001" (:data-href (second row))))
+        (is (not (contains? (second row) :onclick)))
+        (is (every? #(contains? (second %) :data-label) (filter #(and (tag? % :td) (not (tag? % :td.actions-cell))) (nodes row))))))
+    (testing "the sort headers keep the filter"
+      (is (some #(some-> (:hx-get (second %)) (str/includes? "state=paid")) (nodes table)))))
+  (testing "filtered to nothing: says so, with the way back"
+    (is (some #(= "empty-state-filtered" (:class (second %))) (nodes (ui/instances-table [] ui/default-query {"state" "x"})))))
+  (testing "the old one-argument call still renders"
+    (is (some #(tag? % :table.data-table) (nodes (ui/instances-table [instance]))))))
+
 (deftest ^:unit the-detail-page-cards-are-styled
   (let [page  (ui/instance-detail-page instance definition audit {})
         cards (filter #(tag? % :article.workflow-card) (nodes page))]

@@ -44,6 +44,62 @@
   (is (= "/web/admin/roles/view?name=orders%2Fviewer" (sut/role-path :orders/viewer)))
   (is (= "/web/admin/permissions/view?name=admin.users%2Fread" (sut/permission-path :admin.users/read))))
 
+(defn- rows-of
+  "The [:tr] rows under `hiccup`'s tbody, each as its class and its text,
+   attributes left out."
+  [hiccup]
+  (let [shown (fn [node] (->> (tree-seq #(and (coll? %) (not (map? %))) seq node)
+                              (keep #(cond (string? %) %
+                                           (and (vector? %) (= :t (first %))) (second %)))))]
+    (for [node (tree-seq coll? seq hiccup)
+          :when (and (vector? node) (= :tbody (first node)))
+          tr   (tree-seq coll? seq node)
+          :when (and (vector? tr) (keyword? (first tr)) (re-find #"^tr\b" (name (first tr))))]
+      [(:class (second tr)) (vec (shown tr))])))
+
+(def ^:private roles
+  [{:name :orders/clerk :description "Takes orders" :permissions #{:orders/read} :source :managed}
+   {:name :admin.users/viewer :description "Reads users" :permissions #{:admin.users/read} :source :code :module :admin}
+   {:name :admin.users/editor :description nil :permissions #{:admin.users/read :admin.users/write} :source :code :module :admin}])
+
+(deftest ^:unit roles-are-listed-by-module-searched-and-sorted
+  (let [rows (rows-of (sut/roles-page roles {} {:table-query {}}))]
+    (is (= ["list-group-row" "role-row" "role-row" "list-group-row" "role-row"]
+           (map #(re-find #"list-group-row|role-row" (first %)) rows)))
+    (is (= "admin" (first (second (first rows)))) "a module heads its roles")
+    (is (= "admin.users/editor" (first (second (second rows)))) "by name within it"))
+  (testing "a search keeps the matching roles, and their module's heading"
+    (let [rows (rows-of (sut/roles-page roles {} {:table-query {:search "ORDERS"}}))]
+      (is (= [["orders"] ["orders/clerk" "Takes orders"]] (map #(take 2 (second %)) rows)))))
+  (testing "a sort the list does not offer falls back to the name"
+    (is (= (rows-of (sut/roles-page roles {} {:table-query {:sort :nope}}))
+           (rows-of (sut/roles-page roles {} {:table-query {:sort :name :dir :asc}})))))
+  (testing "descending: reversed within each module, the modules in order"
+    (is (= ["admin" "admin.users/viewer" "admin.users/editor" "orders" "orders/clerk"]
+           (map (comp first second) (rows-of (sut/roles-page roles {} {:table-query {:sort :name :dir :desc}}))))))
+  (testing "nothing found says so"
+    (is (some #{:user.lists/no-matches} (text (sut/roles-page roles {} {:table-query {:search "zzz"}}))))))
+
+(deftest ^:unit a-list-fragment-carries-its-count-out-of-band
+  (let [[table badge] (sut/list-fragment sut/roles-list roles {:search "users"})]
+    (is (= "roles-table-container" (:id (second table))))
+    (is (= "roles-table-container-count" (:id (second badge))))
+    (is (= "true" (:hx-swap-oob (second badge))))
+    (is (= [:t :user.roles/count {:count 2} 2] (last badge)))))
+
+(deftest ^:unit the-rights-page-shows-a-group-once-per-role
+  (let [grants   (for [p [:admin.users/read :admin.users/write :orders/read]]
+                   {:permission p :role (if (= "orders" (namespace p)) :orders/clerk :admin.users/editor)
+                    :group-id 1 :group-name "Everyone" :scope {}})
+        registry {:admin.users/read {:module :admin} :admin.users/write {:module :admin}}
+        rows     (rows-of (sut/rights-page {:id 1 :name "Ada"} [] grants {:registry registry}))]
+    (is (= [["admin"]
+            ["admin.users/read" " " "admin.users/write" "admin.users/editor" "Everyone" :user.rights/scope-everywhere]
+            ["orders"]
+            ["orders/read" "orders/clerk" "Everyone" :user.rights/scope-everywhere]]
+           (map second rows))
+        "by module, one row per role, not per permission")))
+
 (deftest ^:unit the-rights-tab-is-active-on-the-rights-page
   (let [page (sut/rights-page {:id 1 :name "Ada"} [] [] {})]
     (is (some #(and (map? %) (= "tab tab-active" (:class %)) (= "/web/users/1/rights" (:href %)))

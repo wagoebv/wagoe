@@ -141,6 +141,14 @@
   [datasource]
   (doto (db/connectable-for datasource) tables/refuse-shared-tables!))
 
+(def ^:private sort-columns
+  "What `list-instances` sorts by: its :sort keys and their columns."
+  {:workflow-id   :workflow_id
+   :entity-type   :entity_type
+   :current-state :current_state
+   :created-at    :created_at
+   :updated-at    :updated_at})
+
 (defrecord WorkflowStore [datasource]
   ports/ITransactionalWorkflowStore
 
@@ -239,8 +247,9 @@
 
   (list-instances [_ opts]
     (log/debug "Listing workflow instances" opts)
-    (let [{:keys [workflow-id entity-type entity-id current-state limit offset]
+    (let [{:keys [workflow-id entity-type entity-id current-state limit offset sort dir]
            :or {limit 50 offset 0}} opts
+          sort-column (get sort-columns sort)
           conditions (cond-> []
                        workflow-id   (conj [:= :workflow_id (kw->str workflow-id)])
                        entity-type   (conj [:= :entity_type (kw->str entity-type)])
@@ -248,7 +257,9 @@
                        current-state (conj [:= :current_state (kw->str current-state)]))
           query (cond-> {:select   [:*]
                          :from     [:workflow_instances]
-                         :order-by [[:updated_at :desc]]
+                         :order-by (if sort-column
+                                     [[sort-column (if (= :desc dir) :desc :asc)] [:updated_at :desc]]
+                                     [[:updated_at :desc]])
                          :limit    limit
                          :offset   offset}
                   (seq conditions)

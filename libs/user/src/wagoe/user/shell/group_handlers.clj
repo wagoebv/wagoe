@@ -10,6 +10,8 @@
             [ring.util.response :as response]
             [wagoe.platform.ports.authorization :as authz]
             [wagoe.shared.ui.core.combobox :as combobox]
+            [wagoe.shared.ui.core.htmx :as htmx]
+            [wagoe.shared.ui.core.table :as table-ui]
             [wagoe.user.core.group :as group-core]
             [wagoe.user.core.group-ui :as group-ui]
             [wagoe.user.core.rights-ui :as rights-ui]
@@ -20,6 +22,19 @@
 (defn page-opts [request]
   {:user  (:user request)
    :flash (:flash request)})
+
+(defn list-response
+  "A list page's response from its URL: for its own search and sort (an htmx
+   request for the list's container `spec`), `items` in the list alone, else
+   `(page table-query)`."
+  [request spec items page]
+  (let [table-query (table-ui/parse-table-params (:query-params request))]
+    ;; One URL, two bodies: a cache must not answer one with the other
+    (-> (html-response request
+                       (if (htmx/fragment-request? (:headers request) [(:id spec)])
+                         (rights-ui/list-fragment spec items table-query)
+                         (page table-query)))
+        (response/header "Vary" "HX-Request, HX-Target"))))
 
 (defn redirect [path flash-key]
   (assoc (response/redirect path :see-other) :flash {:success flash-key}))
@@ -92,7 +107,9 @@
 
 (defn list-page [group-service]
   (fn [request]
-    (html-response request (group-ui/groups-page (ports/list-groups group-service) (page-opts request)) 200)))
+    (let [groups (ports/list-groups group-service)]
+      (list-response request group-ui/groups-list groups
+                     #(group-ui/groups-page groups (assoc (page-opts request) :table-query %))))))
 
 (defn create [group-service]
   (fn [request]

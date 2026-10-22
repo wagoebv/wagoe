@@ -27,6 +27,8 @@
             [wagoe.admin.core.ui.layout :as admin-layout]
             [wagoe.core.utils.text :as text]
             [wagoe.shared.ui.core.form :as form]
+            [wagoe.shared.ui.core.htmx :as htmx]
+            [wagoe.shared.ui.core.table :as table-ui]
             [wagoe.i18n.shell.middleware :as i18n-middleware]
             [wagoe.i18n.shell.render :as i18n]
             [wagoe.platform.core.http.access :as access]
@@ -341,11 +343,21 @@
    :flash    (:flash request)
    :logo-url (:logo-url admin)})
 
+(defn- list-table-query
+  "The list's sort from query-params: a sortable column, else newest first."
+  [query-params]
+  (let [sortable (set (keep #(when (:sortable? % true) (:field %)) workflow-ui/instance-columns))
+        tq       (table-ui/parse-table-params query-params {:sortable sortable})]
+    (if (:sort tq)
+      (merge {:dir :asc} (select-keys tq [:sort :dir]))
+      workflow-ui/default-query)))
+
 (defn- parse-list-opts
   "Extract list-instances filter options from query-params."
   [query-params states]
-  (let [state (state-param (get query-params "state") states)]
-    (cond-> {:limit 50 :offset 0}
+  (let [state (state-param (get query-params "state") states)
+        {:keys [sort dir]} (list-table-query query-params)]
+    (cond-> {:limit 50 :offset 0 :sort sort :dir dir}
       (not-empty (get query-params "workflow-id"))
       (assoc :workflow-id (keyword (get query-params "workflow-id")))
 
@@ -375,12 +387,18 @@
     (let [qp        (or (:query-params request) {})
           states    (known-states registry)
           opts      (parse-list-opts qp states)
-          instances (ports/list-instances store opts)]
-      ;; The form shows the state the list is filtered by, not what was typed
-      (html-response request (workflow-ui/instances-page
-                              instances
-                              (cond-> qp (:current-state opts) (assoc "state" (name (:current-state opts))))
-                              (assoc (page-opts request admin) :states states))))
+          instances (ports/list-instances store opts)
+          ;; The filter shows the state the list is filtered by, not what was typed
+          params    (cond-> qp (:current-state opts) (assoc "state" (name (:current-state opts))))
+          tq        (select-keys opts [:sort :dir])]
+      ;; One URL, two bodies: a cache must not answer one with the other
+      (-> (html-response request
+                         (if (htmx/fragment-request? (:headers request) [workflow-ui/instances-target])
+                           (workflow-ui/instances-table instances tq
+                                                        (select-keys params ["workflow-id" "entity-type" "state"]))
+                           (workflow-ui/instances-page instances params
+                                                       (assoc (page-opts request admin) :states states :table-query tq))))
+          (assoc-in [:headers "Vary"] "HX-Request, HX-Target")))
     (catch Exception e
       (log/error e "Error in handle-list-instances-web")
       (html-response request

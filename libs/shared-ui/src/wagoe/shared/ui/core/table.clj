@@ -1,7 +1,9 @@
 (ns wagoe.shared.ui.core.table
   "Shared table UI helpers (sorting, paging) for Hiccup-based web UIs."
   (:require [wagoe.core.utils.type-conversion :as tc]
+            [wagoe.core.utils.text :as text]
             [wagoe.shared.ui.core.htmx :as htmx]
+            [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.modal :as modal]
             [clojure.string :as str]))
 
@@ -14,8 +16,8 @@
   [{:keys [sort dir page page-size search]}]
   {"sort"      (when sort (name sort))
    "dir"       (when dir (name dir))
-   "page"      (str page)
-   "page-size" (str page-size)
+   "page"      (some-> page str)
+   "page-size" (some-> page-size str)
    "search"    (when-not (str/blank? search) search)})
 
 (defn- url-encode [s]
@@ -377,6 +379,50 @@
                            :placeholder placeholder
                            :hx-trigger  "input changed delay:300ms, search"}
                      attrs)])))
+
+(defn toolbar-search
+  "A list toolbar's search box: a `filter-input` (same opts, :id its input's
+   id) behind the search icon."
+  [{:keys [id placeholder label] :as opts}]
+  [:div.toolbar-search
+   (filter-input (-> opts
+                     (assoc :label (or label placeholder))
+                     (update :attrs merge {:type "text" :class "search-input" :id id})))
+   [:span {:class "search-icon" :aria-hidden "true"} (icons/icon :search {:size 15})]])
+
+(defn count-badge
+  "A list toolbar's count, \"12 records\" or in a plural catalogue entry
+   `label` of its own. A fragment carries it out of band (`htmx/oob`) so it
+   follows the search; put it in an aria-live container."
+  ([id total-count] (count-badge id total-count :admin/entity-card-count))
+  ([id total-count label]
+   [:span {:id id :class "record-count-badge"}
+    [:t label {:count total-count} total-count]]))
+
+(defn- nil-last
+  "`compare`, or its reverse when `desc?`, with nil after any value either way."
+  [desc?]
+  (fn [a b]
+    (cond (nil? a) (if (nil? b) 0 1)
+          (nil? b) -1
+          desc?    (compare b a)
+          :else    (compare a b))))
+
+(defn query-rows
+  "A list held in memory, searched and sorted as `table-query` says: the rows
+   whose `(search-text row)` holds every word of :search, ignoring case, by
+   `((get sort-keys (:sort table-query)) row)` in :dir, nil last. A :sort not
+   in `sort-keys` keeps the order given."
+  [rows {:keys [search sort dir]} {:keys [search-text sort-keys]}]
+  (let [words  (when-not (str/blank? search) (str/split (text/lower-case (str/trim search)) #"\s+"))
+        hit?   (fn [row]
+                 (let [text (text/lower-case (str (search-text row)))]
+                   (every? #(str/includes? text %) words)))
+        rows   (cond->> rows words (filter hit?))
+        key-fn (get sort-keys sort)]
+    (if key-fn
+      (sort-by key-fn (nil-last (= :desc dir)) rows)
+      rows)))
 
 (defn next-page-url
   "The URL of the page after `table-query`'s, or nil on the last page."

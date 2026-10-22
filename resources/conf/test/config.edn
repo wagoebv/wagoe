@@ -76,6 +76,10 @@
    ;; H2 has no per-tenant schemas; this profile runs tenancy on it anyway.
    :allow-h2? true}
 
+  ;; Workflow engine: its admin list is under e2e
+  :wagoe/workflow
+  {:enabled? true}
+
   ;; Admin interface configuration (enabled in tests to satisfy system wiring)
   :wagoe/admin
   {:enabled?         true

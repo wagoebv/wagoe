@@ -63,7 +63,8 @@
   (spel/with-testing-page [pg]
     (admin/login-as-admin! pg fx/*seed*)
     (page/navigate pg (admin/admin-url "/groups"))
-    (page/wait-for-selector pg "form.group-create-form" {:timeout 10000.0})
+    (page/wait-for-selector pg "button[data-modal-open='group-create-modal']" {:timeout 10000.0})
+    (loc/click (page/locator pg "button[data-modal-open='group-create-modal']"))
     (loc/fill (page/locator pg "#group-name") "Finance")
     (loc/click (page/locator pg "form.group-create-form button[type='submit']"))
     (page/wait-for-selector pg "form.group-member-form" {:timeout 10000.0})
