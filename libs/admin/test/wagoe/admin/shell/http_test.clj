@@ -1019,3 +1019,18 @@
                                              {:path {:entity "test-users" :id (str user-id)}})
                 delete-response (*handler* delete-request)]
             (is (= 200 (:status delete-response)))))))))
+
+;; =============================================================================
+;; A malformed id names no record: 404, not 500 (BOU-800)
+;; =============================================================================
+
+(deftest ^:contract a-malformed-id-is-a-404
+  (doseq [[method uri params] [[:get "/web/admin/test-users/xyz" {}]
+                               [:put "/web/admin/test-users/xyz" {:form {"name" "X"}}]
+                               [:delete "/web/admin/test-users/xyz" {}]
+                               [:get "/web/admin/test-users/xyz/name/edit" {}]
+                               [:get "/web/admin/test-users/xyz/name/cancel" {}]
+                               [:patch "/web/admin/test-users/xyz/name" {:form {"value" "X"}}]
+                               [:post "/web/admin/test-users/bulk-delete" {:form {"ids[]" ["xyz"]}}]]]
+    (testing (str (name method) " " uri)
+      (is (= 404 (:status (*handler* (make-request method uri admin-user params))))))))

@@ -290,16 +290,16 @@
   [request]
   (keyword (get-in request [:path-params :entity])))
 
+(defn parse-id
+  "`s` as a record's UUID. One that is not a UUID names no record: :not-found."
+  [s]
+  (or (when (string? s) (parse-uuid s))
+      (throw (ex-info "Entity not found" {:type :not-found :id s}))))
+
 (defn get-entity-id
-  "Extract entity ID from path parameters.
-
-   Args:
-     request: Ring request map
-
-   Returns:
-     Entity ID as UUID"
+  "The record id in the path, a UUID; :not-found when it is not one."
   [request]
-  (UUID/fromString (get-in request [:path-params :id])))
+  (parse-id (get-in request [:path-params :id])))
 
 (defn t-fn
   "The request's translation function; without i18n on the request, one that

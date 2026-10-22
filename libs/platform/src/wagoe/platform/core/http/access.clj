@@ -20,7 +20,9 @@
   [request fresh]
   (or (get-in request [:headers "x-correlation-id"]) fresh))
 
-(defn- web-request? [request]
+(defn web-request?
+  "Whether `request` is for a page under /web."
+  [request]
   (str/starts-with? (str (:uri request)) "/web"))
 
 (defn- login-redirect [request]
@@ -48,16 +50,25 @@
     (login-redirect request)
     (error-response 403 "forbidden" message correlation-id)))
 
-(defn- escape-html [s]
+(defn escape-html
+  "`s` safe in HTML text or an attribute."
+  [s]
   (str/escape (str s) {\& "&amp;" \< "&lt;" \> "&gt;" \" "&quot;" \' "&#39;"}))
+
+(defn error-page-html
+  "A bare error page, for an app that renders none of its own."
+  [status message correlation-id]
+  (str "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>" status
+       "</title></head><body><main><h1>" status "</h1><p>" (escape-html message) "</p>"
+       (when correlation-id
+         (str "<p>Reference: <code>" (escape-html correlation-id) "</code></p>"))
+       "<p><a href=\"/\">Home</a></p></main></body></html>"))
 
 (defn- error-page [status message correlation-id]
   {:status  status
    :headers (cond-> {"Content-Type" "text/html; charset=utf-8"}
               correlation-id (assoc "X-Correlation-ID" (str correlation-id)))
-   :body    (str "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>" status
-                 "</title></head><body><main><h1>" status "</h1><p>" (escape-html message)
-                 "</p><p><a href=\"/\">Home</a></p></main></body></html>")})
+   :body    (error-page-html status message correlation-id)})
 
 (defn refusal-response
   "`status` for a signed-in caller who may not do this: the error body for an

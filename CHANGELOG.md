@@ -268,6 +268,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Web pages answered errors as JSON** (BOU-800): a browser now gets an error page in the app's layout with the
+  reference to quote, htmx an error toast. API routes keep the JSON body. Nothing to change.
+- **Admin: a malformed id in a URL was a 500** (BOU-800); it is a 404. Nothing to change.
 - **The admin sidebar fell back to closed** (BOU-796): it is now open or closed, changed only by its one toggle; the pin
   and hover-expand are gone. A browser that pinned it closed keeps it closed.
 - **Admin: a required yes/no field could not be saved unticked** (BOU-793), so a user could not be deactivated

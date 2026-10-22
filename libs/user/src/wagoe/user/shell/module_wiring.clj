@@ -18,6 +18,7 @@
             [wagoe.user.shell.middleware :as user-middleware]
             [wagoe.user.shell.session-pruner :as session-pruner]
             [wagoe.user.shell.data-export :as data-export]
+            [wagoe.user.shell.web-handlers :as web-handlers]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
@@ -199,6 +200,11 @@
 (defmethod ig/init-key :wagoe/user-home-middleware
   [_ {:keys [config]}]
   (landing/wrap-home config))
+
+;; The page in the app's layout that a browser sees for an error on /web.
+(defmethod ig/init-key :wagoe/user-error-page
+  [_ _]
+  web-handlers/error-page)
 
 (defmethod ig/init-key :wagoe/admin-only-middleware
   [_ {:keys [user-service]}]
@@ -385,6 +391,7 @@
 
     :wagoe/user-http-middleware {:user-service (ig/ref :wagoe/user-service)}
     :wagoe/user-home-middleware {:config config}
+    :wagoe/user-error-page {}
     :wagoe/admin-only-middleware {:user-service (ig/ref :wagoe/user-service)}}
 
    ;; :user-service stays named: the handler passes it to the test-reset
@@ -399,7 +406,8 @@
             ;; Effective rights for the authorization interceptor (ADR-041 §5).
             :rights           (ig/ref :wagoe/user-group-service)
             :auth-middleware  (ig/ref :wagoe/user-http-middleware)
-            :extra-middleware (ig/ref :wagoe/user-home-middleware)}
+            :extra-middleware (ig/ref :wagoe/user-home-middleware)
+            :error-page       (ig/ref :wagoe/user-error-page)}
    :routes [(ig/ref :wagoe/user-routes) (ig/ref :wagoe/user-group-routes)
             (ig/ref :wagoe/user-export-routes)]
    :data-export {:user (ig/ref :wagoe/user-data-exporter)}

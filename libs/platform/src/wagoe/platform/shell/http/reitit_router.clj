@@ -271,7 +271,12 @@
        (fn [e request]
          (if (:type (ex-data e))
            (typed-error-response system e request)
-           (fail e request "Unhandled exception at the HTTP boundary")))}))))
+           (fail e request "Unhandled exception at the HTTP boundary")))
+
+       ;; A browser on a /web page is shown a page, as inside the stack.
+       ::exception/wrap
+       (fn [handle e request]
+         (http-interceptors/web-error-page system request (handle e request) nil))}))))
 
 (def ^:private require-authentication
   "Refuses a request without a `:user`, unless the endpoint is `:public true`.
@@ -599,14 +604,19 @@
   
   Returns:
     Ring handler function"
-  []
+  [system]
   (let [answer (fn [status type message]
                  ;; Outside muuntaja, so the body goes out already encoded.
                  (fn [request]
-                   (-> (errors/response status type message
-                                        {:correlation-id (access/correlation-id request (str (random-uuid)))})
-                       (update :body json/generate-string)
-                       (assoc-in [:headers "Content-Type"] "application/json"))))]
+                   (let [response (http-interceptors/web-error-page
+                                   system request
+                                   (errors/response status type message
+                                                    {:correlation-id (access/correlation-id request (str (random-uuid)))})
+                                   nil)]
+                     (cond-> response
+                       (map? (:body response))
+                       (-> (update :body json/generate-string)
+                           (assoc-in [:headers "Content-Type"] "application/json"))))))]
     (ring/create-default-handler
      {:not-found          (answer 404 :not-found "The requested resource was not found")
       :method-not-allowed (answer 405 :method-not-allowed "The HTTP method is not allowed for this resource")
@@ -875,7 +885,7 @@
                       "for now; write :openapi instead. See UPGRADING.md."))
 
           ;; Create default handler for unmatched routes
-        default-handler (create-default-handler)
+        default-handler (create-default-handler (or (:system config) {}))
 
           ;; Wrap handler with middlewares (outermost last):
           ;; 1. Cookies middleware - parse and set cookies
