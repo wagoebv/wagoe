@@ -550,9 +550,10 @@
 
 (defn grouped-rows
   "`items` as `(row item)` under a heading row per group `group-of` names,
-   groups by name, items in their order; `none-label` heads the nil group."
+   groups by name, items in their order; `none-label` heads the nil group,
+   last."
   [items {:keys [group-of row n-cols none-label]}]
-  (for [[g items] (sort-by key (group-by group-of items))
+  (for [[g items] (sort-by (fn [[g]] [(nil? g) g]) (group-by group-of items))
         r (cons [:tr {:class "list-group-row"} [:th {:colspan n-cols} (or g none-label)]]
                 (map row items))]
     r))

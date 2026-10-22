@@ -1386,7 +1386,6 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 
 /* .admin-content pads it already; the grid gap spaces the filter form */
 .workflow-page { display: grid; gap: var(--space-5); padding: 0; }
-.workflow-page .workflow-filter-form { margin-bottom: 0; }
 /* Not an entity list: no checkbox, sticky identifier or actions column */
 .admin-content .workflow-page .data-table { table-layout: auto; }
 .admin-content .workflow-page .data-table :is(th, td) { width: auto; text-align: left; box-shadow: none; }
@@ -1575,7 +1574,7 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   .admin-content .entity-list-page .data-table tbody tr td.actions-cell .row-nav-hint { opacity: 1; color: var(--text-muted); }
 
   /* No checkbox to make room for */
-  .admin-content .entity-list-page .data-table tbody tr:not(:has(> td.checkbox-cell)):nth-child(n) { padding-left: 14px; }
+  .admin-content .entity-list-page .data-table tbody tr:not(:has(> td.checkbox-cell), .list-group-row):nth-child(n) { padding-left: 14px; }
   /* A module's heading row heads its cards */
   .admin-content :is(.entity-list-page, .rights-page) .data-table tbody tr.list-group-row:nth-child(n) {
     display: block;

@@ -58,11 +58,26 @@
       [:div.form-section-header [:h2.form-section-title title]]
       (into [:div.form-section-body {:class "space-y-3"}] content)]]))
 
+(defn- labelled
+  "`row`'s [:td]s labelled with the header each sits under: a narrow screen
+   hides the thead and heads each cell with its label. A cell's own label stays."
+  [headers row]
+  (let [[tag & more]  row
+        [attrs cells] (if (map? (first more)) [(first more) (rest more)] [nil more])
+        td?           #(and (vector? %) (keyword? (first %)) (str/starts-with? (name (first %)) "td"))]
+    (into (cond-> [tag] attrs (conj attrs))
+          (map (fn [cell h]
+                 (if (and (td? cell) (some? h) (not= "" h))
+                   (let [[_ own] cell]
+                     (htmx/merge-attrs cell (merge {:data-label h} (when (map? own) own))))
+                   cell))
+               cells (concat headers (repeat nil))))))
+
 (defn- table-of [class headers rows]
   (ui/table-wrapper
    [:table {:class class}
     [:thead (into [:tr] (map (fn [h] [:th h]) headers))]
-    (into [:tbody] rows)]))
+    (into [:tbody] (map #(if (vector? %) (labelled headers %) %)) rows)]))
 
 (defn table
   "A table of `rows` under `headers`."
@@ -92,7 +107,7 @@
   [{:keys [sort-keys default-sort]} table-query]
   (let [tq (select-keys table-query [:sort :dir :search])]
     (if (contains? sort-keys (:sort tq))
-      tq
+      (merge {:dir :asc} tq)
       (assoc tq :sort default-sort :dir :asc))))
 
 (defn list-row

@@ -101,6 +101,21 @@
            (map second rows))
         "by module, one row per role, not per permission")))
 
+(deftest ^:unit detail-table-cells-are-labelled-for-a-narrow-screen
+  (let [page (sut/rights-page {:id 1 :name "Ada"} [{:id 2 :name "Sales" :source :member}] [] {})
+        tds  (filter #(and (vector? %) (keyword? (first %)) (re-find #"^td\b" (name (first %))))
+                     (tree-seq coll? seq page))]
+    (is (= [[:t :user.rights/column-group] [:t :user.roles/column-source]] (map (comp :data-label second) tds)))))
+
+(deftest ^:unit roles-with-no-module-come-last-under-other
+  (let [rows (rows-of (sut/roles-page (conj roles {:name :auditor :permissions #{} :source :managed}) {} {:table-query {}}))]
+    (is (= :user.lists/group-none (first (second (last (butlast rows))))))))
+
+(deftest ^:unit a-sort-without-a-direction-is-ascending
+  (is (= ["ascending"]
+         (keep #(when (map? %) (:aria-sort %))
+               (tree-seq coll? seq (sut/roles-page roles {} {:table-query {:sort :name}}))))))
+
 (deftest ^:unit the-rights-tab-is-active-on-the-rights-page
   (let [page (sut/rights-page {:id 1 :name "Ada"} [] [] {})]
     (is (some #(and (map? %) (= "tab tab-active" (:class %)) (= "/web/users/1/rights" (:href %)))

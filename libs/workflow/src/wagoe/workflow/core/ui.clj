@@ -251,7 +251,9 @@
                          :url        instances-path
                          :hx-target  (str "#" instances-target)
                          :hx-include (str "#workflow-filters [name], #" instances-target " .table-state input")
-                         :attrs      {:id (str "workflow-filter-" k) :type "text" :class "input input-sm"}}
+                         :attrs      {:id (str "workflow-filter-" k) :type "text" :class "input input-sm"
+                                      ;; An exact match: on Enter or leaving the field, not per keystroke
+                                      :hx-trigger "change, search"}}
                         opts)))
         current (get params "state" "")]
     [:div#workflow-filters.toolbar-filters
