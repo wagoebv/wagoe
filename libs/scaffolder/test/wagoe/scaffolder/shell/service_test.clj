@@ -1,6 +1,7 @@
 (ns wagoe.scaffolder.shell.service-test
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
             [clojure.string :as str]
+            [wagoe.scaffolder.core.generators :as generators]
             [wagoe.scaffolder.shell.service :as service]
             [wagoe.scaffolder.ports :as ports]
             [clojure.java.io :as io]
@@ -368,7 +369,7 @@
   ;; in the same second produce different filenames sharing one id, and migratus
   ;; throws "Multiple migrations with id N" — which fails the entire migration
   ;; run, not just the offending pair.
-  (let [next-id #'service/next-migration-id]
+  (let [next-id generators/next-migration-id]
 
     (testing "a free timestamp is used as-is"
       (is (= "20260801120000" (next-id #{} "20260801120000"))))
