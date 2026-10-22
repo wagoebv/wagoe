@@ -12,6 +12,11 @@
    (cond-> {:user user :tenant {:id tenant-a}}
      membership (assoc :tenant-membership membership))))
 
+(deftest ^:unit forbidden-response-no-longer-sends-a-browser-to-sign-in
+  (let [resp (access/forbidden-response "No" {:uri "/web/orders"} "cid")]
+    (is (= 403 (:status resp)))
+    (is (nil? (get-in resp [:headers "Location"])))))
+
 (deftest ^:unit in-tenant-scope
   (testing "in a tenant: a member, a user of it, a platform admin"
     (is (access/in-tenant-scope? (in-a {:role :user :tenant-id tenant-b} {:role :member})))

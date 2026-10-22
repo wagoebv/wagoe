@@ -171,6 +171,17 @@
    (merge (->MFAService user-repository config)
           (select-keys opts [:audit-repository :auth-config]))))
 
+(defn setup-view
+  "What the setup step shows: `secret` as a QR code for `account-name`, and
+   the backup codes. Also what it shows again after a wrong first code."
+  [mfa-service secret account-name backup-codes]
+  (let [issuer (get-in mfa-service [:config :issuer] "Wagoe Framework")]
+    {:secret       secret
+     :qr-code-url  (generate-qr-code-data-url (generate-totp-uri secret account-name issuer))
+     :backup-codes backup-codes
+     :issuer       issuer
+     :account-name account-name}))
+
 (defn setup-mfa
   "Initiate MFA setup for a user.
    
@@ -183,24 +194,14 @@
      `{:success? false :error {:type … :message …}}` — the ADR-036 §3 shape.
      `:type` is `:cannot-enable` or `:mfa-setup-failed`."
   [mfa-service user-id]
-  (let [{:keys [user-repository config]} mfa-service]
+  (let [{:keys [user-repository]} mfa-service]
     (try
       (let [user (.find-user-by-id user-repository user-id)
             can-enable (mfa-core/can-enable-mfa? user)]
         (if (:can-enable? can-enable)
           ;; Generate MFA setup data
-          (let [secret (generate-totp-secret)
-                backup-codes (generate-backup-codes 10)
-                issuer (get config :issuer "Wagoe Framework")
-                account-name (:email user)
-                totp-uri (generate-totp-uri secret account-name issuer)
-                qr-code-url (generate-qr-code-data-url totp-uri)]
-            {:success? true
-             :secret secret
-             :qr-code-url qr-code-url
-             :backup-codes backup-codes
-             :issuer issuer
-             :account-name account-name})
+          (assoc (setup-view mfa-service (generate-totp-secret) (:email user) (generate-backup-codes 10))
+                 :success? true)
           ;; Cannot enable MFA
           {:success? false
            :error {:type    :cannot-enable
@@ -349,6 +350,17 @@
                                                                    ip-address user-agent))
       (catch Exception e
         (log/warn e "Could not audit an MFA disable" {:user-id (:id user)})))))
+
+(defn audit-enrolment!
+  "Record a second factor set up at sign-in with the password alone; a failed
+   write is logged and does not undo it. `context`: :ip-address :user-agent."
+  [mfa-service user-id email {:keys [ip-address user-agent]}]
+  (when-let [audit-repository (:audit-repository mfa-service)]
+    (try
+      (ports/create-audit-log audit-repository
+                              (audit-core/mfa-enrolled-audit-entry user-id email ip-address user-agent))
+      (catch Exception e
+        (log/warn e "Could not audit an MFA enrolment" {:user-id user-id})))))
 
 (defn disable-mfa
   "Turn MFA off for `user-id` once they prove it is them: `proof` is
