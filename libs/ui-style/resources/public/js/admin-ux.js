@@ -772,27 +772,19 @@ document.addEventListener('alpine:init', function () {
     return Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 14);
   }
 
-  function responseHeader(xhr, name) {
-    try {
-      return (xhr && xhr.getResponseHeader(name)) || null;
-    } catch (e) {
-      return null;
-    }
-  }
-
   // A failed request shows a toast, unless its response asked for one.
   // A re-rendered 400/422 form never gets here: forms.js swaps it and clears
   // isError, so htmx fires no responseError for it.
   function toastFailure(detail) {
     if (!detail) return;
     var xhr = detail.xhr;
-    if (/showToast/.test(responseHeader(xhr, 'HX-Trigger') || '')) return;
+    if (!xhr || /showToast/.test(xhr.getResponseHeader('HX-Trigger') || '')) return;
     var region = document.getElementById('toasts');
     if (!region) return;
     var headers = (detail.requestConfig && detail.requestConfig.headers) || {};
-    var id = responseHeader(xhr, 'X-Correlation-ID') || headers['X-Correlation-ID'];
-    var message = region.getAttribute('data-error-message') || 'Something went wrong.';
-    if (id) message += ' ' + (region.getAttribute('data-error-reference') || 'Reference:') + ' ' + id;
+    var id = xhr.getResponseHeader('X-Correlation-ID') || headers['X-Correlation-ID'];
+    var message = region.dataset.errorMessage;
+    if (id) message += ' ' + region.dataset.errorReference + ' ' + id;
     document.dispatchEvent(new CustomEvent('showToast', { detail: { type: 'error', message: message } }));
   }
 

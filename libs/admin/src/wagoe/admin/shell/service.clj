@@ -1234,7 +1234,9 @@
           :total-count total-count
           :page-size page-size
           :page-number page-number
-          :total-pages total-pages}))
+          :total-pages total-pages
+          :sort (or sort-field default-sort)
+          :sort-dir (or sort-dir :asc)}))
      db-ctx))
 
   (get-entity [_ entity-name id]

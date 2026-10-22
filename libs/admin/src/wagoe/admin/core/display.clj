@@ -273,8 +273,7 @@
                 (as-> c (assoc c :list-fields
                                (default-list-fields c (field-order c))))
                 derive-default-sort?
-                (as-> c (let [[field dir] (default-sort c)]
-                          (assoc c :default-sort field :default-sort-dir dir))))
+                (as-> c (merge c (zipmap [:default-sort :default-sort-dir] (default-sort c)))))
         ctx   (role-context cfg)
         cols  (distinct (concat (:list-fields cfg) (keys (:fields cfg))))]
     (assoc cfg :display-roles

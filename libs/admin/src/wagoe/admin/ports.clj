@@ -163,7 +163,9 @@
         :total-count 150
         :page-size 50
         :page-number 1
-        :total-pages 3}
+        :total-pages 3
+        :sort :email                   ; the sort it used, default or not
+        :sort-dir :asc}
 
      Throws:
        - ExceptionInfo with :type :entity-not-found if entity doesn't exist

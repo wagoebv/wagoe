@@ -211,7 +211,9 @@
                                 (as-> c (introspection/with-many-to-many entity-name c all))
                                 (display/with-display
                                   {:derive-list-fields?  (not (contains? manual :list-fields))
-                                   :derive-default-sort? (not (contains? manual :default-sort))}))]
+                                   :derive-default-sort? (not (contains? manual :default-sort))})
+                                ;; A direction configured alone applies to the derived field
+                                (merge (select-keys manual [:default-sort-dir])))]
           ;; Here and not in compute-entity-config, which also runs for each
           ;; entity as another's possible child.
           ;; A join table is not created from a form (BOU-778).

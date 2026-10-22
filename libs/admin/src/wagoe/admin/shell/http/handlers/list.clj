@@ -83,14 +83,12 @@
      :options options
      :records records
      :total-count (:total-count result)
-     ;; The page size and page the service used; sort/dir defaulted
-     :table-query (merge {:sort (or (:sort options) (:default-sort entity-config) :id)
-                          :dir (or (:dir options) (:sort-dir options)
-                                   (when-not (:sort options) (:default-sort-dir entity-config))
-                                   :asc)}
-                         options
-                         {:page-size (:page-size result)
-                          :page (:page-number result)})
+     ;; The sort, page size and page the service used
+     :table-query (merge options
+                         {:sort      (or (:sort result) (:sort options))
+                          :dir       (or (:sort-dir result) (:sort-dir options) :asc)
+                          :page-size (:page-size result)
+                          :page      (:page-number result)})
      :permissions (permissions/get-entity-permissions user entity-name entity-config)
      :display (support/display-with-overview admin-service config request entity-name options records)}))
 

@@ -270,8 +270,9 @@
                                     :created-at (.plusSeconds t0 (* 60 i))}]}))
       (is (= [:created-at :desc]
              ((juxt :default-sort :default-sort-dir) (ports/get-entity-config *schema-provider* :test-users))))
-      (is (= ["new@example.com" "mid@example.com" "old@example.com"]
-             (mapv :email (:records (ports/list-entities *admin-service* :test-users {})))))
+      (let [result (ports/list-entities *admin-service* :test-users {})]
+        (is (= ["new@example.com" "mid@example.com" "old@example.com"] (mapv :email (:records result))))
+        (is (= [:created-at :desc] ((juxt :sort :sort-dir) result)) "it says which sort it used"))
       (testing "a sort the caller picks without a direction is ascending"
         (is (= "mid@example.com"
                (:email (first (:records (ports/list-entities *admin-service* :test-users {:sort :email})))))))))
@@ -279,7 +280,12 @@
     (let [provider (schema-repo/create-schema-repository
                     *db-ctx* (assoc-in admin-config [:entities :test-items :default-sort] :name))
           cfg      (ports/get-entity-config provider :test-items)]
-      (is (= [:name :asc] ((juxt :default-sort :default-sort-dir) cfg))))))
+      (is (= [:name :asc] ((juxt :default-sort :default-sort-dir) cfg)))))
+  (testing "a direction configured alone goes with the derived field"
+    (let [provider (schema-repo/create-schema-repository
+                    *db-ctx* (assoc-in admin-config [:entities :test-items :default-sort-dir] :asc))]
+      (is (= [:created-at :asc]
+             ((juxt :default-sort :default-sort-dir) (ports/get-entity-config provider :test-items)))))))
 
 (deftest ^:integration list-entities-search-test
   (testing "List entities with text search"
