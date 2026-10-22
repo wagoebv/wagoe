@@ -865,3 +865,4 @@
             :inventory/manager #{:inventory/read :inventory/write}}
            (update-vals (:roles declared) :permissions)))
     (is (nil? (:error registry)) "and the platform's registry takes it")))
+

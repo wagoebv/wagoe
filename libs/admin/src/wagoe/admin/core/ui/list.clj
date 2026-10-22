@@ -54,7 +54,8 @@
   "The toolbar's record count. A table fragment carries it out of band, so
    it follows search and filters."
   [total-count]
-  [:span {:id "record-count-badge" :class "record-count-badge"} (str total-count)])
+  [:span {:id "record-count-badge" :class "record-count-badge"}
+   [:t :admin/entity-card-count {:count total-count} total-count]])
 
 (defn- workflow-column?
   "An entity with a workflow gets a column for its state (BOU-563)."
@@ -132,12 +133,14 @@
         ;; The detail page needs read: one who may only read sees it read-only
         can-open? (boolean (:can-view permissions))
         row-attrs (cond-> {:class (if can-open? "entity-row clickable-row" "entity-row")}
+                    ;; Focusable from script: closing the drawer returns here
                     can-open?
-                    (assoc :data-href (str "/web/admin/" (name entity-name) "/" record-id)))]
+                    (assoc :data-href (str "/web/admin/" (name entity-name) "/" record-id)
+                           :tabindex "-1"))]
     [:tr row-attrs
      [:td.checkbox-cell
        ;; Alpine.js row checkbox with x-model binding to selectedIds array
-      [:input (alpine/row-checkbox-attrs record-id)]]
+      [:input (alpine/row-checkbox-attrs record-id (get record (:title-field entity-config primary-key)))]]
      (for [column (or cols (cells/columns entity-config (:list-fields entity-config)))]
        (entity-cell entity-name record entity-config permissions display column
                     (when can-open? record-url)))
@@ -463,8 +466,9 @@
        ;; Compact toolbar: title + search + actions in one bar
      [:div.table-toolbar-container
       [:div.toolbar-row-actions
-       ;; The topbar names the page; here only the count
-       [:div.record-meta
+       ;; The topbar names the page; here only the count. Live here and not
+       ;; on the badge, which a swap replaces: a new live region is not read.
+       [:div.record-meta {:aria-live "polite"}
         (record-count-badge total-count)]
 
        (when has-search?
@@ -500,8 +504,7 @@
            {:class "gap-2"
             :href (base/entity-create-url entity-name entity-config
                                           (when (:create-redirect-url entity-config)
-                                            (base/current-list-url entity-name table-query filters)))
-            :aria-label [:t :admin/button-create-new {:entity (name entity-name)}]}
+                                            (base/current-list-url entity-name table-query filters)))}
            (icons/icon :plus {:size 18})
            [:t :admin/button-new {:entity (introspection/singular-label entity-config entity-name)}]])]]]
 

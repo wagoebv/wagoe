@@ -185,16 +185,32 @@
 ;; Query Config Resolution
 ;; =============================================================================
 
+(defn- own-columns
+  "The select of an entity read straight from its table: `*`, or with a
+   binary column the columns by name, so its content is never read. A binary
+   field reads as its size, when in `sized` (nil: every one), else not at all."
+  [entity-config sized]
+  (let [binary (into #{} (keep (fn [[f cfg]] (when (introspection/upload-field? cfg) f)))
+                     (:fields entity-config))
+        cols   (:table-columns entity-config)]
+    (if (or (empty? binary) (empty? cols))
+      [:*]
+      (vec (for [field cols
+                 :let  [col (case-conversion/kebab-case->snake-case-keyword field)]
+                 :when (or (not (binary field)) (nil? sized) (contains? sized field))]
+             (if (binary field) [[:octet_length col] col] col))))))
+
 (defn- resolve-query-config
   "Extract query configuration from entity-config, applying :query-overrides if present.
-   Entities without :query-overrides behave exactly as before.
+   Entities without :query-overrides behave exactly as before, except that a
+   binary column reads as its size: only for the fields in `sized` when given.
 
    For split-table entities: ensures the select clause covers ALL known fields,
    not just those explicitly listed.  When :split-table-update is configured and
    a :join is present, any field in :fields that is missing from the explicit
    :select is appended using the appropriate table alias so the admin UI always
    sees every editable column."
-  [entity-config]
+  [entity-config & [sized]]
   (let [overrides   (:query-overrides entity-config {})
         table-name  (:table-name entity-config)
         split-cfg   (:split-table-update entity-config)
@@ -246,7 +262,8 @@
                                                           (keyword col-name))))
                                                     missing)]
                           (into (vec raw-select) extra))
-                        (or raw-select [:*]))]
+                        (or raw-select
+                            (if (:join overrides) [:*] (own-columns entity-config sized))))]
     {:from-clause       (or (:from overrides) [table-name])
      :select-clause     select-clause
      :join-clause       (:join overrides)
@@ -466,7 +483,8 @@
   (let [child-cfg (child-config schema-provider relationship)
         {:keys [from-clause select-clause join-clause] :as qc}
         (if child-cfg
-          (resolve-query-config child-cfg)
+          ;; A panel of rows: a file's size only where it is a column
+          (resolve-query-config child-cfg (set (concat (:list-fields child-cfg) (:fields relationship))))
           {:from-clause [(:table relationship)] :select-clause [:*] :field-aliases {}})
         qualify   (column-of qc)
         fk-where  [:= (qualify (:foreign-key relationship)) (str parent-id)]]
@@ -480,16 +498,29 @@
                                       fk-where)}
                       join-clause (assoc :join join-clause))}))
 
+(defn- file-size
+  "A binary column's size in bytes, however it was read: as its size, as
+   bytes, as H2's java.sql.Blob, or as text SQLite stored in a BLOB column."
+  [v]
+  (cond (bytes? v)                  (alength ^bytes v)
+        (instance? java.sql.Blob v) (.length ^java.sql.Blob v)
+        (string? v)                 (alength (.getBytes ^String v "UTF-8"))
+        :else                       (long v)))
+
 (defn- typed-record
   "`row` with its :uuid fields as UUIDs and its :instant fields as Instants,
    whatever the driver returned: MySQL a CHAR(36) as text and a DATETIME as a
    LocalDateTime, H2 an OffsetDateTime (BOU-652). A value that does not parse,
-   such as SQLite's `2026-01-01 10:00:00`, is left as read."
+   such as SQLite's `2026-01-01 10:00:00`, is left as read. A :binary field
+   holds its size in bytes, never its content."
   [entity-config row]
   (when row
-    (reduce-kv (fn [m k {:keys [type]}]
+    (reduce-kv (fn [m k {:keys [type] :as cfg}]
                  (let [v (get m k)]
                    (cond-> m
+                     (and (introspection/upload-field? cfg) (some? v))
+                     (assoc k (file-size v))
+
                      (and (= :uuid type) (string? v))
                      (assoc k (or (type-conversion/string->uuid v) v))
 
@@ -765,9 +796,13 @@
                         {:type :configuration-error :writer k})))))
 
 (defn- writable-data
-  "`data` without the read-only fields and the primary key."
+  "`data` without the read-only fields, those a field's own `:readonly` makes
+   read-only too, and the primary key. A disabled checkbox still sends its
+   hidden \"false\"."
   [entity-config data]
-  (apply dissoc data (conj (:readonly-fields entity-config #{}) (:primary-key entity-config :id))))
+  (apply dissoc data (:primary-key entity-config :id)
+         (concat (:readonly-fields entity-config)
+                 (keep (fn [[k field]] (when (:readonly field) k)) (:fields entity-config)))))
 
 (defn- written-update!
   "Update through `writer`, and with it the record's `links`, in one
@@ -865,7 +900,8 @@
       (catch Exception e
         (throw (refused-write entity-config e))))
     (typed-record entity-config
-                  (db/execute-one! conn {:select [:*] :from [table-name] :where [:= primary-key id-str]}))))
+                  (db/execute-one! conn {:select (own-columns entity-config nil) :from [table-name]
+                                         :where  [:= primary-key id-str]}))))
 
 (defn- nested-relationships
   "The has-many entries of `entity-config` created with it, as
@@ -1186,10 +1222,14 @@
      (fn [{:keys [_params]}]
        (let [entity-config (ports/get-entity-config schema-provider entity-name)
              sort-field (:sort options)
-             sort-dir (:sort-dir options)
+             ;; The default direction goes with the default field only
+             sort-dir (or (:sort-dir options)
+                          (when-not sort-field (:default-sort-dir entity-config)))
              default-sort (:default-sort entity-config :id)
 
-             {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
+             ;; A file's content is not read for a list, its size only where it is a column
+             {:keys [from-clause select-clause join-clause field-aliases]}
+             (resolve-query-config entity-config (set (:list-fields entity-config)))
 
              ; Resolve field aliases for ORDER BY
              resolved-sort-field    (when sort-field (get field-aliases sort-field sort-field))
@@ -1197,7 +1237,13 @@
 
              ; Search, filters and soft delete, shared with the overview (ADR-040)
              where-clause (list-where (:adapter db-ctx) entity-config field-aliases options)
-             ordering (build-ordering resolved-sort-field sort-dir resolved-default-sort)
+             primary-key (:primary-key entity-config :id)
+             ;; created-at or a name repeats; without the key as tie-breaker
+             ;; a row can show on two pages, or on none
+             ordering (cond-> (build-ordering resolved-sort-field sort-dir resolved-default-sort)
+                        (and (not= (or sort-field default-sort) primary-key)
+                             (contains? (:fields entity-config) primary-key))
+                        (conj [(get field-aliases primary-key primary-key) :asc]))
              pagination (build-pagination options config)
 
               ; Build list query
@@ -1232,7 +1278,9 @@
           :total-count total-count
           :page-size page-size
           :page-number page-number
-          :total-pages total-pages}))
+          :total-pages total-pages
+          :sort (or sort-field default-sort)
+          :sort-dir (or sort-dir :asc)}))
      db-ctx))
 
   (get-entity [_ entity-name id]
@@ -1402,7 +1450,7 @@
                          :field field
                          :entity entity-name})))
 
-      (when (contains? (set (:readonly-fields entity-config)) field)
+      (when (or (contains? (set (:readonly-fields entity-config)) field) (:readonly field-config))
         (throw (ex-info "Cannot update readonly field"
                         {:type :readonly-field
                          :field field

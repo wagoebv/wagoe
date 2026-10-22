@@ -85,3 +85,9 @@
     (is (= {} (forms/too-many rels (rows forms/max-child-rows))))
     (is (= {:lines {:max forms/max-child-rows :count (inc forms/max-child-rows) :label "Lines"}}
            (forms/too-many rels (rows (inc forms/max-child-rows)))))))
+
+(deftest ^:unit a-file-input-left-empty-leaves-its-row-blank
+  (let [rels (forms/nested-relationships invoice configs)
+        row  (fn [filename] {"description" "" "billable" "false" "file" {:filename filename}})]
+    (is (= 0 (:count (:lines (forms/too-few rels {:lines [["0" (row "")]]})))))
+    (is (= {} (forms/too-few rels {:lines [["0" (row "a.pdf")]]})))))

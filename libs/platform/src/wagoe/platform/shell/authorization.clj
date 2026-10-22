@@ -107,7 +107,7 @@
   (let [{:keys [error] :as decision} (scope/route-decision scopes route-scope (:path-params request))]
     (if error
       {:response (access/refusal-response (if (= :not-found (:type error)) 404 403) (:type error) (:message error)
-                                          request (access/correlation-id request (str (random-uuid))))
+                                          (access/correlation-id request (str (random-uuid))))
        :error    error}
       {:request (assoc request :wagoe/scopes (:scopes decision))})))
 
@@ -147,7 +147,7 @@
         {:request request}
         (let [error {:type :forbidden :message "No authorization rule covers this route"}]
           {:error    error
-           :response (access/refusal-response 403 :forbidden (:message error) request
+           :response (access/refusal-response 403 :forbidden (:message error)
                                               (access/correlation-id request (str (random-uuid))))})))))
 
 (defn authorization-middleware

@@ -14,6 +14,10 @@
   (let [info {:labels {:domain-id "Domain"} :sources {:user/department "department"}}]
     (is (= [:user.rights/scope-everywhere] (text (sut/scope-view {} info))))
     (is (= ["Domain" ": " "42"] (text (sut/scope-view {:domain-id 42} info))))
+    (testing "a key on an admin entity asks the admin for the record's title"
+      (let [[_ attrs v] (last (last (sut/scope-view {:domain-id 42} (assoc info :entities {:domain-id :domains}))))]
+        (is (= "/web/admin/domains/lookup?id=42" (:hx-get attrs)))
+        (is (= "42" v) "the id until it answers")))
     (testing "an unlabelled key shows its name"
       (is (= ["region" ": " "north"] (text (sut/scope-view {:region "north"} info)))))
     (testing "a value from the member names its source, and what it resolved to"

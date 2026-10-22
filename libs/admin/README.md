@@ -266,7 +266,7 @@ The admin UI auto-detects field types from the database schema. You can override
 | `:date` | `DATE` | Date input |
 | `:time` | `TIME` | Time input |
 | `:json` | `JSON`, `JSONB` | Textarea |
-| `:binary` | `BLOB`, `BYTEA`, `VARBINARY` | File input; the upload is stored in the column. Left empty on an edit, the stored file is kept. After a rejected form, choose the file again |
+| `:binary` | `BLOB`, `BYTEA`, `VARBINARY` | File input; the upload is stored in the column. Left empty on an edit, the stored file is kept; an optional one has a "Remove the stored file" box. After a rejected form, choose the file again. A record holds the file's size, never its content. Only a `:binary` field may have `:widget :file-input`; a field where the two disagree is left off the form, with a config error logged and shown there |
 | `:enum` | Manual only — must provide `:options` | Select dropdown |
 
 **Name heuristics for `TEXT` columns** — the system also infers type from field name:
@@ -318,6 +318,7 @@ A list cell renders by its field's **display role** ([ADR-040](../../dev-docs/ad
 | `:date` / `:datetime` | `:date` / `:instant` | relative, absolute on hover |
 | `:email` / `:url` / `:identifier` | name ends in mail or mail-address / ends in url, website / a code, number, sku, UUID | link / host / monospace |
 | `:boolean` | `:boolean` | check mark |
+| `:file` | `:binary` | the file's size |
 | `:text` | anything else | one line, ellipsis |
 
 ```clojure

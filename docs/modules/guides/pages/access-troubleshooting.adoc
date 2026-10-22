@@ -43,14 +43,15 @@ changes they may not make are not shown.
 A tenant admin lost the admin:: The role Admin makes a platform admin only
 without a tenant. A tenant user with that role needs groups like anyone else.
 
-The Groups page shows a sign-in form:: Users, groups, roles and permissions are
+The Groups page answers Forbidden:: Users, groups, roles and permissions are
 managed by users with the role Admin only. That cannot be handed out through a
 group.
 
 == Locked out
 
 *Too many failed attempts, please try again in 15 minutes*, or a 429 from the
-API: see xref:access-tasks.adoc#_locked_accounts[Locked accounts].
+API: see xref:access-tasks.adoc#_locked_accounts[Locked accounts]. *Unlock* on
+their *Sessions* tab ends it now.
 
 A user who signs in with a correct password to *Invalid email or password* may
 be deactivated: check *Active* on their page.

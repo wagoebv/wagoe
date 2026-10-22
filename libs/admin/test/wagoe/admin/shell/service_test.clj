@@ -259,6 +259,34 @@
         (is (= "Alice" (first names)))
         (is (= "Charlie" (last names)))))))
 
+(deftest ^:integration list-entities-default-sort-test
+  (testing "an entity with created_at lists newest first"
+    (let [t0 (Instant/parse "2026-01-01T00:00:00Z")]
+      (doseq [[i email] (map-indexed vector ["old@example.com" "mid@example.com" "new@example.com"])]
+        (db/execute-one! *db-ctx*
+                         {:insert-into :test-users
+                          :values [{:id (UUID/randomUUID) :email email :name email
+                                    :password-hash "h" :active true
+                                    :created-at (.plusSeconds t0 (* 60 i))}]}))
+      (is (= [:created-at :desc]
+             ((juxt :default-sort :default-sort-dir) (ports/get-entity-config *schema-provider* :test-users))))
+      (let [result (ports/list-entities *admin-service* :test-users {})]
+        (is (= ["new@example.com" "mid@example.com" "old@example.com"] (mapv :email (:records result))))
+        (is (= [:created-at :desc] ((juxt :sort :sort-dir) result)) "it says which sort it used"))
+      (testing "a sort the caller picks without a direction is ascending"
+        (is (= "mid@example.com"
+               (:email (first (:records (ports/list-entities *admin-service* :test-users {:sort :email})))))))))
+  (testing "an explicit :default-sort wins, ascending unless its direction is given"
+    (let [provider (schema-repo/create-schema-repository
+                    *db-ctx* (assoc-in admin-config [:entities :test-items :default-sort] :name))
+          cfg      (ports/get-entity-config provider :test-items)]
+      (is (= [:name :asc] ((juxt :default-sort :default-sort-dir) cfg)))))
+  (testing "a direction configured alone goes with the derived field"
+    (let [provider (schema-repo/create-schema-repository
+                    *db-ctx* (assoc-in admin-config [:entities :test-items :default-sort-dir] :asc))]
+      (is (= [:created-at :asc]
+             ((juxt :default-sort :default-sort-dir) (ports/get-entity-config provider :test-items)))))))
+
 (deftest ^:integration list-entities-search-test
   (testing "List entities with text search"
     ;; Create diverse test data
@@ -642,3 +670,11 @@
         e      (ex-info "Database update failed" {:type :database-error :constraint :not-null :field :number} driver)]
     (is (= {:type :validation-error :field :number :errors {:number ["Field is required"]}}
            (ex-data (#'service/not-null-violation e))))))
+
+(deftest ^:unit a-field-read-only-by-its-own-config-is-not-written
+  ;; Its checkbox is disabled, but the hidden "false" beside it still posts.
+  (is (= {:name "n"}
+         (#'service/writable-data {:readonly-fields #{:created-at}
+                                   :fields          {:verified {:type :boolean :readonly true}
+                                                     :name     {:type :string}}}
+                                  {:id 1 :name "n" :verified false :created-at "t"}))))

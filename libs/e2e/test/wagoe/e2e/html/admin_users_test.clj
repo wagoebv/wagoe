@@ -115,7 +115,8 @@
         (is (not (str/includes? url "/table")))
         (is (str/includes? url "search=admin%40acme"))
         (is (str/includes? url "dir=desc") "the sort survives the search")
-        (is (= (str rows) (page/evaluate pg "() => document.getElementById('record-count-badge').innerText.trim()"))
+        (is (= (str rows (if (= 1 rows) " record" " records"))
+               (page/evaluate pg "() => document.getElementById('record-count-badge').innerText.trim()"))
             "the count follows the search"))
       (page/go-back pg)
       (page/wait-for-load-state pg)
@@ -195,6 +196,24 @@
       ;; It dismisses itself
       (page/wait-for-selector pg "#toasts .alert" {:state :detached :timeout 10000.0})
       (is (zero? (loc/count-elements (page/locator pg "#toasts .alert")))))))
+
+(deftest ^:integration ^:e2e timezone-is-picked-from-the-zones
+  (testing "The timezone is a combobox over the IANA zones; the one picked is saved"
+    (spel/with-testing-page [pg]
+      (admin/login-as-admin! pg fx/*seed*)
+      (page/navigate pg (admin/admin-url (str "/users/" (-> fx/*seed* :user :id))))
+      (page/wait-for-load-state pg)
+      ;; Preferences is optional, so folded away
+      (loc/click (page/locator pg "details[data-group-id='preferences'] > summary"))
+      (let [input (page/locator pg "input[role='combobox']#timezone")]
+        (loc/fill input "amsterdam")
+        (page/wait-for-selector pg "#timezone-listbox li[data-value='Europe/Amsterdam']" {:timeout 10000.0})
+        (loc/press input "ArrowDown")
+        (loc/press input "Enter"))
+      (is (= "Europe/Amsterdam" (loc/input-value (page/locator pg "input[name='timezone']"))))
+      (admin/submit-entity-form! pg)
+      (is (= "Europe/Amsterdam" (loc/input-value (page/locator pg "input[name='timezone']"))))
+      (is (= "Europe/Amsterdam" (loc/input-value (page/locator pg "input#timezone")))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Validation feedback

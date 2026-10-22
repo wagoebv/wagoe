@@ -1,7 +1,8 @@
 (ns wagoe.admin.core.forms
   "What an entity form shows, which of a form's errors it cannot show next
    to a field, and the child rows a parent is created with (BOU-570)."
-  (:require [clojure.string :as str]))
+  (:require [wagoe.admin.core.schema-introspection :as introspection]
+            [clojure.string :as str]))
 
 (defn shown-fields
   "The fields the entity form renders as a visible input, its many-to-many
@@ -18,6 +19,15 @@
   [entity-config errors]
   (let [shown (shown-fields entity-config)]
     (into {} (remove (fn [[field _]] (contains? shown field))) errors)))
+
+(def remove-file-param
+  "Names each file field whose stored file the form removes."
+  "__remove")
+
+(defn no-file?
+  "A file input left empty: the browser still sends the part, with no name."
+  [v]
+  (if (map? v) (str/blank? (:filename v)) (and (string? v) (str/blank? v))))
 
 ;; =============================================================================
 ;; Creating a parent with its children
@@ -73,11 +83,13 @@
      (update-vals rows #(vec (sort-by (comp parse-long key) %)))]))
 
 (defn- blank-row?
-  "Nothing typed: a checkbox always submits a value, so it does not count."
+  "Nothing typed: a checkbox always submits a value, so it does not count. A
+   file input left empty sends a part with no file name."
   [rel values]
   (every? (fn [[field v]]
-            (or (= :boolean (get-in rel [:entity-config :fields (keyword field) :type]))
-                (str/blank? (str (if (vector? v) (last v) v)))))
+            (let [v (if (vector? v) (last v) v)]
+              (or (= :boolean (get-in rel [:entity-config :fields (keyword field) :type]))
+                  (no-file? v) (str/blank? (str v)))))
           values))
 
 (defn filled-rows
@@ -146,3 +158,20 @@
         sent  (filter #(or (named %) (some? (param params %))) keys)]
     [(apply dissoc params links-param (keyword links-param) (mapcat (juxt identity keyword) keys))
      (into {} (map (fn [k] [(keyword k) (as-values (param params k))])) sent)]))
+
+;; =============================================================================
+;; Removing a stored file (BOU-811)
+;; =============================================================================
+
+(defn split-remove-params
+  "`params` as [params removed]: without `remove-file-param`, and the file
+   fields it names."
+  [entity-config params]
+  [(dissoc params remove-file-param (keyword remove-file-param))
+   (filterv #(introspection/upload-field? (get-in entity-config [:fields %]))
+            (map keyword (as-values (param params remove-file-param))))])
+
+(defn clear-removed
+  "`data` with each `removed` file cleared, unless the form chose a new one."
+  [data removed]
+  (reduce (fn [acc field] (cond-> acc (not (contains? acc field)) (assoc field nil))) data removed))

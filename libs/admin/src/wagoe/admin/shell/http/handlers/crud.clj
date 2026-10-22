@@ -52,7 +52,7 @@
   "`data` without its files. A rejected form stored none, and one shown as
    stored would be dropped by a resubmit that leaves the input empty."
   [entity-config data]
-  (into {} (remove #(= :binary (get-in entity-config [:fields (key %) :type]))) data))
+  (into {} (remove #(introspection/upload-field? (get-in entity-config [:fields (key %)]))) data))
 
 (defn- rejected-create-opts
   "Page opts for a create form shown again after it failed. The values go in
@@ -453,31 +453,38 @@
 
 (defn field-options-handler
   "GET /:entity/options/:field?q= — the options of a foreign key's combobox:
-   the parent rows whose label contains the typed text. The user has to be
-   able to view the entity and the parent whose labels this lists."
+   the parent rows whose label contains the typed text, or for a timezone
+   field the zones. The user has to be able to view the entity and the parent
+   whose labels this lists."
   [admin-service schema-provider _config]
   (fn [request]
-    (let [[user entity-name] (support/viewable-entity! schema-provider request)
-          field       (keyword (get-in request [:path-params :field]))
-          found       (support/search-foreign-key-options admin-service schema-provider entity-name field
-                                                          (combobox/query request))
-          _           (when-not found
-                        (throw (ex-info "No such foreign key" {:type :not-found :entity-name entity-name :field field})))]
-      (shell-permissions/assert-can-view-entity! user (:parent found) (:parent-cfg found))
+    (let [[user entity-name entity-cfg] (support/viewable-entity! schema-provider request)
+          field (keyword (get-in request [:path-params :field]))
+          q     (combobox/query request)
+          options (if (support/timezone-field? entity-cfg field)
+                    (support/search-timezones q)
+                    (let [found (support/search-foreign-key-options admin-service schema-provider entity-name field q)]
+                      (when-not found
+                        (throw (ex-info "No such foreign key" {:type :not-found :entity-name entity-name :field field})))
+                      (shell-permissions/assert-can-view-entity! user (:parent found) (:parent-cfg found))
+                      (:options found)))]
       (support/html-response request
-                             (combobox/options field (:options found) [:t :admin/combobox-no-matches])))))
+                             (combobox/options field options [:t :admin/combobox-no-matches])))))
 
 (defn lookup-handler
   "GET /:entity/lookup?q= — the rows of an entity whose label contains the
    typed text, as combobox options, for a page outside the admin that picks
-   one of them (a grant's scope). The user has to be able to view the entity."
+   one of them (a grant's scope). With ?id= instead, that row's label, for a
+   page showing one by its id. The user has to be able to view the entity."
   [admin-service schema-provider _config]
   (fn [request]
-    (let [[_ entity-name entity-cfg] (support/viewable-entity! schema-provider request)
-          options (support/search-entity-options admin-service entity-cfg entity-name (combobox/query request))]
-      (when-not options
-        (throw (ex-info "No text label to search" {:type :not-found :entity-name entity-name})))
-      (support/html-response request
-                             ;; Option ids follow the asking combobox, so two on one page differ
-                             (combobox/options (or (not-empty (get-in request [:query-params "field"])) entity-name)
-                                               options [:t :admin/combobox-no-matches])))))
+    (let [[_ entity-name entity-cfg] (support/viewable-entity! schema-provider request)]
+      (if-let [id (not-empty (get-in request [:query-params "id"]))]
+        (support/html-response request [:span (support/entity-label admin-service entity-name entity-cfg id)])
+        (let [options (support/search-entity-options admin-service entity-cfg entity-name (combobox/query request))]
+          (when-not options
+            (throw (ex-info "No text label to search" {:type :not-found :entity-name entity-name})))
+          (support/html-response request
+                                 ;; Option ids follow the asking combobox, so two on one page differ
+                                 (combobox/options (or (not-empty (get-in request [:query-params "field"])) entity-name)
+                                                   options [:t :admin/combobox-no-matches])))))))

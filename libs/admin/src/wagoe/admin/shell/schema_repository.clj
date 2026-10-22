@@ -204,20 +204,29 @@
                                             (try (ports/list-available-entities this)
                                                  (catch clojure.lang.ExceptionInfo _ [])))))
               own           (get all entity-name)
+              manual        (get-in config [:entities entity-name])
               ;; Roles last: a has-many column needs the inverse relations, and
               ;; the default columns need the roles (ADR-040).
               entity-config (-> (introspection/with-inverse-relationships entity-name own all)
                                 (as-> c (introspection/with-many-to-many entity-name c all))
                                 (display/with-display
-                                  {:derive-list-fields?
-                                   (not (contains? (get-in config [:entities entity-name]) :list-fields))}))]
+                                  {:derive-list-fields?  (not (contains? manual :list-fields))
+                                   :derive-default-sort? (not (contains? manual :default-sort))})
+                                ;; A direction configured alone applies to the derived field
+                                (merge (select-keys manual [:default-sort-dir])))]
           ;; Here and not in compute-entity-config, which also runs for each
           ;; entity as another's possible child.
           ;; A join table is not created from a form (BOU-778).
           (doseq [{:keys [message]} (when-not (:join-keys entity-config) (:create-config-errors own))]
             (log/error "Admin config error:" message))
-          (swap! config-cache assoc entity-name entity-config)
-          entity-config)))
+          ;; A field whose widget and type disagree on taking a file leaves the
+          ;; form; the rest of the entity, and the admin, keep working.
+          (let [errors        (introspection/upload-errors entity-name entity-config)
+                entity-config (introspection/without-upload-errors entity-config errors)]
+            (doseq [{:keys [message]} errors]
+              (log/error "Admin config error:" message))
+            (swap! config-cache assoc entity-name entity-config)
+            entity-config))))
 
   (list-available-entities [_]
     "List all entities available based on discovery configuration.

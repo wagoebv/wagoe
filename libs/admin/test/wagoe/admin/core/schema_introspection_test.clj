@@ -270,7 +270,7 @@
 
       (testing "Default sort by primary key descending"
         (is (= :id (:default-sort config)))
-        (is (= :desc (:default-sort-dir config)))))))
+        (is (= :asc (:default-sort-dir config)))))))
 
 ;; =============================================================================
 ;; Entity Config Merging Tests
@@ -888,3 +888,15 @@
                                   {:people    {:has-many [{:entity :notes :foreign-key :owner_id}]}
                                    :companies {:has-many [{:entity :notes :foreign-key :owner-id}]}
                                    :notes     notes})))))))))
+
+(deftest ^:unit only-a-binary-field-takes-a-file
+  (testing "a binary column is a file input whatever its name says"
+    (is (= :file-input (introspection/infer-widget-for-field :content :binary "BYTEA")))
+    (is (= :file-input (introspection/infer-widget-for-field :logo-url :binary "BLOB"))))
+  (testing "a widget and a type that disagree are a config error"
+    (is (= [] (introspection/upload-errors :p {:fields {:doc  {:type :binary :widget :file-input}
+                                                        :name {:type :string :widget :text-input}}})))
+    (is (= [:name] (map :field (introspection/upload-errors :p {:fields {:name {:type :string :widget :file-input}}}))))
+    (is (= [:doc] (map :field (introspection/upload-errors :p {:fields {:doc {:type :binary :widget :hidden}}}))))
+    (is (= [:doc] (map :field (introspection/upload-errors :p {:fields {:doc {:type :binary}}})))
+        "with no widget a field renders as a text input")))

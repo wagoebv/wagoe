@@ -34,6 +34,10 @@ for what is public API, what is internal, and how deprecations are announced.
 - **A child record's page and its parent's filtered list lead back to the parent**: breadcrumbs Admin / parent list /
   parent / children. Works for any belongs-to; nothing to configure.
 
+- **An admin can unlock a user and reset their two-factor authentication** (BOU-795), under *Sign-in* on the user's
+  Sessions tab; both are audited. Nothing to change.
+- **`:options-source :timezones` on an admin field** (BOU-804): a combobox over the IANA zones. `admin/users.edn`
+  uses it for `:timezone`; add it there in an existing app.
 - **The admin dashboard shows counts, summaries and recent activity** (BOU-806) instead of a hero. Counts run in
   parallel and a failing one shows "—"; non-entity pages are a compact link row.
 - **The admin dashboard has the sidebar's sections** (BOU-809), a card per sidebar item. A `:sidebar-hidden` entity
@@ -202,6 +206,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Admin dashboard tiles line up**: at most four a row, counts on one line, other pages as tiles too. 25 more Lucide
   icons for an entity's `:icon`, e.g. `landmark`, `map-pin`, `history` (`wagoe.shared.ui.core.icons/available-icons`).
+- **`/web/users/:id` redirects to `/web/admin/users/:id`** (BOU-804), which has the Details, Sessions and Rights
+  tabs. Delete permanently moved to the Sessions tab; `PUT`/`DELETE /web/users/:id` are gone.
 
 - **`response-shape-cli` leaves a response already set alone** (BOU-790); it no longer rewrites an HTTP error response
   to `{:exit :stderr}`. In `create-cli-pipeline` it never saw one.
@@ -246,6 +252,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **`wagoe.platform.shell.database.migrations/create-config`** (BOU-813): `create-migration` no longer calls
+  migratus/create, so nothing needs it; goes in 2.0. Call `create-migration`.
 - **`:require-role` in the admin config** (BOU-774): nothing reads it; boot warns outside `:off`, and it goes in 2.0.
   Drop it.
 - **Group grants, `:role :user` and OIDC `:default-role`** (BOU-771): grants move onto managed roles, their rows kept
@@ -279,6 +287,22 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin list accessibility** (BOU-803): sort headers are column headers with a sort button and `aria-sort`, checkboxes
+  are named, and focus returns after the drawer or a sort/page swap. Tests clicking `th.sortable-header` click its button.
+- **Admin lists loaded every stored file** (BOU-811); reads now take its size only, and a stored file can be removed.
+  A `:file-input` field that is not `:binary` (or the reverse) leaves the form with a logged config error; fix the config.
+- **Access admin gaps** (BOU-795): a signed-in non-admin gets a 403 page on Groups, not the login form; scopes show
+  record titles; the lockout message says the real minutes; a read-only checkbox no longer saves false.
+- **`wagoe upgrade authorization check` names admin entities missing from the `:allowlist`** (BOU-795), which have no
+  `admin.<entity>` permissions; `prepare` adds them. `authz-report` shows `/api/...` redirects as redirects.
+- **Admin: a failed htmx request said nothing** (BOU-802); it now shows an error toast with a reference, and a refused
+  inline edit shows its message. Nothing to change.
+- **Admin lists start newest first** (BOU-802): `created-at` desc, else the title field, and `:default-sort-dir` is
+  honoured. Set `:default-sort` to keep another order; the record count now reads "25 records".
+- **`bb scaffold` could pick a framework migration's id** (BOU-812), and boot refused. Scaffolded ids now end in an even
+  second; framework ids end in an odd one.
+- **`bb migrate create` could pick a framework migration's id** (BOU-813), as `bb scaffold` could. It now takes a
+  free even second too.
 - **Page chrome and user error pages were English in every locale** (BOU-805): navigation, theme toggle, toasts and
   sibling nav now translate. A page rendered with `components/render-html` shows them in English.
 - **`(explain-entity :e)` was missing from a generated app's REPL** (BOU-805). Add the one-line `explain-entity` from
