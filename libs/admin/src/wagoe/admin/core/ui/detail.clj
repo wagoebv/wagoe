@@ -823,12 +823,16 @@
      [:div.page-header {:class "space-y-3"}
       [:div.page-header-row
        ;; The list is the way back: the breadcrumb, Cancel and the save bar
-       [:div.page-breadcrumbs
-        [:a {:href "/web/admin"} [:t :admin/breadcrumb-admin]]
-        " / "
-        [:a {:href list-url :data-action "list"} label]
-        " / "
-        [:span (if is-edit? heading page-title)]]
+       (if-let [trail (:parent-trail opts)]
+         (base/parent-breadcrumbs trail
+                                  [:a {:href (:list-href trail) :data-action "list"} label]
+                                  [:span (if is-edit? heading page-title)])
+         [:div.page-breadcrumbs
+          [:a {:href "/web/admin"} [:t :admin/breadcrumb-admin]]
+          " / "
+          [:a {:href list-url :data-action "list"} label]
+          " / "
+          [:span (if is-edit? heading page-title)]])
        [:div.page-header-actions {:class "flex flex-wrap items-center gap-2"}
         (when sibling-nav
           [:div.sibling-nav

@@ -31,6 +31,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **A child record's page and its parent's filtered list lead back to the parent**: breadcrumbs Admin / parent list /
+  parent / children. Works for any belongs-to; nothing to configure.
+
 - **The admin dashboard shows counts, summaries and recent activity** (BOU-806) instead of a hero. Counts run in
   parallel and a failing one shows "—"; non-entity pages are a compact link row.
 - **The admin dashboard has the sidebar's sections** (BOU-809), a card per sidebar item. A `:sidebar-hidden` entity

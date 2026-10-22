@@ -443,7 +443,7 @@
    Returns:
      Hiccup page structure"
   [entity-name records entity-config table-query total-count permissions & [opts]]
-  (let [{:keys [search filters flash display]} opts
+  (let [{:keys [search filters flash display parent-trail]} opts
         search-fields (:search-fields entity-config)
         has-search? (seq search-fields)
         search-value (:search search)]
@@ -456,6 +456,9 @@
      (when flash
        (for [[type message] flash]
          [:div {:class (str "alert alert-" (name type) " mb-2")} message]))
+     ;; One parent's children: the way back to it
+     (when parent-trail
+       (base/parent-breadcrumbs parent-trail [:span (:label entity-config)]))
 
        ;; Compact toolbar: title + search + actions in one bar
      [:div.table-toolbar-container

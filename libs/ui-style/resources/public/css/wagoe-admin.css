@@ -822,9 +822,9 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   gap: 8px;
   width: 100%;
 }
-:is(.entity-detail-page, .workflow-page) .page-breadcrumbs { font-size: 12px; color: var(--text-muted); }
-:is(.entity-detail-page, .workflow-page) .page-breadcrumbs a { color: var(--text-muted); text-decoration: none; }
-:is(.entity-detail-page, .workflow-page) .page-breadcrumbs a:hover { color: var(--accent-primary); text-decoration: underline; }
+:is(.entity-detail-page, .entity-list-page, .workflow-page) .page-breadcrumbs { font-size: 12px; color: var(--text-muted); }
+:is(.entity-detail-page, .entity-list-page, .workflow-page) .page-breadcrumbs a { color: var(--text-muted); text-decoration: none; }
+:is(.entity-detail-page, .entity-list-page, .workflow-page) .page-breadcrumbs a:hover { color: var(--accent-primary); text-decoration: underline; }
 .entity-detail-page .page-header-actions .button {
   height: 30px !important;
   min-height: 0 !important;
