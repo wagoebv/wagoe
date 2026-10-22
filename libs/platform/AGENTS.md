@@ -462,6 +462,12 @@ Exceptions thrown with `:type` in `ex-data` are automatically converted:
                  :user-id id}))
 ```
 
+On a `/web` route a browser sees a page instead of the JSON body, and htmx an
+error toast (`HX-Trigger` `showToast`); a caller sending `Accept: application/json`
+keeps the body. The page is the `(fn [request error] html)` a module contributes
+as `:error-page` under `:http` (the user module's, in the app's layout), else a
+bare one. `error` is `{:status :type :message :correlation-id}`.
+
 ---
 
 ## Rate Limiting

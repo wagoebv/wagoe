@@ -283,8 +283,9 @@
 (defn live-attrs
   "htmx attributes that post a field's form to `url` when the field changes,
    naming the field as `__field` (plus `extra` string pairs), and swap the
-   answer over the field's wrapper. `hx-push-url` is reset because a control
-   inherits it from an htmx form."
+   answer over the field's wrapper. `hx-push-url` and `hx-encoding` are reset
+   because a control inherits them from an htmx form; multipart would upload
+   a chosen file on every check."
   ([url field-key] (live-attrs url field-key nil))
   ([url field-key extra]
    {:hx-post     url
@@ -292,6 +293,7 @@
     :hx-target   "closest .form-field"
     :hx-swap     "outerHTML"
     :hx-push-url "false"
+    :hx-encoding "application/x-www-form-urlencoded"
     :hx-vals     (json/generate-string (merge {"__field" (name field-key)} extra))}))
 
 (defn with-live-validation

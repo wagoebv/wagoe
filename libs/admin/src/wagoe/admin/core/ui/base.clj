@@ -358,6 +358,12 @@
     23 "0.001"
     nil))
 
+(defn number-input-step
+  "The `step` a number input needs for a field of `field-type`. The default
+   is 1, so without it `12.50` fails validation and the form will not submit."
+  [field-type]
+  (when (= :decimal field-type) "any"))
+
 (defn render-field-value
   "Render field value for display in table or detail view.
 

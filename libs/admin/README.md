@@ -266,7 +266,7 @@ The admin UI auto-detects field types from the database schema. You can override
 | `:date` | `DATE` | Date input |
 | `:time` | `TIME` | Time input |
 | `:json` | `JSON`, `JSONB` | Textarea |
-| `:binary` | `BLOB`, `BYTEA` | Hidden (not editable) |
+| `:binary` | `BLOB`, `BYTEA`, `VARBINARY` | File input; the upload is stored in the column. Left empty on an edit, the stored file is kept. After a rejected form, choose the file again |
 | `:enum` | Manual only — must provide `:options` | Select dropdown |
 
 **Name heuristics for `TEXT` columns** — the system also infers type from field name:

@@ -130,3 +130,25 @@
     (let [r (rt/call :get uri (:empty rt/bodies) (:admin callers))]
       (is (= 404 (:status r)) uri)
       (is (= "not-found" (get-in (rt/decoded r) [:error :type])) uri))))
+
+(deftest ^:integration a-malformed-admin-id-is-a-404
+  ;; UUID/fromString threw an untyped IllegalArgumentException: a 500 (BOU-800).
+  (doseq [[m uri] [[:get "/web/admin/users/xyz"] [:delete "/web/admin/users/xyz"]]]
+    (let [r (rt/call m uri (:empty rt/bodies) (:admin callers))]
+      (is (= 404 (:status r)) uri)
+      (is (= "not-found" (get-in (rt/decoded r) [:error :type])) uri))))
+
+(deftest ^:integration a-browser-sees-an-error-page-in-the-apps-layout
+  (let [browser (merge (:admin callers) {"accept" "text/html" "x-correlation-id" "cid-800"})]
+    (testing "a page"
+      (let [r    (rt/call :get "/web/admin/users/xyz" (:empty rt/bodies) browser)
+            body (str (:body r))]
+        (is (= 404 (:status r)))
+        (is (str/starts-with? (get-in r [:headers "Content-Type"]) "text/html"))
+        (is (str/includes? body "site-header") "the layout, not the bare page")
+        (is (str/includes? body "Entity not found"))
+        (is (str/includes? body "cid-800"))))
+    (testing "an htmx request: a toast"
+      (let [r (rt/call :get "/web/admin/no-such-entity" (:empty rt/bodies) (assoc browser "hx-request" "true"))]
+        (is (= 404 (:status r)))
+        (is (str/includes? (str (get-in r [:headers "HX-Trigger"])) "showToast"))))))
