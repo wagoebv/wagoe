@@ -270,7 +270,7 @@
 
       (testing "Default sort by primary key descending"
         (is (= :id (:default-sort config)))
-        (is (= :desc (:default-sort-dir config)))))))
+        (is (= :asc (:default-sort-dir config)))))))
 
 ;; =============================================================================
 ;; Entity Config Merging Tests

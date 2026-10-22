@@ -31,6 +31,12 @@
                                                       {:overview/fields [field]} [record])
                        (list-return-to request entity-name)))
 
+(defn- in-the-cell
+  "An error form, swapped into the cell: replacing the td, as the form's
+   outerHTML asks, would leave its retry and cancel no `closest td`."
+  [response]
+  (ring-response/header response "HX-Reswap" "innerHTML"))
+
 (defn inline-edit-widget-handler
   "Handler for GET /:entity/:id/:field/edit - returns inline edit form.
 
@@ -123,7 +129,8 @@
                                     {:zone-id        (:input-zone zones)
                                      :server-zone-id (:server-zone zones)
                                      :offsets        (:offsets zones)}))
-            (assoc :status 422))
+            (assoc :status 422)
+            (in-the-cell))
       (try
         ; Update single field
         (let [updated (ports/update-entity-field admin-service entity-name id field parsed-value)
@@ -134,12 +141,13 @@
 
         (catch Exception e
           (let [error-data (ex-data e)
-                form-with  #(support/html-response request
-                                                   (admin-ui/render-inline-edit-form-with-error
-                                                    entity-name id field field-value field-config %
-                                                    {:zone-id        (:input-zone zones)
-                                                     :server-zone-id (:server-zone zones)
-                                                     :offsets        (:offsets zones)}))]
+                form-with  #(in-the-cell
+                             (support/html-response request
+                                                    (admin-ui/render-inline-edit-form-with-error
+                                                     entity-name id field field-value field-config %
+                                                     {:zone-id        (:input-zone zones)
+                                                      :server-zone-id (:server-zone zones)
+                                                      :offsets        (:offsets zones)})))]
             (cond
               (support/refusal? e)
               (form-with [(support/refusal-message request e)])
