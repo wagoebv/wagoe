@@ -35,6 +35,7 @@
  :common/filter-all-roles   "Alle rollen"
  :common/role-user          "Gebruiker"
  :common/role-admin         "Admin"
+ :common/role-viewer        "Kijker"
 
  :common/option-yes         "Ja"
  :common/option-no          "Nee"
