@@ -8,14 +8,15 @@
      state-badge          — colored state pill
      state-machine-vis    — read-only workflow state diagram
      audit-log-table      — chronological audit trail table
-     instances-filter-form — search/filter form for instance list
-     instances-table      — paginated instance list table
+     instances-filter-form — the instance list's filters
+     instances-table      — the instance list, sortable
      instances-page       — full page: instance list
      instance-detail-page — full page: instance detail with state viz + audit trail"
   (:require [wagoe.shared.ui.core.shell :as shell]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.form :as form]
+            [wagoe.shared.ui.core.table :as table-ui]
             [clojure.string :as str]))
 
 ;; =============================================================================
@@ -155,58 +156,84 @@
              [:span.text-muted "—"])]])]])))
 
 ;; =============================================================================
-;; Instances Table
+;; Instances List
 ;; =============================================================================
+
+(def instances-path "/web/admin/workflows")
+
+(def instances-target
+  "The container the list's filters and sort re-render."
+  "workflows-table-container")
+
+(def instance-columns
+  "The list's columns; :sortable? ones are what the store sorts by."
+  [{:field :id :label [:t :workflow/column-instance-id] :class "c-title" :sortable? false}
+   {:field :workflow-id :label [:t :workflow/column-workflow]}
+   {:field :entity-type :label [:t :workflow/column-entity-type]}
+   {:field :entity-id :label [:t :workflow/column-entity-id] :sortable? false}
+   {:field :current-state :label [:t :workflow/column-current-state]}
+   {:field :updated-at :label [:t :workflow/column-updated]}])
+
+(def default-query
+  "Newest first, as the store lists them."
+  {:sort :updated-at :dir :desc})
+
+(defn- short-id [x]
+  (let [s (str x)]
+    [:code (subs s 0 (min 8 (count s))) "…"]))
+
+(def sortable-fields
+  "What the store sorts the list by."
+  (set (keep #(when (:sortable? % true) (:field %)) instance-columns)))
+
+(def filter-params
+  "The query params the list filters by."
+  ["workflow-id" "entity-type" "state"])
+
+(defn- instance-row [inst]
+  (let [href (str instances-path "/" (:id inst))]
+    (table-ui/list-row
+     {:href       href
+      :columns    instance-columns
+      :open-label [:t :workflow/button-open-instance]
+      :cells      [[:a {:href href} (short-id (:id inst))]
+                   [:code (name (:workflow-id inst))]
+                   [:code (name (:entity-type inst))]
+                   (short-id (:entity-id inst))
+                   (state-badge (:current-state inst) :current)
+                   [:span.c-datetime (str (:updated-at inst))]]})))
 
 (defn instances-table
-  "Render a paginated table of workflow instances.
+  "The instances in the shared data-table, or an empty state, in the
+   container the list's filters and sort re-render.
 
    Args:
-     instances - vector of WorkflowInstance maps
+     instances   - vector of WorkflowInstance maps
+     table-query - {:sort :dir}, `default-query` when omitted
+     filters     - the query params filtered by (string keys), when any
 
    Returns:
-     Hiccup table or empty-state structure"
-  [instances]
-  (if (empty? instances)
-    [:div.empty-state
-     (icons/icon :layout-list {:size 32})
-     [:h3 [:t :workflow/empty-state-no-instances]]
-     [:p [:t :workflow/empty-state-instances-description]]]
-    (ui/table-wrapper
-     [:table {:class "data-table ui-table"}
-      [:thead
-       [:tr
-        [:th [:t :workflow/column-instance-id]]
-        [:th [:t :workflow/column-workflow]]
-        [:th [:t :workflow/column-entity-type]]
-        [:th [:t :workflow/column-entity-id]]
-        [:th [:t :workflow/column-current-state]]
-        [:th [:t :workflow/column-updated]]]]
-      [:tbody
-       (for [inst instances]
-         (let [id-str (str (:id inst))
-               short-id (subs id-str 0 (min 8 (count id-str)))]
-           [:tr {:onclick (str "window.location.href='/web/admin/workflows/" id-str "'")
-                 :style "cursor: pointer;"}
-            [:td
-             [:a {:href (str "/web/admin/workflows/" id-str)}
-              [:code {:style "font-size: 0.85em;"} short-id "…"]]]
-            [:td [:code (name (:workflow-id inst))]]
-            [:td [:code (name (:entity-type inst))]]
-            [:td
-             (let [eid-str (str (:entity-id inst))
-                   short-eid (subs eid-str 0 (min 8 (count eid-str)))]
-               [:code {:style "font-size: 0.85em;"} short-eid "…"])]
-            [:td (state-badge (:current-state inst) :current)]
-            [:td {:style "font-size: 0.85em; white-space: nowrap;"}
-             (str (:updated-at inst))]]))]])))
+     Hiccup structure"
+  ([instances] (instances-table instances default-query {}))
+  ([instances table-query filters]
+   (table-ui/list-body {:id             instances-target
+                        :url            instances-path
+                        :columns        instance-columns
+                        :rows           (map instance-row instances)
+                        :table-query    table-query
+                        :filters        (into {} (remove (comp str/blank? val)) (select-keys filters filter-params))
+                        :empty          (list [:strong [:t :workflow/empty-state-no-instances]] " "
+                                              [:t :workflow/empty-state-instances-description])
+                        :empty-filtered [:t :workflow/empty-state-no-matches]
+                        :clear-label    [:t :common/button-clear]})))
 
 ;; =============================================================================
-;; Filter Form
+;; Filters
 ;; =============================================================================
 
 (defn instances-filter-form
-  "Render the search/filter form for the workflow instances list.
+  "The list's filters: each re-queries the table as it changes, sending the
+   others and the table's sort along, and pushes the URL.
 
    Args:
      params - current query-params map (string keys)
@@ -214,36 +241,37 @@
               of them, or a text field when none is registered
 
    Returns:
-     Hiccup form structure"
+     Hiccup structure"
   [params states]
-  [:form.workflow-filter-form {:method "GET"
-                               :action "/web/admin/workflows"}
-   [:label.form-field
-    [:t :workflow/filter-label-workflow-id]
-    (ui/text-input :workflow-id (get params "workflow-id" "")
-                   {:placeholder [:t :workflow/filter-placeholder-workflow-id]})]
-   [:label.form-field
-    [:t :workflow/filter-label-entity-type]
-    (ui/text-input :entity-type (get params "entity-type" "")
-                   {:placeholder [:t :workflow/filter-placeholder-entity-type]})]
-   [:label.form-field
-    [:t :workflow/filter-label-current-state]
-    (if (seq states)
-      (let [current (get params "state" "")]
-        ;; A filtered-by state no workflow registers stays selectable, so
-        ;; the select never shows "any" over a filtered list
-        (ui/select-field :state
-                         (cond-> (into [["" [:t :workflow/filter-option-any-state]]]
-                                       (map (juxt name form/label-text))
-                                       states)
-                           (and (seq current) (not-any? #(= current (name %)) states))
-                           (conj [current (form/label-text current)]))
-                         current))
-      (ui/text-input :state (get params "state" "")
-                     {:placeholder [:t :workflow/filter-placeholder-current-state]}))]
-   [:button.button.secondary {:type "submit"}
-    (icons/icon :search {:size 14})
-    " " [:t :common/button-search]]])
+  (let [input (fn [k label opts]
+                (table-ui/filter-input
+                 (merge {:name       k
+                         :value      (get params k "")
+                         :label      label
+                         :url        instances-path
+                         :hx-target  (str "#" instances-target)
+                         :hx-include (str "#workflow-filters [name], #" instances-target " .table-state input")
+                         :attrs      {:id (str "workflow-filter-" k) :type "text" :class "input input-sm"
+                                      ;; An exact match: on Enter or leaving the field, not per keystroke
+                                      :hx-trigger "change, search"}}
+                        opts)))
+        current (get params "state" "")]
+    [:div#workflow-filters.toolbar-filters
+     (input "workflow-id" [:t :workflow/filter-label-workflow-id]
+            {:placeholder [:t :workflow/filter-placeholder-workflow-id]})
+     (input "entity-type" [:t :workflow/filter-label-entity-type]
+            {:placeholder [:t :workflow/filter-placeholder-entity-type]})
+     (if (seq states)
+       ;; A filtered-by state no workflow registers stays selectable, so the
+       ;; select never shows "any" over a filtered list
+       (input "state" [:t :workflow/filter-label-current-state]
+              {:placeholder [:t :workflow/filter-option-any-state]
+               :options     (cond-> (mapv (juxt name form/label-text) states)
+                              (and (seq current) (not-any? #(= current (name %)) states))
+                              (conj [current (form/label-text current)]))
+               :attrs       {:id "workflow-filter-state" :class "select select-sm"}})
+       (input "state" [:t :workflow/filter-label-current-state]
+              {:placeholder [:t :workflow/filter-placeholder-current-state]}))]))
 
 ;; =============================================================================
 ;; Full Pages
@@ -270,8 +298,9 @@
    Args:
      instances - vector of WorkflowInstance maps
      params    - query-params map (string keys from ring request)
-     opts      - map with :user, :flash, :states (for the filter), and the
-                 admin's :logo-url
+     opts      - map with :user, :flash, :states (for the filter),
+                 :table-query (`default-query` when absent), and the admin's
+                 :logo-url
 
    Returns:
      Complete HTML page structure (doctype + html)"
@@ -279,8 +308,11 @@
   (admin-page
    [:t :workflow/page-instances-title]
    [:t :workflow/page-instances-heading]
-   (list (instances-filter-form params (:states opts))
-         (instances-table instances))
+   [:div.entity-list-page {:class "space-y-4"}
+    [:div.table-toolbar-container
+     [:div.toolbar-row-actions
+      (instances-filter-form params (:states opts))]]
+    (instances-table instances (or (:table-query opts) default-query) params)]
    opts))
 
 (defn instance-detail-page

@@ -262,6 +262,8 @@
  :user/audit-empty-state-filtered "No audit logs match these filters."
  :user/audit-column-target     "Target User"
  :user/audit-column-result     "Result"
+ :user/audit-count             {:one "{count} entry" :many "{count} entries"}
+ :user/audit-ip-loopback       "this machine"
  :user/audit-filter-result-label "Result"
  :user/audit-filter-target-email "Target User Email"
  :user/audit-filter-actor-email  "Actor Email"
@@ -348,13 +350,15 @@
 
  ;; Groups
  :user.groups/page-title "Groups"
- :user.groups/heading "Groups"
- :user.groups/description "Members of a group hold the rights of its roles. Everyone holds every signed-in user. The admin role needs no group."
+ :user.groups/description "Members of a group hold the rights of its roles. Everyone contains every signed-in user. The admin role needs no group."
  :user.groups/field-name "Name"
  :user.groups/field-description "Description"
  :user.groups/column-members "Members"
  :user.groups/column-roles "Roles"
  :user.groups/empty "No groups yet."
+ :user.groups/search-placeholder "Search groups…"
+ :user.groups/members-everyone "All users"
+ :user.groups/count {:one "{count} group" :many "{count} groups"}
  :user.groups/create-heading "New group"
  :user.groups/button-create "Create group"
  :user.groups/group-page-title "Group {name}"
@@ -432,6 +436,9 @@
  :user.roles/flash-saved "Role saved."
  :user.roles/flash-deleted "Role deleted."
  :user.roles/flash-duplicated "Role duplicated."
+ :user.roles/search-placeholder "Search roles…"
+ :user.roles/empty "No roles yet."
+ :user.roles/count {:one "{count} role" :many "{count} roles"}
  :user.permissions/page-title "Permissions"
  :user.permissions/nav-description "Every permission the modules declare, and who holds it."
  :user.permissions/description "Every permission the enabled modules declare, by module. Open one to see who holds it."
@@ -442,6 +449,9 @@
  :user.permissions/roles-heading "Roles holding it"
  :user.permissions/no-roles "No role holds it."
  :user.permissions/not-found "That permission does not exist."
+ :user.permissions/search-placeholder "Search permissions and roles…"
+ :user.permissions/empty "No module declares a permission."
+ :user.permissions/count {:one "{count} permission" :many "{count} permissions"}
  :user.rights/tab "Rights"
  :user.rights/page-title "Rights of {name}"
  :user.rights/groups-heading "Groups"
@@ -459,6 +469,9 @@
  :user.rights/scope-resolved-none "(none, so no rights)"
  :user.rights/scope-resolve-failed "(could not be resolved)"
  :user.rights/user-not-found "That user does not exist."
+ :user.lists/group-none "Other"
+ :user.lists/button-open "Open"
+ :user.lists/no-matches "Nothing matches “{search}”."
  :user/tab-sessions "Sessions"
  :admin/tab-details "Details"
 
@@ -796,6 +809,8 @@
  :workflow/audit-column-context          "Context"
  :workflow/empty-state-no-instances       "No workflow instances"
  :workflow/empty-state-instances-description "No workflow instances have been created yet."
+ :workflow/empty-state-no-matches "No workflow instance matches these filters."
+ :workflow/button-open-instance "Open instance"
  :workflow/column-instance-id             "Instance ID"
  :workflow/column-workflow                "Workflow"
  :workflow/column-entity-type             "Entity type"

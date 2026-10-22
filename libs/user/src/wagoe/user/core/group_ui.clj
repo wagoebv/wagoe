@@ -2,8 +2,11 @@
   "Admin pages for groups, their members and their roles. Pure Hiccup; plain
    forms that post and redirect."
   (:require [wagoe.platform.core.csrf :as csrf]
+            [wagoe.core.utils.text :as text]
             [wagoe.shared.ui.core.combobox :as combobox]
             [wagoe.shared.ui.core.components :as ui]
+            [wagoe.shared.ui.core.icons :as icons]
+            [wagoe.shared.ui.core.modal :as modal]
             [wagoe.user.core.group :as group]
             [wagoe.user.core.rights-ui :as rights-ui]))
 
@@ -50,30 +53,49 @@
    [:input#group-description {:type "text" :name "description" :maxlength 255 :class "input"
                               :value (:description group)}]))
 
+(def groups-list
+  "The groups list."
+  (let [columns [{:field :name :label [:t :user.groups/field-name] :class "c-title"}
+                 {:field :description :label [:t :user.groups/field-description]}
+                 {:field :members :label [:t :user.groups/column-members]}
+                 {:field :roles :label [:t :user.groups/column-roles]}]]
+    {:id           "groups-table-container"
+     :url          base-path
+     :placeholder  [:t :user.groups/search-placeholder]
+     :empty-text   [:t :user.groups/empty]
+     :count-label  :user.groups/count
+     :columns      columns
+     :default-sort :name
+     :sort-keys    {:name        #(some-> (:name %) text/lower-case)
+                    :description #(some-> (:description %) text/lower-case)
+                    :members     #(when-not (group/everyone? (:id %)) (:member-count %))
+                    :roles       :role-count}
+     :search-text  #(str (:name %) " " (:description %))
+     :row          (fn [{:keys [id name description member-count role-count]}]
+                     (rights-ui/list-row (group-path id) {:class "group-row"} columns
+                                         [[:a {:href (group-path id)} name]
+                                          description
+                                          (if (group/everyone? id)
+                                            [:t :user.groups/members-everyone]
+                                            member-count)
+                                          role-count]))}))
+
 (defn groups-page
-  "Every group, and a form to create one."
+  "Every group, searchable and sortable by `(:table-query opts)`, and a form
+   to create one."
   [groups opts]
-  (page
+  (rights-ui/list-page
    [:t :user.groups/page-title]
+   [:t :user.groups/description]
    (list
-    (rights-ui/header [[[:t :user.groups/breadcrumb]]] [:t :user.groups/heading])
-    [:p [:t :user.groups/description]]
-    (rights-ui/notice opts)
-    (if (seq groups)
-      (rights-ui/table [[:t :user.groups/field-name] [:t :user.groups/field-description]
-                        [:t :user.groups/column-members] [:t :user.groups/column-roles]]
-                       (for [{:keys [id name description member-count role-count]} groups]
-                         [:tr
-                          [:td [:a {:href (group-path id)} name]]
-                          [:td description]
-                          [:td (when-not (group/everyone? id) member-count)]
-                          [:td role-count]]))
-      [:p.empty-state [:t :user.groups/empty]])
-    [:form.group-create-form {:method "post" :action base-path}
-     (csrf/hidden-field)
-     (rights-ui/section [:t :user.groups/create-heading]
-                        (group-fields (:form opts))
-                        [:button.button.primary {:type "submit"} [:t :user.groups/button-create]])])
+    (rights-ui/list-view groups-list groups (:table-query opts)
+                         [:button.button.primary (merge (modal/open-attrs "group-create-modal") {:class "gap-2"})
+                          (icons/icon :plus {:size 18}) [:t :user.groups/create-heading]])
+    (rights-ui/create-modal "group-create-modal" [:t :user.groups/create-heading] opts
+                            [:form.group-create-form {:method "post" :action base-path :class "space-y-3"}
+                             (csrf/hidden-field)
+                             (group-fields (:form opts))
+                             [:button.button.primary {:type "submit"} [:t :user.groups/button-create]]]))
    opts))
 
 (defn- role-input [roles chosen]
@@ -116,8 +138,8 @@
 (defn- member-rows [members action]
   (for [m members]
     [:tr
-     [:td [:a {:href (rights-ui/user-rights-path (:id m))} (:email m)]]
-     [:td (:name m)]
+     [:td {:data-label [:t :user.rights/column-user]} [:a {:href (rights-ui/user-rights-path (:id m))} (:email m)]]
+     [:td {:data-label [:t :user.groups/field-name]} (:name m)]
      [:td.actions-cell (action m)]]))
 
 (defn provider-members
@@ -125,7 +147,7 @@
   [members]
   (if (seq members)
     (rights-ui/table [[:t :user.rights/column-user] [:t :user.groups/field-name] [:t :user.roles/column-source]]
-                     (member-rows members (constantly (ui/badge [:t :user.rights/source-provider] {:variant :warning}))))
+                     (member-rows members (constantly (ui/tone-badge [:t :user.rights/source-provider] :warning))))
     [:p.empty-state [:t :user.groups/provider-members-empty]]))
 
 (defn group-page
@@ -179,8 +201,10 @@
                            (rights-ui/action-table [[:t :user.groups/field-role] [:t :user.groups/field-scope] ""]
                                             (for [a roles]
                                               [:tr
-                                               [:td [:a {:href (rights-ui/role-path (:role a))} [:code (group/permission-str (:role a))]]]
-                                               [:td (rights-ui/scope-view (:scope a) (:scope-info opts))]
+                                               [:td {:data-label [:t :user.groups/field-role]}
+                                                [:a {:href (rights-ui/role-path (:role a))} [:code (group/permission-str (:role a))]]]
+                                               [:td {:data-label [:t :user.groups/field-scope]}
+                                                (rights-ui/scope-view (:scope a) (:scope-info opts))]
                                                [:td.actions-cell (remove-button (str path "/roles/" (:id a) "/remove"))]]))
                            [:p.empty-state [:t :user.groups/roles-empty]])
                          [:form.group-role-form {:method "post" :action (str path "/roles") :class "space-y-2"}

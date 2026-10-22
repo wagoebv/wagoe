@@ -563,3 +563,18 @@
         "nothing to unlock or reset")
     (is (empty? (posts (ui/user-sessions-page locked [] nil {:user {:role :user} :current-time now})))
         "not for a user looking at their own sessions")))
+
+(deftest ^:unit the-audit-trail-shows-an-ip-short-and-loopback-named
+  (let [shown (fn [ip] (->> (tree-seq coll? seq (ui/format-ip ip))
+                            (keep #(cond (string? %) % (and (vector? %) (= :t (first %))) (second %)))
+                            vec))]
+    (is (= ["::1" " (" :user/audit-ip-loopback ")"] (shown "[0:0:0:0:0:0:0:1]")))
+    (is (= ["127.0.0.1" " (" :user/audit-ip-loopback ")"] (shown "127.0.0.1")))
+    (is (= ["2001:db8::8:800:200c:417a"] (shown "2001:0DB8:0:0:8:800:200C:417A")))
+    (is (= ["fe80::1:0:0:5"] (shown "fe80:0:0:0:1:0:0:5")) "the longer zero run")
+    (is (= ["10.0.0.4"] (shown "10.0.0.4")))
+    (is (nil? (ui/format-ip nil)))))
+
+(deftest ^:unit audit-badges-are-tone-badges
+  (doseq [badge [(ui/action-badge :login) (ui/result-badge :failure)]]
+    (is (re-find #"c-badge tone-" (:class (second badge))))))

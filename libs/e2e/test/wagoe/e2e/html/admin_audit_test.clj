@@ -34,7 +34,7 @@
       (await! pg "!!document.querySelector('#audit-table-container .empty-state-filtered')")
       (is (= "alive" (page/evaluate pg "document.body.dataset.e2eMarker")) "no full reload")
       (is (str/includes? (page/url pg) "result=failure"))
-      (is (= "0" (str/trim (loc/text-content (page/locator pg "#audit-record-count"))))))
+      (is (= "0 entries" (str/trim (loc/text-content (page/locator pg "#audit-record-count"))))))
 
     (testing "a reload keeps the filter"
       (page/reload pg)
