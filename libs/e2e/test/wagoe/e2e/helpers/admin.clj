@@ -158,6 +158,26 @@
     (loc/click (page/locator pg (str "table.data-table th.sortable-header.field-" field)))
     (await-swap! pg marked "#entity-table-container")))
 
+(defn sort-by-select!
+  "Pick `value` in the card view's sort select `select-name` (\"sort\" or
+   \"dir\") and wait for the table to be replaced."
+  [pg select-name value]
+  (let [selector (str ".card-sort select[name='" select-name "']")
+        ;; A select swapped in a moment ago has no htmx listener until htmx
+        ;; processes it, and a change before that requests nothing
+        ready    (page/wait-for-function
+                  pg
+                  (str "(() => { const s = document.querySelector(\"" selector "\");"
+                       " return !!(s && s['htmx-internal-data'])"
+                       " && !document.querySelector('.htmx-request, .htmx-swapping, .htmx-settling'); })()")
+                  {:timeout 10000.0 :polling 50.0})
+        _        (when (map? ready)
+                   (throw (ex-info (str "htmx never processed " selector)
+                                   {:type :wagoe.e2e/htmx-not-ready :selector selector})))
+        marked   (mark-stale! pg "#entity-table-container")]
+    (loc/select-option (page/locator pg selector) value)
+    (await-swap! pg marked "#entity-table-container")))
+
 (defn submit-entity-form!
   "Click an admin entity form's submit button and wait for it to re-render.
 

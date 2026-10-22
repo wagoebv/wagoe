@@ -61,6 +61,54 @@
   [entity-config]
   (some? (:workflow entity-config)))
 
+(defn- record-page-url
+  "A record's page, carrying the list it came from (BOU-553)."
+  [entity-name record-id return-to]
+  (str "/web/admin/" (name entity-name) "/" record-id
+       (when return-to (str "?return_to=" (base/url-encode return-to)))))
+
+(defn entity-cell
+  "One `[:td]` of a list row: `column` as `cells/columns` describes it, double-
+   click editable when the user may write the field. An inline save or cancel
+   answers with this same cell, so the edited cell stays the one the list drew.
+   `href` is the record's page, for a :title cell, or nil."
+  [entity-name record entity-config permissions display column href]
+  (let [{:keys [field config role label relation data?]} column
+        primary-key (:primary-key entity-config :id)
+        content (cells/cell field record
+                            {:role          role
+                             :field-config  config
+                             :entity-config entity-config
+                             :relation      relation
+                             :display       display
+                             :href          href})
+        classes (str "field-" (name field) " " (:class column))
+        editable? (and (:can-edit permissions)
+                       data?
+                       (not (some #{field} (:readonly-fields entity-config)))
+                       (not= field primary-key))]
+    (if editable?
+      [:td {:class (str classes " editable")
+            :data-label label
+            :hx-get (str "/web/admin/" (name entity-name) "/" (get record primary-key) "/" (name field) "/edit")
+            :hx-trigger "dblclick"
+            :hx-target "this"
+            :hx-swap "innerHTML"
+            :title [:t :admin/cell-dblclick-hint]}
+       content]
+      [:td {:class classes
+            :data-label label}
+       content])))
+
+(defn field-cell
+  "`field`'s list cell for `record` alone: what an inline save or cancel
+   returns. `return-to` is the list the row is on, as `entity-table-row` takes it."
+  [entity-name record entity-config field permissions & [display return-to]]
+  (entity-cell entity-name record entity-config permissions display
+               (first (cells/columns entity-config [field]))
+               (when (:can-view permissions)
+                 (record-page-url entity-name (get record (:primary-key entity-config :id)) return-to))))
+
 (defn entity-table-row
   "Generate entity table row.
 
@@ -80,9 +128,7 @@
         ;; Links carry the list they came from, so the record page can offer
         ;; previous / next in it and the way back (data-href stays bare: the
         ;; drawer and the keyboard add the live list URL themselves)
-        record-url (str "/web/admin/" (name entity-name) "/" record-id
-                        (when return-to (str "?return_to=" (base/url-encode return-to))))
-        readonly-fields (set (:readonly-fields entity-config))
+        record-url (record-page-url entity-name record-id return-to)
         ;; The detail page needs read: one who may only read sees it read-only
         can-open? (boolean (:can-view permissions))
         row-attrs (cond-> {:class (if can-open? "entity-row clickable-row" "entity-row")}
@@ -92,34 +138,9 @@
      [:td.checkbox-cell
        ;; Alpine.js row checkbox with x-model binding to selectedIds array
       [:input (alpine/row-checkbox-attrs record-id)]]
-     (for [{:keys [field config role label relation data?] :as column}
-           (or cols (cells/columns entity-config (:list-fields entity-config)))]
-       (let [content (cells/cell field record
-                                 {:role          role
-                                  :field-config  config
-                                  :entity-config entity-config
-                                  :relation      relation
-                                  :display       display
-                                  :href          (when can-open? record-url)})
-             classes (str "field-" (name field) " " (:class column))
-             editable? (and (:can-edit permissions)
-                            data?
-                            (not (contains? readonly-fields field))
-                            (not= field primary-key))]
-         (if editable?
-           ; Editable cell with double-click to edit (Week 2)
-           [:td {:class (str classes " editable")
-                 :data-label label
-                 :hx-get (str "/web/admin/" (name entity-name) "/" record-id "/" (name field) "/edit")
-                 :hx-trigger "dblclick"
-                 :hx-target "this"
-                 :hx-swap "innerHTML"
-                 :title [:t :admin/cell-dblclick-hint]}
-            content]
-           ; Non-editable cell
-           [:td {:class classes
-                 :data-label label}
-            content])))
+     (for [column (or cols (cells/columns entity-config (:list-fields entity-config)))]
+       (entity-cell entity-name record entity-config permissions display column
+                    (when can-open? record-url)))
      (when (workflow-column? entity-config)
        [:td.field-workflow {:data-label [:t :admin/column-workflow]}
         (base/workflow-state-link (:admin/workflow record))])
@@ -239,7 +260,14 @@
         table-params (table-ui/table-query->params table-query)
         filter-params (table-ui/search-filters->params (or filters {}))
         list-fields (:list-fields entity-config)
-        cols (cells/columns entity-config list-fields)]
+        cols (cells/columns entity-config list-fields)
+        ;; The role aligns a header with its cells; the field class lets the
+        ;; column menu hide it
+        table-columns (for [{:keys [field config label data?] role-class :class} cols]
+                        {:field     field
+                         :label     label
+                         :class     role-class
+                         :sortable? (boolean (and data? (:sortable config true)))})]
     ;; Table container - Alpine.js scope is at parent entity-list-page level
     ;; MutationObserver automatically handles HTMX DOM updates (no afterSwap needed)
     [:div#entity-table-container
@@ -299,6 +327,8 @@
              has-pagination? (some? pagination)
              wrapper-class (if has-pagination? "table-and-pagination" "")]
          [:div {:class wrapper-class}
+          (table-ui/sort-select {:url list-path :hx-target hx-target :table-query table-query
+                                 :filters filters :columns table-columns})
           [:div.table-wrapper
            ;; Form for checkbox submission (hidden inputs + table)
            [:form#table-form
@@ -313,13 +343,7 @@
               :hx-target   hx-target
               :table-query table-query
               :filters     filters
-              ;; The role aligns a header with its cells; the field class
-              ;; lets the column menu hide it
-              :columns     (for [{:keys [field config label data?] role-class :class} cols]
-                             {:field     field
-                              :label     label
-                              :class     role-class
-                              :sortable? (boolean (and data? (:sortable config true)))})
+              :columns     table-columns
               ;; Column sizing for table-layout: fixed — framing columns via CSS
               ;; classes, data columns via proportional inline widths
               ;; (overridable via :width in the field config).
@@ -375,7 +399,7 @@
   "The list's keys (keyboard.js), shown once below the table."
   []
   [:p {:class "kbd-hints" :aria-hidden "true"}
-   (for [[ks label] [[["/"] :admin/kbd-search] [["j" "k"] :admin/kbd-move] [["PgUp" "PgDn"] :admin/kbd-page]
+   (for [[ks label] [[["/"] :admin/kbd-search] [["j" "k"] :admin/kbd-move] [["PgUp" "PgDn"] :admin/kbd-page] ; i18n-ignore: key caps
                      [["x"] :admin/kbd-select] [["f"] :admin/kbd-filter] [["↵"] :admin/kbd-open] [["e"] :admin/kbd-edit]
                      [["q"] :admin/kbd-close]]]
      [:span (for [k ks] [:kbd k]) " " [:t label]])])
@@ -474,7 +498,7 @@
             :href (base/entity-create-url entity-name entity-config
                                           (when (:create-redirect-url entity-config)
                                             (base/current-list-url entity-name table-query filters)))
-            :aria-label (str "Create new " (name entity-name))}
+            :aria-label [:t :admin/button-create-new {:entity (name entity-name)}]}
            (icons/icon :plus {:size 18})
            [:t :admin/button-new {:entity (introspection/singular-label entity-config entity-name)}]])]]]
 

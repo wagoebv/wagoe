@@ -354,21 +354,21 @@
     (let [service (create-mock-service)
           config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/user-detail-page-handler service config)
-          request {:path-params {:id (str (UUID/randomUUID))}}
+          request (assoc dutch :path-params {:id (str (UUID/randomUUID))})
           response (handler request)]
 
       (is (= 404 (:status response)))
-      (is (html-contains? response "User Not Found"))))
+      (is (html-contains? response "Gebruiker niet gevonden"))))
 
   (testing "returns 400 for invalid UUID"
     (let [service (create-mock-service)
           config {:active {:wagoe/settings {:user-limits {:max-users 1000}}}}
           handler (web-handlers/user-detail-page-handler service config)
-          request {:path-params {:id "not-a-uuid"}}
+          request (assoc dutch :path-params {:id "not-a-uuid"})
           response (handler request)]
 
       (is (= 400 (:status response)))
-      (is (html-contains? response "Invalid User ID"))))
+      (is (html-contains? response "Ongeldig gebruikers-ID"))))
 
   (testing "handles service errors gracefully"
     (let [user (create-test-user {})
@@ -788,7 +788,7 @@
           response (handler request)]
 
       (is (= 400 (:status response)))
-      (is (html-contains? response "Invalid user ID"))))
+      (is (html-contains? response "error-invalid-user-id"))))
 
   (testing "handles service errors gracefully"
     (let [user (create-test-user {})
@@ -848,7 +848,7 @@
           response (handler request)]
 
       (is (= 400 (:status response)))
-      (is (html-contains? response "Invalid user ID"))))
+      (is (html-contains? response "error-invalid-user-id"))))
 
   (testing "handles service errors"
     (let [user (create-test-user {})
@@ -1214,7 +1214,7 @@
       (let [resp ((web-handlers/revoke-session-handler svc {})
                   {:path-params {:id (str uid) :session-id "nope"}})]
         (is (= 400 (:status resp)))
-        (is (re-find #"\"showToast\".*Invalid session" (get-in resp [:headers "HX-Trigger"])))))))
+        (is (re-find #"\"showToast\".*error-invalid-session" (get-in resp [:headers "HX-Trigger"])))))))
 
 (defn- mfa-user-service [id password]
   (mfa/create-mfa-service (mem/->MemoryUserRepository (atom {id (mem/mfa-user id password)}))

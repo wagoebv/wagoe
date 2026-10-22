@@ -545,6 +545,19 @@
      :date-time-format (:date-time-format config)
      :date-format      (:date-format config)}))
 
+(defn overview
+  "What the cells of `records` need (ADR-040), or nil when the service does
+   not provide it."
+  [admin-service entity-name options records]
+  (when (satisfies? ports/IListOverview admin-service)
+    (ports/list-overview admin-service entity-name options records)))
+
+(defn display-with-overview
+  "The display options, with the overview of `records`."
+  [admin-service config request entity-name options records]
+  (assoc (display-options config request)
+         :overview (overview admin-service entity-name options records)))
+
 (defn form-zone-options
   "The zones to parse a submitted form's :instant fields in, and `params`
    without the `__zone` field that carried them.
@@ -970,13 +983,18 @@
         related-records (when (seq has-many-rels)
                           (mapv (fn [rel]
                                   (let [rows (ports/list-related-entities admin-service entity-name record-id
-                                                                          (assoc rel :limit (inc panel-size)))]
+                                                                          (assoc rel :limit (inc panel-size)))
+                                        page (vec (take panel-size rows))]
                                     [(cond-> (assoc rel
                                                     :entity-config (get entity-configs (:entity rel))
                                                     :parent-id record-id
                                                     :has-more? (> (count rows) panel-size))
-                                       (:editable rel) (assoc :return-to parent-url))
-                                     (vec (take panel-size rows))]))
+                                       (:editable rel) (assoc :return-to parent-url)
+                                       ;; Relation titles for its cells (ADR-040)
+                                       (seq page)
+                                       (assoc :overview (overview admin-service (:entity rel)
+                                                                  {:overview/fields (:fields rel)} page)))
+                                     page]))
                                 has-many-rels))
 
         ; Return URL when navigating back from a child entity (e.g. order-items → order)

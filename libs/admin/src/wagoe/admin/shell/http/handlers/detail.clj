@@ -21,11 +21,8 @@
   "The display options for the drawer, with the overview of its one record —
    relation titles — when the service provides one (ADR-040)."
   [admin-service config request entity-name entity-config record]
-  (cond-> (support/display-options config request)
-    (satisfies? ports/IListOverview admin-service)
-    (assoc :overview (ports/list-overview admin-service entity-name
-                                          {:overview/fields (drawer/fields entity-config)}
-                                          [record]))))
+  (support/display-with-overview admin-service config request entity-name
+                                 {:overview/fields (drawer/fields entity-config)} [record]))
 
 (defn entity-detail-handler
   "Handler for entity detail/edit page: the form for editing an existing

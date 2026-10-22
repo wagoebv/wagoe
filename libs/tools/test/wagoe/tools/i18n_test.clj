@@ -43,6 +43,10 @@
     (is (empty? (i18n/scan-violations
                  "(defn page\n  \"First line of prose.\n   Second line of prose.\"\n  []\n  [:div])"))))
 
+  (testing "a docstring after map metadata is not a violation"
+    (is (empty? (i18n/scan-violations
+                 "(defn ^{:deprecated \"1.0\"} page\n  \"Render the user page.\"\n  []\n  [:div])"))))
+
   (testing "a namespace docstring is not a violation"
     (is (empty? (i18n/scan-violations
                  "(ns demo.core.ui\n  \"User interface components.\"\n  (:require [x]))"))))
@@ -109,7 +113,27 @@
   ;; scan exists to find.
   (testing "a string bound by def is reported"
     (is (= [{:line 1 :text "Users Page"}]
-           (i18n/scan-violations "(def title \"Users Page\")")))))
+           (i18n/scan-violations "(def title \"Users Page\")"))))
+
+  (testing "a comment after the value does not make it a docstring"
+    (is (= [{:line 1 :text "Users Page"}]
+           (i18n/scan-violations "(def title \"Users Page\" ; shown on top\n)"))))
+
+  (testing "a def docstring, followed by the value, is not reported"
+    (is (empty? (i18n/scan-violations "(def roles\n  \"Width weights by role.\"\n  {:a 1})")))))
+
+(deftest ^:unit scan-skips-acronyms-and-ignored-lines
+  (testing "an all-caps word is not prose"
+    (is (empty? (i18n/scan-violations "(defn f [] [:form {:method \"POST\"}])"))))
+
+  (testing "an i18n-ignore comment keeps its line off the report, and only its line"
+    (is (= [{:line 2 :text "Page Down"}]
+           (i18n/scan-violations
+            "(defn f [] [[\"Page Up\"] ; i18n-ignore: key caps\n [\"Page Down\"]])"))))
+
+  (testing "an i18n-ignore without a reason does not count"
+    (is (= [{:line 1 :text "Page Up"}]
+           (i18n/scan-violations "(defn f [] [\"Page Up\"]) ; i18n-ignore")))))
 
 ;; =============================================================================
 ;; The extractor the scan is built on

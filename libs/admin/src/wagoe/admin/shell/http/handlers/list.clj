@@ -9,8 +9,13 @@
    [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
+   [wagoe.platform.database :as db]
    [wagoe.shared.ui.core.htmx :as htmx]
-   [ring.util.response :as ring-response]))
+   [wagoe.user.core.ui :as user-ui]
+   [wagoe.user.ports :as user-ports]
+   [clojure.tools.logging :as log]
+   [ring.util.response :as ring-response])
+  (:import [java.time Instant]))
 
 (defn- list-options
   "The list's options from the query string, without the filters that filter
@@ -23,49 +28,86 @@
       (dissoc options :filters))))
 
 ;; =============================================================================
-;; List Overview (ADR-040)
-;; =============================================================================
-
-(defn- display-with-overview
-  "The display options for a list page, with the overview its cells need when
-   the service provides one (ADR-040)."
-  [admin-service config request entity-name options records]
-  (cond-> (support/display-options config request)
-    (satisfies? ports/IListOverview admin-service)
-    (assoc :overview (ports/list-overview admin-service entity-name options records))))
-
-;; =============================================================================
 ;; Admin Home Handler
 ;; =============================================================================
 
+(defn- isolated
+  "`(f)`, or nil when it throws: logged, and the dashboard shows the part as
+   missing instead of failing. In a savepoint, so a failed query in a tenant
+   request's transaction does not abort the parts after it on PostgreSQL."
+  [part f]
+  (try (db/in-savepoint (db/current-transaction) f)
+       (catch Exception e
+         (log/warn e "admin dashboard query failed" {:part part})
+         nil)))
+
+(def ^:private parallel-counts
+  "How many entities the dashboard counts at once: each takes a pool connection."
+  4)
+
+(defn- in-parallel
+  "`(f x)` for each of `xs`, a few at a time, or one by one when a transaction
+   is open on this thread (a tenant request's): its connection may not be
+   shared by threads."
+  [f xs]
+  (if (db/current-transaction)
+    (mapv f xs)
+    (into [] (mapcat #(mapv deref (mapv (fn [x] (future (f x))) %)))
+          (partition-all parallel-counts xs))))
+
+(defn- entity-stats
+  "{:count n :summary [..]} for `entity`, each part nil when its query fails."
+  [admin-service entity-configs entity]
+  {:count   (isolated [entity :count] #(ports/count-entities admin-service entity {}))
+   :summary (when (and (seq (:summary (get entity-configs entity)))
+                       (satisfies? ports/IListOverview admin-service))
+              (:summary (isolated [entity :summary] #(ports/list-overview admin-service entity {:overview/summary-only? true} []))))})
+
+(defn- recent-activity
+  "The last audit entries, when `groups` (the user's sidebar) has the audit
+   trail: it is there only when mounted and the user may open it."
+  [user-service groups]
+  (when-let [trail (and user-service
+                        (some #(when (= user-ui/audit-url (:href %)) %) (mapcat :items groups)))]
+    (if-let [result (isolated :activity #(user-ports/list-audit-logs user-service
+                                                                     {:limit 10 :sort-by :created-at
+                                                                      :sort-direction :desc :count? false}))]
+      {:href (:href trail) :entries (:audit-logs result)}
+      {:href (:href trail) :error? true})))
+
 (defn admin-home-handler
-  "The dashboard: the sidebar's sections, a card per page the user may open.
-   For every signed-in user, except under :enforce, where it needs read on
-   one entity in a scope that entity can check (ADR-041 §6)."
-  [admin-service schema-provider config]
-  (fn [request]
-    (let [user (support/get-current-user request)
-          available (ports/list-available-entities schema-provider)
-          all-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) available)
-          _ (when (= :enforce (permissions/mode user))
-              (shell-permissions/assert-can-access-admin! user all-configs))
-          entities (permissions/filter-visible-entities user available all-configs)
-          entity-configs (select-keys all-configs entities)
-          groups (admin-ui/dashboard-groups entities entity-configs user)
-          ;; Counted only for a card the dashboard shows
-          stats (into {} (comp (mapcat :items)
-                               (keep :entity)
-                               (filter (set entities))
-                               (map (fn [e] [e {:count (ports/count-entities admin-service e {})}])))
-                      groups)]
-      (support/html-response request
-                             (admin-ui/admin-layout
-                              (admin-ui/dashboard groups stats)
-                              {:user user
-                               :nav groups
-                               :current-entity nil
-                               :entity-configs entity-configs
-                               :logo-url (:logo-url config)})))))
+  "The dashboard: the sidebar's sections, an entity tile with its count and
+   summary for each entity the user may read, and with `user-service` the
+   recent audit entries for a user who may open the audit trail. For every
+   signed-in user, except under :enforce, where it needs read on one entity
+   in a scope that entity can check (ADR-041 §6)."
+  ([admin-service schema-provider config]
+   (admin-home-handler admin-service schema-provider config nil))
+  ([admin-service schema-provider config user-service]
+   (fn [request]
+     (let [user (support/get-current-user request)
+           available (ports/list-available-entities schema-provider)
+           all-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) available)
+           _ (when (= :enforce (permissions/mode user))
+               (shell-permissions/assert-can-access-admin! user all-configs))
+           entities (permissions/filter-visible-entities user available all-configs)
+           entity-configs (select-keys all-configs entities)
+           groups (admin-ui/dashboard-groups entities entity-configs user)
+           ;; Counted only for a tile the dashboard shows
+           shown (into [] (comp (mapcat :items) (keep :entity) (filter (set entities)) (distinct)) groups)
+           stats (zipmap shown (in-parallel (partial entity-stats admin-service entity-configs) shown))]
+       (support/html-response request
+                              (admin-ui/admin-layout
+                               (admin-ui/dashboard groups stats
+                                                   {:activity       (recent-activity user-service groups)
+                                                    :entity-configs entity-configs
+                                                    :display        (support/display-options config request)
+                                                    :now            (Instant/now)})
+                               {:user user
+                                :nav groups
+                                :current-entity nil
+                                :entity-configs entity-configs
+                                :logo-url (:logo-url config)}))))))
 
 ;; =============================================================================
 ;; Entity List Handlers
@@ -102,7 +144,7 @@
                          {:page-size (:page-size result)
                           :page (:page-number result)})
      :permissions (permissions/get-entity-permissions user entity-name entity-config)
-     :display (display-with-overview admin-service config request entity-name options records)}))
+     :display (support/display-with-overview admin-service config request entity-name options records)}))
 
 (defn- table-fragment-response
   "The table, or with the filter summary when that is the target, plus the

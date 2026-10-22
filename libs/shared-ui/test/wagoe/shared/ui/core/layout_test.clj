@@ -4,6 +4,7 @@
    Tests verify that layout components generate correct page structures,
    navigation elements, and consistent styling for the application."
   (:require [wagoe.platform.core.http.pages :as pages]
+            [wagoe.shared.ui.core.components :as components]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.layout :as layout]
             [clojure.string :as str]
@@ -40,8 +41,7 @@
         (is (str/includes? nav-html "Test User")))))
 
   (testing "Navigation structure contains expected links"
-    (let [result (layout/main-navigation)
-          nav-html (str result)]
+    (let [nav-html (components/render-html (layout/main-navigation))]
       ; Should contain the brand logo (with alt text) and login when no user
       (is (str/includes? nav-html "Wagoe"))
       (is (str/includes? nav-html "Login")))))
