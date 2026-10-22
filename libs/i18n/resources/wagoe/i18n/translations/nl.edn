@@ -35,6 +35,7 @@
  :common/filter-all-roles   "Alle rollen"
  :common/role-user          "Gebruiker"
  :common/role-admin         "Admin"
+ :common/role-viewer        "Kijker"
 
  :common/option-yes         "Ja"
  :common/option-no          "Nee"
@@ -684,6 +685,10 @@
  :admin/view-density-compact             "Compact"
  :admin/view-density-comfortable         "Ruim"
  :admin/view-columns                     "Kolommen"
+ :admin/sort-by                          "Sorteren op"
+ :admin/sort-direction                   "Sorteerrichting"
+ :admin/sort-ascending                   "Oplopend"
+ :admin/sort-descending                  "Aflopend"
  :admin/record-summary                   "Recordgegevens"
  :admin/changed-in-this-edit             "Gewijzigd in deze bewerking"
  :admin/save-and-back                    "opslaan en terug naar de lijst"
