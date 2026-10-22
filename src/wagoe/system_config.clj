@@ -70,7 +70,7 @@
                      :wagoe/mfa-service :wagoe/auth-hooks :wagoe/auth-service
                      :wagoe/user-service :wagoe/user-routes
                      :wagoe/user-http-middleware :wagoe/admin-only-middleware
-                     :wagoe/user-home-middleware
+                     :wagoe/user-home-middleware :wagoe/user-error-page
                      ;; Its timer belongs to whoever owns user_sessions, so a
                      ;; service that does not run the user module does not also
                      ;; prune its table (BOU-429).
