@@ -84,7 +84,11 @@
            (second m)))))
 
 (defn- next-migration-id
-  "First id at or after `now` that is not in `used`, as a string.
+  "First even id at or after `now` that is not in `used`, as a string.
+
+   Even because framework migrations share the id space and end in an odd
+   second (test/wagoe/migration_ids_test.clj), so an even id never collides
+   with one.
 
    Second precision alone is not unique: two scaffold operations within the
    same second produce different filenames sharing one id, and migratus throws
@@ -100,9 +104,9 @@
 
    Pure: takes the used set and the current timestamp rather than reading either."
   [used now]
-  (loop [id (Long/parseLong now)]
+  (loop [id (let [n (Long/parseLong now)] (if (odd? n) (inc n) n))]
     (if (contains? used (str id))
-      (recur (inc id))
+      (recur (+ id 2))
       (str id))))
 
 (defn- get-next-migration-number

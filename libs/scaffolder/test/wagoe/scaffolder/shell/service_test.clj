@@ -373,13 +373,18 @@
     (testing "a free timestamp is used as-is"
       (is (= "20260801120000" (next-id #{} "20260801120000"))))
 
-    (testing "a taken timestamp steps to the next free second"
-      (is (= "20260801120001" (next-id #{"20260801120000"} "20260801120000"))))
+    (testing "a taken timestamp steps to the next free even second"
+      (is (= "20260801120002" (next-id #{"20260801120000"} "20260801120000"))))
 
     (testing "consecutive collisions keep stepping"
-      (is (= "20260801120003"
-             (next-id #{"20260801120000" "20260801120001" "20260801120002"}
+      (is (= "20260801120006"
+             (next-id #{"20260801120000" "20260801120002" "20260801120004"}
                       "20260801120000"))))
+
+    (testing "an odd second is a framework id, so it steps to the even one after"
+      ;; The MySQL smoke scaffolded 20261022100001-create-invoices, the id of
+      ;; push's 20261022100001-device-token-binary-collation, and boot refused.
+      (is (= "20261022100002" (next-id #{} "20261022100001"))))
 
     (testing "ids stay 14 digits — a longer id would sort after every existing migration forever"
       (is (= 14 (count (next-id #{"20260801120000"} "20260801120000")))))

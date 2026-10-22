@@ -99,7 +99,9 @@
   (let [generators (core/endpoints-to-generators (or (:endpoints spec) [:crud]))
         ctx        (core/build-scaffold-context module-name spec)
         files      (generate-module-files! module-name ctx generators)
-        now               (java.time.LocalDateTime/now)
+        ;; An even second: framework migration ids end in an odd one.
+        now               (let [t (java.time.LocalDateTime/now)]
+                            (cond-> t (odd? (.getSecond t)) (.plusSeconds 1)))
         migration-ts      (.format now (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss"))
         migration-content (gen/generate-migration-file ctx migration-ts)
         ;; Where migratus reads, so this never splits a project's migrations
