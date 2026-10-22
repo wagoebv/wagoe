@@ -134,3 +134,7 @@
     (is (str/includes? html "href=\"/web/admin/workflows/i1\""))
     (is (str/includes? html "c-badge tone-success"))
     (is (str/includes? html ">On hold<"))))
+
+(deftest ^:unit a-file-cell-shows-its-size
+  (is (= :file (display/display-role {:fields {:datasheet {:type :binary}}} :datasheet)))
+  (is (str/includes? (render :file :datasheet 15) "file-size{:n 15}")))

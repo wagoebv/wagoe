@@ -76,11 +76,6 @@
 ;; Form Data Parsing
 ;; =============================================================================
 
-(defn- no-file?
-  "A file input left empty: the browser still sends the part, with no name."
-  [v]
-  (if (map? v) (str/blank? (:filename v)) (and (string? v) (str/blank? v))))
-
 (defn- upload-bytes
   "The content of a multipart file part, which Ring stores in a temp file."
   [field-keyword v]
@@ -127,7 +122,7 @@
                                (last value)
                                value)
             ;; A file input left empty keeps the stored file
-            keep-stored? (and (= field-type :binary) (no-file? normalized-value))
+            keep-stored? (and (introspection/upload-field? field-config) (forms/no-file? normalized-value))
 
              ; Convert string value to appropriate type
             typed-value (cond
@@ -136,8 +131,15 @@
                           ;; A JSON null clears the column
                           (nil? normalized-value) nil
 
-                          (= field-type :binary)
+                          (introspection/upload-field? field-config)
                           (upload-bytes field-keyword normalized-value)
+
+                          ;; A file sent to a field that takes none
+                          (map? normalized-value)
+                          (throw (ex-info "Not a file field"
+                                          {:type :validation-error
+                                           :field field-keyword
+                                           :message (str "Field '" (name field-keyword) "' does not take a file")}))
 
                            ; Empty strings become nil
                           (str/blank? normalized-value) nil
@@ -247,24 +249,28 @@
    invalid integer, decimal, UUID or date answered 500 rather than re-rendering
    the form (BOU-521). Parsing field by field reports every bad field at once,
    in the {field [message]} shape the form already renders, and keeps what the
-   user typed in `data` so the re-rendered form shows it."
+   user typed in `data` so the re-rendered form shows it. A stored file the
+   form removes (`forms/remove-file-param`) is cleared."
   ([params entity-config] (parse-form-params-checked params entity-config nil))
   ([params entity-config zones]
-   (reduce-kv
-    (fn [[data errors] field-name value]
-      (try
-        [(merge data (if zones
-                       (parse-form-params {field-name value} entity-config zones)
-                       (parse-form-params {field-name value} entity-config)))
-         errors]
-        (catch clojure.lang.ExceptionInfo e
-          (let [{:keys [type field message]} (ex-data e)]
-            (if (= :validation-error type)
-              [(assoc data field (if (vector? value) (last value) value))
-               (assoc errors field [message])]
-              (throw e))))))
-    [{} {}]
-    params)))
+   (let [[params removed] (forms/split-remove-params entity-config params)]
+     (-> (reduce-kv
+          (fn [[data errors] field-name value]
+            (try
+              [(merge data (if zones
+                             (parse-form-params {field-name value} entity-config zones)
+                             (parse-form-params {field-name value} entity-config)))
+               errors]
+              (catch clojure.lang.ExceptionInfo e
+                (let [{:keys [type field message]} (ex-data e)]
+                  (if (= :validation-error type)
+                    ;; A file part is not shown again: it would print its temp file
+                    [(assoc data field (let [v (if (vector? value) (last value) value)] (when-not (map? v) v)))
+                     (assoc errors field [message])]
+                    (throw e))))))
+          [{} {}]
+          params)
+         (update 0 forms/clear-removed removed)))))
 
 (defn get-current-user
   "Extract authenticated user from request.

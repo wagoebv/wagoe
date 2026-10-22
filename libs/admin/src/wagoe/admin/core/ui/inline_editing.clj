@@ -39,10 +39,11 @@
     (if (and (= widget :select) (not options?)) :text-input widget)))
 
 (defn- inline-select
-  "The select an inline edit shows, focused like the other inline inputs."
+  "The select an inline edit shows, focused like the other inline inputs. No
+   id: two editors open in one column would share it."
   [field field-config value class required?]
   (assoc-in (ui/select-field field (:options field-config) value
-                             {:class class :required required?})
+                             {:class class :required required? :blank? (not required?) :id nil})
             [1 :autofocus] true))
 
 (defn- temporal-inline-input
