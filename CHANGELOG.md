@@ -257,6 +257,8 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`jwt-authentication-middleware` and `protect-with-jwt` without a user service** (BOU-682): they trust the token, so a
   deactivated user passes. Pass the user service first; the 1-arity warns once and goes in 2.0.
 
+- **Admin `render-field-value`** (BOU-799): no page renders through it. Use `cells/cell`; it goes in 2.0.
+
 ### Removed
 
 - **`:dashboard-extra-cards`** (BOU-765): the page it extended is gone. For a dashboard card, give a module's nav
@@ -268,6 +270,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin inline edit: Save did nothing, and the cell came back as a UUID or raw enum name** (BOU-799). Inline and
+  related-record cells now match the list; an enum edits as a select. Nothing to change.
 - **The admin sidebar fell back to closed** (BOU-796): it is now open or closed, changed only by its one toggle; the pin
   and hover-expand are gone. A browser that pinned it closed keeps it closed.
 - **Admin: a required yes/no field could not be saved unticked** (BOU-793), so a user could not be deactivated

@@ -3,9 +3,36 @@
   (:require
    [wagoe.admin.ports :as ports]
    [wagoe.admin.core.ui :as admin-ui]
+   [wagoe.admin.core.ui.base :as ui-base]
+   [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
-   [ring.util.response :as ring-response]))
+   [ring.util.response :as ring-response])
+  (:import (java.net URI)))
+
+(defn- list-return-to
+  "The list the edited row is on, from the page htmx names, so a title cell
+   links back to it as the list drew it. Nil unless that page is this entity's
+   list."
+  [request entity-name]
+  (when-let [uri (try (some-> (get-in request [:headers "hx-current-url"]) URI.)
+                      (catch Exception _ nil))]
+    (when (= (.getPath uri) (ui-base/list-path entity-name))
+      (cond-> (.getPath uri)
+        (.getRawQuery uri) (str "?" (.getRawQuery uri))))))
+
+(defn- list-cell
+  "`field`'s cell after a save or cancel, rendered as the list renders it:
+   role, label, and the record's relation titles (ADR-040)."
+  [admin-service config request user entity-name entity-config record field]
+  (admin-ui/field-cell entity-name record entity-config field
+                       (permissions/get-entity-permissions user entity-name entity-config)
+                       (cond-> (support/display-options config request)
+                         (satisfies? ports/IListOverview admin-service)
+                         (assoc :overview (ports/list-overview admin-service entity-name
+                                                               {:overview/fields [field]}
+                                                               [record])))
+                       (list-return-to request entity-name)))
 
 (defn inline-edit-widget-handler
   "Handler for GET /:entity/:id/:field/edit - returns inline edit form.
@@ -102,13 +129,10 @@
             (assoc :status 422))
       (try
         ; Update single field
-        (let [updated-record (ports/update-entity-field admin-service entity-name id field parsed-value)
-              new-value (get updated-record field)]
-
-          ; Return updated cell HTML with success indicator
+        (let [updated (ports/update-entity-field admin-service entity-name id field parsed-value)
+              record  (if (map? updated) updated (ports/get-entity admin-service entity-name id))]
           (-> (support/html-response request
-                                     (admin-ui/render-inline-edit-cell entity-name id field new-value field-config
-                                                                       (support/display-options config request)))
+                                     (list-cell admin-service config request user entity-name entity-config record field))
               (ring-response/header "HX-Trigger" "entityUpdated")))
 
         (catch Exception e
@@ -134,7 +158,7 @@
    Returns the original cell HTML without changes."
   [admin-service schema-provider config]
   (fn [request]
-    (let [_user (support/require-admin-user! request schema-provider)
+    (let [user (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)
           id (support/get-entity-id request)
           field (keyword (get-in request [:path-params :field]))
@@ -146,13 +170,10 @@
                                :entity-name entity-name})))
 
           entity-config (ports/get-entity-config schema-provider entity-name)
-          field-config (get-in entity-config [:fields field])
-
-          ; Get current record
+          _ (shell-permissions/assert-can-view-entity! user entity-name entity-config)
           record (ports/get-entity admin-service entity-name id)
-          current-value (get record field)]
-
-      ; Return original cell HTML
+          _ (when-not record
+              (throw (ex-info "Entity not found"
+                              {:type :not-found :entity-name entity-name :id id})))]
       (support/html-response request
-                             (admin-ui/render-inline-edit-cell entity-name id field current-value field-config
-                                                               (support/display-options config request))))))
+                             (list-cell admin-service config request user entity-name entity-config record field)))))

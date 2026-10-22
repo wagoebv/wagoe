@@ -38,6 +38,9 @@
                 wagoe.platform.shell.http.rate-limit-interceptor-test {:linters {:missing-protocol-method {:level :off}}}
                 wagoe.bench.hotpaths {:linters {:missing-protocol-method {:level :off}}}
                 wagoe.reports.shell.service-test {:linters {:missing-protocol-method {:level :off}}}
+                ;; the re-export and the tests of a deprecated renderer
+                wagoe.admin.core.ui {:linters {:deprecated-var {:level :off}}}
+                wagoe.admin.core.ui-test {:linters {:deprecated-var {:level :off}}}
                 wagoe.user.ports {:linters {:redefined-var {:level :off}}}
                 build {:linters {:redefined-var {:level :off}}}
                 hooks.com.github.seancorfield.next-jdbc {:linters {:redefined-var {:level :off}}}

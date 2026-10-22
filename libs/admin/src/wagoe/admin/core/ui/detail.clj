@@ -677,8 +677,8 @@
      relationship: {:label \"Order Items\" :fields [...] :editable true
                     :foreign-key :order-id :parent-id \"...\" :return-to \"...\"
                     :has-more? true
-                    :entity-config {...}} — the related entity's config, which
-                   gives each cell its field type
+                    :entity-config {...}  ; the related entity's, for each cell's role
+                    :overview {...}}      ; relation titles of `records` (ADR-040)
      records:      vector of record maps (kebab-case keys)
      display:      Optional display options (zone/date patterns) for value
                    rendering
@@ -704,29 +704,35 @@
         [:t :admin/button-new {:entity (or (get-in relationship [:entity-config :label]) label)}]])
      (if (empty? records)
        [:p.empty-state [:t :admin/relationship-empty-state {:label label}]]
-       [:div.table-wrapper
-        [:table.related-table
-         [:thead
-          [:tr
-           (for [f fields]
-             [:th (-> (name f) (str/replace #"-" " ") text/capitalize)])
-           (when editable?
-             [:th])]]
-         [:tbody
-          (for [record records]
+       (let [child-cfg (:entity-config relationship)
+             cols      (cells/columns child-cfg fields)
+             display   (assoc display :overview (:overview relationship))]
+         [:div.table-wrapper
+          [:table.related-table
+           [:thead
             [:tr
-             (for [f fields]
-               ;; Rendered by field type, like a list table: a timestamp here
-               ;; used to print as the raw database value (BOU-382).
-               [:td (if-some [v (get record f)]
-                      (base/render-field-value f v (get-in relationship [:entity-config :fields f]) display)
-                      "—")])
+             (for [{:keys [label] role-class :class} cols]
+               [:th {:class role-class} label])
              (when editable?
-               [:td
-                [:a.button.secondary
-                 {:href (str "/web/admin/" entity "/" (:id record)
-                             (when return-qs (str "?" return-qs)))}
-                 [:t :common/button-edit]]])])]]])
+               [:th])]]
+           [:tbody
+            (for [record records
+                  :let [edit-url (str "/web/admin/" entity "/" (get record (:primary-key child-cfg :id))
+                                      (when return-qs (str "?" return-qs)))]]
+              [:tr
+               ;; The list's cells, by display role (ADR-040)
+               (for [{:keys [field config role relation label] role-class :class} cols]
+                 [:td {:class (str "field-" (name field) " " role-class) :data-label label}
+                  (cells/cell field record {:role          role
+                                            :field-config  config
+                                            :entity-config child-cfg
+                                            :relation      relation
+                                            :display       display
+                                            :href          (when editable? edit-url)})])
+               (when editable?
+                 [:td
+                  [:a.button.secondary {:href edit-url}
+                   [:t :common/button-edit]]])])]]]))
      (when (and (:has-more? relationship) fk-param (some? (:parent-id relationship)))
        [:a.button.secondary {:href (base/filtered-list-url entity fk-param (:parent-id relationship))}
         [:t :admin/relationship-view-all {:label label}]])]))

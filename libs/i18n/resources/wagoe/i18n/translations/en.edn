@@ -31,6 +31,7 @@
  :common/filter-all-roles   "All roles"
  :common/role-user          "User"
  :common/role-admin         "Admin"
+ :common/role-viewer        "Viewer"
 
  :common/option-yes         "Yes"
  :common/option-no          "No"

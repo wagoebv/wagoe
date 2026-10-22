@@ -42,9 +42,8 @@
 (defn enum-label
   "The label `:options` gives `value`, else the value humanized."
   [field-config value]
-  (let [v (value-name value)]
-    (or (some (fn [[k label]] (when (= v (value-name k)) label)) (:options field-config))
-        (base/format-field-label v))))
+  (or (base/option-label field-config value)
+      (base/format-field-label (value-name value))))
 
 (defn enum-tone
   "The tone `:tones` gives `value`, else :neutral."

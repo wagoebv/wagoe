@@ -3,14 +3,17 @@
 
    Pure Hiccup generators for the editable-cell display mode, the inline
    edit form, and the inline edit form with a validation error."
-  (:require [wagoe.core.utils.text :as text]
-            [wagoe.admin.core.ui.base :as base]
+  (:require [wagoe.admin.core.ui.base :as base]
+            [wagoe.admin.core.ui.list :as list]
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.icons :as icons]
             [clojure.string :as str]))
 
 (defn render-inline-edit-cell
-  "Render an editable table cell (normal display mode).
+  "An editable table cell for `field` alone, rendered by its display role.
+   Knows only this field, so a relation shows its id and a title no link:
+   the inline handlers use `list/field-cell`, which has the record and its
+   overview.
 
    Args:
      entity-name: Keyword entity name
@@ -23,19 +26,18 @@
    Returns:
      Hiccup td element"
   [entity-name record-id field value field-config & [display]]
-  (let [field-label (:label field-config (text/capitalize (name field)))]
-    [:td {:class (str "field-" (name field) " editable")
-          :data-label field-label
-          :hx-get (str "/web/admin/" (name entity-name) "/" record-id "/" (name field) "/edit")
-          :hx-trigger "dblclick"
-          :hx-target "this"
-          :hx-swap "innerHTML"
-          :title [:t :admin/cell-dblclick-hint]}
-     [:span.cell-content
-      (base/render-field-value field value field-config display)]
-     [:span.inline-edit-hint
-      (icons/icon :pencil {:size 14})
-      " " [:t :common/button-edit]]]))
+  (list/field-cell entity-name {:id record-id field value}
+                   {:fields {field (or field-config {})}}
+                   field {:can-edit true} display))
+
+(defn- inline-widget
+  "The field's widget; an enum with `:options` and none set edits as a select,
+   so the editor shows the labels the cell shows."
+  [field-config]
+  (or (:widget field-config)
+      (if (and (= :enum (:type field-config)) (seq (:options field-config)))
+        :select
+        :text-input)))
 
 (defn- temporal-inline-input
   "The date or datetime input for an inline edit, or nil for any other widget.
@@ -103,15 +105,14 @@
    Returns:
      Hiccup form structure"
   [entity-name record-id field value field-config & [display]]
-  (let [widget-type (:widget field-config :text-input)
+  (let [widget-type (inline-widget field-config)
         _field-type (:type field-config :string)
         required? (:required field-config false)
         _cancel-url (str "/web/admin/" (name entity-name) "/" record-id "/" (name field) "/cancel")]
     [:form.inline-edit-form
      {:hx-patch (str "/web/admin/" (name entity-name) "/" record-id "/" (name field))
       :hx-target "closest td"
-      :hx-swap "outerHTML"
-      :onsubmit "event.preventDefault(); htmx.trigger(this, 'submit');"}
+      :hx-swap "outerHTML"}
      (zone-field display)
 
      ; Render appropriate input widget
@@ -136,6 +137,10 @@
          :autofocus true
          :rows 2}
         (str value)]
+
+       (= widget-type :select)
+       (ui/select-field field (:options field-config) value
+                        {:class "inline-input" :required required?})
 
        (= widget-type :number-input)
        [:input.inline-input
@@ -174,7 +179,7 @@
 
 (defn- inline-edit-form-with-error
   [entity-name record-id field value field-config errors display]
-  (let [widget-type (:widget field-config :text-input)
+  (let [widget-type (inline-widget field-config)
         _field-type (:type field-config :string)
         required? (:required field-config false)]
     [:div.inline-edit-error
@@ -205,6 +210,10 @@
           :autofocus true
           :rows 2}
          (str value)]
+
+        (= widget-type :select)
+        (ui/select-field field (:options field-config) value
+                         {:class "inline-input error" :required required?})
 
         (= widget-type :number-input)
         [:input.inline-input.error

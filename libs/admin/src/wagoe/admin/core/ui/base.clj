@@ -358,8 +358,19 @@
     23 "0.001"
     nil))
 
-(defn render-field-value
-  "Render field value for display in table or detail view.
+(defn option-label
+  "The label `:options` gives an enum `value`, or nil. `:paid`, `\"paid\"`
+   and `paid` name the same option."
+  [field-config value]
+  (let [vname #(if (keyword? %) (name %) (str %))]
+    (some (fn [[k label]] (when (= (vname value) (vname k)) label))
+          (:options field-config))))
+
+(defn ^{:deprecated "1.0.2"} render-field-value
+  "Deprecated: no admin page renders through this any more. Use
+   `wagoe.admin.core.ui.cells/cell`, which renders by display role (ADR-040).
+
+   Render field value for display in table or detail view.
 
    Args:
      field-name: Keyword field name
@@ -396,7 +407,7 @@
 
        (= field-type :enum)
        [:span.enum-badge {:class "badge ui-badge ui-badge-outline enum-badge"}
-        (text/capitalize (name value))]
+        (or (option-label field-config value) (text/capitalize (name value)))]
 
        (= field-type :json)
        [:code (str value)]
