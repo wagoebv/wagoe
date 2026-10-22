@@ -197,16 +197,23 @@
 
        ;; File upload
        (= widget-type :file-input)
-       (list
-        [:input {:type "file"
-                 :id (name field-name)
-                 :name (name field-name)
-                 ;; Left empty on an edit, the stored file is kept.
-                 :required (and required? (nil? value))
-                 :disabled readonly?
-                 :class "form-control"}]
-        (when (bytes? value)
-          [:small.file-stored [:t :admin/file-stored {:n (alength ^bytes value)}]]))
+       ;; A stored file reads as its size (the service never loads its content)
+       (let [stored? (integer? value)]
+         (list
+          [:input {:type "file"
+                   :id (name field-name)
+                   :name (name field-name)
+                   ;; Left empty on an edit, the stored file is kept.
+                   :required (and required? (not stored?))
+                   :disabled readonly?
+                   :class "form-control"}]
+          (when stored?
+            [:small.file-stored [:t :admin/file-stored {:n value}]])
+          (when (and stored? (not required?) (not readonly?))
+            [:label {:class "file-remove flex items-center gap-2 mt-1"}
+             [:input {:type "checkbox" :class "checkbox checkbox-sm"
+                      :name forms/remove-file-param :value (name field-name)}]
+             [:span [:t :admin/file-remove]]])))
 
        ;; Hidden field
        (= widget-type :hidden)
@@ -498,6 +505,11 @@
     (when is-edit?
       [:span [:kbd "⌘↵"] " " [:t :admin/save-and-back]])]])
 
+(defn- uploads?
+  "Whether any of `fields` of `entity-config` takes a file."
+  [entity-config fields]
+  (some #(introspection/upload-field? (get-in entity-config [:fields %])) fields))
+
 (defn entity-form
   "Render entity create/edit form.
 
@@ -565,7 +577,8 @@
                                           optional-details-key
                                           "', 'false'); }")}
               ;; htmx sends url-encoded otherwise, and the file never arrives
-              (when (some #(= :file-input (get-in entity-config [:fields % :widget])) editable-fields)
+              (when (or (uploads? entity-config editable-fields)
+                        (some (fn [{:keys [rel]}] (uploads? (:entity-config rel) (:fields rel))) nested))
                 {:hx-encoding "multipart/form-data"})
               ;; After a successful edit, push the same URL (including return_to) so the
               ;; browser stays on the detail page with context intact
@@ -584,6 +597,9 @@
       [:div.form-card-body {:class "form-card-body space-y-4"}
        [:div.form-meta
         [:span.form-meta-label [:t :admin/form-required-fields-note]]]
+       (for [{:keys [field]} (:upload-config-errors entity-config)]
+         [:div {:class "alert alert-error admin-config-error" :role "alert"}
+          [:t :admin/config-error-upload {:field (name field)}]])
        (cond
          ;; Priority 1: Use configured field groups if present
          field-groups

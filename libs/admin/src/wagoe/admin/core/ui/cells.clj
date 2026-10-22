@@ -225,6 +225,10 @@
           :identifier
           (identifier value)
 
+          ;; The service reads a file as its size in bytes
+          :file
+          [:t :admin/file-size {:n value}]
+
           :email
           [:a {:href (str "mailto:" value)} (str value)]
 

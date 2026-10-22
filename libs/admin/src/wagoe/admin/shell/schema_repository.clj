@@ -219,8 +219,14 @@
           ;; A join table is not created from a form (BOU-778).
           (doseq [{:keys [message]} (when-not (:join-keys entity-config) (:create-config-errors own))]
             (log/error "Admin config error:" message))
-          (swap! config-cache assoc entity-name entity-config)
-          entity-config)))
+          ;; A field whose widget and type disagree on taking a file leaves the
+          ;; form; the rest of the entity, and the admin, keep working.
+          (let [errors        (introspection/upload-errors entity-name entity-config)
+                entity-config (introspection/without-upload-errors entity-config errors)]
+            (doseq [{:keys [message]} errors]
+              (log/error "Admin config error:" message))
+            (swap! config-cache assoc entity-name entity-config)
+            entity-config))))
 
   (list-available-entities [_]
     "List all entities available based on discovery configuration.
