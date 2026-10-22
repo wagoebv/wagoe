@@ -64,3 +64,18 @@
       (is (not (loc/is-visible? (link pg "/web/admin/groups"))))
       (loc/hover (toggle pg "user"))
       (is (loc/is-visible? (link pg "/web/admin/groups"))))))
+
+(deftest ^:integration ^:e2e the-dashboard-has-the-sidebar-sections
+  (spel/with-testing-page [pg]
+    (admin/login-as-admin! pg fx/*seed*)
+    (page/navigate pg (admin/admin-url "/"))
+    (let [read (fn [js] (page/evaluate pg js))
+          sidebar (read (str "[...document.querySelectorAll('nav.admin-sidebar-nav .nav-module')]"
+                             ".map(g => [g.querySelector('.nav-module-toggle .nav-text').textContent,"
+                             " [...g.querySelectorAll('a')].map(a => [a.getAttribute('href'), a.querySelector('.nav-text').textContent])])"))
+          dashboard (read (str "[...document.querySelectorAll('.admin-home-section')]"
+                               ".map(s => [s.querySelector('h2').textContent,"
+                               " [...s.querySelectorAll('a.entity-card-link')]"
+                               ".map(a => [a.getAttribute('href'), a.querySelector('.entity-card-title').textContent])])"))]
+      (is (seq dashboard))
+      (is (= sidebar dashboard) "the same groups, items and labels, in the same order"))))

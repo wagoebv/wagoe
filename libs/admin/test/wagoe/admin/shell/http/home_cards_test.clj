@@ -6,6 +6,7 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [reitit.core :as r]
+            [wagoe.admin.core.ui :as admin-ui]
             [wagoe.admin.ports :as admin-ports]
             [wagoe.admin.shell.http.handlers.list :as list-handlers]
             [wagoe.platform.core.http.nav :as nav]
@@ -48,7 +49,9 @@
     (str (:body ((interceptors/wrap-nav
                   #(interceptors/run-http-interceptors handler [] % {})
                   (constantly
-                   (nav/collect (keep :nav (contributions config)) nil
+                   (nav/collect (conj (vec (keep :nav (contributions config)))
+                                      (admin-ui/nav entities {}))
+                                nil
                                 (partial pages/mounted? {::r/router (router config)}))))
                  {:request-method :get :uri "/web/admin/"
                   :user (merge {:id (random-uuid) :role :admin :active true} user)
@@ -93,3 +96,13 @@
       (is (not (str/includes? body "entity-card-count")))
       (is (not (str/includes? body "/web/admin/groups")))
       (is (not (str/includes? body "/web/audit"))))))
+
+(deftest ^:unit the-dashboard-groups-cards-as-the-sidebar-does
+  ;; The user module claims :users, so its card sits with Groups; :orders,
+  ;; claimed by nobody, goes to the last section, as in the sidebar.
+  (let [body     (home nil nil [:users :orders])
+        sections (re-seq #"(?s)<section[^>]*data-group=\"([^\"]+)\".*?</section>" body)]
+    (is (= ["user" "other"] (map second sections)))
+    (is (str/includes? (ffirst sections) "/web/admin/users"))
+    (is (str/includes? (ffirst sections) "/web/admin/groups"))
+    (is (str/includes? (first (second sections)) "/web/admin/orders"))))

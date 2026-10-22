@@ -509,7 +509,7 @@
                        :secrets {:sidebar-hidden true}
                        :line-items {})]
     (is (= [{:entity :users :module nil :href "/web/admin/users" :label "Users"
-             :icon :users :access :admin}
+             :icon :users :access :admin :description "User management"}
             {:entity :orders :module :billing :href "/web/admin/orders" :label "Orders"
              :icon :shopping-cart :access :admin}
             {:entity :line-items :module nil :href "/web/admin/line-items" :label "Line items"
@@ -598,21 +598,49 @@
       (is (str/includes? (str home) "/web/admin/users"))
       (is (str/includes? (str home) "/web/admin/orders")))))
 
-(deftest ^:unit the-dashboard-has-a-card-per-described-nav-page
-  (let [groups [{:id :user :label "Users"
-                 :items [{:href "/web/admin/groups" :label "Groups" :icon :shield :access :admin
+(defn- dashboard-sections
+  "Each section of `home` as [heading-label [card-hrefs]]."
+  [home]
+  (let [nodes (fn [tag tree] (filter #(and (vector? %) (= tag (first %))) (tree-seq coll? seq tree)))]
+    (for [section (nodes :section.admin-home-section home)]
+      [(last (last (first (nodes :h2.admin-home-section-title section))))
+       (mapv (comp :href second) (nodes :a section))])))
+
+(deftest ^:unit the-dashboard-has-the-sidebar-sections
+  (let [groups [{:id :user :label "Users" :icon :users
+                 :items [{:href "/web/admin/users" :label "Users" :entity :users :access :admin}
+                         {:href "/web/admin/groups" :label "Groups" :icon :shield :access :admin
                           :description "Manage groups"}
                          {:href "/web/audit" :label "Audit" :access :platform-admin
-                          :description "Who did what"}
-                         {:href "/web/admin/users" :label "Users" :entity :users :access :admin}]}]
-        cards  (fn [user]
+                          :description "Who did what"}]}
+                {:id :search :label "Search"
+                 :items [{:href "/web/admin/search" :label "Indices" :access :admin}]}
+                {:id :other :label "Other"
+                 :items [{:href "/web/admin/orders" :label "Orders" :entity :orders :access :admin}]}]
+        home   (fn [user]
                  (binding [nav/*nav* {:groups groups :uri "/web/admin/"}]
-                   (->> (ui/admin-home [] {} {} user)
-                        (tree-seq coll? seq)
-                        (keep #(when (and (vector? %) (= :a (first %))) (:href (second %)))))))]
-    (is (= ["/web/admin/groups" "/web/audit"] (cards {:role :admin})))
-    (is (= ["/web/admin/groups"] (cards {:role :admin :tenant-id 1})) "the audit trail is the platform admin's")
-    (is (empty? (cards {:role :user})))))
+                   (ui/admin-home [] {} {:users {:count 3}} user)))]
+    (testing "a section per group, in the sidebar's order, its items in theirs"
+      (is (= [["Users" ["/web/admin/users" "/web/admin/groups" "/web/audit"]]
+              ["Search" ["/web/admin/search"]]
+              ["Other" ["/web/admin/orders"]]]
+             (dashboard-sections (home {:role :admin})))))
+    (testing "only what the user may open, and no empty section"
+      (is (= [["Users" ["/web/admin/users" "/web/admin/groups"]]
+              ["Search" ["/web/admin/search"]]
+              ["Other" ["/web/admin/orders"]]]
+             (dashboard-sections (home {:role :admin :tenant-id 1})))
+          "the audit trail is the platform admin's")
+      (is (empty? (dashboard-sections (home {:role :user})))))
+    (testing "a count where stats has one"
+      (let [s (str (home {:role :admin}))]
+        (is (str/includes? s "{:count 3}"))
+        (is (= 1 (count (re-seq #":admin/entity-card-count" s))))))))
+
+(deftest ^:unit an-entity-card-has-its-description
+  (is (= "All the orders"
+         (get-in (ui/nav [:orders] {:orders {:label "Orders" :description "All the orders"}})
+                 [:admin :items 0 :description]))))
 
 ;; =============================================================================
 ;; Entity List Component Tests

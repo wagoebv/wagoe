@@ -5,6 +5,7 @@
    the sidebar of the shell in `wagoe.shared.ui.core.shell`, the dashboard
    home, 403/404 error pages and the `build-table-url` helper."
   (:require [wagoe.admin.core.schema-introspection :as introspection]
+            [wagoe.platform.core.http.nav :as nav]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.layout :as layout]
@@ -25,12 +26,15 @@
            :items (vec (for [entity entities
                              :let  [entity-config (get entity-configs entity)]
                              :when (not (:sidebar-hidden entity-config))]
-                         {:entity entity
-                          :module (some-> (:module entity-config) keyword)
-                          :href   (str "/web/admin/" (name entity))
-                          :label  (introspection/plural-label entity-config entity)
-                          :icon   (keyword (or (:icon entity-config) "database"))
-                          :access :admin}))}})
+                         (cond-> {:entity entity
+                                  :module (some-> (:module entity-config) keyword)
+                                  :href   (str "/web/admin/" (name entity))
+                                  :label  (introspection/plural-label entity-config entity)
+                                  :icon   (keyword (or (:icon entity-config) "database"))
+                                  :access :admin}
+                           ;; For its dashboard card
+                           (:description entity-config)
+                           (assoc :description (:description entity-config)))))}})
 
 (def admin-shell
   "`content` in the shell. `opts`: :user, :page-title, :logo-url."
@@ -54,14 +58,36 @@
                      (:label (get entity-configs current-entity)))]
     (shell/shell-page title content (assoc opts :page-title page-title))))
 
+(defn dashboard-groups
+  "The sidebar's groups for `user`, which the dashboard has a section each of.
+   Outside a request, the admin's own items for `entities`."
+  [entities entity-configs user]
+  (or (shell/user-nav user)
+      (nav/collect [(nav entities entity-configs)] nil (constantly true))))
+
+(defn- dashboard-card
+  "A sidebar item as a card: its icon, label and description, and an entity's
+   record count when `stats` has one."
+  [{:keys [href icon label description entity]} stats]
+  [:div.entity-card
+   [:a {:href href :class "entity-card-link"}
+    [:div.entity-card-icon (icons/icon (or icon :file) {:size 20})]
+    [:div.entity-card-title label]
+    (when description
+      [:div.entity-card-description description])
+    (when-let [n (get-in stats [entity :count])]
+      [:div.entity-card-meta
+       [:span.entity-card-count [:t :admin/entity-card-count {:count n}]]])]])
+
 (defn admin-home
-  "Admin dashboard home page content: a card per entity, and one per page a
-   module put in the navigation with a :description, if `user` may open it.
+  "Admin dashboard home page content: a section per sidebar group `user` sees,
+   in the sidebar's order, a card per item. `entities` and `entity-configs`
+   matter only outside a request (see `dashboard-groups`).
 
    Args:
      entities: Vector of available entity names
      entity-configs: Map of entity configurations
-     stats: Optional map of dashboard statistics
+     stats: Optional map of entity to {:count n}
      user: Optional signed-in user
 
    Returns:
@@ -74,29 +100,15 @@
       [:span.admin-home-kicker [:t :admin/page-kicker]]
       [:h1 [:t :admin/page-heading]]
       [:p [:t :admin/page-description]]]]]
-   [:div.entity-grid
-    (for [entity entities]
-      (let [entity-config (get entity-configs entity)
-            label (:label entity-config)
-            description (:description entity-config)
-            icon (keyword (or (:icon entity-config) "database"))
-            count (get-in stats [entity :count] 0)]
-        [:div.entity-card
-         [:a {:href (str "/web/admin/" (name entity))
-              :class "entity-card-link"}
-          [:div.entity-card-icon (icons/icon icon {:size 20})]
-          [:div.entity-card-title label]
-          (when description
-            [:div.entity-card-description description])
-          [:div.entity-card-meta
-           [:span.entity-card-count [:t :admin/entity-card-count {:count count}]]]]]))
-    (for [{:keys [href icon label description]} (mapcat :items (shell/user-nav user))
-          :when description]
-      [:div.entity-card
-       [:a {:href href :class "entity-card-link"}
-        [:div.entity-card-icon (icons/icon icon {:size 20})]
-        [:div.entity-card-title label]
-        [:div.entity-card-description description]]])]])
+   (for [{:keys [id label icon items]} (dashboard-groups entities entity-configs user)
+         :let [heading (str "admin-home-" (name id))]]
+     [:section.admin-home-section {:aria-labelledby heading :data-group (name id)}
+      [:h2.admin-home-section-title {:id heading}
+       (icons/icon (or icon :folder) {:size 18})
+       [:span label]]
+      [:div.entity-grid
+       (for [item items]
+         (dashboard-card item stats))]])])
 
 ;; =============================================================================
 ;; Error Pages
