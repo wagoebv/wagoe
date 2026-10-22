@@ -84,7 +84,7 @@
   --accent-primary-light: light-dark(rgba(14, 124, 102, 0.10), rgba(95, 211, 182, 0.12));
   --color-primary-faint:  light-dark(rgba(14, 124, 102, 0.06), rgba(95, 211, 182, 0.06));
   --row-hover:      light-dark(#F1F6F4, #1A2C25);
-  --row-selected:   light-dark(#E6F3EE, #1E3A30);
+  --row-selected:   light-dark(#E9F5F0, #1E3A30); /* the accent on it stays over 4.5:1 */
 
   /* Type */
   --font-sans:    'Inter', system-ui, -apple-system, sans-serif;
@@ -445,6 +445,16 @@
   border-bottom: 1px solid var(--color-base-300) !important;
 }
 
+/* The sort control is a button inside the th; it looks like the header text */
+.data-table th.sortable-header .sort-button {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.data-table th.sortable-header .sort-button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.admin-content .data-table tbody tr.clickable-row:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
 .admin-content .data-table th.sortable-header--active .sort-label { color: var(--text-primary); }
 .admin-content .data-table th.sortable-header .sort-icon {
   background: none !important;
@@ -485,6 +495,12 @@ td.c-money, td.c-number, td.c-percent, td.c-count,
 th.c-money, th.c-number, th.c-percent, th.c-count { text-align: right !important; }
 
 .c-money   { font-weight: 500; }
+/* The accent is under 4.5:1 on a hovered editable cell's tint */
+.admin-content .data-table td.editable:hover a { color: var(--text-primary); text-decoration: underline; }
+
+/* daisyUI dims an inactive tab to half opacity, under 4.5:1 */
+.record-tabs .tab:not(.tab-active) { color: var(--text-muted); }
+
 .c-title a { font-weight: 500; color: var(--text-primary); text-decoration: none; }
 .c-title a:hover { color: var(--accent-primary); text-decoration: underline; }
 
@@ -996,7 +1012,7 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   justify-content: flex-end;
   gap: 4px 14px;
   font-size: 11px;
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 .save-bar .save-hint kbd { margin: 0 3px 0 0; }
 .entity-detail-page:not(:has([data-nav])) .save-hint-nav { display: none; }
@@ -1014,7 +1030,6 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   all: unset;
   font-family: var(--font-mono);
   font-size: 11px;
-  opacity: 0.7;
   margin-left: 4px;
 }
 

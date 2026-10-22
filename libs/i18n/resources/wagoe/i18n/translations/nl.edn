@@ -656,6 +656,8 @@
  :admin/sort-direction                   "Sorteerrichting"
  :admin/sort-ascending                   "Oplopend"
  :admin/sort-descending                  "Aflopend"
+ :admin/select-all                       "Alles selecteren"
+ :admin/select-row                       "{title} selecteren"
  :admin/record-summary                   "Recordgegevens"
  :admin/changed-in-this-edit             "Gewijzigd in deze bewerking"
  :admin/save-and-back                    "opslaan en terug naar de lijst"

@@ -258,6 +258,7 @@
      Map of attributes for the select-all checkbox"
   []
   {:type "checkbox"
+   :aria-label [:t :admin/select-all]
    :x-bind:checked "isAllChecked()"
    :x-bind:indeterminate "isIndeterminate()"
    (keyword "@change") "toggleAll($event)"})
@@ -267,15 +268,19 @@
 
    Args:
      id: Record ID value
+     title: What the row is called, for the box's accessible name
+            (\"Select <title>\"); the id when absent
 
    Returns:
      Map of attributes for individual row checkbox"
-  [id]
-  {:type "checkbox"
-   :name "ids[]"
-   :value (str id)
-   :x-model "selectedIds"
-   :x-on:click.stop ""})
+  ([id] (row-checkbox-attrs id nil))
+  ([id title]
+   {:type "checkbox"
+    :name "ids[]"
+    :value (str id)
+    :aria-label [:t :admin/select-row {:title (str (if (some? title) title id))}]
+    :x-model "selectedIds"
+    :x-on:click.stop ""}))
 
 (defn delete-button-attrs
   "Delete button attributes that disables when nothing selected.

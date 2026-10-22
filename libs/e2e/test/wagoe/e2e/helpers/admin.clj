@@ -151,11 +151,18 @@
       (loc/dispatch-event input "search")
       (await-swap! pg marked "#entity-table-container"))))
 
+(defn after-table-swap!
+  "Call `f`, which makes htmx replace the list table, and wait for the swap."
+  [pg f]
+  (let [marked (mark-stale! pg "#entity-table-container")]
+    (f)
+    (await-swap! pg marked "#entity-table-container")))
+
 (defn sort-by-column!
   "Click the sortable header of `field` and wait for the table to be replaced."
   [pg field]
   (let [marked (mark-stale! pg "#entity-table-container")]
-    (loc/click (page/locator pg (str "table.data-table th.sortable-header.field-" field)))
+    (loc/click (page/locator pg (str "table.data-table th.sortable-header.field-" field " .sort-button")))
     (await-swap! pg marked "#entity-table-container")))
 
 (defn sort-by-select!

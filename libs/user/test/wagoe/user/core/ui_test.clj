@@ -623,7 +623,9 @@
 
   (testing "the users table selects rows for the bulk form"
     (let [boxes (attrs-of (ui/users-table sample-users) #(= "ids[]" (:name %)))]
-      (is (= #{"123" "456"} (set (map :value boxes))))))
+      (is (= #{"123" "456"} (set (map :value boxes))))
+      (is (= (set (map #(vector :t :admin/select-row {:title (:name %)}) sample-users))
+             (set (map :aria-label boxes))))))
 
   (testing "a bulk action keeps the page; a filter, which reads only .table-sort, does not"
     (let [table      (ui/users-table sample-users {:sort :name :dir :asc :page 3 :page-size 20} 60 {})

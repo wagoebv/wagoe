@@ -128,6 +128,7 @@
        (= widget-type :select)
        (ui/select-field field-name options value
                         {:required required?
+                         :blank?   (not required?)
                          :disabled readonly?
                          :class "form-control"})
 

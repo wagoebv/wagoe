@@ -132,12 +132,14 @@
         ;; The detail page needs read: one who may only read sees it read-only
         can-open? (boolean (:can-view permissions))
         row-attrs (cond-> {:class (if can-open? "entity-row clickable-row" "entity-row")}
+                    ;; Focusable from script: closing the drawer returns here
                     can-open?
-                    (assoc :data-href (str "/web/admin/" (name entity-name) "/" record-id)))]
+                    (assoc :data-href (str "/web/admin/" (name entity-name) "/" record-id)
+                           :tabindex "-1"))]
     [:tr row-attrs
      [:td.checkbox-cell
        ;; Alpine.js row checkbox with x-model binding to selectedIds array
-      [:input (alpine/row-checkbox-attrs record-id)]]
+      [:input (alpine/row-checkbox-attrs record-id (get record (:title-field entity-config primary-key)))]]
      (for [column (or cols (cells/columns entity-config (:list-fields entity-config)))]
        (entity-cell entity-name record entity-config permissions display column
                     (when can-open? record-url)))
@@ -497,8 +499,7 @@
            {:class "gap-2"
             :href (base/entity-create-url entity-name entity-config
                                           (when (:create-redirect-url entity-config)
-                                            (base/current-list-url entity-name table-query filters)))
-            :aria-label (str "Create new " (name entity-name))}
+                                            (base/current-list-url entity-name table-query filters)))}
            (icons/icon :plus {:size 18})
            [:t :admin/button-new {:entity (introspection/singular-label entity-config entity-name)}]])]]]
 

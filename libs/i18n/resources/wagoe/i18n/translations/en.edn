@@ -656,6 +656,8 @@
  :admin/sort-direction                   "Sort direction"
  :admin/sort-ascending                   "Ascending"
  :admin/sort-descending                  "Descending"
+ :admin/select-all                       "Select all"
+ :admin/select-row                       "Select {title}"
  :admin/record-summary                   "Record details"
  :admin/changed-in-this-edit             "Changed in this edit"
  :admin/save-and-back                    "save and back to the list"

@@ -97,18 +97,20 @@
      field-key: Keyword for select name/id
      options: Vector of [value label] pairs or map of value->label
      selected-value: Currently selected value
-     opts: Optional map with additional attributes
+     opts: Optional map with :class, :required, :blank? (a leading empty
+           option for a value that may be left unset, unless the options
+           have one) and :id (the field name by default; nil for none)
      
    Returns:
      Hiccup select element"
   [field-key options selected-value & [opts]]
-  (let [{:keys [class required]} opts
-        option-pairs (if (map? options)
-                       (seq options)
-                       options)
+  (let [{:keys [class required blank?]} opts
+        option-pairs (cond->> (if (map? options) (seq options) options)
+                       (and blank? (not-any? #(= "" (str (first %))) options))
+                       (cons ["" "—"]))
         ;; Normalize selected-value to string for comparison
         selected-str (if (keyword? selected-value) (name selected-value) (str selected-value))]
-    [:select (-> (merge {:id (name field-key)
+    [:select (-> (merge {:id (get opts :id (name field-key))
                          :name (name field-key)}
                         (when class {:class class})
                         (when required {:required true}))

@@ -52,6 +52,13 @@
                       [[f (str v)]]))))
         filters))
 
+(defn- control-id
+  "An id for a table control, unique per table: htmx refocuses the element
+   with the focused one's id after a swap. Nil unless `hx-target` is an id."
+  [hx-target & parts]
+  (when (and (string? hx-target) (str/starts-with? hx-target "#"))
+    (str/join "-" (cons (subs hx-target 1) parts))))
+
 (defn sortable-th
   "Reusable sortable table header cell.
 
@@ -94,20 +101,24 @@
                    (str (or push-url-base base-url) "?" query-str)
                    "false")]
     [:th
-     {:hx-get     url
-      :hx-target  hx-target
-      :hx-swap    hx-swap
-      :hx-push-url push-url
-      :hx-params  "none"
-      :class      (str "sortable-header"
-                       (when active? " sortable-header--active")
-                       (when active? (str " sort-dir-" (name current-dir))))
-      :role       "button"
-      :tabindex   "0"}
-     [:span.sort-label label]
-     (when icon-symbol
-       [:span.sort-icon
-        icon-symbol])]))
+     {:class     (str "sortable-header"
+                      (when active? " sortable-header--active")
+                      (when active? (str " sort-dir-" (name current-dir))))
+      :aria-sort (when active? (if (= current-dir :asc) "ascending" "descending"))}
+     ;; A button, so the header keeps its columnheader role and the keyboard
+     ;; sorts; its id lets htmx put focus back on it after the swap
+     [:button
+      {:type        "button"
+       :class       "sort-button"
+       :id          (control-id hx-target "sort" (name field))
+       :hx-get      url
+       :hx-target   hx-target
+       :hx-swap     hx-swap
+       :hx-push-url push-url
+       :hx-params   "none"}
+      [:span.sort-label label]
+      (when icon-symbol
+        [:span.sort-icon {:aria-hidden "true"} icon-symbol])]]))
 
 (defn- page-window
   "Compute which page numbers to show in the pagination bar.
@@ -185,14 +196,16 @@
         next-page    (min total-pages (inc page))
         page-btn     (fn [p]
                        (let [active? (= p page)]
+                         ;; The current page stays focusable (aria-current
+                         ;; says it is current), so focus can land on it
                          [:button {:type       "button"
+                                   :id         (control-id hx-target "page" (str p))
                                    :class      (str "page-btn" (when active? " active"))
                                    :hx-get     (when-not active? (mk-url p))
                                    :hx-target  (when-not active? hx-target)
                                    :hx-swap    (when-not active? hx-swap)
                                    :hx-push-url (when-not active? (mk-push-url p))
                                    :hx-params  "none"
-                                   :disabled   active?
                                    :aria-label [:t :admin/pagination-page {:page p}]
                                    :aria-current (when active? "page")}
                           (str p)]))]
@@ -214,7 +227,8 @@
                                :aria-label [:t :admin/pagination-first-page]
                                :title      [:t :admin/pagination-first-page]
                                ;; What the keyboard pages with (admin keyboard.js)
-                               :data-page  "first"}
+                               :data-page  "first"
+                               :id         (control-id hx-target "page" "first")}
          "«"]
         ;; Previous page
         [:button.page-nav-btn {:type       "button"
@@ -226,7 +240,8 @@
                                :disabled   (<= page 1)
                                :aria-label [:t :admin/pagination-previous-page]
                                :title      [:t :admin/pagination-previous-page]
-                               :data-page  "prev"}
+                               :data-page  "prev"
+                               :id         (control-id hx-target "page" "prev")}
          "‹"]
         ;; Page number buttons with ellipsis
         [:div.page-numbers
@@ -244,7 +259,8 @@
                                :disabled   (>= page total-pages)
                                :aria-label [:t :admin/pagination-next-page]
                                :title      [:t :admin/pagination-next-page]
-                               :data-page  "next"}
+                               :data-page  "next"
+                               :id         (control-id hx-target "page" "next")}
          "›"]
         ;; Last page
         [:button.page-nav-btn {:type       "button"
@@ -256,7 +272,8 @@
                                :disabled   (>= page total-pages)
                                :aria-label [:t :admin/pagination-last-page]
                                :title      [:t :admin/pagination-last-page]
-                               :data-page  "last"}
+                               :data-page  "last"
+                               :id         (control-id hx-target "page" "last")}
          "»"]]])))
 
 ;; ---------------------------------------------------------------------------
