@@ -1141,13 +1141,12 @@
 ;; =============================================================================
 
 (defn account-recovery-allowed?
-  "Whether `user` may unlock a user or reset their second factor: the role
-   Admin, which under :wagoe/authorization :enforce makes a platform admin
-   only without a tenant."
-  [config user]
-  (if (= :enforce (get-in config [:active :wagoe/authorization :mode]))
-    (access/platform-admin? user)
-    (= :admin (some-> (:role user) keyword))))
+  "Whether `actor` may unlock user `target-id` or reset their second factor: a
+   platform admin, as for the audit trail, and not on their own account, whose
+   second factor the profile turns off with a password or code."
+  [actor target-id]
+  (and (access/platform-admin? actor)
+       (not (access/same-id? (:id actor) target-id))))
 
 (defn user-sessions-page-handler
   "Handler for user sessions management page (GET /web/users/:id/sessions).
@@ -1161,7 +1160,7 @@
      
    Returns:
      Ring handler function"
-  [user-service config]
+  [user-service _config]
   (fn [request]
     (try
       (let [user-id (get-in request [:path-params :id])
@@ -1172,7 +1171,7 @@
             _ (log/info "Sessions retrieved:" {:count (count sessions)})
             current-session-id (get-in request [:session :id])
             opts {:user (:user request)
-                  :account-recovery? (account-recovery-allowed? config (:user request))
+                  :account-recovery? (account-recovery-allowed? (:user request) user-id)
                   :current-time (current-time)
                   :zone-id (current-zone-id)
                   :flash (:flash request)}]

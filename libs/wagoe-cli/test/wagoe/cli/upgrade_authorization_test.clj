@@ -59,6 +59,10 @@
           (let [more (sut/allow-entities (str/replace added ":products" ":tenants") [:products])]
             (is (empty? (sut/unlisted-admin-entities more dir))))))
       (is (= text (sut/allow-entities text [])) "nothing to add, nothing changed")
+      (is (empty? (sut/unlisted-admin-entities
+                   (str/replace text ":enabled? true" ":enabled? true :entity-discovery {:allowlist #include \"x.edn\"}")
+                   dir))
+          "an allowlist it cannot read is not reported as missing everything")
       (finally (doseq [f (reverse (file-seq dir))] (.delete ^java.io.File f))))))
 
 (deftest ^:unit the-log-is-summarised-per-permission-and-route

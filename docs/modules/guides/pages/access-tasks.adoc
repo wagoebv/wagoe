@@ -45,7 +45,8 @@ code; a backup code counts.
 A user who has lost both the device and the backup codes cannot turn it off
 themselves. Open their *Sessions* tab and choose *Reset two-factor
 authentication* under *Sign-in*. They sign in with their password alone until
-they set it up again. The reset is in the audit trail, with you as actor.
+they set it up again. The reset is in the audit trail, with you as actor. Your
+own account is not reset here: turn yours off under *Profile & Security*.
 
 Check:: The *Sessions* tab says *Two-factor authentication is off*.
 

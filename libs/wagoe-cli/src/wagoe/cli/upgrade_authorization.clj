@@ -76,11 +76,14 @@
   "The entities `:wagoe/admin :entities` configures that its `:allowlist`
    lacks, sorted. The admin declares `admin.<entity>` permissions for the
    allowlist only, so under :enforce only a platform admin reaches these.
-   `dir` holds the config.edn, for its `#include`s."
+   `dir` holds the config.edn, for its `#include`s. None when the allowlist is
+   not a literal set: what it holds cannot be read, nor `allow-entities` extend it."
   [text dir]
-  (let [entities (some-> (loc-at text [:active :wagoe/admin :entities]) (entity-keys dir))
-        allow    (let [loc (loc-at text allowlist-path)] (if (= :set (some-> loc z/tag)) (set (value loc)) #{}))]
-    (sort (distinct (remove #(or (not (keyword? %)) (= ::unreadable %) (allow %)) entities)))))
+  (let [entities  (some-> (loc-at text [:active :wagoe/admin :entities]) (entity-keys dir))
+        allow-loc (loc-at text allowlist-path)]
+    (when (or (nil? allow-loc) (= :set (z/tag allow-loc)))
+      (let [allow (if allow-loc (set (value allow-loc)) #{})]
+        (sort (distinct (remove #(or (not (keyword? %)) (= ::unreadable %) (allow %)) entities)))))))
 
 (defn- append-entry
   "The map at `loc`, positioned, with `k` and `v`, source text, on a line of

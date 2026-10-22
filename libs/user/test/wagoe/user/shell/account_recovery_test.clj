@@ -4,7 +4,6 @@
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [support.test-db :as test-db]
             [wagoe.user.ports :as ports]
-            [wagoe.user.shell.http :as http]
             [wagoe.user.shell.persistence :as persistence]
             [wagoe.user.shell.service :as user-service]
             [wagoe.user.shell.web-handlers :as web-handlers])
@@ -78,12 +77,11 @@
     (is (= 404 (:status ((web-handlers/reset-mfa-handler svc {})
                          {:request-method :post :path-params {:id (str (random-uuid))}}))))))
 
-(deftest ^:unit under-enforce-only-a-platform-admin-may
-  (let [guard   (fn [mode] ((#'http/account-admin-middleware {:active {:wagoe/authorization {:mode mode}}})
-                            (constantly {:status 200})))
-        request (fn [user] {:request-method :post :uri "/web/users/x/unlock" :headers {} :user user})
-        tenant-admin (assoc admin :tenant-id (random-uuid))]
-    (is (= 200 (:status ((guard :enforce) (request admin)))))
-    (is (= 403 (:status ((guard :enforce) (request tenant-admin)))))
-    (is (= 200 (:status ((guard :off) (request tenant-admin)))) "the role, as the other user pages")
-    (is (= 403 (:status ((guard :off) (request (assoc admin :role :user))))))))
+(deftest ^:unit only-a-platform-admin-may-and-not-on-their-own-account
+  (let [target (str (random-uuid))]
+    (is (web-handlers/account-recovery-allowed? admin target))
+    (is (not (web-handlers/account-recovery-allowed? (assoc admin :tenant-id (random-uuid)) target))
+        "a tenant admin could reach a platform admin's account")
+    (is (not (web-handlers/account-recovery-allowed? (assoc admin :role :user) target)))
+    (is (not (web-handlers/account-recovery-allowed? admin (str (:id admin))))
+        "their own second factor goes off on the profile, with a password or code")))

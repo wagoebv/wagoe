@@ -510,20 +510,20 @@
       (handler request)
       (user-middleware/create-forbidden-response "Platform admin required" :insufficient-role request))))
 
-(defn- account-admin-middleware
+(defn- account-recovery-middleware
   "Lets through whom `web-handlers/account-recovery-allowed?` admits, the rule
    the sessions page shows its Sign-in panel by."
-  [config]
-  (fn [handler]
-    (fn [request]
-      (if (web-handlers/account-recovery-allowed? config (:user request))
-        (handler request)
-        (user-middleware/create-forbidden-response "Admin role required" :insufficient-role request)))))
+  [handler]
+  (fn [request]
+    (if (web-handlers/account-recovery-allowed? (:user request) (get-in request [:path-params :id]))
+      (handler request)
+      (user-middleware/create-forbidden-response "Platform admin required, on another user's account"
+                                                 :insufficient-role request))))
 
-(defn- account-recovery-route [path auth-middleware config handler summary]
+(defn- account-recovery-route [path auth-middleware handler summary]
   [path {:no-doc        true
          :authorization :self
-         :middleware    [auth-middleware (account-admin-middleware config)]
+         :middleware    [auth-middleware account-recovery-middleware]
          :post          {:handler handler :summary summary}}])
 
 (defn web-routes
@@ -663,10 +663,10 @@
                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                               'wagoe.user.shell.http-interceptors/require-self-or-admin]
                :summary "Revoke specific session"}}]
-      (account-recovery-route "/users/:id/unlock" auth-middleware config
+      (account-recovery-route "/users/:id/unlock" auth-middleware
                               (web-handlers/unlock-user-handler user-service config)
                               "End a user's sign-in lockout (admin)")
-      (account-recovery-route "/users/:id/mfa/reset" auth-middleware config
+      (account-recovery-route "/users/:id/mfa/reset" auth-middleware
                               (web-handlers/reset-mfa-handler user-service config)
                               "Turn off a user's second factor (admin)")
       ;; Audit trail routes
