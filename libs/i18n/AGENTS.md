@@ -112,7 +112,7 @@ In the current HTTP pipeline:
 1. **Add to `en.edn`** — choose the correct namespace, follow existing naming patterns.
 2. **Add to `nl.edn`** — keep parity; run `bb i18n:missing` to check.
 3. **Use marker in Hiccup** — `[:t :namespace/key]` instead of `"Hardcoded string"`.
-4. **Run `bb i18n:scan`** — verifies no unexternalised literals remain in `core/ui.clj` files.
+4. **Run `bb i18n:scan`** — verifies no unexternalised literals remain in `core/ui.clj` and `core/ui/*.clj` files.
 
 ---
 
@@ -123,7 +123,7 @@ In the current HTTP pipeline:
 bb i18n:find "Sign in"
 bb i18n:find :user/sign-in
 
-# Scan core/ui.clj files for unexternalised string literals (CI gate)
+# Scan core/ui.clj and core/ui/*.clj for unexternalised string literals (CI gate)
 bb i18n:scan              # exits 0 if clean, 1 if violations found
 
 # Report translation gaps (keys in en.edn but missing from other locales)

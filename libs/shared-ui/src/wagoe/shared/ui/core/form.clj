@@ -259,12 +259,7 @@
   "`msg` as an English string: a marker looked up in `english`, anything else
    as it is."
   [msg]
-  (if (and (vector? msg) (= :t (first msg)))
-    (let [[_ k params] msg]
-      (reduce-kv (fn [s pk pv] (str/replace s (str "{" (name pk) "}") (str pv)))
-                 (get english k (name k))
-                 (or params {})))
-    msg))
+  (if (ui/marker? msg) (ui/plain-marker english msg) msg))
 
 (defn plain-errors
   "`errors` with every message `plain`."

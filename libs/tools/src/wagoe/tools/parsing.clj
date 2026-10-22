@@ -76,8 +76,9 @@
      content - Clojure source string
 
    Returns:
-     Seq of {:text str :line int :regex? bool :preceding-code str}, in order.
-     `:text` excludes the surrounding quotes. `:preceding-code` is the code
+     Seq of {:text str :line int :end int :regex? bool :preceding-code str},
+     in order. `:text` excludes the surrounding quotes; `:end` is the index
+     just past the closing one. `:preceding-code` is the code
      before the literal with comments and other strings blanked, so a caller
      can match against the enclosing form without re-solving quoting."
   [content]
@@ -122,6 +123,7 @@
               (recur end (+ line newlines) code
                      (conj! acc {:text            text
                                  :line            start-line
+                                 :end             (min end n)
                                  :regex?          regex?
                                  :preceding-code  before})))
 
@@ -165,12 +167,22 @@
    `def` is deliberately absent. `(def x \"doc\" v)` is legal and rare;
    `(def title \"Users\")` is common, and treating the second as a docstring
    would hide exactly the literal a scan is looking for."
-  #"\((?:defn|defmacro|defprotocol|definterface|ns)-?\s+(?:\^\S+\s+)*[^\s()\[\]{}]+\s*(?:\[[^\]]*\]\s*)?$")
+  #"\((?:defn|defmacro|defprotocol|definterface|ns)-?\s+(?:\^(?:\{[^}]*\}|\S+)\s+)*[^\s()\[\]{}]+\s*(?:\[[^\]]*\]\s*)?$")
 
 (defn docstring?
   "Whether a `string-literals` entry sits in a docstring position."
   [{:keys [preceding-code]}]
   (boolean (re-find docstring-position (str preceding-code))))
+
+(defn def-docstring?
+  "Whether a `string-literals` entry of `content` is the docstring of a
+   `(def name \"doc\" value)`: right after the name, with more of the form after
+   it. `(def title \"Users\")` is a value."
+  [content {:keys [preceding-code end]}]
+  (and (re-find #"\(def\s+(?:\^\S+\s+)*[^\s()\[\]{}]+\s*$" (str preceding-code))
+       (not (-> (re-matcher #"(?:\s|;[^\n]*)*\)" content)
+                (.region (int end) (count content))
+                (.lookingAt)))))
 
 ;; ---------------------------------------------------------------------------
 ;; ns form parsing

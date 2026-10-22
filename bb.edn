@@ -123,7 +123,7 @@
                  :task (dev/install-hooks)}
   i18n:find     {:doc "Find a translation key by substring or exact keyword (bb i18n:find \"Sign in\")"
                  :task (apply i18n/-main "find" *command-line-args*)}
-  i18n:scan     {:doc "Scan core/ui.clj files for unexternalised string literals (exits 1 if found)"
+  i18n:scan     {:doc "Scan core/ui.clj and core/ui/*.clj for unexternalised string literals (exits 1 if found)"
                  :task (i18n/-main "scan")}
   i18n:missing  {:doc "Report translation keys present in en.edn but missing from other locales"
                  :task (i18n/-main "missing")}

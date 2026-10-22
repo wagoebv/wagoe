@@ -962,7 +962,7 @@
       (let [resp ((web-handlers/revoke-session-handler svc {})
                   {:path-params {:id (str uid) :session-id "nope"}})]
         (is (= 400 (:status resp)))
-        (is (re-find #"\"showToast\".*Invalid session" (get-in resp [:headers "HX-Trigger"])))))))
+        (is (re-find #"\"showToast\".*error-invalid-session" (get-in resp [:headers "HX-Trigger"])))))))
 
 (defn- mfa-user-service [id password]
   (mfa/create-mfa-service (mem/->MemoryUserRepository (atom {id (mem/mfa-user id password)}))
