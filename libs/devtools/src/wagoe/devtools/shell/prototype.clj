@@ -99,12 +99,16 @@
   (let [generators (core/endpoints-to-generators (or (:endpoints spec) [:crud]))
         ctx        (core/build-scaffold-context module-name spec)
         files      (generate-module-files! module-name ctx generators)
-        now               (java.time.LocalDateTime/now)
-        migration-ts      (.format now (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss"))
-        migration-content (gen/generate-migration-file ctx migration-ts)
         ;; Where migratus reads, so this never splits a project's migrations
         ;; across two directories (BOU-489).
         mig-dir           (db/create-destination)
+        used-ids          (into #{} (keep #(second (re-find #"^(\d+)-" %)))
+                                (.list (io/file mig-dir)))
+        migration-ts      (gen/next-migration-id
+                           used-ids
+                           (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
+                                    (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))
+        migration-content (gen/generate-migration-file ctx migration-ts)
         up-path           (format "%s%s-add-%s-table.up.sql" mig-dir migration-ts module-name)
         down-path         (format "%s%s-add-%s-table.down.sql" mig-dir migration-ts module-name)
         entity-table      (get-in ctx [:entities 0 :entity-table] module-name)]

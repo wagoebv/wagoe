@@ -865,3 +865,32 @@
             :inventory/manager #{:inventory/read :inventory/write}}
            (update-vals (:roles declared) :permissions)))
     (is (nil? (:error registry)) "and the platform's registry takes it")))
+
+(deftest ^:unit migration-ids-do-not-collide-within-a-second
+  ;; Second-precision ids are not unique on their own: two scaffold operations
+  ;; in the same second produce different filenames sharing one id, and migratus
+  ;; throws "Multiple migrations with id N" — which fails the entire migration
+  ;; run, not just the offending pair.
+  (let [next-id gen/next-migration-id]
+
+    (testing "a free timestamp is used as-is"
+      (is (= "20260801120000" (next-id #{} "20260801120000"))))
+
+    (testing "a taken timestamp steps to the next free even second"
+      (is (= "20260801120002" (next-id #{"20260801120000"} "20260801120000"))))
+
+    (testing "consecutive collisions keep stepping"
+      (is (= "20260801120006"
+             (next-id #{"20260801120000" "20260801120002" "20260801120004"}
+                      "20260801120000"))))
+
+    (testing "an odd second is a framework id, so it steps to the even one after"
+      ;; The MySQL smoke scaffolded 20261022100001-create-invoices, the id of
+      ;; push's 20261022100001-device-token-binary-collation, and boot refused.
+      (is (= "20261022100002" (next-id #{} "20261022100001"))))
+
+    (testing "ids stay 14 digits — a longer id would sort after every existing migration forever"
+      (is (= 14 (count (next-id #{"20260801120000"} "20260801120000")))))
+
+    (testing "unrelated ids do not push the timestamp forward"
+      (is (= "20260801120000" (next-id #{"19990101000000" "20250101000000"} "20260801120000"))))))

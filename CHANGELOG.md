@@ -280,6 +280,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb scaffold` could pick a framework migration's id** (BOU-812), and boot refused. Scaffolded ids now end in an even
+  second; framework ids end in an odd one.
 - **Page chrome and user error pages were English in every locale** (BOU-805): navigation, theme toggle, toasts and
   sibling nav now translate. A page rendered with `components/render-html` shows them in English.
 - **`(explain-entity :e)` was missing from a generated app's REPL** (BOU-805). Add the one-line `explain-entity` from
