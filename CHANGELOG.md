@@ -273,6 +273,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Admin inline edit: Save did nothing, and the cell came back as a UUID or raw enum name** (BOU-799). Inline and
   related-record cells now match the list; an enum edits as a select. Nothing to change.
+- **Web pages answered errors as JSON** (BOU-800): a browser now gets an error page in the app's layout with the
+  reference to quote, htmx an error toast. API routes keep the JSON body. Nothing to change.
+- **Admin: a malformed id in a URL was a 500** (BOU-800); it is a 404. Nothing to change.
 - **Admin forms take a fraction in a decimal field and upload the file in a binary one** (BOU-798). Nothing to
   change; an H2 `BYTEA` or MySQL `VARBINARY`/`*BLOB` column now gets a file input too.
 - **Admin dark mode showed the old navy palette when the OS was dark** (BOU-797); the topbar initials and the

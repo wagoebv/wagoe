@@ -70,6 +70,14 @@
                      (str/includes? "json")))
     (try (json/parse-string body true) (catch Exception _ nil))))
 
+(defn error-of
+  "The `error` map of `response`'s body, a map or JSON a handler encoded
+   itself; nil when it carries none."
+  [response]
+  (let [b (:body response)
+        e (:error (if (map? b) b (json-string-body response)))]
+    (when (map? e) e)))
+
 (defn with-correlation-id
   "`response` with `correlation-id` in its error body when it has none: for
    the bodies handlers build themselves, encoded or not (BOU-592)."

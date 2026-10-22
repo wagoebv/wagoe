@@ -187,6 +187,14 @@
                                    :body-length (count (str body-content))})
      response)))
 
+(defn error-page
+  "The page a browser sees in place of an error body on a /web request:
+   platform's `:error-page`, which this module supplies."
+  [request error]
+  (:body (html-response request
+                        (user-ui/error-page (assoc error :user (:user request)))
+                        (:status error))))
+
 ;; An exception's message can carry driver, SQL or config detail: it goes to
 ;; the log, and the page says something generic (BOU-552, BOU-555).
 
