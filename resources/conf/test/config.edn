@@ -24,7 +24,7 @@
   ;; Authentication, sessions and user management. In :active so `migrate up`
   ;; creates its tables (BOU-669). The hook asks a second factor of anyone at
   ;; @mfa-required.test, for the e2e enrolment path.
-  :wagoe/user {:mfa-required? wagoe.test-support.shell.mfa-policy/required?}
+  :wagoe/user {:auth {:mfa-required? wagoe.test-support.shell.mfa-policy/required?}}
 
   ;; Active database configurations
   ;; Test environment uses in-memory H2 for fast, isolated tests

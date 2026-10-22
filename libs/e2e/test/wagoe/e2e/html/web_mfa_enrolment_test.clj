@@ -2,7 +2,8 @@
   "A user the app requires a second factor of, who has none, is led from
    sign-in to setting one up: on registering, and after an admin reset it.
    The test profile's hook requires one of anyone at @mfa-required.test."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [com.blockether.spel.core :as spel]
             [com.blockether.spel.page :as page]
             [com.blockether.spel.locator :as loc]
@@ -21,7 +22,8 @@
   "On the setup page: scan, so to speak, and confirm with a code."
   [pg]
   (page/wait-for-url pg #".*/web/login/mfa-setup$" {:timeout 10000.0})
-  (let [secret (loc/get-attribute (page/locator pg "input[name='secret']") "value")]
+  (is (str/ends-with? (page/url pg) "/web/login/mfa-setup"))
+  (let [secret (loc/input-value (page/locator pg "input[name='secret']"))]
     (loc/fill (page/locator pg "input[name='verification-code']") (totp/fresh-code secret))
     (loc/click (page/locator pg "form button[type='submit']"))
     (page/wait-for-selector pg ".backup-codes-grid" {:timeout 10000.0})
