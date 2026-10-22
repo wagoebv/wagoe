@@ -1,5 +1,6 @@
 {:users
  {:label           "Users"
+  :icon            :users
   ;; Keep the list view compact but include the most important identity fields.
   :list-fields     [:email :name :role :active :created-at]
   :search-fields   [:email :name]

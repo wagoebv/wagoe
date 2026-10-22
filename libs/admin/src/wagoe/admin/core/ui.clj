@@ -49,6 +49,8 @@
 (def admin-shell layout/admin-shell)
 (def admin-layout layout/admin-layout)
 (def admin-home layout/admin-home)
+(def dashboard-groups layout/dashboard-groups)
+(def dashboard layout/dashboard)
 (def admin-forbidden-page layout/admin-forbidden-page)
 (def admin-not-found-page layout/admin-not-found-page)
 (def create-config-error layout/create-config-error)

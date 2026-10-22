@@ -226,7 +226,7 @@ client.
 == Landing page and dashboard
 
 After signing in, everyone lands on the dashboard, the admin's home at `/web/admin/`.
-Each user sees a card for each entity and page they may open. `/web/dashboard` redirects
+It has the sidebar's sections, with a card for each item the user may open. `/web/dashboard` redirects
 there. Without the admin module, the dashboard is `/web/profile`. This is configurable under `:wagoe/user`:
 
 [source,clojure]

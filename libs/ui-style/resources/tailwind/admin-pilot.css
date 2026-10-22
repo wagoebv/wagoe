@@ -672,6 +672,15 @@ input[type="number"] {
   @apply mt-1 text-sm text-base-content/70;
 }
 
+/* A dashboard section per sidebar group */
+.admin-home-section {
+  @apply space-y-3 pt-2;
+}
+
+.admin-home-section-title {
+  @apply flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-base-content/70;
+}
+
 .entity-grid {
   @apply grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3;
 }
