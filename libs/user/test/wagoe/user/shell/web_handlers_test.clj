@@ -1273,3 +1273,23 @@
         page ((web-handlers/mfa-disable-page-handler (mfa-user-service id nil) {}) {:user {:id id}})]
     (is (html-contains? page "name=\"password\""))
     (is (html-contains? page "name=\"code\""))))
+
+;; =============================================================================
+;; The app's error page (BOU-800)
+;; =============================================================================
+
+(deftest ^:unit the-error-page-is-the-apps-layout-with-the-reference
+  (let [user {:id (UUID/randomUUID) :name "Ada Admin" :role :admin}
+        page (fn [error] (web-handlers/error-page (assoc dutch :user user) error))]
+    (testing "a client error shows its message and the reference to quote"
+      (let [body (page {:status 404 :message "Entity not found" :correlation-id "cid-800"})]
+        (is (str/includes? body "<html"))
+        (is (str/includes? body "Ada Admin") "the layout's navigation, signed in")
+        (is (str/includes? body "Pagina niet gevonden"))
+        (is (str/includes? body "Entity not found"))
+        (is (str/includes? body "Referentie: <code>cid-800</code>"))))
+    (testing "a server error says nothing of the cause"
+      (let [body (page {:status 500 :message "Internal Server Error" :correlation-id "cid-500"})]
+        (is (str/includes? body "Er ging iets mis. Probeer het later opnieuw."))
+        (is (not (str/includes? body "Internal Server Error")))
+        (is (str/includes? body "cid-500"))))))

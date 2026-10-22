@@ -31,13 +31,15 @@
    "e2e_orders"
    "e2e_ticket_labels"
    "e2e_ticket_watchers"
-   "e2e_tickets"])
+   "e2e_tickets"
+   "e2e_products"])
 
 (def ^:private fixture-tables
   "Tables no module owns, for admin e2e tests: an order whose lines have a
    has-many :min (:e2e-orders in resources/conf/test/config.edn, BOU-570),
    tickets whose customer is a combobox (BOU-754), and two join tables:
-   labels a ticket has, few, and customers watching it, many (BOU-778)."
+   labels a ticket has, few, and customers watching it, many (BOU-778),
+   and a product with a price and a file (BOU-798)."
   ["CREATE TABLE IF NOT EXISTS e2e_orders (
       id UUID PRIMARY KEY,
       number VARCHAR(50) NOT NULL,
@@ -67,7 +69,12 @@
       id UUID PRIMARY KEY,
       e2e_ticket_id UUID NOT NULL REFERENCES e2e_tickets(id),
       e2e_customer_id UUID NOT NULL REFERENCES e2e_customers(id),
-      UNIQUE (e2e_ticket_id, e2e_customer_id))"])
+      UNIQUE (e2e_ticket_id, e2e_customer_id))"
+   "CREATE TABLE IF NOT EXISTS e2e_products (
+      id UUID PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      price DECIMAL(10,2),
+      datasheet BYTEA)"])
 
 (defn- seed-customers!
   "One more customer than :max-page-size (200) in the test config. Tests only

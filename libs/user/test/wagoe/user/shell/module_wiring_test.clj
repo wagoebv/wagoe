@@ -73,3 +73,7 @@
         "the hook goes through :wagoe/auth-hooks, where module contributions meet it"))
   (is (= {} (get-in (sut/ig-config nil {:config {}})
                     [:components :wagoe/auth-service :auth-config]))))
+
+(deftest ^:unit user-supplies-the-error-page-in-the-apps-layout
+  (let [{:keys [http]} (sut/ig-config nil {:config {} :enabled #{}})]
+    (is (fn? (:error-page http)))))
