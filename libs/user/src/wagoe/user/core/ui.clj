@@ -54,11 +54,6 @@
 ;; User Table Components
 ;; =============================================================================
 
-(defn- tone-badge
-  "An enum tone badge (ADR-040) with `class` added."
-  [text tone class]
-  (update-in (ui/tone-badge text tone) [1 :class] str " " class))
-
 (defn user-row
   "The cells of a user's row: name, email, role and status, the badges
    styled as the admin's enum cells.
@@ -73,10 +68,10 @@
         active? (boolean (:active user))]
     [(:name user)
      (:email user)
-     (tone-badge (-> role name text/capitalize) (if (= :admin role) :info :neutral) "user-role-badge")
-     (tone-badge (if active? [:t :user/badge-active] [:t :user/badge-inactive])
-                 (if active? :success :warning)
-                 "user-status-badge")]))
+     (ui/tone-badge (-> role name text/capitalize) (if (= :admin role) :info :neutral) "user-role-badge")
+     (ui/tone-badge (if active? [:t :user/badge-active] [:t :user/badge-inactive])
+                    (if active? :success :warning)
+                    "user-status-badge")]))
 
 (def ^:private user-columns
   ;; The columns of `user-row`, in its order
@@ -524,15 +519,12 @@
                                :x-on:bulk-clear.window "clearSelection()"})
        [:div.table-toolbar-container
         [:div.toolbar-row-actions
-         [:div.toolbar-search
-          (table-ui/filter-input
-           (merge (filter-opts "#users-role-filter")
-                  {:name        "q"
-                   :value       (:q filters)
-                   :label       [:t :user/filter-placeholder-email]
-                   :placeholder [:t :user/filter-placeholder-email]
-                   :attrs       {:type "text" :class "search-input" :id "users-search"}}))
-          [:span {:class "search-icon" :aria-hidden "true"} (icons/icon :search {:size 15})]]
+         (table-ui/toolbar-search
+          (merge (filter-opts "#users-role-filter")
+                 {:id          "users-search"
+                  :name        "q"
+                  :value       (:q filters)
+                  :placeholder [:t :user/filter-placeholder-email]}))
          [:div.toolbar-filter
           (table-ui/filter-input
            (merge (filter-opts "#users-search")
@@ -1170,7 +1162,7 @@
                   (:group-join :grant-add) :info
                   (:group-leave :grant-remove) :warning
                   :neutral)]
-    (tone-badge (text/capitalize (str/replace action-name "-" " ")) variant "audit-action-badge")))
+    (ui/tone-badge (text/capitalize (str/replace action-name "-" " ")) variant "audit-action-badge")))
 
 (defn result-badge
   "Display result status with appropriate styling.
@@ -1184,8 +1176,8 @@
    Pure: true"
   [result]
   (if (= result :success)
-    (tone-badge [:t :common/audit-success] :success "audit-result-badge")
-    (tone-badge [:t :common/audit-failure] :danger "audit-result-badge")))
+    (ui/tone-badge [:t :common/audit-success] :success "audit-result-badge")
+    (ui/tone-badge [:t :common/audit-failure] :danger "audit-result-badge")))
 
 (defn- compress-ipv6
   "An IPv6 address in its short form: no leading zeros, the longest run of two
@@ -1260,16 +1252,14 @@
     (conj
      ;; The labels head a cell when a narrow screen shows rows as cards
      (into [:tr]
-           (map (fn [{:keys [field label] col-class :class} content]
-                  [:td {:class (str "field-" (name field) (when col-class (str " " col-class))) :data-label label}
-                   content])
-                audit-columns
-                [(format-audit-timestamp created-at)
-                 (action-badge action)
-                 (or (:actor-email audit-log) [:em [:t :user/audit-actor-system]])
-                 (or (:target-user-email audit-log) "-")
-                 (result-badge result)
-                 (or (format-ip (:ip-address audit-log)) "-")]))
+           (table-ui/column-cells
+            audit-columns
+            [(format-audit-timestamp created-at)
+             (action-badge action)
+             (or (:actor-email audit-log) [:em [:t :user/audit-actor-system]])
+             (or (:target-user-email audit-log) "-")
+             (result-badge result)
+             (or (format-ip (:ip-address audit-log)) "-")]))
      [:td.actions-cell
       [:button.button.small.secondary.audit-detail-trigger
        (merge (modal/open-attrs "audit-detail-modal")

@@ -182,21 +182,26 @@
   (let [s (str x)]
     [:code (subs s 0 (min 8 (count s))) "…"]))
 
+(def sortable-fields
+  "What the store sorts the list by."
+  (set (keep #(when (:sortable? % true) (:field %)) instance-columns)))
+
+(def filter-params
+  "The query params the list filters by."
+  ["workflow-id" "entity-type" "state"])
+
 (defn- instance-row [inst]
   (let [href (str instances-path "/" (:id inst))]
-    [:tr {:class "clickable-row" :data-href href}
-     (map (fn [{:keys [field label] col-class :class} cell]
-            [:td {:class (str "field-" (name field) (when col-class (str " " col-class))) :data-label label} cell])
-          instance-columns
-          [[:a {:href href} (short-id (:id inst))]
-           [:code (name (:workflow-id inst))]
-           [:code (name (:entity-type inst))]
-           (short-id (:entity-id inst))
-           (state-badge (:current-state inst) :current)
-           [:span.c-datetime (str (:updated-at inst))]])
-     [:td.actions-cell
-      [:a.row-nav-hint {:href href :aria-label [:t :workflow/button-open-instance]}
-       (icons/icon :chevron-right {:size 14})]]]))
+    (table-ui/list-row
+     {:href       href
+      :columns    instance-columns
+      :open-label [:t :workflow/button-open-instance]
+      :cells      [[:a {:href href} (short-id (:id inst))]
+                   [:code (name (:workflow-id inst))]
+                   [:code (name (:entity-type inst))]
+                   (short-id (:entity-id inst))
+                   (state-badge (:current-state inst) :current)
+                   [:span.c-datetime (str (:updated-at inst))]]})))
 
 (defn instances-table
   "The instances in the shared data-table, or an empty state, in the
@@ -211,37 +216,16 @@
      Hiccup structure"
   ([instances] (instances-table instances default-query {}))
   ([instances table-query filters]
-   (let [target  (str "#" instances-target)
-         filters (into {} (remove (comp str/blank? val)) filters)]
-     [:div {:id instances-target}
-      ;; The sort the toolbar filters send along: they sit outside this swap
-      [:div {:class "table-state" :hidden true}
-       (table-ui/hidden-inputs (select-keys (table-ui/table-query->params table-query) ["sort" "dir"]))]
-      (cond
-        (and (empty? instances) (seq filters))
-        [:div.empty-state {:class "empty-state-filtered"}
-         [:div.empty-state-icon (icons/icon :filter {:size 32})]
-         [:p [:t :workflow/empty-state-no-matches]]
-         [:a.button.secondary {:href instances-path} [:t :common/button-clear]]]
-
-        (empty? instances)
-        [:div.empty-state
-         (icons/icon :layout-list {:size 32})
-         [:h3 [:t :workflow/empty-state-no-instances]]
-         [:p [:t :workflow/empty-state-instances-description]]]
-
-        :else
-        [:div
-         (table-ui/sort-select {:url instances-path :hx-target target :table-query table-query
-                                :filters filters :columns instance-columns})
-         (ui/table-wrapper
-          (table-ui/data-table {:url         instances-path
-                                :hx-target   target
-                                :table-query table-query
-                                :filters     filters
-                                :columns     instance-columns
-                                :head-after  [[:th.actions-header [:span.sr-only [:t :common/column-actions]]]]
-                                :rows        (map instance-row instances)}))])])))
+   (table-ui/list-body {:id             instances-target
+                        :url            instances-path
+                        :columns        instance-columns
+                        :rows           (map instance-row instances)
+                        :table-query    table-query
+                        :filters        (into {} (remove (comp str/blank? val)) (select-keys filters filter-params))
+                        :empty          (list [:strong [:t :workflow/empty-state-no-instances]] " "
+                                              [:t :workflow/empty-state-instances-description])
+                        :empty-filtered [:t :workflow/empty-state-no-matches]
+                        :clear-label    [:t :common/button-clear]})))
 
 ;; =============================================================================
 ;; Filters
@@ -326,9 +310,7 @@
     [:div.table-toolbar-container
      [:div.toolbar-row-actions
       (instances-filter-form params (:states opts))]]
-    (instances-table instances
-                     (or (:table-query opts) default-query)
-                     (select-keys params ["workflow-id" "entity-type" "state"]))]
+    (instances-table instances (or (:table-query opts) default-query) params)]
    opts))
 
 (defn instance-detail-page

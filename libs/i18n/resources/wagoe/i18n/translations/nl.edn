@@ -350,7 +350,6 @@
 
  ;; Groups
  :user.groups/page-title "Groepen"
- :user.groups/heading "Groepen"
  :user.groups/description "Leden van een groep hebben de rechten van de rollen van die groep. Iedereen omvat elke aangemelde gebruiker. De beheerdersrol heeft geen groep nodig."
  :user.groups/field-name "Naam"
  :user.groups/field-description "Omschrijving"

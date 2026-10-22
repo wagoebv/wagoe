@@ -421,7 +421,8 @@
         rows   (cond->> rows words (filter hit?))
         key-fn (get sort-keys sort)]
     (if key-fn
-      (sort-by key-fn (nil-last (= :desc dir)) rows)
+      ;; Each key once, not once per comparison
+      (->> rows (map (juxt key-fn identity)) (sort-by first (nil-last (= :desc dir))) (map second))
       rows)))
 
 (defn next-page-url
@@ -527,6 +528,68 @@
          (for [_ head-after] [:th])])]
      [:tbody rows]
      tfoot]))
+
+(defn column-cells
+  "`cells` as the [:td]s under `columns`, as `data-table` takes them: each
+   with its field class and its label, which heads it on a narrow screen."
+  [columns cells]
+  (map (fn [{:keys [field label] col-class :class} cell]
+         [:td {:class (str "field-" (name field) (when col-class (str " " col-class))) :data-label label}
+          cell])
+       columns cells))
+
+(defn list-row
+  "A `data-table` row opening `href` on a click: its `cells` under `columns`,
+   then a chevron link named `open-label`. `attrs` add to the row's."
+  [{:keys [href attrs columns cells open-label]}]
+  [:tr (merge-with #(str %1 " " %2) {:class "clickable-row" :data-href href} attrs)
+   (column-cells columns cells)
+   [:td.actions-cell
+    [:a.row-nav-hint {:href href :aria-label open-label}
+     (icons/icon :chevron-right {:size 14})]]])
+
+(defn grouped-rows
+  "`items` as `(row item)` under a heading row per group `group-of` names,
+   groups by name, items in their order; `none-label` heads the nil group."
+  [items {:keys [group-of row n-cols none-label]}]
+  (for [[g items] (sort-by key (group-by group-of items))
+        r (cons [:tr {:class "list-group-row"} [:th {:colspan n-cols} (or g none-label)]]
+                (map row items))]
+    r))
+
+(defn list-body
+  "A `data-table` list in the container `id` its controls re-render, with a
+   sort select for narrow screens, or what to say when it is empty: `empty`,
+   or with a search or filters, `empty-filtered` and a link to `url` clearing
+   them. Holds the sort for controls outside it to send along."
+  [{:keys [id url columns rows table-query filters empty empty-filtered clear-label]}]
+  (let [target (str "#" id)]
+    [:div {:id id}
+     [:div {:class "table-state" :hidden true}
+      (hidden-inputs (select-keys (table-query->params table-query) ["sort" "dir"]))]
+     (cond
+       (and (empty? rows) (or (seq filters) (:search table-query)))
+       [:div.empty-state {:class "empty-state-filtered"}
+        [:div.empty-state-icon (icons/icon :filter {:size 32})]
+        [:p empty-filtered]
+        [:a.button.secondary {:href url} clear-label]]
+
+       (empty? rows)
+       [:div.empty-state {:class "p-10 text-center"}
+        [:div.empty-state-icon (icons/icon :inbox {:size 48})]
+        [:p empty]]
+
+       :else
+       [:div
+        (sort-select {:url url :hx-target target :table-query table-query :filters filters :columns columns})
+        [:div {:class "table-wrapper ui-table-wrapper"}
+         (data-table {:url         url
+                      :hx-target   target
+                      :table-query table-query
+                      :filters     filters
+                      :columns     columns
+                      :head-after  [[:th.actions-header [:span.sr-only [:t :common/column-actions]]]]
+                      :rows        rows})]])]))
 
 (defn bulk-bar
   "The bar that appears once rows are selected: how many, what to do with

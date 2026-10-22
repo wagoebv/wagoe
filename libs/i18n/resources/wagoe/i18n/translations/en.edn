@@ -350,7 +350,6 @@
 
  ;; Groups
  :user.groups/page-title "Groups"
- :user.groups/heading "Groups"
  :user.groups/description "Members of a group hold the rights of its roles. Everyone contains every signed-in user. The admin role needs no group."
  :user.groups/field-name "Name"
  :user.groups/field-description "Description"

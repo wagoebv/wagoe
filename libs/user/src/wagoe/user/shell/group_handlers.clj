@@ -34,7 +34,7 @@
                        (if (htmx/fragment-request? (:headers request) [(:id spec)])
                          (rights-ui/list-fragment spec items table-query)
                          (page table-query)))
-        (response/header "Vary" "HX-Request, HX-Target"))))
+        (response/header "Vary" htmx/vary))))
 
 (defn redirect [path flash-key]
   (assoc (response/redirect path :see-other) :flash {:success flash-key}))

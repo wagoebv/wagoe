@@ -1441,8 +1441,6 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 /* A detail page's tables wrap rather than cut a scope or a list of codes */
 .admin-content .rights-page .data-table { table-layout: auto; }
 .admin-content .rights-page .data-table td { white-space: normal; overflow-wrap: break-word; }
-/* A last column of data, not actions (whose header is empty) */
-.admin-content .rights-page .data-table :is(th:not(:empty), td:not(.actions-cell)):last-child { width: auto; text-align: left; }
 /* Its Remove buttons fit their column rather than spill out of it */
 .admin-content .rights-page .data-table td.actions-cell { width: 1%; min-width: 0; max-width: none; }
 
@@ -1579,14 +1577,14 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   /* No checkbox to make room for */
   .admin-content .entity-list-page .data-table tbody tr:not(:has(> td.checkbox-cell)):nth-child(n) { padding-left: 14px; }
   /* A module's heading row heads its cards */
-  .admin-content .entity-list-page .data-table tbody tr.list-group-row:nth-child(n) {
+  .admin-content :is(.entity-list-page, .rights-page) .data-table tbody tr.list-group-row:nth-child(n) {
     display: block;
     margin: 12px 0 6px;
     padding: 0;
     border: 0 !important;
     background: none !important;
   }
-  .admin-content .entity-list-page .data-table tbody tr.list-group-row th { display: block; padding: 0; border: 0 !important; background: none !important; }
+  .admin-content :is(.entity-list-page, .rights-page) .data-table tbody tr.list-group-row th { display: block; padding: 0; border: 0 !important; background: none !important; }
   .admin-content .rights-list-page .data-table tbody td.c-title code { font-size: 14px; }
 
   /* A detail page's tables: a row a card, its actions beside the fields */
@@ -1621,14 +1619,6 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
     padding: 0;
     border: 0;
   }
-  .admin-content .rights-page .data-table tbody tr.list-group-row {
-    display: block;
-    padding: 0;
-    margin: 12px 0 6px;
-    border: 0;
-    background: none !important;
-  }
-  .admin-content .rights-page .data-table tbody tr.list-group-row th { display: block; padding: 0; border: 0 !important; }
 
   /* The pager: one line, sticky under the cards */
   .admin-content .entity-list-page .table-pagination {

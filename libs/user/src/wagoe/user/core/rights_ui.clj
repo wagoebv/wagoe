@@ -83,17 +83,9 @@
 (defn module-of
   "The module `x` belongs to: its declared `module`, else its name's namespace."
   [x module]
-  (if module (name module) (namespace (keyword (group/permission-str x)))))
-
-(defn- grouped
-  "Each of `items` as its `row`, under a heading row per group `group-of`
-   names: groups by name, items in their order."
-  [items group-of row n-cols]
-  (for [[g items] (sort-by key (group-by group-of items))
-        r (cons [:tr {:class "list-group-row"}
-                 [:th {:colspan n-cols} (or g [:t :user.lists/group-none])]]
-                (map row items))]
-    r))
+  (cond module       (name module)
+        (keyword? x) (namespace x)
+        :else        (namespace (keyword (group/permission-str x)))))
 
 (defn- list-query
   "`table-query` sorted by `spec`'s default unless by one of its sort keys."
@@ -107,46 +99,12 @@
   "A list row opening `href`: its `cells` under the `columns` labels, the
    title link first, a chevron last."
   [href attrs columns cells]
-  [:tr (merge-with #(str %1 " " %2) {:class "clickable-row" :data-href href} attrs)
-   (map (fn [{:keys [field label] col-class :class} cell]
-          [:td {:class (str "field-" (name field) (when col-class (str " " col-class))) :data-label label}
-           cell])
-        columns cells)
-   [:td.actions-cell
-    [:a.row-nav-hint {:href href :aria-label [:t :user.lists/button-open]}
-     (icons/icon :chevron-right {:size 14})]]])
+  (table-ui/list-row {:href href :attrs attrs :columns columns :cells cells
+                      :open-label [:t :user.lists/button-open]}))
 
-(defn- list-table
-  "The list in the container its search and sort re-render, or what to say
-   when it is empty."
-  [{:keys [id url columns empty-text]} rows table-query]
-  (let [target (str "#" id)]
-    [:div {:id id}
-     ;; The sort the toolbar search sends along: it sits outside this swap
-     [:div {:class "table-state" :hidden true}
-      (table-ui/hidden-inputs (select-keys (table-ui/table-query->params table-query) ["sort" "dir"]))]
-     (cond
-       (and (empty? rows) (:search table-query))
-       [:div.empty-state {:class "empty-state-filtered"}
-        [:div.empty-state-icon (icons/icon :filter {:size 32})]
-        [:p [:t :user.lists/no-matches {:search (:search table-query)}]]
-        [:a.button.secondary {:href url} [:t :admin/button-clear-search]]]
-
-       (empty? rows)
-       [:div.empty-state {:class "p-10 text-center"}
-        [:div.empty-state-icon (icons/icon :inbox {:size 48})]
-        [:p empty-text]]
-
-       :else
-       [:div
-        (table-ui/sort-select {:url url :hx-target target :table-query table-query :columns columns})
-        (ui/table-wrapper
-         (table-ui/data-table {:url         url
-                               :hx-target   target
-                               :table-query table-query
-                               :columns     columns
-                               :head-after  [[:th.actions-header [:span.sr-only [:t :common/column-actions]]]]
-                               :rows        rows}))])]))
+(defn- grouped [items group-of row n-cols]
+  (table-ui/grouped-rows items {:group-of group-of :row row :n-cols n-cols
+                                :none-label [:t :user.lists/group-none]}))
 
 (defn- list-parts
   "`items` searched and sorted for `spec`: the table and the count."
@@ -156,7 +114,14 @@
         rows  (if group-of
                 (grouped items group-of row (inc (count columns)))
                 (map row items))]
-    {:table (list-table spec rows tq)
+    {:table (table-ui/list-body {:id             (:id spec)
+                                 :url            (:url spec)
+                                 :columns        columns
+                                 :rows           rows
+                                 :table-query    tq
+                                 :empty          (:empty-text spec)
+                                 :empty-filtered [:t :user.lists/no-matches {:search (:search tq)}]
+                                 :clear-label    [:t :admin/button-clear-search]})
      :badge (table-ui/count-badge (str (:id spec) "-count") (count items) (:count-label spec))}))
 
 (defn list-fragment
@@ -253,7 +218,7 @@
   [registry held]
   (let [held     (set held)
         declared (->> registry
-                      (group-by (fn [[p {:keys [module]}]] (if module (name module) (namespace p))))
+                      (group-by (fn [[p {:keys [module]}]] (module-of p module)))
                       (sort-by key)
                       (mapv (fn [[m ps]]
                               [m (->> ps
@@ -317,7 +282,7 @@
 
 (defn- source-badge [source]
   (if (= :code source)
-    (update-in (ui/tone-badge [:t :user.roles/source-code] :neutral) [1 :class] str " role-locked")
+    (ui/tone-badge [:t :user.roles/source-code] :neutral "role-locked")
     (ui/tone-badge [:t :user.roles/source-managed] :info)))
 
 (defn- role-fields [registry form]
@@ -460,12 +425,11 @@
 (defn permission-items
   "The registry's permissions as `permissions-list` lists them."
   [registry roles]
-  (for [[p {:keys [label module]}] registry]
-    {:permission p
-     :label      label
-     :module     module
-     :roles      (sort-by group/permission-str
-                          (for [r roles :when (contains? (:permissions r) p)] (:name r)))}))
+  (let [holders (reduce (fn [m {:keys [name permissions]}]
+                          (reduce #(update %1 %2 (fnil conj []) name) m permissions))
+                        {} (sort-by (comp group/permission-str :name) roles))]
+    (for [[p {:keys [label module]}] registry]
+      {:permission p :label label :module module :roles (get holders p [])})))
 
 (defn permissions-page
   "The registry by module, each permission with the roles holding it.
@@ -523,30 +487,31 @@
     (ui/tone-badge [:t :user.rights/source-member] :info)))
 
 (def ^:private rights-columns
-  [[:permissions [:t :user.roles/column-permissions]]
-   [:role [:t :user.groups/field-role]]
-   [:group [:t :user.rights/column-group]]
-   [:scope [:t :user.groups/field-scope]]])
+  [{:field :permissions :label [:t :user.roles/column-permissions]}
+   {:field :role :label [:t :user.groups/field-role]}
+   {:field :group :label [:t :user.rights/column-group]}
+   {:field :scope :label [:t :user.groups/field-scope]}])
 
 (defn- rights-rows
   "`grants` by module: a row per role a group gives, with the permissions it
    gives in that module, so the group shows once per role."
   [grants registry scope-info]
   (let [module-of-grant #(module-of (:permission %) (get-in registry [(:permission %) :module]))
-        cell            (fn [[field label] content] [:td {:class (str "field-" (name field)) :data-label label} content])]
-    (for [[m in-module] (sort-by key (group-by module-of-grant grants))
-          r (cons [:tr {:class "list-group-row"} [:th {:colspan (count rights-columns)} (or m [:t :user.lists/group-none])]]
-                  (for [[[role group-id group-name scope] gs]
-                        (sort-by (fn [[[role _ group-name]]] [(group/permission-str role) (str group-name)])
-                                 (group-by (juxt :role :group-id :group-name :scope) in-module))]
-                    (into [:tr.rights-permission]
-                          (map cell rights-columns
-                               [(interpose " " (for [p (sort-by group/permission-str (distinct (map :permission gs)))]
-                                                 [:a {:href (permission-path p)} (code p)]))
-                                [:a {:href (role-path role)} (code role)]
-                                [:a {:href (group-path group-id)} group-name]
-                                (scope-view scope scope-info)]))))]
-      r)))
+        role-grants     (->> grants
+                             (group-by (juxt module-of-grant :role :group-id :group-name :scope))
+                             (map (fn [[[m role group-id group-name scope] gs]]
+                                    {:module m :role role :group-id group-id :group-name group-name :scope scope
+                                     :permissions (sort-by group/permission-str (distinct (map :permission gs)))}))
+                             (sort-by (juxt (comp group/permission-str :role) (comp str :group-name))))
+        row             (fn [{:keys [role group-id group-name scope permissions]}]
+                          (into [:tr.rights-permission]
+                                (table-ui/column-cells
+                                 rights-columns
+                                 [(interpose " " (for [p permissions] [:a {:href (permission-path p)} (code p)]))
+                                  [:a {:href (role-path role)} (code role)]
+                                  [:a {:href (group-path group-id)} group-name]
+                                  (scope-view scope scope-info)])))]
+    (grouped role-grants :module row (count rights-columns))))
 
 (defn rights-page
   "`user`'s groups, each with where the membership comes from, and their
@@ -574,7 +539,7 @@
                  [:p.empty-state [:t :user.rights/groups-empty]]))
       (section [:t :user.rights/permissions-heading]
                (if (seq grants)
-                 (table (map second rights-columns)
+                 (table (map :label rights-columns)
                         (rights-rows grants (:registry opts) (:scope-info opts)))
                  [:p.empty-state [:t :user.rights/permissions-empty]])))
      opts)))

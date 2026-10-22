@@ -346,8 +346,7 @@
 (defn- list-table-query
   "The list's sort from query-params: a sortable column, else newest first."
   [query-params]
-  (let [sortable (set (keep #(when (:sortable? % true) (:field %)) workflow-ui/instance-columns))
-        tq       (table-ui/parse-table-params query-params {:sortable sortable})]
+  (let [tq (table-ui/parse-table-params query-params {:sortable workflow-ui/sortable-fields})]
     (if (:sort tq)
       (merge {:dir :asc} (select-keys tq [:sort :dir]))
       workflow-ui/default-query)))
@@ -394,11 +393,10 @@
       ;; One URL, two bodies: a cache must not answer one with the other
       (-> (html-response request
                          (if (htmx/fragment-request? (:headers request) [workflow-ui/instances-target])
-                           (workflow-ui/instances-table instances tq
-                                                        (select-keys params ["workflow-id" "entity-type" "state"]))
+                           (workflow-ui/instances-table instances tq params)
                            (workflow-ui/instances-page instances params
                                                        (assoc (page-opts request admin) :states states :table-query tq))))
-          (assoc-in [:headers "Vary"] "HX-Request, HX-Target")))
+          (assoc-in [:headers "Vary"] htmx/vary)))
     (catch Exception e
       (log/error e "Error in handle-list-instances-web")
       (html-response request
