@@ -201,11 +201,6 @@
   [_ {:keys [config]}]
   (landing/wrap-home config))
 
-;; The page in the app's layout that a browser sees for an error on /web.
-(defmethod ig/init-key :wagoe/user-error-page
-  [_ _]
-  web-handlers/error-page)
-
 (defmethod ig/init-key :wagoe/admin-only-middleware
   [_ {:keys [user-service]}]
   ;; The rejecting counterpart of the above: authenticate, then demand the
@@ -391,7 +386,6 @@
 
     :wagoe/user-http-middleware {:user-service (ig/ref :wagoe/user-service)}
     :wagoe/user-home-middleware {:config config}
-    :wagoe/user-error-page {}
     :wagoe/admin-only-middleware {:user-service (ig/ref :wagoe/user-service)}}
 
    ;; :user-service stays named: the handler passes it to the test-reset
@@ -407,7 +401,8 @@
             :rights           (ig/ref :wagoe/user-group-service)
             :auth-middleware  (ig/ref :wagoe/user-http-middleware)
             :extra-middleware (ig/ref :wagoe/user-home-middleware)
-            :error-page       (ig/ref :wagoe/user-error-page)}
+            ;; The page in the app's layout a browser sees for an error on /web
+            :error-page       web-handlers/error-page}
    :routes [(ig/ref :wagoe/user-routes) (ig/ref :wagoe/user-group-routes)
             (ig/ref :wagoe/user-export-routes)]
    :data-export {:user (ig/ref :wagoe/user-data-exporter)}

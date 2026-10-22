@@ -637,7 +637,12 @@
                  :config            config
                  :csrf-config       csrf-config
                  :rate-limit-config rate-limit-config
-                 :error-page        error-page})
+                 ;; Through the i18n middleware: a request answered outside
+                 ;; the router's middleware, an unknown path, has no catalogue.
+                 :error-page        (if (and error-page i18n-middleware)
+                                      (fn [request error]
+                                        ((i18n-middleware #(error-page % error)) request))
+                                      error-page)})
 
         ;; i18n middleware is built by the i18n lib and injected
         ;; (:wagoe/i18n-http-middleware), the shape BOU-200 established for

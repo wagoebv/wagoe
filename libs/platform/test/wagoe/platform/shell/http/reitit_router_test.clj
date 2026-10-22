@@ -1347,3 +1347,26 @@
       (let [resp (web-get handler uri headers)]
         (is (= 404 (:status resp)))
         (is (= "not-found" (get-in (response-body-as-map resp) [:error :type])) uri)))))
+
+(deftest ^:unit an-error-answered-by-middleware-or-encoded-by-the-handler-is-a-page-too
+  (let [handler (reitit/compile-routes
+                 [["/web/refused-by-middleware"
+                   {:middleware [(fn [_] (fn [_] (errors/response 413 :validation-error "Too large")))]
+                    :get        {:handler (fn [_] {:status 200 :body "ok"})}}]
+                  ["/web/encoded"
+                   {:get {:handler (fn [_] {:status  404
+                                            :headers {"Content-Type" "application/json"}
+                                            :body    (json/generate-string (errors/body :not-found "Gone"))})}}]]
+                 {:system {}})]
+    (doseq [[uri status text] [["/web/refused-by-middleware" 413 "Too large"]
+                               ["/web/encoded" 404 "Gone"]]]
+      (let [resp (web-get handler uri)]
+        (is (= status (:status resp)) uri)
+        (is (html? resp) uri)
+        (is (str/includes? (:body resp) text) uri)))))
+
+(deftest ^:unit an-htmx-history-restore-gets-the-page
+  (let [resp (web-get (web-error-handler {}) "/web/missing"
+                      {"hx-request" "true" "hx-history-restore-request" "true"})]
+    (is (str/includes? (:body resp) "<html"))
+    (is (nil? (get-in resp [:headers "HX-Trigger"])))))

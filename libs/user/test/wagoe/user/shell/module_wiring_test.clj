@@ -75,7 +75,5 @@
                     [:components :wagoe/auth-service :auth-config]))))
 
 (deftest ^:unit user-supplies-the-error-page-in-the-apps-layout
-  (let [{:keys [components http]} (sut/ig-config nil {:config {} :enabled #{}})]
-    (is (contains? components :wagoe/user-error-page))
-    (is (= (ig/ref :wagoe/user-error-page) (:error-page http)))
-    (is (fn? (ig/init-key :wagoe/user-error-page {})))))
+  (let [{:keys [http]} (sut/ig-config nil {:config {} :enabled #{}})]
+    (is (fn? (:error-page http)))))

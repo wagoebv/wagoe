@@ -4,12 +4,16 @@
    body of `wagoe.platform.core.http.errors`."
   (:require [cheshire.core :as json]
             [clojure.string :as str]
-            [wagoe.platform.core.http.access :as access]))
+            [wagoe.platform.core.http.access :as access]
+            [wagoe.platform.core.http.errors :as errors]))
 
 (defn htmx?
-  "Whether htmx sent `request`."
+  "Whether htmx sent `request` for a fragment. A history restore asks for a
+   whole page."
   [request]
-  (= "true" (get-in request [:headers "hx-request"])))
+  (let [headers (:headers request)]
+    (and (= "true" (get headers "hx-request"))
+         (not= "true" (get headers "hx-history-restore-request")))))
 
 (defn- wants-json?
   "Whether the caller asked for JSON and not HTML, as a script on a page does."
@@ -21,30 +25,31 @@
 (defn page-error
   "`{:status :type :message :correlation-id}` when `response` to `request`
    carries the JSON error body and a browser should see a page instead; nil
-   otherwise. A handler's own HTML is left alone. `correlation-id` is used when
-   the body has none."
-  [request {:keys [status body]} correlation-id]
-  (let [error (when (map? body) (:error body))]
-    (when (and (access/web-request? request)
-               (number? status) (>= status 400)
-               (map? error)
-               (not (wants-json? request)))
+   otherwise. A handler's own HTML is left alone."
+  [request {:keys [status] :as response}]
+  (when (and (number? status) (>= status 400)
+             (access/web-request? request)
+             (not (wants-json? request)))
+    (when-let [error (errors/error-of response)]
       {:status         status
        :type           (some-> (:type error) name)
        :message        (str (or (:message error) "An error occurred"))
-       :correlation-id (some-> (or (:correlation-id error) correlation-id) str)})))
-
-(defn page
-  "The page shown when the app supplies none of its own."
-  [{:keys [status message correlation-id]}]
-  (access/error-page-html status message correlation-id))
+       :correlation-id (some-> (:correlation-id error) str)})))
 
 (defn page-response
   "`response` with `body`, HTML, in place of the error body."
   [response body]
   (-> response
+      (update :headers dissoc "content-type")
       (assoc :body body)
       (assoc-in [:headers "Content-Type"] "text/html; charset=utf-8")))
+
+(defn toast-trigger
+  "The HX-Trigger value components.js shows as an error toast."
+  [message]
+  ;; ASCII only: a header value carries no UTF-8
+  (json/generate-string {:showToast {:type "error" :message message}}
+                        {:escape-non-ascii true}))
 
 (defn htmx-response
   "`response` for htmx: its status kept, so nothing is swapped, and the message
@@ -52,7 +57,4 @@
   [response {:keys [message]}]
   (cond-> (page-response response (access/escape-html message))
     (nil? (get-in response [:headers "HX-Trigger"]))
-    (assoc-in [:headers "HX-Trigger"]
-              ;; ASCII only: a header value carries no UTF-8
-              (json/generate-string {:showToast {:type "error" :message message}}
-                                    {:escape-non-ascii true}))))
+    (assoc-in [:headers "HX-Trigger"] (toast-trigger message))))
