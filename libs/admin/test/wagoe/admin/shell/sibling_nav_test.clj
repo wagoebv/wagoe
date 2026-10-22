@@ -3,6 +3,7 @@
    the parent's panel. It read every sibling; now at most a bounded window."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
+            [wagoe.admin.ports :as ports]
             [wagoe.admin.shell.http.handlers.detail :as detail]
             [wagoe.admin.shell.http.support :as support]
             [wagoe.admin.shell.schema-repository :as schema-repo]
@@ -76,3 +77,17 @@
       (is (str/includes? (page 2) (str "/web/admin/sn-items/" (item-id 3)))))
     (testing "past it: no sibling navigation"
       (is (nil? (count-text (page 3)))))))
+
+(deftest ^:contract a-child-page-leads-back-to-its-parent
+  (let [order-url (str "/web/admin/sn-orders/" order-id)
+        trail     #(support/parent-trail (:svc @sys) (:sp @sys) :sn-items
+                                         (ports/get-entity-config (:sp @sys) :sn-items) %)
+        from-list (trail {:filters {:sn-order-id {:op :eq :value order-id}}})]
+    (testing "the child page's breadcrumbs name the parent and link to it"
+      (is (str/includes? (page 1) (str "href=\"" order-url "\">Order</a>"))))
+    (testing "the parent's filtered list and a page opened from it find the same parent"
+      (is (= order-url (:title-href from-list)))
+      (is (= from-list (trail {:return-to (:list-href from-list)}))))
+    (testing "no parent: no trail"
+      (is (nil? (trail {})))
+      (is (nil? (trail {:return-to "/web/admin/sn-items?page=2"}))))))
