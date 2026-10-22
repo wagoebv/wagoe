@@ -16,13 +16,19 @@
 
 ;; ─── config.edn ──────────────────────────────────────────────────────────────
 
-(defn- loc-at [text path]
-  (some-> (z/of-string text) (upgrade/path-loc path)))
+(defn- loc-at
+  ([text path] (loc-at text path nil))
+  ([text path opts] (some-> (z/of-string text opts) (upgrade/path-loc path))))
 
 (defn- value [loc]
   (try (z/sexpr loc) (catch Exception _ ::unreadable)))
 
 (def ^:private sections [[:active] [] [:inactive]])
+
+(defn- key-locs
+  "The locations of the keys of the map at `loc`."
+  [loc]
+  (take-nth 2 (take-while some? (iterate z/right (z/down loc)))))
 
 (defn- require-role-locs [text]
   (keep #(some-> (loc-at text (conj % :wagoe/admin)) (upgrade/key-loc :require-role)) sections))
@@ -36,7 +42,7 @@
      :require-role?  (boolean (seq (require-role-locs text)))
      :default-roles  (when-let [providers (loc-at text [:active :wagoe/user :oidc :providers])]
                        (when (= :map (z/tag providers))
-                         (for [id-loc (take-nth 2 (take-while some? (iterate z/right (z/down providers))))
+                         (for [id-loc (key-locs providers)
                                :let [role (some-> id-loc z/right (upgrade/key-loc :default-role) z/right value)]
                                :when role]
                            [(value id-loc) role])))}))
@@ -48,15 +54,12 @@
     (recur (-> k z/right z/remove z/remove z/root-string))
     text))
 
-(defn- map-keys [loc]
-  (map value (take-nth 2 (take-while some? (iterate z/right (z/down loc))))))
-
 (defn- entity-keys
   "The entity names `loc`, an admin `:entities` value, configures: a map's
    keys, through `#merge` and `#include`, which Aero reads relative to `dir`."
   [loc dir]
   (case (z/tag loc)
-    :map          (map-keys loc)
+    :map          (map value (key-locs loc))
     :reader-macro (let [tag (z/string (z/down loc))
                         arg (z/right (z/down loc))]
                     (case tag
@@ -67,8 +70,7 @@
                       nil))
     nil))
 
-(defn- allowlist-loc [text]
-  (loc-at text [:active :wagoe/admin :entity-discovery :allowlist]))
+(def ^:private allowlist-path [:active :wagoe/admin :entity-discovery :allowlist])
 
 (defn unlisted-admin-entities
   "The entities `:wagoe/admin :entities` configures that its `:allowlist`
@@ -77,7 +79,7 @@
    `dir` holds the config.edn, for its `#include`s."
   [text dir]
   (let [entities (some-> (loc-at text [:active :wagoe/admin :entities]) (entity-keys dir))
-        allow    (let [loc (allowlist-loc text)] (if (= :set (some-> loc z/tag)) (set (value loc)) #{}))]
+        allow    (let [loc (loc-at text allowlist-path)] (if (= :set (some-> loc z/tag)) (set (value loc)) #{}))]
     (sort (distinct (remove #(or (not (keyword? %)) (allow %)) entities)))))
 
 (defn- append-entry
@@ -95,15 +97,14 @@
 (defn allow-entities
   "`text` with `entities` added to `:wagoe/admin`'s `:allowlist`."
   [text entities]
-  (let [at    #(some-> (z/of-string text {:track-position? true}) (upgrade/path-loc %))
-        path  [:active :wagoe/admin :entity-discovery :allowlist]
-        allow (at path)
+  (let [at     #(loc-at text % {:track-position? true})
+        allow  (at allowlist-path)
         listed (str "#{" (str/join " " entities) "}")]
     (cond
       (empty? entities) text
       allow             (if (= :set (z/tag allow)) (z/root-string (reduce z/append-child allow entities)) text)
-      :else             (let [discovery (at (pop path))
-                              admin     (at (pop (pop path)))]
+      :else             (let [discovery (at (pop allowlist-path))
+                              admin     (at (pop (pop allowlist-path)))]
                           (cond
                             (= :map (some-> discovery z/tag)) (z/root-string (append-entry discovery :allowlist listed))
                             discovery                         text

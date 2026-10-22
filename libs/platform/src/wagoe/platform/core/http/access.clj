@@ -70,7 +70,7 @@
   "`status` for a signed-in caller who may not do this: the error body, which
    the router shows a browser on /web as the app's error page. Not the login
    redirect, which would send them back here."
-  [status error message _request correlation-id]
+  [status error message correlation-id]
   (error-response status error message correlation-id))
 
 (defn admin?

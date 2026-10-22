@@ -900,23 +900,23 @@
   (unlock-user [_ user-id]
     (let [user    (existing-user user-repository user-id)
           cleared {:failed-login-count 0 :lockout-until nil}]
-      (if-not (or (auth-core/locked? user (current-timestamp)) (pos? (or (:failed-login-count user) 0)))
-        false
+      (if (or (auth-core/locked? user (current-timestamp)) (pos? (or (:failed-login-count user) 0)))
         (do (.update-user user-repository (assoc cleared :id user-id))
             (audit-quietly! audit-repository
                             (fn [actor-id actor-email target-id target-email ip ua]
                               (audit-core/update-user-audit-entry actor-id actor-email target-id target-email
                                                                   (select-keys user (keys cleared)) cleared ip ua))
                             user-id (:email user))
-            true))))
+            true)
+        false)))
 
   (reset-user-mfa [_ user-id]
     (let [user (existing-user user-repository user-id)]
-      (if-not (:mfa-enabled user)
-        false
+      (if (:mfa-enabled user)
         (do (.update-user user-repository (assoc (mfa-core/prepare-mfa-disablement user) :id user-id))
             (audit-quietly! audit-repository audit-core/mfa-reset-audit-entry user-id (:email user))
-            true)))))
+            true)
+        false))))
 
 ;; =============================================================================
 ;; Factory Functions

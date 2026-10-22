@@ -1239,21 +1239,20 @@
    true or false."
   [user-service change done nothing]
   (fn [request]
-    (let [user-id (parse-uuid (str (get-in request [:path-params :id])))
-          back    (str "/web/users/" user-id "/sessions")]
+    (if-let [user-id (parse-uuid (str (get-in request [:path-params :id])))]
       (try
-        (if (change user-service (or user-id (throw (IllegalArgumentException. "user id"))))
-          (redirect-with-toast request back :success done)
-          (redirect-with-toast request back :info nothing))
-        (catch IllegalArgumentException _
-          (-> (html-response request (ui/error-message "Invalid user ID") 400)
-              (with-error-toast request "Invalid user ID")))
+        (let [back (str "/web/users/" user-id "/sessions")]
+          (if (change user-service user-id)
+            (redirect-with-toast request back :success done)
+            (redirect-with-toast request back :info nothing)))
         (catch clojure.lang.ExceptionInfo e
           (if (= :user-not-found (:type (ex-data e)))
             (-> (html-response request (ui/error-message [:t :user.rights/user-not-found]) 404)
                 (with-error-toast request :user.rights/user-not-found))
             (-> (server-error request e "Account recovery failed")
-                (with-error-toast request :common/error-generic))))))))
+                (with-error-toast request :common/error-generic)))))
+      (-> (html-response request (ui/error-message "Invalid user ID") 400)
+          (with-error-toast request "Invalid user ID")))))
 
 (defn unlock-user-handler
   "POST /web/users/:id/unlock: ends the user's sign-in lockout (admin)."

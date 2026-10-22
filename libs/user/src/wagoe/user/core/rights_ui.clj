@@ -80,14 +80,18 @@
 (defn- values-str [values]
   (str/join ", " (sort (map str values))))
 
+(defn entity-lookup-url
+  "Where the admin answers lookups of `entity`'s rows: by text, or one by ?id=."
+  [entity]
+  (str "/web/admin/" (name entity) "/lookup"))
+
 (defn- scope-value
   "Fixed value `v`, replaced by its record's title when key's admin entity is
    `entity`: the admin's lookup answers it once the page has loaded."
   [entity v]
   [:strong.scope-value
    (when entity
-     {:hx-get     (str "/web/admin/" (name entity) "/lookup?"
-                       (table-ui/encode-query-params {"id" (str v)}))
+     {:hx-get     (str (entity-lookup-url entity) "?" (table-ui/encode-query-params {"id" (str v)}))
       :hx-trigger "load"
       :hx-swap    "innerHTML"})
    (str v)])

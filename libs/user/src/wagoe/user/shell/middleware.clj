@@ -88,8 +88,7 @@
    a page for a /web one. Not the login form, which they are past."
   ([message reason] (create-forbidden-response message reason nil))
   ([message _reason request]
-   (access/refusal-response 403 "forbidden" message request
-                            (access/correlation-id request (str (random-uuid))))))
+   (access/refusal-response 403 "forbidden" message (access/correlation-id request (str (random-uuid))))))
 
 ;; =============================================================================
 ;; JWT Authentication Middleware

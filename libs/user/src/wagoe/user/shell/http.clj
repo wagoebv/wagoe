@@ -519,6 +519,12 @@
     require-platform-admin-middleware
     user-middleware/require-admin-middleware))
 
+(defn- account-recovery-route [path auth-middleware config handler summary]
+  [path {:no-doc        true
+         :authorization :self
+         :middleware    [auth-middleware (account-admin-middleware config)]
+         :post          {:handler handler :summary summary}}])
+
 (defn web-routes
   "The module's web UI routes, as Reitit data.
 
@@ -656,18 +662,12 @@
                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                               'wagoe.user.shell.http-interceptors/require-self-or-admin]
                :summary "Revoke specific session"}}]
-      ["/users/:id/unlock"
-       {:no-doc        true
-        :authorization :self
-        :middleware    [auth-middleware (account-admin-middleware config)]
-        :post {:handler (web-handlers/unlock-user-handler user-service config)
-               :summary "End a user's sign-in lockout (admin)"}}]
-      ["/users/:id/mfa/reset"
-       {:no-doc        true
-        :authorization :self
-        :middleware    [auth-middleware (account-admin-middleware config)]
-        :post {:handler (web-handlers/reset-mfa-handler user-service config)
-               :summary "Turn off a user's second factor (admin)"}}]
+      (account-recovery-route "/users/:id/unlock" auth-middleware config
+                              (web-handlers/unlock-user-handler user-service config)
+                              "End a user's sign-in lockout (admin)")
+      (account-recovery-route "/users/:id/mfa/reset" auth-middleware config
+                              (web-handlers/reset-mfa-handler user-service config)
+                              "Turn off a user's second factor (admin)")
       ;; Audit trail routes
       ["/audit"
        {:no-doc     true

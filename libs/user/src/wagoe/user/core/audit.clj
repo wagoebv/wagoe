@@ -298,15 +298,8 @@
 (defn mfa-reset-audit-entry
   "Audit log entry for an admin turning off another user's second factor."
   [actor-id actor-email target-user-id target-user-email ip-address user-agent]
-  {:action :mfa-disabled
-   :actor-id actor-id
-   :actor-email actor-email
-   :target-user-id target-user-id
-   :target-user-email target-user-email
-   :metadata {:reset true}
-   :ip-address ip-address
-   :user-agent user-agent
-   :result :success})
+  (assoc (mfa-disabled-audit-entry target-user-id target-user-email ip-address user-agent)
+         :actor-id actor-id :actor-email actor-email :metadata {:reset true}))
 
 (defn sessions-revoked-audit-entry
   "One audit entry for ending `n` of the user's sessions at once, every one

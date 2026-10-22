@@ -12,6 +12,7 @@
             [wagoe.shared.ui.core.combobox :as combobox]
             [wagoe.user.core.group :as group-core]
             [wagoe.user.core.group-ui :as group-ui]
+            [wagoe.user.core.rights-ui :as rights-ui]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.web-handlers :refer [html-response]]))
 
@@ -43,7 +44,7 @@
                  :let  [entity (:wagoe/entity props)]]
              {:key     k
               :label   (get-in scopes [k :label])
-              :url     (when entity (str "/web/admin/" (name entity) "/lookup"))
+              :url     (some-> entity rights-ui/entity-lookup-url)
               :sources (vec (for [src (sort (get-in scopes [k :sources]))]
                               [src (or (get-in sources [src :label]) (group-core/permission-str src))]))})))))
 
