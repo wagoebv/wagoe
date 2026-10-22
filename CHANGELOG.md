@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **The admin dashboard shows counts, summaries and recent activity** (BOU-806) instead of a hero. Counts run in
+  parallel and a failing one shows "—"; non-entity pages are a compact link row.
 - **The admin dashboard has the sidebar's sections** (BOU-809), a card per sidebar item. A `:sidebar-hidden` entity
   no longer gets a card; add `:icon :users` to an existing `admin/users.edn` for the user icon.
 - **Administrator guide to users, groups, roles and rights** (BOU-793): *Managing access* in the guides, with task

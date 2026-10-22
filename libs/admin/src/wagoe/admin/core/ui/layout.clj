@@ -5,12 +5,15 @@
    the sidebar of the shell in `wagoe.shared.ui.core.shell`, the dashboard
    home, 403/404 error pages and the `build-table-url` helper."
   (:require [wagoe.admin.core.schema-introspection :as introspection]
+            [wagoe.admin.core.ui.base :as base]
+            [wagoe.admin.core.ui.cells :as cells]
             [wagoe.platform.core.http.nav :as nav]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.table :as table-ui]
-            [wagoe.shared.ui.core.shell :as shell]))
+            [wagoe.shared.ui.core.shell :as shell]
+            [wagoe.user.core.ui :as user-ui]))
 
 ;; =============================================================================
 ;; Admin Layout Components
@@ -65,42 +68,104 @@
   (or (shell/user-nav user)
       (nav/collect [(nav entities entity-configs)] nil (constantly true))))
 
-(defn- dashboard-card
-  "A sidebar item as a card: its icon, label and description, and an entity's
-   record count when `stats` has one."
-  [{:keys [href icon label description entity] :or {icon :file}} stats]
-  [:div.entity-card
-   [:a {:href href :class "entity-card-link"}
-    [:div.entity-card-icon (icons/icon icon {:size 20})]
-    [:div.entity-card-title label]
-    (when description
-      [:div.entity-card-description description])
-    (when-let [n (get-in stats [entity :count])]
-      [:div.entity-card-meta
-       [:span.entity-card-count [:t :admin/entity-card-count {:count n}]]])]])
+(defn- dashboard-tile
+  "An entity as a tile: its count, \"—\" when counting failed, and its
+   `:summary` values when `stats` has them."
+  [{:keys [href icon label description entity] :or {icon :file}} stats {:keys [entity-configs display]}]
+  (let [{:keys [summary] :as stat} (get stats entity)
+        entity-config (get entity-configs entity)]
+    [:div.entity-card
+     [:a {:href href :class "entity-card-link"}
+      [:div.entity-card-head
+       [:span.entity-card-icon (icons/icon icon {:size 18})]
+       [:span.entity-card-title label]]
+      (when stat
+        [:div.entity-card-meta
+         (if-let [n (:count stat)]
+           [:span.entity-card-count [:t :admin/entity-card-count {:count n} n]]
+           [:span.entity-card-count {:title [:t :admin/dashboard-count-failed]} "—"])])
+      (when (seq summary)
+        [:dl.entity-card-summary
+         (for [{:keys [label value role field]} summary]
+           [:div
+            [:dt label]
+            [:dd {:class (cells/cell-class role)}
+             (if (some? value)
+               (cells/format-aggregate value role (get-in entity-config [:fields field]) entity-config display)
+               "—")]])])
+      (when description
+        [:div.entity-card-description description])]]))
+
+(defn- dashboard-link
+  "A page that is not an entity, as a compact link: the sidebar has it too."
+  [{:keys [href icon label description] :or {icon :file}}]
+  [:a {:href href :class "dashboard-link" :title description}
+   (icons/icon icon {:size 16})
+   [:span.dashboard-link-label label]])
+
+(def ^:private audit-path "/web/audit")
+
+(defn- activity-entry
+  [{:keys [action actor-email target-user-email created-at]} {:keys [now display]}]
+  [:li.dashboard-activity-entry
+   (user-ui/action-badge action)
+   [:span.dashboard-activity-who
+    (or actor-email [:em [:t :user/audit-actor-system]])
+    (when target-user-email
+      (list " → " target-user-email))]
+   (when created-at
+     [:time.dashboard-activity-when {:datetime (str created-at)
+                                     :title    (base/format-instant created-at display)}
+      (or (when now (base/relative-instant created-at now display))
+          (base/format-instant created-at display))])])
+
+(defn- activity-panel
+  "The last audit entries, or why there are none. `activity`: {:entries [..]}
+   or {:error? true}."
+  [{:keys [entries error?]} opts]
+  [:section.dashboard-activity {:aria-labelledby "admin-home-activity"}
+   [:div.dashboard-activity-head
+    [:h2.admin-home-section-title {:id "admin-home-activity"}
+     (icons/icon :clock {:size 18})
+     [:span [:t :admin/dashboard-activity]]]
+    [:a.dashboard-activity-all {:href audit-path} [:t :admin/audit-trail-title]]]
+   (cond
+     error?          [:p.dashboard-activity-empty [:t :admin/dashboard-activity-failed]]
+     (empty? entries) [:p.dashboard-activity-empty [:t :admin/dashboard-activity-empty]]
+     :else           [:ol.dashboard-activity-list
+                      (for [entry entries] (activity-entry entry opts))])])
 
 (defn dashboard
   "Admin dashboard home page content: a section per group of `groups` (the
-   sidebar's, see `dashboard-groups`), a card per item. `stats` maps an
-   entity to {:count n}."
-  [groups stats]
-  [:div.admin-home {:class "space-y-4"}
-   [:section.admin-home-hero
-    [:div.admin-home-hero-inner
-     [:div
-      [:span.admin-home-kicker [:t :admin/page-kicker]]
-      [:h1 [:t :admin/page-heading]]
-      [:p [:t :admin/page-description]]]]]
-   (for [{:keys [id label icon items]} groups
-         ;; A group may have no id: the shell's plain list
-         :let [heading (some->> id name (str "admin-home-"))]]
-     [:section.admin-home-section {:aria-labelledby heading :data-group (some-> id name)}
-      [:h2.admin-home-section-title {:id heading}
-       (icons/icon (or icon :folder) {:size 18})
-       [:span label]]
-      [:div.entity-grid
-       (for [item items]
-         (dashboard-card item stats))]])])
+   sidebar's, see `dashboard-groups`), an entity as a tile, any other page as
+   a compact link. `stats` maps an entity to {:count n :summary [..]}; a nil
+   count shows \"—\". `opts`: :activity for the recent-activity panel (see
+   `activity-panel`), and :entity-configs, :display and :now to format
+   summaries and times."
+  ([groups stats] (dashboard groups stats {}))
+  ([groups stats {:keys [activity] :as opts}]
+   [:div.admin-home
+    [:header.admin-home-header
+     [:h1 [:t :admin/page-heading]]]
+    [:div {:class (if activity "admin-home-body with-activity" "admin-home-body")}
+     [:div.admin-home-sections
+      (for [{:keys [id label icon items]} groups
+            ;; A group may have no id: the shell's plain list
+            :let [heading (some->> id name (str "admin-home-"))
+                  {tiles true links false} (group-by (comp some? :entity) items)]]
+        [:section.admin-home-section {:aria-labelledby heading :data-group (some-> id name)}
+         [:h2.admin-home-section-title {:id heading}
+          (icons/icon (or icon :folder) {:size 18})
+          [:span label]]
+         (when (seq tiles)
+           [:div.entity-grid
+            (for [item tiles]
+              (dashboard-tile item stats opts))])
+         (when (seq links)
+           [:div.dashboard-links
+            (map dashboard-link links)])])]
+     (when activity
+       (activity-panel activity opts))]]))
 
 (defn admin-home
   "`dashboard` for the groups `dashboard-groups` gives `user`."

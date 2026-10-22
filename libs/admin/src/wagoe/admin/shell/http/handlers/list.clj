@@ -9,8 +9,14 @@
    [wagoe.admin.core.permissions :as permissions]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.admin.shell.http.support :as support]
+   [wagoe.platform.core.http.access :as access]
+   [wagoe.platform.core.http.pages :as pages]
+   [wagoe.platform.database :as db]
    [wagoe.shared.ui.core.htmx :as htmx]
-   [ring.util.response :as ring-response]))
+   [wagoe.user.ports :as user-ports]
+   [clojure.tools.logging :as log]
+   [ring.util.response :as ring-response])
+  (:import [java.time Instant]))
 
 (defn- list-options
   "The list's options from the query string, without the filters that filter
@@ -38,34 +44,76 @@
 ;; Admin Home Handler
 ;; =============================================================================
 
+(defn- isolated
+  "`(f)`, or nil when it throws: logged, and the dashboard shows the part as
+   missing instead of failing."
+  [part f]
+  (try (f)
+       (catch Exception e
+         (log/warn e "admin dashboard query failed" {:part part})
+         nil)))
+
+(defn- in-parallel
+  "`(f x)` for each of `xs`, concurrently unless a transaction is open on this
+   thread (a tenant request's): its connection may not be shared by threads."
+  [f xs]
+  (if (db/current-transaction)
+    (mapv f xs)
+    (mapv deref (mapv #(future (f %)) xs))))
+
+(defn- entity-stats
+  "{:count n :summary [..]} for `entity`, each part nil when its query fails."
+  [admin-service entity-configs entity]
+  {:count   (isolated [entity :count] #(ports/count-entities admin-service entity {}))
+   :summary (when (and (seq (:summary (get entity-configs entity)))
+                       (satisfies? ports/IListOverview admin-service))
+              (:summary (isolated [entity :summary] #(ports/list-overview admin-service entity {} []))))})
+
+(def ^:private audit-path "/web/audit")
+
+(defn- recent-activity
+  "The last audit entries for a user who may open the audit trail, else nil."
+  [user-service user]
+  (when (and user-service (access/platform-admin? user) (pages/mounted? audit-path))
+    (if-let [result (isolated :activity #(user-ports/list-audit-logs user-service
+                                                                     {:limit 10 :sort-by :created-at
+                                                                      :sort-direction :desc :count? false}))]
+      {:entries (:audit-logs result)}
+      {:error? true})))
+
 (defn admin-home-handler
-  "The dashboard: the sidebar's sections, a card per page the user may open.
-   For every signed-in user, except under :enforce, where it needs read on
-   one entity in a scope that entity can check (ADR-041 §6)."
-  [admin-service schema-provider config]
-  (fn [request]
-    (let [user (support/get-current-user request)
-          available (ports/list-available-entities schema-provider)
-          all-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) available)
-          _ (when (= :enforce (permissions/mode user))
-              (shell-permissions/assert-can-access-admin! user all-configs))
-          entities (permissions/filter-visible-entities user available all-configs)
-          entity-configs (select-keys all-configs entities)
-          groups (admin-ui/dashboard-groups entities entity-configs user)
-          ;; Counted only for a card the dashboard shows
-          stats (into {} (comp (mapcat :items)
-                               (keep :entity)
-                               (filter (set entities))
-                               (map (fn [e] [e {:count (ports/count-entities admin-service e {})}])))
-                      groups)]
-      (support/html-response request
-                             (admin-ui/admin-layout
-                              (admin-ui/dashboard groups stats)
-                              {:user user
-                               :nav groups
-                               :current-entity nil
-                               :entity-configs entity-configs
-                               :logo-url (:logo-url config)})))))
+  "The dashboard: the sidebar's sections, an entity tile with its count and
+   summary for each entity the user may read, and with `user-service` the
+   recent audit entries for a user who may open the audit trail. For every
+   signed-in user, except under :enforce, where it needs read on one entity
+   in a scope that entity can check (ADR-041 §6)."
+  ([admin-service schema-provider config]
+   (admin-home-handler admin-service schema-provider config nil))
+  ([admin-service schema-provider config user-service]
+   (fn [request]
+     (let [user (support/get-current-user request)
+           available (ports/list-available-entities schema-provider)
+           all-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) available)
+           _ (when (= :enforce (permissions/mode user))
+               (shell-permissions/assert-can-access-admin! user all-configs))
+           entities (permissions/filter-visible-entities user available all-configs)
+           entity-configs (select-keys all-configs entities)
+           groups (admin-ui/dashboard-groups entities entity-configs user)
+           ;; Counted only for a tile the dashboard shows
+           shown (into [] (comp (mapcat :items) (keep :entity) (filter (set entities)) (distinct)) groups)
+           stats (zipmap shown (in-parallel (partial entity-stats admin-service entity-configs) shown))]
+       (support/html-response request
+                              (admin-ui/admin-layout
+                               (admin-ui/dashboard groups stats
+                                                   {:activity       (recent-activity user-service user)
+                                                    :entity-configs entity-configs
+                                                    :display        (support/display-options config request)
+                                                    :now            (Instant/now)})
+                               {:user user
+                                :nav groups
+                                :current-entity nil
+                                :entity-configs entity-configs
+                                :logo-url (:logo-url config)}))))))
 
 ;; =============================================================================
 ;; Entity List Handlers

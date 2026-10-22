@@ -72,10 +72,11 @@
     (let [read (fn [js] (page/evaluate pg js))
           sidebar (read (str "[...document.querySelectorAll('nav.admin-sidebar-nav .nav-module')]"
                              ".map(g => [g.querySelector('.nav-module-toggle .nav-text').textContent,"
-                             " [...g.querySelectorAll('a')].map(a => [a.getAttribute('href'), a.querySelector('.nav-text').textContent])])"))
+                             " [...g.querySelectorAll('a')].map(a => [a.getAttribute('href'), a.querySelector('.nav-text').textContent]).sort()])"))
+          ;; Entity tiles first, then the other pages as links
           dashboard (read (str "[...document.querySelectorAll('.admin-home-section')]"
                                ".map(s => [s.querySelector('h2').textContent,"
-                               " [...s.querySelectorAll('a.entity-card-link')]"
-                               ".map(a => [a.getAttribute('href'), a.querySelector('.entity-card-title').textContent])])"))]
+                               " [...s.querySelectorAll('a.entity-card-link, a.dashboard-link')]"
+                               ".map(a => [a.getAttribute('href'), a.querySelector('.entity-card-title, .dashboard-link-label').textContent]).sort()])"))]
       (is (seq dashboard))
-      (is (= sidebar dashboard) "the same groups, items and labels, in the same order"))))
+      (is (= sidebar dashboard) "the same groups in the same order, with the same items and labels"))))
