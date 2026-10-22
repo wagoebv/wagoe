@@ -16,7 +16,8 @@
             [support.mysql :as mysql]
             [support.test-db :as test-db]
             [clojure.string :as str]
-            [clojure.test :refer [deftest is testing use-fixtures]])
+            [clojure.test :refer [deftest is testing use-fixtures]]
+            [wagoe.test.logging :refer [logged-errors]])
   (:import [java.io File]
            [java.nio.charset StandardCharsets]))
 
@@ -242,29 +243,34 @@
         (is (= 422 (:status response)))
         (is (= "v1" (bytes->str (:datasheet (the-row db-ctx)))))))))
 
-(deftest ^:integration a-file-input-needs-a-binary-field
-  (let [db-ctx (:h2 @backends)]
-    (testing "named in the config, refused at boot"
-      (let [e (try (schema-repo/create-schema-repository
-                    db-ctx (assoc-in admin-config [:entities :fi-products :fields]
-                                     {:name {:type :string :widget :file-input}}))
-                   nil
-                   (catch clojure.lang.ExceptionInfo e e))]
-        (is (= :configuration-error (:type (ex-data e))))
-        (is (str/includes? (ex-message e) ":widget :file-input needs a :binary field"))))
-    (testing "the column's type, refused when the entity is read"
-      (let [{:keys [schema]} (system db-ctx (assoc-in admin-config [:entities :fi-products :fields]
-                                                      {:name {:widget :file-input}}))
-            e (try (ports/get-entity-config schema :fi-products) nil
-                   (catch clojure.lang.ExceptionInfo e e))]
-        (is (= :configuration-error (:type (ex-data e))))
-        (is (= [:name] (:fields (ex-data e))))))
-    (testing "a binary field with another widget"
-      (let [{:keys [schema]} (system db-ctx (assoc-in admin-config [:entities :fi-products :fields]
-                                                      {:datasheet {:widget :textarea}}))
-            e (try (ports/get-entity-config schema :fi-products) nil
-                   (catch clojure.lang.ExceptionInfo e e))]
-        (is (str/includes? (ex-message e) "its :widget must be :file-input"))))))
+(deftest ^:integration a-mismatched-file-field-leaves-the-form-and-nothing-else
+  ;; A 1.x app with :file-input on a text field worked except on upload; it
+  ;; must not lose its admin over it.
+  (let [db-ctx (:h2 @backends)
+        config (assoc-in admin-config [:entities :fi-products :fields]
+                         {:name      {:type :string :widget :file-input}
+                          :datasheet {:widget :textarea}})
+        {:keys [schema svc]} (system db-ctx config)
+        [cfg logged] (logged-errors #(ports/get-entity-config schema :fi-products))]
+    (testing "logged once, naming entity, field and fix"
+      (is (= 2 (count logged)))
+      (is (some #(str/includes? % ":widget :file-input needs a :binary field") logged))
+      (is (some #(str/includes? % "its :widget must be :file-input") logged))
+      (is (= [] (second (logged-errors #(ports/get-entity-config schema :fi-products))))
+          "cached: not computed, nor logged, again"))
+    (testing "the fields are off the form and not written"
+      (is (= [:datasheet :name] (map :field (:upload-config-errors cfg))))
+      (is (not-any? #{:name :datasheet} (:editable-fields cfg)))
+      (is (every? (set (:readonly-fields cfg)) [:name :datasheet])))
+    (testing "the rest of the admin keeps working"
+      (let [page ((detail/new-entity-handler svc schema config)
+                  (assoc (multipart-request :get {}) :uri "/web/admin/fi-products/new"))]
+        (is (= 200 (:status page)))
+        (is (str/includes? (str (:body page)) "is not on this form")))
+      (is (= 0 (:total-count (ports/list-entities svc :fi-products {}))))
+      (is (= 200 (:status ((detail/new-entity-handler svc schema config)
+                           (assoc (multipart-request :get {}) :uri "/web/admin/fi-kits/new"
+                                  :path-params {:entity "fi-kits"}))))))))
 
 (deftest ^:integration a-child-row-uploads-its-file
   (doseq [[backend db-ctx] @backends

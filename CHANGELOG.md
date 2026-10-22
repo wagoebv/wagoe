@@ -281,7 +281,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Fixed
 
 - **Admin lists loaded every stored file** (BOU-811); reads now take its size only, and a stored file can be removed.
-  `:widget :file-input` only on a `:binary` field, and a `:binary` field only with it: fix the config the error names.
+  A `:file-input` field that is not `:binary` (or the reverse) leaves the form with a logged config error; fix the config.
 - **Admin: a failed htmx request said nothing** (BOU-802); it now shows an error toast with a reference, and a refused
   inline edit shows its message. Nothing to change.
 - **Admin lists start newest first** (BOU-802): `created-at` desc, else the title field, and `:default-sort-dir` is

@@ -596,6 +596,9 @@
       [:div.form-card-body {:class "form-card-body space-y-4"}
        [:div.form-meta
         [:span.form-meta-label [:t :admin/form-required-fields-note]]]
+       (for [{:keys [field]} (:upload-config-errors entity-config)]
+         [:div {:class "alert alert-error admin-config-error" :role "alert"}
+          [:t :admin/config-error-upload {:field (name field)}]])
        (cond
          ;; Priority 1: Use configured field groups if present
          field-groups

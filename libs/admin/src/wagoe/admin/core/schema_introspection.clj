@@ -743,6 +743,19 @@
                           (str ":widget :file-input needs a :binary field (a BLOB or BYTEA column), and this one is "
                                (or (:type cfg) :string) ". Use another widget, or a binary column.")))})))
 
+(defn without-upload-errors
+  "`entity-config` with the fields of `errors` (see `upload-errors`) off its
+   form and read-only, so neither is written, and the errors as
+   :upload-config-errors for the form to show."
+  [entity-config errors]
+  (if (empty? errors)
+    entity-config
+    (let [fields (set (map :field errors))]
+      (-> entity-config
+          (update :editable-fields #(vec (remove fields %)))
+          (update :readonly-fields #(into (set %) fields))
+          (assoc :upload-config-errors errors)))))
+
 (defn- off-form-reason
   [field entity-config]
   (if (contains? (set (:readonly-fields entity-config)) field)
