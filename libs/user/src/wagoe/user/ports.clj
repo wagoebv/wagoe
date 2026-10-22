@@ -369,6 +369,19 @@
   ;; Throws :user-not-found, :account-locked (with :retry-after),
   ;; :invalid-current-password, :password-policy-violation.
 
+(defprotocol IUserAccountRecovery
+  "What an admin does for a user who cannot sign in. Each change is audited
+   with the admin as actor."
+
+  (unlock-user [this user-id])
+  ;; Ends a sign-in lockout and clears the failed-attempt count. Returns true,
+  ;; or false when there was nothing to clear. Throws :user-not-found.
+
+  (reset-user-mfa [this user-id]))
+  ;; Turns off the user's second factor, for one who lost both the device and
+  ;; the backup codes; they sign in with the password until they set it up
+  ;; again. Returns true, or false when it was off. Throws :user-not-found.
+
 (defprotocol IUserGroupService
   "Groups of users and the roles assigned to them (ADR-041). A user's grants
    are the permissions of the roles of their groups: those they were added

@@ -80,11 +80,27 @@
 (defn- values-str [values]
   (str/join ", " (sort (map str values))))
 
+(defn entity-lookup-url
+  "Where the admin answers lookups of `entity`'s rows: by text, or one by ?id=."
+  [entity]
+  (str "/web/admin/" (name entity) "/lookup"))
+
+(defn- scope-value
+  "Fixed value `v`, replaced by its record's title when key's admin entity is
+   `entity`: the admin's lookup answers it once the page has loaded."
+  [entity v]
+  [:strong.scope-value
+   (when entity
+     {:hx-get     (str (entity-lookup-url entity) "?" (table-ui/encode-query-params {"id" (str v)}))
+      :hx-trigger "load"
+      :hx-swap    "innerHTML"})
+   (str v)])
+
 (defn scope-view
-  "A stored scope as text. `info`: {:labels {key label} :sources {source label}
-   :resolved {[key source] values-or-:error}}, the last when the scope is a
-   user's."
-  [scope {:keys [labels sources resolved]}]
+  "A stored scope as text. `info`: {:labels {key label} :entities {key entity}
+   :sources {source label} :resolved {[key source] values-or-:error}}, the
+   last when the scope is a user's."
+  [scope {:keys [labels entities sources resolved]}]
   (if (empty? scope)
     [:span.scope-everywhere [:t :user.rights/scope-everywhere]]
     (into [:span.scope]
@@ -101,7 +117,7 @@
                     (= :error r)  (list " " [:span.scope-unresolved [:t :user.rights/scope-resolve-failed]])
                     (empty? r)    (list " " [:span.scope-unresolved [:t :user.rights/scope-resolved-none]])
                     :else         (list " = " [:strong.scope-value (values-str r)]))])
-               [:span.scope-part label ": " [:strong.scope-value (str v)]]))))))
+               [:span.scope-part label ": " (scope-value (get entities k) v)]))))))
 
 ;; =============================================================================
 ;; Permission checklist

@@ -51,19 +51,20 @@
                (assoc request :user (assoc (users who) :id who))
                request))))
 
-(defn- handler [mode]
+(defn- handler [mode & [extra]]
   (let [registry (ig/init-key :wagoe/permission-registry
                               {:declarations {:wagoe/orders {:permissions {:orders/refund {:label "Refund"}}
                                                              :scopes {:domain-id {:label "Domain"}}}}})]
     (ig/init-key :wagoe/http-handler
-                 {:module-routes       [{:wagoe/module :wagoe/orders :contribution orders-routes}
-                                        unowned-routes]
-                  :permission-registry registry
-                  :rights              rights
-                  :auth-middleware     [authenticate]
-                  :router              {}
-                  :config              {:active (cond-> {:wagoe/settings {:name "t"}}
-                                                  mode (assoc :wagoe/authorization {:mode mode}))}})))
+                 (merge {:module-routes       [{:wagoe/module :wagoe/orders :contribution orders-routes}
+                                               unowned-routes]
+                         :permission-registry registry
+                         :rights              rights
+                         :auth-middleware     [authenticate]
+                         :router              {}
+                         :config              {:active (cond-> {:wagoe/settings {:name "t"}}
+                                                         mode (assoc :wagoe/authorization {:mode mode}))}}
+                        extra))))
 
 (defn- call
   ([h method uri user] (call h method uri user "application/json"))
@@ -115,7 +116,10 @@
       (let [{:keys [status content-type body]} (call h :get "/web/orders" "nobody" "text/html")]
         (is (= 403 status))
         (is (str/starts-with? content-type "text/html"))
-        (is (str/includes? body "403"))))))
+        (is (str/includes? body "403"))))
+    (testing "in the app's own error page when it has one"
+      (let [h (handler :enforce {:error-page (fn [_ {:keys [status]}] (str "<p>app page " status "</p>"))})]
+        (is (= "<p>app page 403</p>" (:body (call h :get "/web/orders" "nobody" "text/html"))))))))
 
 (deftest ^:integration rights-are-read-once-per-request-and-only-when-needed
   (let [h (handler :enforce)]

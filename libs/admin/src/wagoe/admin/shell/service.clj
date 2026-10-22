@@ -765,9 +765,13 @@
                         {:type :configuration-error :writer k})))))
 
 (defn- writable-data
-  "`data` without the read-only fields and the primary key."
+  "`data` without the read-only fields, those a field's own `:readonly` makes
+   read-only too, and the primary key. A disabled checkbox still sends its
+   hidden \"false\"."
   [entity-config data]
-  (apply dissoc data (conj (:readonly-fields entity-config #{}) (:primary-key entity-config :id))))
+  (apply dissoc data (:primary-key entity-config :id)
+         (concat (:readonly-fields entity-config)
+                 (keep (fn [[k field]] (when (:readonly field) k)) (:fields entity-config)))))
 
 (defn- written-update!
   "Update through `writer`, and with it the record's `links`, in one
@@ -1412,7 +1416,7 @@
                          :field field
                          :entity entity-name})))
 
-      (when (contains? (set (:readonly-fields entity-config)) field)
+      (when (or (contains? (set (:readonly-fields entity-config)) field) (:readonly field-config))
         (throw (ex-info "Cannot update readonly field"
                         {:type :readonly-field
                          :field field

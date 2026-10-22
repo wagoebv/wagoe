@@ -670,3 +670,11 @@
         e      (ex-info "Database update failed" {:type :database-error :constraint :not-null :field :number} driver)]
     (is (= {:type :validation-error :field :number :errors {:number ["Field is required"]}}
            (ex-data (#'service/not-null-violation e))))))
+
+(deftest ^:unit a-field-read-only-by-its-own-config-is-not-written
+  ;; Its checkbox is disabled, but the hidden "false" beside it still posts.
+  (is (= {:name "n"}
+         (#'service/writable-data {:readonly-fields #{:created-at}
+                                   :fields          {:verified {:type :boolean :readonly true}
+                                                     :name     {:type :string}}}
+                                  {:id 1 :name "n" :verified false :created-at "t"}))))

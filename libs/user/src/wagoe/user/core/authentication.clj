@@ -41,6 +41,11 @@
     {:valid? false
      :errors (login-request-explainer login-data)}))
 
+(defn locked?
+  "Whether `user`'s account is locked at `current-time`."
+  [user current-time]
+  (boolean (some-> (:lockout-until user) (.isAfter current-time))))
+
 (defn should-allow-login-attempt?
   "Pure function: Determine if login attempt should be allowed based on account state.
    
@@ -69,8 +74,7 @@
     {:allowed? false :reason "Account no longer exists"}
 
     ;; Check if account is locked due to failed attempts
-    (and (:lockout-until user)
-         (.isBefore current-time (:lockout-until user)))
+    (locked? user current-time)
     {:allowed? false
      :reason "Account temporarily locked due to failed login attempts"
      :retry-after (:lockout-until user)}
@@ -87,6 +91,11 @@
   {:max-attempts (get login-config :max-failed-attempts 5)
    :until        (.plus current-time (Duration/ofMinutes (get login-config :lockout-duration-minutes 15)))
    :now          current-time})
+
+(defn minutes-locked
+  "Whole minutes from `current-time` until `retry-after`, at least one."
+  [retry-after current-time]
+  (max 1 (long (Math/ceil (/ (.toMillis (Duration/between current-time retry-after)) 60000.0)))))
 
 (defn prepare-successful-login-updates
   "Pure function: Prepare user updates for successful login.

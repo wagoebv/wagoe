@@ -9,6 +9,7 @@
    application judges the scope."
   (:require [clojure.string :as str]
             [malli.core :as m]
+            [wagoe.core.utils.text :as text]
             [malli.error :as me]))
 
 (def everyone-id
@@ -29,6 +30,13 @@
   "`permission` as stored and shown: its namespace kept, no colon."
   [permission]
   (subs (str permission) 1))
+
+(defn scope-key-label
+  "What a scope key declared in `:groups :scope` is called: its schema's
+   `:title`, else its name without `-id`, `:domain-id` as \"Domain\"."
+  [k props]
+  (or (:title props)
+      (text/capitalize (str/replace (str/replace (name k) #"-id$" "") "-" " "))))
 
 (defn holds?
   "Whether `grants` hold `permission`, in any scope."

@@ -474,14 +474,17 @@
 (defn lookup-handler
   "GET /:entity/lookup?q= — the rows of an entity whose label contains the
    typed text, as combobox options, for a page outside the admin that picks
-   one of them (a grant's scope). The user has to be able to view the entity."
+   one of them (a grant's scope). With ?id= instead, that row's label, for a
+   page showing one by its id. The user has to be able to view the entity."
   [admin-service schema-provider _config]
   (fn [request]
-    (let [[_ entity-name entity-cfg] (support/viewable-entity! schema-provider request)
-          options (support/search-entity-options admin-service entity-cfg entity-name (combobox/query request))]
-      (when-not options
-        (throw (ex-info "No text label to search" {:type :not-found :entity-name entity-name})))
-      (support/html-response request
-                             ;; Option ids follow the asking combobox, so two on one page differ
-                             (combobox/options (or (not-empty (get-in request [:query-params "field"])) entity-name)
-                                               options [:t :admin/combobox-no-matches])))))
+    (let [[_ entity-name entity-cfg] (support/viewable-entity! schema-provider request)]
+      (if-let [id (not-empty (get-in request [:query-params "id"]))]
+        (support/html-response request [:span (support/entity-label admin-service entity-name entity-cfg id)])
+        (let [options (support/search-entity-options admin-service entity-cfg entity-name (combobox/query request))]
+          (when-not options
+            (throw (ex-info "No text label to search" {:type :not-found :entity-name entity-name})))
+          (support/html-response request
+                                 ;; Option ids follow the asking combobox, so two on one page differ
+                                 (combobox/options (or (not-empty (get-in request [:query-params "field"])) entity-name)
+                                                   options [:t :admin/combobox-no-matches])))))))
