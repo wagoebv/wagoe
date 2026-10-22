@@ -43,6 +43,10 @@
     (is (empty? (i18n/scan-violations
                  "(defn page\n  \"First line of prose.\n   Second line of prose.\"\n  []\n  [:div])"))))
 
+  (testing "a docstring after map metadata is not a violation"
+    (is (empty? (i18n/scan-violations
+                 "(defn ^{:deprecated \"1.0\"} page\n  \"Render the user page.\"\n  []\n  [:div])"))))
+
   (testing "a namespace docstring is not a violation"
     (is (empty? (i18n/scan-violations
                  "(ns demo.core.ui\n  \"User interface components.\"\n  (:require [x]))"))))

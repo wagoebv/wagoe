@@ -167,7 +167,7 @@
    `def` is deliberately absent. `(def x \"doc\" v)` is legal and rare;
    `(def title \"Users\")` is common, and treating the second as a docstring
    would hide exactly the literal a scan is looking for."
-  #"\((?:defn|defmacro|defprotocol|definterface|ns)-?\s+(?:\^\S+\s+)*[^\s()\[\]{}]+\s*(?:\[[^\]]*\]\s*)?$")
+  #"\((?:defn|defmacro|defprotocol|definterface|ns)-?\s+(?:\^(?:\{[^}]*\}|\S+)\s+)*[^\s()\[\]{}]+\s*(?:\[[^\]]*\]\s*)?$")
 
 (defn docstring?
   "Whether a `string-literals` entry sits in a docstring position."
