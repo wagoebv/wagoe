@@ -80,7 +80,6 @@
   :wagoe/admin
   {:enabled?         true
    :base-path        "/web/admin"
-   :require-role     :admin
    :entity-discovery {:mode      :allowlist
                       :allowlist #{:users :tenants :e2e-orders :e2e-order-lines
                                    :e2e-customers :e2e-tickets :e2e-labels

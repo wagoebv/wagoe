@@ -50,9 +50,11 @@
 (defn scope-info
   "What `rights-ui/scope-view` reads to label a scope's keys and sources."
   [group-service]
-  (let [registry (:registry group-service)]
-    {:labels  (some-> registry authz/scopes (update-vals :label))
-     :sources (some-> registry authz/scope-sources (update-vals :label))}))
+  (let [registry (:registry group-service)
+        scopes   (some-> registry authz/scopes)]
+    {:labels   (update-vals scopes :label)
+     :entities (into {} (keep (fn [[k {:keys [entity]}]] (when entity [k entity]))) scopes)
+     :sources  (some-> registry authz/scope-sources (update-vals :label))}))
 
 (defn- error-text
   "What to show for a refused change: the field's message, and the schema's

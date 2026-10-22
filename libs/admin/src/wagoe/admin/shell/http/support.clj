@@ -611,6 +611,12 @@
              nil))
       id))
 
+(defn entity-label
+  "What row `id` of `entity-name` is called: its label, or the id when it
+   cannot be read."
+  [admin-service entity-name entity-cfg id]
+  (current-label admin-service entity-name entity-cfg nil id))
+
 (defn foreign-key-options
   "The choices for each editable foreign key of `entity-name`: the parent's
    rows as [id label], where the label is the parent's `:title-field` — what

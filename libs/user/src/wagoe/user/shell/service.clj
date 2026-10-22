@@ -19,6 +19,7 @@
             [wagoe.user.core.user :as user-core]
             [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.audit :as audit-core]
+            [wagoe.user.core.mfa :as mfa-core]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.lockout :as lockout]
             [wagoe.user.ports :as ports]
@@ -211,6 +212,10 @@
                          (entry-fn actor-id actor-email user-id email ip-address user-agent)))
     (catch Exception e
       (println "WARN: Failed to create audit log:" (.getMessage e)))))
+
+(defn- existing-user [user-repository user-id]
+  (or (.find-user-by-id user-repository user-id)
+      (throw (ex-info "User not found" {:type :user-not-found :user-id user-id}))))
 
 (defn- delete-users!
   "Delete `user-ids`, soft unless `permanent?`, in one transaction: all of
@@ -888,7 +893,30 @@
            true)))
      {:system {:user-repository user-repository
                :audit-repository audit-repository
-               :auth-service auth-service}})))
+               :auth-service auth-service}}))
+
+  ports/IUserAccountRecovery
+
+  (unlock-user [_ user-id]
+    (let [user    (existing-user user-repository user-id)
+          cleared {:failed-login-count 0 :lockout-until nil}]
+      (if-not (or (auth-core/locked? user (current-timestamp)) (pos? (or (:failed-login-count user) 0)))
+        false
+        (do (.update-user user-repository (assoc cleared :id user-id))
+            (audit-quietly! audit-repository
+                            (fn [actor-id actor-email target-id target-email ip ua]
+                              (audit-core/update-user-audit-entry actor-id actor-email target-id target-email
+                                                                  (select-keys user (keys cleared)) cleared ip ua))
+                            user-id (:email user))
+            true))))
+
+  (reset-user-mfa [_ user-id]
+    (let [user (existing-user user-repository user-id)]
+      (if-not (:mfa-enabled user)
+        false
+        (do (.update-user user-repository (assoc (mfa-core/prepare-mfa-disablement user) :id user-id))
+            (audit-quietly! audit-repository audit-core/mfa-reset-audit-entry user-id (:email user))
+            true)))))
 
 ;; =============================================================================
 ;; Factory Functions

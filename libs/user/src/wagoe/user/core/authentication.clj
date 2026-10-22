@@ -88,6 +88,16 @@
    :until        (.plus current-time (Duration/ofMinutes (get login-config :lockout-duration-minutes 15)))
    :now          current-time})
 
+(defn minutes-locked
+  "Whole minutes from `current-time` until `retry-after`, at least one."
+  [retry-after current-time]
+  (max 1 (long (Math/ceil (/ (.toMillis (Duration/between current-time retry-after)) 60000.0)))))
+
+(defn locked?
+  "Whether `user`'s account is locked at `current-time`."
+  [user current-time]
+  (boolean (some-> (:lockout-until user) (.isAfter current-time))))
+
 (defn prepare-successful-login-updates
   "Pure function: Prepare user updates for successful login.
    

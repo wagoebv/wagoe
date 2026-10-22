@@ -179,6 +179,8 @@
  :user/oidc-account-unavailable "This account cannot sign in right now."
  :user/oidc-mfa-invalid        "Invalid code"
  :user/mfa-enrolment-required  "This sign-in needs two-factor authentication, and your account has none set up. Ask an administrator."
+ :user/error-locked            {:one "Too many failed attempts, please try again in {n} minute"
+                                :many "Too many failed attempts, please try again in {n} minutes"}
 
  :user/created-label-email     "Email:"
  :user/created-label-name      "Name:"
@@ -214,6 +216,19 @@
  :user/toast-session-not-found "Session not found or already ended"
  :user/toast-sessions-revoked "Other sessions revoked"
  :user/page-sessions-title     "Sessions for {name}"
+ :user/sign-in-title           "Sign-in"
+ :user/account-locked          {:one "Locked after too many failed attempts; it unlocks by itself in {n} minute"
+                                :many "Locked after too many failed attempts; it unlocks by itself in {n} minutes"}
+ :user/account-not-locked      "Not locked out"
+ :user/button-unlock           "Unlock"
+ :user/mfa-status-on           "Two-factor authentication is on"
+ :user/mfa-status-off          "Two-factor authentication is off"
+ :user/button-reset-mfa        "Reset two-factor authentication"
+ :user/confirm-reset-mfa       "Turn off two-factor authentication for this user? They sign in with their password alone until they set it up again."
+ :user/toast-account-unlocked  "Account unlocked"
+ :user/toast-account-not-locked "The account was not locked"
+ :user/toast-mfa-reset         "Two-factor authentication turned off"
+ :user/toast-mfa-not-on        "Two-factor authentication was already off"
 
  :user/audit-actor-system      "System"
  :user/audit-view-details      "View details"

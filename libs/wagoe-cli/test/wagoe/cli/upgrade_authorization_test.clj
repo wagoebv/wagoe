@@ -43,6 +43,24 @@
     (testing "a map without :mode gets one"
       (is (= :enforce (:mode (sut/config-facts (sut/set-mode "{:active {:wagoe/authorization {}}}" :enforce))))))))
 
+(deftest ^:unit admin-entities-missing-from-the-allowlist-are-found-and-added
+  (let [dir  (io/file (System/getProperty "java.io.tmpdir") (str "wagoe-authz-allow-" (System/nanoTime)))
+        text "{:active {:wagoe/admin {:enabled? true\n                          :entities #merge [#include \"admin/products.edn\"\n                                            {:orders {:label \"Orders\"}}]}}}"]
+    (io/make-parents (io/file dir "admin" "products.edn"))
+    (spit (io/file dir "admin" "products.edn") "{:products {:label \"Products\" :fields {:name {:label #env NAME}}}}")
+    (try
+      (is (= [:orders :products] (sut/unlisted-admin-entities text dir)))
+      (let [added (sut/allow-entities text [:orders :products])]
+        (is (= #{:orders :products} (get-in (read-string (str/replace added #"#merge|#include|#env" ""))
+                                            [:active :wagoe/admin :entity-discovery :allowlist])))
+        (is (str/includes? added "#include \"admin/products.edn\"") "the rest is kept as written")
+        (is (empty? (sut/unlisted-admin-entities added dir)))
+        (testing "an allowlist that exists is extended"
+          (let [more (sut/allow-entities (str/replace added ":products" ":tenants") [:products])]
+            (is (empty? (sut/unlisted-admin-entities more dir))))))
+      (is (= text (sut/allow-entities text [])) "nothing to add, nothing changed")
+      (finally (doseq [f (reverse (file-seq dir))] (.delete ^java.io.File f))))))
+
 (deftest ^:unit the-log-is-summarised-per-permission-and-route
   (let [log (str "12:00 WARN  w.p.s.authorization - Authorization would refuse this request under :enforce "
                  "{:mode :report, :user-id #uuid \"00000000-0000-0000-0000-00000000000a\", :route /api/v1/orders,"

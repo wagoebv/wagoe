@@ -71,3 +71,11 @@
     (is (= "forbidden"
            (get-in (json/parse-string (if (string? body) body (slurp body)) true)
                    [:error :type])))))
+
+(deftest ^:unit a-signed-in-user-refused-a-web-page-gets-a-403-page
+  ;; It was the login form, a 200, to someone already signed in.
+  (let [resp ((user-mw/require-role-middleware #{:admin} (constantly {:status 200}))
+              {:request-method :get :uri "/web/admin/groups" :headers {}
+               :user {:id (random-uuid) :role :user}})]
+    (is (= 403 (:status resp)))
+    (is (str/starts-with? (get-in resp [:headers "Content-Type"]) "text/html"))))

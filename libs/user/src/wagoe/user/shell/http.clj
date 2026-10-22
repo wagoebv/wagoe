@@ -501,6 +501,24 @@
              :tags       ["mfa"]
              :description "Returns whether MFA is enabled and remaining backup codes"}}]]))
 
+(defn- require-platform-admin-middleware
+  "An admin outside any tenant only: the export carries the user's audit trail,
+   which only a platform admin reads (/web/audit)."
+  [handler]
+  (fn [request]
+    (if (access/platform-admin? (:user request))
+      (handler request)
+      (user-middleware/create-forbidden-response "Platform admin required" :insufficient-role request))))
+
+(defn- account-admin-middleware
+  "Who may unlock a user or reset their second factor: the role Admin, which
+   under :wagoe/authorization :enforce makes a platform admin only without a
+   tenant."
+  [config]
+  (if (= :enforce (get-in config [:active :wagoe/authorization :mode]))
+    require-platform-admin-middleware
+    user-middleware/require-admin-middleware))
+
 (defn web-routes
   "The module's web UI routes, as Reitit data.
 
@@ -638,6 +656,18 @@
                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                               'wagoe.user.shell.http-interceptors/require-self-or-admin]
                :summary "Revoke specific session"}}]
+      ["/users/:id/unlock"
+       {:no-doc        true
+        :authorization :self
+        :middleware    [auth-middleware (account-admin-middleware config)]
+        :post {:handler (web-handlers/unlock-user-handler user-service config)
+               :summary "End a user's sign-in lockout (admin)"}}]
+      ["/users/:id/mfa/reset"
+       {:no-doc        true
+        :authorization :self
+        :middleware    [auth-middleware (account-admin-middleware config)]
+        :post {:handler (web-handlers/reset-mfa-handler user-service config)
+               :summary "Turn off a user's second factor (admin)"}}]
       ;; Audit trail routes
       ["/audit"
        {:no-doc     true
@@ -896,15 +926,6 @@
           profile (or (user-ports/get-user-by-id user-service user-id) (throw (user-not-found user-id)))]
       (audit-export! audit-repository request profile)
       (privacy/request-export-job! export-jobs {:type :user :id user-id} (get-in request [:user :id])))))
-
-(defn- require-platform-admin-middleware
-  "An admin outside any tenant only: the export carries the user's audit trail,
-   which only a platform admin reads (/web/audit)."
-  [handler]
-  (fn [request]
-    (if (access/platform-admin? (:user request))
-      (handler request)
-      (user-middleware/create-forbidden-response "Platform admin required" :insufficient-role request))))
 
 (defn export-routes
   "Data export: a user's own at GET /api/v1/me/export and /web/profile/export,

@@ -1059,6 +1059,16 @@
              ["/web/x#frag"       "/web/x#frag"]]]
       (is (= expected (location return-to)) (pr-str return-to)))))
 
+(deftest ^:unit a-lockout-says-how-long-it-lasts
+  (let [svc (reify ports/IUserService
+              (authenticate-user [_ _]
+                {:authenticated false :reason :account-locked
+                 :retry-after (.plusSeconds (Instant/now) 290)}))
+        response ((web-handlers/login-submit-handler svc {})
+                  (merge dutch {:form-params {"email" "user@example.com" "password" "password123"}}))]
+    (is (= 401 (:status response)))
+    (is (html-contains? response "probeer het over 5 minuten opnieuw"))))
+
 (deftest ^:contract ^:security error-pages-hide-the-exception
   ;; The exception message can carry driver or config detail (BOU-552).
   (let [boom (RuntimeException. "jdbc:postgresql://db:5432 password=hunter2")]

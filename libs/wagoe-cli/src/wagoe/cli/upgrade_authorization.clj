@@ -8,6 +8,7 @@
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [rewrite-clj.node :as n]
             [rewrite-clj.zip :as z]
             [wagoe.cli.catalogue :as cat]
             [wagoe.cli.config-edn :as config-edn]
@@ -46,6 +47,70 @@
   (if-let [k (first (require-role-locs text))]
     (recur (-> k z/right z/remove z/remove z/root-string))
     text))
+
+(defn- map-keys [loc]
+  (map value (take-nth 2 (take-while some? (iterate z/right (z/down loc))))))
+
+(defn- entity-keys
+  "The entity names `loc`, an admin `:entities` value, configures: a map's
+   keys, through `#merge` and `#include`, which Aero reads relative to `dir`."
+  [loc dir]
+  (case (z/tag loc)
+    :map          (map-keys loc)
+    :reader-macro (let [tag (z/string (z/down loc))
+                        arg (z/right (z/down loc))]
+                    (case tag
+                      "merge"   (when (= :vector (z/tag arg))
+                                  (mapcat #(entity-keys % dir) (take-while some? (iterate z/right (z/down arg)))))
+                      "include" (let [f (io/file dir (str (value arg)))]
+                                  (when (.isFile f) (some-> (z/of-string (slurp f)) (entity-keys (.getParentFile f)))))
+                      nil))
+    nil))
+
+(defn- allowlist-loc [text]
+  (loc-at text [:active :wagoe/admin :entity-discovery :allowlist]))
+
+(defn unlisted-admin-entities
+  "The entities `:wagoe/admin :entities` configures that its `:allowlist`
+   lacks, sorted. The admin declares `admin.<entity>` permissions for the
+   allowlist only, so under :enforce only a platform admin reaches these.
+   `dir` holds the config.edn, for its `#include`s."
+  [text dir]
+  (let [entities (some-> (loc-at text [:active :wagoe/admin :entities]) (entity-keys dir))
+        allow    (let [loc (allowlist-loc text)] (if (= :set (some-> loc z/tag)) (set (value loc)) #{}))]
+    (sort (distinct (remove #(or (not (keyword? %)) (allow %)) entities)))))
+
+(defn- append-entry
+  "The map at `loc`, positioned, with `k` and `v`, source text, on a line of
+   their own at the column of its first key."
+  [loc k v]
+  (let [col (or (some-> loc z/down z/position second dec) 1)]
+    (-> loc
+        (z/append-child* (n/newlines 1))
+        (z/append-child* (n/spaces col))
+        (z/append-child* (n/keyword-node k))
+        (z/append-child* (n/spaces 1))
+        (z/append-child* (z/node (z/of-string v))))))
+
+(defn allow-entities
+  "`text` with `entities` added to `:wagoe/admin`'s `:allowlist`."
+  [text entities]
+  (let [at    #(some-> (z/of-string text {:track-position? true}) (upgrade/path-loc %))
+        path  [:active :wagoe/admin :entity-discovery :allowlist]
+        allow (at path)
+        listed (str "#{" (str/join " " entities) "}")]
+    (cond
+      (empty? entities) text
+      allow             (if (= :set (z/tag allow)) (z/root-string (reduce z/append-child allow entities)) text)
+      :else             (let [discovery (at (pop path))
+                              admin     (at (pop (pop path)))]
+                          (cond
+                            (= :map (some-> discovery z/tag)) (z/root-string (append-entry discovery :allowlist listed))
+                            discovery                         text
+                            (= :map (some-> admin z/tag))     (z/root-string
+                                                               (append-entry admin :entity-discovery
+                                                                             (str "{:mode :allowlist :allowlist " listed "}")))
+                            :else                             text)))))
 
 (defn set-mode
   "`text` with `:wagoe/authorization :mode` set to `mode` under `:active`."
@@ -198,11 +263,15 @@
 (defn- header [step env path]
   (println (str "Authorization upgrade: " step " (WAG_ENV=" env ", " path ")")))
 
-(defn- project-lines [deps {:keys [mode require-role? default-roles]}]
+(defn- project-lines [deps {:keys [mode require-role? default-roles]} unlisted]
   (concat
    (when-let [n (version-note deps)] [(str "  " n)])
    [(str "  :wagoe/authorization mode in config.edn: " mode)]
    (when require-role? ["  :require-role in :wagoe/admin: nothing reads it; prepare deletes it."])
+   (when (seq unlisted)
+     [(str "  :wagoe/admin :entities has " (str/join ", " unlisted) ", which its :allowlist lacks: they have no"
+           " admin.<entity> permissions, so under :enforce only a platform admin reaches them."
+           " prepare adds them to the :allowlist.")])
    (for [[id role] default-roles]
      (str "  OIDC provider " id " :default-role " role ": deprecated. Delete it, and put those users"
           " in a group, by :group-membership or by hand."))))
@@ -212,22 +281,25 @@
     (println (str "  " path ": nothing to change."))
     (println (upgrade/unified-diff (upgrade/relative dir path) old new))))
 
+(defn- unlisted-entities [{:keys [text path]}]
+  (unlisted-admin-entities text (.getParentFile (io/file path))))
+
 (defn- step-check [{:keys [deps text] :as ctx}]
   (println)
   (println "Project:")
-  (run! println (project-lines deps (config-facts text)))
+  (run! println (project-lines deps (config-facts text) (unlisted-entities ctx)))
   (let [code (jvm! ctx "check")]
     (println)
     (println "What the steps change:")
-    (println "  prepare  deletes :require-role, sets :mode :report if it is :off, runs the migrations,")
-    (println "           and moves the rights as shown above.")
+    (println "  prepare  deletes :require-role, adds the admin's entities to its :allowlist, sets :mode")
+    (println "           :report if it is :off, runs the migrations, and moves the rights as shown above.")
     (println "  report   changes nothing: lists where :enforce would refuse what :off allowed.")
     (println "  enforce  sets :mode :enforce, and refuses while a route has no rule or a user would be refused.")
     code))
 
 (defn- step-prepare [{:keys [dir path text dry-run?] :as ctx}]
   (let [{:keys [mode]} (config-facts text)
-        new (cond-> (drop-require-role text)
+        new (cond-> (-> (drop-require-role text) (allow-entities (unlisted-entities ctx)))
               (= :off mode) (set-mode :report))]
     (println)
     (show-diff dir path text new)
@@ -296,7 +368,8 @@
    "Moves this app from :wagoe/authorization :off to :enforce, for one environment"
    "(--env, default $WAG_ENV or dev). Run the steps in order; each can be run again."
    "  check    what the app has and what each step changes; writes nothing"
-   "  prepare  delete :require-role, set :mode :report, run migrations, move rights"
+   "  prepare  delete :require-role, allowlist the admin's entities, set :mode :report,"
+   "           run migrations, move rights"
    "  report   where :enforce would refuse what :off allows; --log FILE summarises a :report log"
    "  enforce  set :mode :enforce; refused while anything would be refused, unless --force"
    "  --dry-run  show what prepare or enforce would write, and write nothing"])

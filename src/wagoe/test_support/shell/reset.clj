@@ -7,6 +7,7 @@
             [clojure.tools.logging :as log]
             [wagoe.test-support.core :as core]
             [wagoe.tenant.ports :as tenant-ports]
+            [wagoe.user.core.group :as group]
             [wagoe.user.ports :as user-ports]))
 
 (def ^:private tables-in-truncation-order
@@ -21,7 +22,6 @@
    "user_group_roles"
    "user_roles"
    "user_group_members"
-   "user_groups"
    "tenant_memberships"
    "tenant_member_invites"
    "users"
@@ -106,6 +106,8 @@
     (try
       (doseq [t tables-in-truncation-order]
         (jdbc/execute! tx [(str "TRUNCATE TABLE " t)]))
+      ;; Everyone stays: the user module creates it only at boot.
+      (jdbc/execute! tx ["DELETE FROM user_groups WHERE id <> ?" (str group/everyone-id)])
       (finally
         (jdbc/execute! tx ["SET REFERENTIAL_INTEGRITY TRUE"]))))
   (log/debug "test-support: truncated all tables"))

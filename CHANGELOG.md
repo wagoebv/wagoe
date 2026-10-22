@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **An admin can unlock a user and reset their two-factor authentication** (BOU-795), under *Sign-in* on the user's
+  Sessions tab; both are audited. Nothing to change.
 - **The admin dashboard has the sidebar's sections** (BOU-809), a card per sidebar item. A `:sidebar-hidden` entity
   no longer gets a card; add `:icon :users` to an existing `admin/users.edn` for the user icon.
 - **Administrator guide to users, groups, roles and rights** (BOU-793): *Managing access* in the guides, with task
@@ -268,6 +270,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Access admin gaps** (BOU-795): a signed-in non-admin gets a 403 page on Groups, not the login form; scopes show
+  record titles; the lockout message says the real minutes; a read-only checkbox no longer saves false.
+- **`wagoe upgrade authorization check` names admin entities missing from the `:allowlist`** (BOU-795), which have no
+  `admin.<entity>` permissions; `prepare` adds them. `authz-report` shows `/api/...` redirects as redirects.
 - **Admin dark mode showed the old navy palette when the OS was dark** (BOU-797); the topbar initials and the
   unsaved-changes dot were invisible. A theme file's `:root` now also wins over an OS-dark preference.
 - **The admin sidebar fell back to closed** (BOU-796): it is now open or closed, changed only by its one toggle; the pin

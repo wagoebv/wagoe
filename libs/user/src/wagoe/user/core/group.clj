@@ -30,6 +30,14 @@
   [permission]
   (subs (str permission) 1))
 
+(defn scope-key-label
+  "What a scope key declared in `:groups :scope` is called: its schema's
+   `:title`, else its name without `-id`, `:domain-id` as \"Domain\"."
+  [k props]
+  (or (:title props)
+      (let [s (str/replace (str/replace (name k) #"-id$" "") "-" " ")]
+        (str (str/upper-case (subs s 0 1)) (subs s 1)))))
+
 (defn holds?
   "Whether `grants` hold `permission`, in any scope."
   [grants permission]

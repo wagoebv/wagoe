@@ -42,8 +42,7 @@
    :role       {:type :enum
                 :label [:t :admin.users/field-role]
                 :options [[:admin [:t :common/role-admin]]
-                          [:user  [:t :common/role-user]]
-                          [:viewer [:t :common/role-viewer]]]
+                          [:user  [:t :common/role-user]]]
                 :filterable true}
    :active     {:type :boolean :label [:t :admin.users/field-active]  :filterable true}
    :created-at {:type :instant :label [:t :admin.users/field-created] :filterable true}
