@@ -808,10 +808,12 @@ document.addEventListener('alpine:init', function () {
     });
     document.addEventListener('htmx:afterRequest', function (event) {
       hideProgress();
-      // htmx:afterRequest fires after error events too; restoreTableOnError
-      // has already removed the entry in that case, so this is a no-op for
-      // failed requests.
-      clearSavedTable(event.detail && event.detail.xhr);
+      // After a response error restoreTableOnError has already removed the
+      // entry. A request that got no response (status 0) fires this before
+      // sendError or timeout, so restore the table here.
+      var xhr = event.detail && event.detail.xhr;
+      if (xhr && xhr.status === 0) restoreTableOnError(xhr);
+      else clearSavedTable(xhr);
     });
     // htmx:responseError fires when the server returns a non-2xx status.
     // htmx:sendError and htmx:timeout fire when the request fails before any
