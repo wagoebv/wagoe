@@ -100,15 +100,13 @@
 ;; =============================================================================
 
 (deftest ^:security ^:unit web-user-management-routes-guard-cross-user-access
-  (testing "GET /users/:id (management detail) is admin-only (self-service is /profile)"
+  (testing "GET /users/:id, now a redirect to the admin's page, is admin-only"
     (is (web-mounted? "/users/:id" :get :require-admin))
     (is (denied? (web-guard "/users/:id" :get :require-admin) cross-user-ctx)))
-  (testing "PUT /users/:id (update) is admin-only — no self-escalation / cross-user edit"
-    (is (web-mounted? "/users/:id" :put :require-admin))
-    (is (denied? (web-guard "/users/:id" :put :require-admin) cross-user-ctx)))
-  (testing "DELETE /users/:id (deactivate) is admin-only"
-    (is (web-mounted? "/users/:id" :delete :require-admin))
-    (is (denied? (web-guard "/users/:id" :delete :require-admin) cross-user-ctx)))
+  (testing "PUT and DELETE /users/:id are gone: the admin's edit page writes the user"
+    (let [route (second (first (filter #(= "/users/:id" (first %)) web-routes)))]
+      (is (not (contains? route :put)))
+      (is (not (contains? route :delete)))))
   (testing "POST /users/:id/hard-delete is admin-only"
     (is (web-mounted? "/users/:id/hard-delete" :post :require-admin))
     (is (denied? (web-guard "/users/:id/hard-delete" :post :require-admin) cross-user-ctx)))
