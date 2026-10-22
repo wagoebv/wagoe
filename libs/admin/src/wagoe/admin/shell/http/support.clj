@@ -14,6 +14,7 @@
    [wagoe.admin.core.ui.filters :as ui-filters]
    [wagoe.admin.ports :as ports]
    [wagoe.core.utils.redirect :as redirect]
+   [wagoe.core.utils.text :as text]
    [wagoe.admin.shell.permissions :as shell-permissions]
    [wagoe.i18n.shell.middleware :as i18n-middleware]
    [wagoe.i18n.shell.render :as i18n]
@@ -653,8 +654,38 @@
              nil))
       id))
 
+(defn- zone-text
+  "A zone id as typed: `New_York` matches `new york`."
+  [s]
+  (text/lower-case (str/replace s "_" " ")))
+
+(def ^:private zones
+  "The IANA zones the JVM knows, sorted, each as [searchable-text id]."
+  (mapv (juxt zone-text identity) (sort (java.time.ZoneId/getAvailableZoneIds))))
+
+(defn search-timezones
+  "The first zones whose id contains the typed `q`, as [id id], for the
+   combobox of a field with `:options-source :timezones`."
+  [q]
+  (let [q (zone-text (or q ""))]
+    (into [] (comp (filter #(str/includes? (first %) q))
+                   (take combobox/limit)
+                   (map (fn [[_ id]] [id id])))
+          zones)))
+
+(defn timezone-field?
+  "Whether `field` of `entity-config` is chosen from the IANA zones."
+  [entity-config field]
+  (= :timezones (get-in entity-config [:fields field :options-source])))
+
+(defn- timezone-combobox
+  "The zone combobox of `field`, showing its current value."
+  [entity-name field values]
+  {:url (options-url entity-name field) :label (some-> (get values field) str)})
+
 (defn foreign-key-options
-  "The choices for each editable foreign key of `entity-name`: the parent's
+  "The choices for each editable foreign key of `entity-name`, and the zone
+   combobox of each timezone field (`timezone-field?`). A foreign key offers the parent's
    rows as [id label], where the label is the parent's `:title-field` — what
    its relation cells show. Only when every parent fits in the maximum page
    size: a select capped there would silently offer a subset, so past it the
@@ -668,7 +699,8 @@
   ([admin-service config entity-configs entity-name fields values]
   (let [entity-config (get entity-configs entity-name)
         page-size     (get-in config [:pagination :max-page-size] 200)]
-    (into {}
+    (into (into {} (for [field fields :when (timezone-field? entity-config field)]
+                     [field (timezone-combobox entity-name field values)]))
           (for [[field parent] (introspection/declared-parents entity-name entity-configs)
                 :when (some #{field} fields)
                 :let  [parent-cfg (get entity-configs parent)
@@ -701,15 +733,17 @@
 
 (defn field-options
   "The choices `field` of `entity-name` is rendered with, as
-   `foreign-key-options` finds them, or nil when it is no foreign key. Reads
-   only the parent of that field."
+   `foreign-key-options` finds them, or nil when it is neither a foreign key
+   nor a timezone. Reads only the parent of that field."
   [admin-service schema-provider config entity-name field values]
-  (let [entity-configs (all-entity-configs schema-provider)]
-    (when-let [parent (get (introspection/declared-parents entity-name entity-configs) field)]
-      ;; Only `field`, so a second key to the same parent is not read
-      (get (foreign-key-options admin-service config (select-keys entity-configs [entity-name parent])
-                                entity-name [field] values)
-           field))))
+  (if (timezone-field? (ports/get-entity-config schema-provider entity-name) field)
+    (timezone-combobox entity-name field values)
+    (let [entity-configs (all-entity-configs schema-provider)]
+      (when-let [parent (get (introspection/declared-parents entity-name entity-configs) field)]
+        ;; Only `field`, so a second key to the same parent is not read
+        (get (foreign-key-options admin-service config (select-keys entity-configs [entity-name parent])
+                                  entity-name [field] values)
+             field)))))
 
 (defn- viewable-parents
   "{foreign-key-field parent} of `entity-name`, for the parents `user` may view."

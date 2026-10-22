@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`:options-source :timezones` on an admin field** (BOU-804): a combobox over the IANA zones. `admin/users.edn`
+  uses it for `:timezone`; add it there in an existing app.
 - **The admin dashboard shows counts, summaries and recent activity** (BOU-806) instead of a hero. Counts run in
   parallel and a failing one shows "—"; non-entity pages are a compact link row.
 - **The admin dashboard has the sidebar's sections** (BOU-809), a card per sidebar item. A `:sidebar-hidden` entity
@@ -196,6 +198,9 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`IListOverview`** (ADR-040): the admin port a list page asks for titles, counts, facets and summaries.
 
 ### Changed
+
+- **`/web/users/:id` redirects to `/web/admin/users/:id`** (BOU-804), which has the Details, Sessions and Rights
+  tabs. Delete permanently moved to the Sessions tab; `PUT`/`DELETE /web/users/:id` are gone.
 
 - **`response-shape-cli` leaves a response already set alone** (BOU-790); it no longer rewrites an HTTP error response
   to `{:exit :stderr}`. In `create-cli-pipeline` it never saw one.
