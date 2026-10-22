@@ -6,7 +6,7 @@
 ;; Usage (via bb.edn tasks):
 ;;   bb i18n:find "Sign in"       ; find key by substring in en.edn, then grep codebase
 ;;   bb i18n:find :user/sign-in   ; find by exact keyword
-;;   bb i18n:scan                 ; scan core/ui.clj files for unexternalised string literals
+;;   bb i18n:scan                 ; scan core/ui.clj and core/ui/*.clj for unexternalised string literals
 ;;   bb i18n:missing              ; report keys present in en.edn but missing from nl.edn
 ;;   bb i18n:unused               ; report catalogue keys not referenced in source
 
@@ -86,7 +86,7 @@
     (grep query (ui-src-dirs))))
 
 ;; =============================================================================
-;; scan — find unexternalised string literals in core/ui.clj files
+;; scan — find unexternalised string literals in core/ui.clj and core/ui/*.clj
 ;; =============================================================================
 
 (def user-visible-text
@@ -123,37 +123,42 @@
 (defn scan-violations
   "Unexternalised user-visible literals in `content`.
 
-   Pure, so the rules are testable without a source tree.
+   Pure, so the rules are testable without a source tree. An all-caps word
+   (`\"POST\"`) is not prose; a literal that is, but stays untranslated, is
+   kept off the report by an `i18n-ignore: <why>` comment on its line.
 
    Returns a seq of {:line int :text str}."
   [content]
-  (for [lit  (parsing/string-literals content)
-        :when (re-find user-visible-text (:text lit))
-        :when (not (:regex? lit))
-        :when (not (parsing/docstring? lit))
-        :when (not (re-find pattern-arg (:preceding-code lit)))
-        :when (not (inside-marker? lit))]
-    {:line (:line lit) :text (:text lit)}))
+  (let [lines (str/split-lines content)]
+    (for [lit  (parsing/string-literals content)
+          :when (re-find user-visible-text (:text lit))
+          :when (not (re-matches #"[A-Z]+" (:text lit)))
+          :when (not (:regex? lit))
+          :when (not (parsing/docstring? lit))
+          :when (not (re-find pattern-arg (:preceding-code lit)))
+          :when (not (parsing/def-docstring? content lit))
+          :when (not (inside-marker? lit))
+          :when (not (re-find #"i18n-ignore:\s*\S" (nth lines (dec (:line lit)) "")))]
+      {:line (:line lit) :text (:text lit)})))
 
 (defn scan
-  "Scan core/ui.clj files for hardcoded English string literals.
-   Exits 1 if any are found (suitable as a CI gate).
+  "Scan core/ui.clj and core/ui/*.clj files for hardcoded English string
+   literals. Exits 1 if any are found (suitable as a CI gate).
 
-   Only `**/core/ui.clj` is covered — Hiccup elsewhere (shell/web_handlers,
-   admin views) is not scanned, so a clean run is not proof the whole codebase
-   is externalised."
+   Hiccup elsewhere (shell/web_handlers, shared-ui) is not scanned, so a clean
+   run is not proof the whole codebase is externalised."
   []
-  (let [ui-files   (mapcat #(fs/glob % "**/core/ui.clj") (ui-src-dirs))
+  (let [ui-files   (mapcat #(fs/glob % "**/core/{ui.clj,ui/*.clj}") (ui-src-dirs))
         violations (for [f ui-files
                          v (scan-violations (slurp (str f)))]
                      (assoc v :file (str f)))]
     (if (seq violations)
       (do
-        (println "FAIL: Unexternalised string literals found in core/ui.clj files:")
+        (println "FAIL: Unexternalised string literals found in core UI files:")
         (doseq [{:keys [file line text]} violations]
           (println (format "  %s:%d  \"%s\"" file line text)))
         (System/exit 1))
-      (println (format "OK: No unexternalised string literals found in %d core/ui.clj file(s)."
+      (println (format "OK: No unexternalised string literals found in %d core UI file(s)."
                        (count ui-files))))))
 
 ;; =============================================================================

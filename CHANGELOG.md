@@ -273,6 +273,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Page chrome and user error pages were English in every locale** (BOU-805): navigation, theme toggle, toasts and
+  sibling nav now translate. A page rendered with `components/render-html` shows them in English.
+- **`(explain-entity :e)` was missing from a generated app's REPL** (BOU-805). Add the one-line `explain-entity` from
+  a new app's `dev/user.clj` to yours.
 - **Admin inline edit: Save did nothing, and the cell came back as a UUID or raw enum name** (BOU-799). Inline and
   related-record cells now match the list; an enum edits as a select. Nothing to change.
 - **Admin list on a narrow screen** (BOU-801): rows are compact cards that no longer overlap, the pager covers none,

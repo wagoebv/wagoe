@@ -399,7 +399,7 @@
   "The list's keys (keyboard.js), shown once below the table."
   []
   [:p {:class "kbd-hints" :aria-hidden "true"}
-   (for [[ks label] [[["/"] :admin/kbd-search] [["j" "k"] :admin/kbd-move] [["PgUp" "PgDn"] :admin/kbd-page]
+   (for [[ks label] [[["/"] :admin/kbd-search] [["j" "k"] :admin/kbd-move] [["PgUp" "PgDn"] :admin/kbd-page] ; i18n-ignore: key caps
                      [["x"] :admin/kbd-select] [["f"] :admin/kbd-filter] [["↵"] :admin/kbd-open] [["e"] :admin/kbd-edit]
                      [["q"] :admin/kbd-close]]]
      [:span (for [k ks] [:kbd k]) " " [:t label]])])
@@ -498,7 +498,7 @@
             :href (base/entity-create-url entity-name entity-config
                                           (when (:create-redirect-url entity-config)
                                             (base/current-list-url entity-name table-query filters)))
-            :aria-label (str "Create new " (name entity-name))}
+            :aria-label [:t :admin/button-create-new {:entity (name entity-name)}]}
            (icons/icon :plus {:size 18})
            [:t :admin/button-new {:entity (introspection/singular-label entity-config entity-name)}]])]]]
 
