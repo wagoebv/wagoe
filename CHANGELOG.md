@@ -33,7 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`:options-source :timezones` on an admin field** (BOU-804): a combobox over the IANA zones. `admin/users.edn`
   uses it for `:timezone`; add it there in an existing app.
-
+- **The admin dashboard shows counts, summaries and recent activity** (BOU-806) instead of a hero. Counts run in
+  parallel and a failing one shows "—"; non-entity pages are a compact link row.
 - **The admin dashboard has the sidebar's sections** (BOU-809), a card per sidebar item. A `:sidebar-hidden` entity
   no longer gets a card; add `:icon :users` to an existing `admin/users.edn` for the user icon.
 - **Administrator guide to users, groups, roles and rights** (BOU-793): *Managing access* in the guides, with task
@@ -263,6 +264,9 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`jwt-authentication-middleware` and `protect-with-jwt` without a user service** (BOU-682): they trust the token, so a
   deactivated user passes. Pass the user service first; the 1-arity warns once and goes in 2.0.
 
+- **Admin `render-field-value` and `render-inline-edit-cell`** (BOU-799): no page renders through them. Use
+  `cells/cell` and `field-cell`; they go in 2.0.
+
 ### Removed
 
 - **`:dashboard-extra-cards`** (BOU-765): the page it extended is gone. For a dashboard card, give a module's nav
@@ -274,6 +278,15 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin inline edit: Save did nothing, and the cell came back as a UUID or raw enum name** (BOU-799). Inline and
+  related-record cells now match the list; an enum edits as a select. Nothing to change.
+- **Admin list on a narrow screen** (BOU-801): rows are compact cards that no longer overlap, the pager covers none,
+  and a select sorts them. Nothing to change.
+- **Web pages answered errors as JSON** (BOU-800): a browser now gets an error page in the app's layout with the
+  reference to quote, htmx an error toast. API routes keep the JSON body. Nothing to change.
+- **Admin: a malformed id in a URL was a 500** (BOU-800); it is a 404. Nothing to change.
+- **Admin forms take a fraction in a decimal field and upload the file in a binary one** (BOU-798). Nothing to
+  change; an H2 `BYTEA` or MySQL `VARBINARY`/`*BLOB` column now gets a file input too.
 - **Admin dark mode showed the old navy palette when the OS was dark** (BOU-797); the topbar initials and the
   unsaved-changes dot were invisible. A theme file's `:root` now also wins over an OS-dark preference.
 - **The admin sidebar fell back to closed** (BOU-796): it is now open or closed, changed only by its one toggle; the pin

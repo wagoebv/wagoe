@@ -8,6 +8,8 @@
             [reitit.ring.middleware.multipart :as multipart]
             [wagoe.observability.errors.ports :as error-ports]
             [wagoe.observability.logging.ports :as log-ports]
+            [wagoe.platform.core.http.errors :as errors]
+            [wagoe.platform.core.http.pages :as pages]
             [ring.util.codec :as codec]
             [ring.util.request :as ring-request]))
 
@@ -1272,3 +1274,109 @@
         (is (= 200 (:status resp)))
         (is (nil? (get-in resp [:headers "x-tags"])))
         (is (nil? (get-in resp [:headers "X-Correlation-ID"])))))))
+
+;; =============================================================================
+;; Error pages on /web (BOU-800)
+;; =============================================================================
+
+(defn- web-error-handler
+  "Routes under /web and /api that fail in each way, compiled with `system`."
+  [system]
+  (reitit/compile-routes
+   [["/web/missing" {:get {:handler (fn [_] (throw (ex-info "No such widget" {:type :not-found})))}}]
+    ["/web/boom" {:get {:handler (fn [_] (throw (RuntimeException. "secret driver detail")))}}]
+    ["/web/refused" {:get {:handler (fn [_] (errors/response 422 :unprocessable "Widget is locked"))}}]
+    ["/web/coerced" {:get {:handler    (fn [_] {:status 200 :body "ok"})
+                           :parameters {:query [:map [:n :int]]}}}]
+    ["/api/missing" {:get {:handler (fn [_] (throw (ex-info "No such widget" {:type :not-found})))}}]
+    ["/webhooks/missing" {:get {:handler (fn [_] (throw (ex-info "No such widget" {:type :not-found})))}}]]
+   {:system system}))
+
+(defn- web-get
+  ([handler uri] (web-get handler uri {}))
+  ([handler uri headers]
+   (let [resp (handler {:request-method :get :uri uri
+                        :headers (merge {"x-correlation-id" "cid-800"} headers)})]
+     (cond-> resp
+       (instance? java.io.InputStream (:body resp)) (update :body slurp)))))
+
+(defn- html? [resp]
+  (str/starts-with? (str (get-in resp [:headers "Content-Type"])) "text/html"))
+
+(deftest ^:unit a-web-error-is-a-page-with-the-correlation-id
+  (let [handler (web-error-handler {})]
+    (doseq [[uri status text] [["/web/missing" 404 "No such widget"]
+                               ["/web/refused" 422 "Widget is locked"]
+                               ["/web/boom" 500 "Internal Server Error"]
+                               ["/web/coerced" 400 "Request validation failed"]
+                               ["/web/no-such-page" 404 "The requested resource was not found"]]]
+      (testing uri
+        (let [resp (web-get handler uri)]
+          (is (= status (:status resp)))
+          (is (html? resp))
+          (is (str/includes? (:body resp) text))
+          (is (str/includes? (:body resp) "cid-800"))
+          (is (not (str/includes? (:body resp) "secret driver detail"))))))))
+
+(deftest ^:unit the-apps-error-page-renders-it
+  (let [seen    (atom nil)
+        handler (web-error-handler {:error-page (fn [request error]
+                                                  (reset! seen [(:uri request) error])
+                                                  "<html>app layout</html>")})
+        resp    (web-get handler "/web/missing")]
+    (is (= "<html>app layout</html>" (:body resp)))
+    (is (= ["/web/missing" {:status 404 :type "not-found" :message "No such widget"
+                            :correlation-id "cid-800"}]
+           @seen)))
+  (testing "it renders as a page does: the layout can ask what is mounted"
+    (let [seen    (atom nil)
+          handler (web-error-handler {:error-page (fn [_ _]
+                                                    (reset! seen (pages/mounted? "/web/not-a-route"))
+                                                    "<html></html>")})]
+      (web-get handler "/web/missing")
+      (is (false? @seen))))
+  (testing "one that fails leaves the bare page"
+    (let [handler (web-error-handler {:error-page (fn [_ _] (throw (RuntimeException. "layout broke")))})
+          resp    (web-get handler "/web/missing")]
+      (is (= 404 (:status resp)))
+      (is (str/includes? (:body resp) "No such widget")))))
+
+(deftest ^:unit an-htmx-request-gets-a-toast-not-a-page
+  (let [resp (web-get (web-error-handler {}) "/web/missing" {"hx-request" "true"})]
+    (is (= 404 (:status resp)) "kept, so htmx swaps nothing")
+    (is (html? resp))
+    (is (= {:showToast {:type "error" :message "No such widget"}}
+           (json/parse-string (get-in resp [:headers "HX-Trigger"]) true)))
+    (is (not (str/includes? (:body resp) "<html")))))
+
+(deftest ^:unit the-api-and-a-script-asking-for-json-keep-the-error-body
+  (let [handler (web-error-handler {})]
+    (doseq [[uri headers] [["/api/missing" {}]
+                           ["/webhooks/missing" {}]
+                           ["/web/missing" {"accept" "application/json"}]]]
+      (let [resp (web-get handler uri headers)]
+        (is (= 404 (:status resp)))
+        (is (= "not-found" (get-in (response-body-as-map resp) [:error :type])) uri)))))
+
+(deftest ^:unit an-error-answered-by-middleware-or-encoded-by-the-handler-is-a-page-too
+  (let [handler (reitit/compile-routes
+                 [["/web/refused-by-middleware"
+                   {:middleware [(fn [_] (fn [_] (errors/response 413 :validation-error "Too large")))]
+                    :get        {:handler (fn [_] {:status 200 :body "ok"})}}]
+                  ["/web/encoded"
+                   {:get {:handler (fn [_] {:status  404
+                                            :headers {"Content-Type" "application/json"}
+                                            :body    (json/generate-string (errors/body :not-found "Gone"))})}}]]
+                 {:system {}})]
+    (doseq [[uri status text] [["/web/refused-by-middleware" 413 "Too large"]
+                               ["/web/encoded" 404 "Gone"]]]
+      (let [resp (web-get handler uri)]
+        (is (= status (:status resp)) uri)
+        (is (html? resp) uri)
+        (is (str/includes? (:body resp) text) uri)))))
+
+(deftest ^:unit an-htmx-history-restore-gets-the-page
+  (let [resp (web-get (web-error-handler {}) "/web/missing"
+                      {"hx-request" "true" "hx-history-restore-request" "true"})]
+    (is (str/includes? (:body resp) "<html"))
+    (is (nil? (get-in resp [:headers "HX-Trigger"])))))

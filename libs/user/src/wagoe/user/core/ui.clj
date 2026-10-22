@@ -7,6 +7,7 @@
   (:require [wagoe.core.utils.text :as text]
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.htmx :as htmx]
+            [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.shared.ui.core.modal :as modal]
             [wagoe.shared.ui.core.shell :as shell]
@@ -1210,7 +1211,7 @@
      [:span.audit-detail-label [:t :common/audit-error]]
      [:code#audit-detail-error.audit-detail-value "-"]]]))
 
-(def ^:private audit-url "/web/audit")
+(def audit-url "/web/audit")
 (def ^:private audit-target "#audit-table-container")
 
 (defn audit-count-badge
@@ -1336,3 +1337,22 @@
     (audit-logs-table audit-logs table-query total-count filters)
     (audit-detail-modal)]
    (assoc opts :page-title [:t :user/page-audit-heading])))
+
+;; =============================================================================
+;; Error page
+;; =============================================================================
+
+(defn error-page
+  "The page a browser sees for a failed request: the error's own message for a
+   client error, the generic sentence for a server one, and the reference to
+   quote when reporting it."
+  [{:keys [status message correlation-id user]}]
+  (page-layout
+   [:t :common/error-page-title]
+   [:div.error-page
+    [:h1 (str status " – ") [:t (if (= 404 status) :common/error-page-not-found :common/error-page-title)]]
+    [:p.error-message (if (>= status 500) [:t :common/error-generic] message)]
+    (when correlation-id
+      [:p.error-reference [:t :common/error-page-reference] " " [:code correlation-id]])
+    [:a.btn.btn-primary {:href home/*path*} [:t :common/error-page-home]]]
+   {:user user}))

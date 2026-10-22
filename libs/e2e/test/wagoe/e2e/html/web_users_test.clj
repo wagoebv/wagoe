@@ -96,7 +96,7 @@
         (is (= (inc before) (page/evaluate pg "history.length")))
         (page/evaluate pg (str "window.e2eSettled = false;"
                                "document.body.addEventListener('htmx:afterSettle', () => window.e2eSettled = true, {once: true});"
-                               "htmx.trigger(document.body, 'userUpdated')"))
+                               "htmx.trigger(document.body, 'userCreated')"))
         (await! pg "window.e2eSettled")
         (is (= (inc before) (page/evaluate pg "history.length")))
         (is (str/includes? (page/url pg) "sort=email"))))))

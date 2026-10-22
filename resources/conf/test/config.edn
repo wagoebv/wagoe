@@ -84,7 +84,8 @@
    :entity-discovery {:mode      :allowlist
                       :allowlist #{:users :tenants :e2e-orders :e2e-order-lines
                                    :e2e-customers :e2e-tickets :e2e-labels
-                                   :e2e-ticket-labels :e2e-ticket-watchers}}
+                                   :e2e-ticket-labels :e2e-ticket-watchers
+                                   :e2e-products}}
    :entities         #merge [#include "admin/users.edn"
                              #include "admin/tenants.edn"
                              ;; e2e fixture: an order is created with at least one
@@ -113,7 +114,9 @@
                               :e2e-tickets     {:label "Ticket"}
                               ;; Join tables to tickets: few labels, many
                               ;; watching customers.
-                              :e2e-labels      {:label "E2E Labels" :title-field :name}}]
+                              :e2e-labels      {:label "E2E Labels" :title-field :name}
+                              ;; A decimal and a file field (BOU-798).
+                              :e2e-products    {:label "E2E Products" :title-field :name}}]
    :pagination       {:default-page-size 20
                       :max-page-size     200}}
 

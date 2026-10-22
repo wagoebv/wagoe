@@ -18,6 +18,7 @@
             [wagoe.user.shell.middleware :as user-middleware]
             [wagoe.user.shell.session-pruner :as session-pruner]
             [wagoe.user.shell.data-export :as data-export]
+            [wagoe.user.shell.web-handlers :as web-handlers]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
@@ -399,7 +400,9 @@
             ;; Effective rights for the authorization interceptor (ADR-041 §5).
             :rights           (ig/ref :wagoe/user-group-service)
             :auth-middleware  (ig/ref :wagoe/user-http-middleware)
-            :extra-middleware (ig/ref :wagoe/user-home-middleware)}
+            :extra-middleware (ig/ref :wagoe/user-home-middleware)
+            ;; The page in the app's layout a browser sees for an error on /web
+            :error-page       web-handlers/error-page}
    :routes [(ig/ref :wagoe/user-routes) (ig/ref :wagoe/user-group-routes)
             (ig/ref :wagoe/user-export-routes)]
    :data-export {:user (ig/ref :wagoe/user-data-exporter)}

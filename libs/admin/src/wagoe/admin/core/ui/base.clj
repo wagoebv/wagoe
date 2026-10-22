@@ -358,8 +358,29 @@
     23 "0.001"
     nil))
 
-(defn render-field-value
-  "Render field value for display in table or detail view.
+(defn number-input-step
+  "The `step` a number input needs for a field of `field-type`. The default
+   is 1, so without it `12.50` fails validation and the form will not submit."
+  [field-type]
+  (when (= :decimal field-type) "any"))
+
+(defn value-name
+  "An enum value as the string the config names it by: `:paid`, `\"paid\"`
+   and `paid` are all \"paid\"."
+  [value]
+  (if (keyword? value) (name value) (str value)))
+
+(defn option-label
+  "The label `:options` gives an enum `value`, or nil."
+  [field-config value]
+  (some (fn [[k label]] (when (= (value-name value) (value-name k)) label))
+        (:options field-config)))
+
+(defn ^{:deprecated "1.0.2"} render-field-value
+  "Deprecated: no admin page renders through this any more. Use
+   `wagoe.admin.core.ui.cells/cell`, which renders by display role (ADR-040).
+
+   Render field value for display in table or detail view.
 
    Args:
      field-name: Keyword field name
@@ -396,7 +417,7 @@
 
        (= field-type :enum)
        [:span.enum-badge {:class "badge ui-badge ui-badge-outline enum-badge"}
-        (text/capitalize (name value))]
+        (or (option-label field-config value) (text/capitalize (name value)))]
 
        (= field-type :json)
        [:code (str value)]

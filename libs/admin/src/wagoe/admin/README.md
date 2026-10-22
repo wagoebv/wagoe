@@ -167,7 +167,8 @@ Navigate: ← Previous | Page 1 of 5 | Next →
 | `VARCHAR` with "url" | URL input | `<input type="url">` |
 | `TEXT` | Textarea | `<textarea>` |
 | `BOOLEAN` | Checkbox | `<input type="checkbox">` |
-| `INTEGER`, `DECIMAL` | Number input | `<input type="number">` |
+| `INTEGER`, `DECIMAL` | Number input | `<input type="number">`, `step="any"` for a decimal |
+| `BLOB`, `BYTEA`, `VARBINARY` | File input | `<input type="file">`, posted multipart |
 | `TIMESTAMP` | Datetime input | `<input type="datetime-local">` |
 | `DATE` | Date input | `<input type="date">` |
 | `UUID` | Text input (readonly) | `<input readonly>` |

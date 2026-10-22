@@ -48,7 +48,9 @@
             [wagoe.observability.errors.core :as error-reporting]
             [wagoe.observability.core.sql-redaction :as redaction]
             [wagoe.platform.core.csrf :as csrf]
+            [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.client-ip :as client-ip]
+            [wagoe.platform.core.http.error-pages :as error-pages]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.platform.core.http.nav :as nav]
             [wagoe.platform.core.http.pages :as pages]
@@ -517,6 +519,44 @@
   {:name :http-correlation-header
    :leave add-correlation-id
    :error add-correlation-id})
+
+(defn web-error-page
+  "`response` as a browser should see it: an error body on a /web request
+   becomes a page, rendered by the app's `:error-page` when `system` has one,
+   or a toast for htmx. Anything else is returned as it is."
+  [system request response]
+  (let [error (error-pages/page-error request response)]
+    (cond
+      (nil? error)                response
+      (error-pages/htmx? request) (error-pages/htmx-response response error)
+      :else
+      (error-pages/page-response
+       response
+       (or (when-let [render (:error-page system)]
+             ;; Rendered after the handler's binding has ended: the layout's
+             ;; logout form and nav read these, as they do on any page.
+             (try (binding [csrf/*token*     (:anti-forgery-token request)
+                            pages/*mounted?* (partial shell-pages/mounted? request)]
+                    (render request error))
+                  (catch Throwable t
+                    ;; The bare page rather than a second failure
+                    (when-let [logger (:logger system)]
+                      (log-ports/error logger "Error page failed to render"
+                                       {:correlation-id  (:correlation-id error)
+                                        :exception-class (.getName (class t))}))
+                    nil)))
+           (access/error-page-html (:status error) (:message error) (:correlation-id error)))))))
+
+(defn- with-web-error-page [{:keys [system request] :as ctx}]
+  (cond-> ctx
+    (:response ctx) (update :response #(web-error-page system request %))))
+
+(def http-web-error-pages
+  "Shows a browser an error body on a /web route as a page, or as a toast
+   for htmx. First in the stack so it sees the response last."
+  {:name  :http-web-error-pages
+   :leave with-web-error-page
+   :error with-web-error-page})
 
 (def http-error-handler
   "Converts exceptions into safe HTTP error responses."
@@ -1106,7 +1146,8 @@
 
 (def default-http-interceptors
   "Default HTTP interceptor stack for observability and error handling."
-  [http-request-logging
+  [http-web-error-pages
+   http-request-logging
    http-request-tracing
    http-request-metrics
    http-error-reporting

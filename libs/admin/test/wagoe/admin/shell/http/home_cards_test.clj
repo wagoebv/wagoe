@@ -32,18 +32,27 @@
   (r/router (:web (wiring/module-route-contributions (contributions config)))
             {:conflicts nil}))
 
-(defn- home [config user & [entities]]
+(defn- home
+  "The dashboard's body for `user`. `opts`: :count-of (fn [entity] n), :configs
+   {entity config}, :overview (fn [entity] overview), :user-service."
+  [config user & [entities {:keys [count-of configs overview user-service]}]]
   (let [schema  (reify admin-ports/ISchemaProvider
                   (fetch-table-metadata [_ _] nil)
-                  (get-entity-config [_ e] {:label (name e)})
+                  (get-entity-config [_ e] (get configs e {:label (name e)}))
                   (list-available-entities [_] (vec entities))
                   (get-entity-label [_ _] nil)
                   (validate-entity-exists [_ _] false))
+        ;; Asserted, not thrown: the dashboard swallows a failing count
+        counted (fn [e]
+                  (is (= :admin (:role user :admin)) (str "counted " e " for a non-admin"))
+                  (if count-of (count-of e) 7))
         service #_{:clj-kondo/ignore [:missing-protocol-method]}
-                (reify admin-ports/IAdminService
-                  (count-entities [_ e _]
-                    (if (= :admin (:role user :admin)) 7 (throw (ex-info "counted for a non-admin" {:entity e})))))
-        handler (list-handlers/admin-home-handler service schema {})]
+                (reify
+                  admin-ports/IAdminService
+                  (count-entities [_ e _] (counted e))
+                  admin-ports/IListOverview
+                  (list-overview [_ e _ _] (when overview (overview e))))
+        handler (list-handlers/admin-home-handler service schema {} user-service)]
     ;; Through the pipeline every route runs, which binds what is mounted,
     ;; inside the navigation the platform binds.
     (str (:body ((interceptors/wrap-nav
@@ -106,3 +115,46 @@
     (is (str/includes? (ffirst sections) "/web/admin/users"))
     (is (str/includes? (ffirst sections) "/web/admin/groups"))
     (is (str/includes? (first (second sections)) "/web/admin/orders"))))
+
+(deftest ^:unit a-failing-count-costs-only-its-tile
+  (let [body (home nil nil [:orders :invoices]
+                   {:count-of #(if (= :orders %) (throw (ex-info "db down" {})) 12)})]
+    (is (str/includes? body "href=\"/web/admin/invoices\""))
+    ;; Without a locale bound the markers render as their keys
+    (is (= 1 (count (re-seq #"class=\"entity-card-count\">entity-card-count<" body))) "the other count")
+    (is (= 1 (count (re-seq #"title=\"dashboard-count-failed\">—<" body))) "the failed one")))
+
+(deftest ^:unit a-tile-shows-the-entity-summary
+  (let [body (home nil nil [:orders]
+                   {:configs  {:orders {:label "Orders" :summary [{:label "Open" :agg :count}]}}
+                    :overview (fn [_] {:summary [{:label "Open" :value 3 :role :number}]})})]
+    (is (re-find #"<dt>Open</dt><dd[^>]*>3</dd>" body))))
+
+(deftest ^:unit recent-activity-is-the-platform-admins
+  (let [usvc #_{:clj-kondo/ignore [:missing-protocol-method]}
+             (reify user-ports/IUserService
+               (list-audit-logs [_ opts]
+                 (is (= 10 (:limit opts)))
+                 {:audit-logs [{:action :login :result :success :actor-email "ann@example.com"
+                                :target-user-email "bob@example.com"
+                                :created-at (java.time.Instant/now)}
+                               {:action :login :result :failure :actor-email "eve@example.com"
+                                :created-at (java.time.Instant/now)}]}))]
+    (testing "a platform admin: the last entries, and a link to the trail"
+      (let [body (home nil nil [] {:user-service usvc})]
+        (is (str/includes? body "dashboard-activity"))
+        (is (str/includes? body "ann@example.com"))
+        (is (= 1 (count (re-seq #"audit-result-badge" body))) "only the failed entry is marked")
+        (is (str/includes? body "href=\"/web/audit\""))))
+    (testing "a tenant admin and a plain user: no panel"
+      (is (not (str/includes? (home nil {:tenant-id (random-uuid)} [] {:user-service usvc}) "dashboard-activity")))
+      (is (not (str/includes? (home nil {:role :user} [] {:user-service usvc}) "dashboard-activity"))))
+    (testing "the audit trail switched off: no panel"
+      (is (not (str/includes? (home off nil [] {:user-service usvc}) "dashboard-activity"))))
+    (testing "a failing audit query: the panel says so, the page renders"
+      (let [failing #_{:clj-kondo/ignore [:missing-protocol-method]}
+                    (reify user-ports/IUserService
+                      (list-audit-logs [_ _] (throw (ex-info "db down" {}))))
+            body    (home nil nil [:orders] {:user-service failing})]
+        (is (str/includes? body "dashboard-activity-failed"))
+        (is (str/includes? body "class=\"entity-card-count\">entity-card-count<"))))))

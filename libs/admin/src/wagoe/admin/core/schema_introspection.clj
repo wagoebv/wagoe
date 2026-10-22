@@ -63,8 +63,15 @@
    "jsonb" :json
    "clob" :json
    "blob" :binary
+   "tinyblob" :binary
+   "mediumblob" :binary
+   "longblob" :binary
    "bytea" :binary
-   "binary" :binary})
+   "binary" :binary
+   "varbinary" :binary
+   ;; H2 reports these for BYTEA/VARBINARY and BLOB
+   "binary varying" :binary
+   "binary large object" :binary})
 
 (defn normalize-sql-type
   "Normalize SQL type string to lowercase without size/precision, or MySQL's

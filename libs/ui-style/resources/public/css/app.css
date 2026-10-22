@@ -3421,6 +3421,9 @@ textarea:focus-visible,
   justify-content: center;
 }
 
+/* table/sort-select: a stylesheet that shows rows as cards shows it */
+.card-sort { display: none; }
+
 /* Pagination controls (shared component, needs its own styles outside admin.css) */
 .table-pagination {
   display: flex;

@@ -6,6 +6,7 @@
   (:require [wagoe.core.utils.text :as text]
             [wagoe.admin.core.ui.base :as base]
             [wagoe.admin.core.ui.cells :as cells]
+            [wagoe.admin.core.ui.list :as list]
             [wagoe.admin.core.forms :as forms]
             [wagoe.admin.core.schema-introspection :as introspection]
             [wagoe.shared.ui.core.combobox :as combobox]
@@ -107,6 +108,7 @@
        (= widget-type :number-input)
        (ui/text-input field-name value
                       (merge {:type "number"
+                              :step (base/number-input-step field-type)
                               :placeholder placeholder
                               :required required?
                               :readonly readonly?
@@ -194,12 +196,16 @@
 
        ;; File upload
        (= widget-type :file-input)
-       [:input {:type "file"
-                :id (name field-name)
-                :name (name field-name)
-                :required required?
-                :disabled readonly?
-                :class "form-control"}]
+       (list
+        [:input {:type "file"
+                 :id (name field-name)
+                 :name (name field-name)
+                 ;; Left empty on an edit, the stored file is kept.
+                 :required (and required? (nil? value))
+                 :disabled readonly?
+                 :class "form-control"}]
+        (when (bytes? value)
+          [:small.file-stored [:t :admin/file-stored {:n (alength ^bytes value)}]]))
 
        ;; Hidden field
        (= widget-type :hidden)
@@ -545,25 +551,28 @@
      (if read-only?
        {:data-readonly "true"}
        (merge {hx-attr form-action
-             :hx-target "body"
-             :hx-swap "outerHTML"
-             ;; Dirty tracking and ⌘S / Ctrl+S for the save bar (admin-ux.js)
-             :x-data "dirtyForm"
-             :x-on:input "track()"
-             :x-on:change "track()"
-             :x-on:keydown.meta.s.window.prevent "save()"
-             :x-on:keydown.ctrl.s.window.prevent "save()"
-             ;; The form's own save only: a field's live check bubbles up here too
-             "hx-on::afterRequest" (str "if (event.detail.successful && event.detail.elt === this) { localStorage.setItem('"
-                                        optional-details-key
-                                        "', 'false'); }")}
-            ;; After a successful edit, push the same URL (including return_to) so the
-            ;; browser stays on the detail page with context intact
-            (when is-edit?
-              {:hx-push-url form-action
-               ;; ⌘↵ / Ctrl+↵: save, then back to the list
-               :x-on:keydown.meta.enter.window.prevent "saveAndBack()"
-               :x-on:keydown.ctrl.enter.window.prevent "saveAndBack()"})))
+               :hx-target "body"
+               :hx-swap "outerHTML"
+               ;; Dirty tracking and ⌘S / Ctrl+S for the save bar (admin-ux.js)
+               :x-data "dirtyForm"
+               :x-on:input "track()"
+               :x-on:change "track()"
+               :x-on:keydown.meta.s.window.prevent "save()"
+               :x-on:keydown.ctrl.s.window.prevent "save()"
+               ;; The form's own save only: a field's live check bubbles up here too
+               "hx-on::afterRequest" (str "if (event.detail.successful && event.detail.elt === this) { localStorage.setItem('"
+                                          optional-details-key
+                                          "', 'false'); }")}
+              ;; htmx sends url-encoded otherwise, and the file never arrives
+              (when (some #(= :file-input (get-in entity-config [:fields % :widget])) editable-fields)
+                {:hx-encoding "multipart/form-data"})
+              ;; After a successful edit, push the same URL (including return_to) so the
+              ;; browser stays on the detail page with context intact
+              (when is-edit?
+                {:hx-push-url form-action
+                 ;; ⌘↵ / Ctrl+↵: save, then back to the list
+                 :x-on:keydown.meta.enter.window.prevent "saveAndBack()"
+                 :x-on:keydown.ctrl.enter.window.prevent "saveAndBack()"})))
      ;; No longer need hidden _method field since HTMX sends proper HTTP method
      ;; The zone the :instant fields above were rendered in. The handler parses
      ;; them back in exactly this zone; reading it from the cookie instead would
@@ -677,8 +686,8 @@
      relationship: {:label \"Order Items\" :fields [...] :editable true
                     :foreign-key :order-id :parent-id \"...\" :return-to \"...\"
                     :has-more? true
-                    :entity-config {...}} — the related entity's config, which
-                   gives each cell its field type
+                    :entity-config {...}  ; the related entity's, for each cell's role
+                    :overview {...}}      ; relation titles of `records` (ADR-040)
      records:      vector of record maps (kebab-case keys)
      display:      Optional display options (zone/date patterns) for value
                    rendering
@@ -704,29 +713,30 @@
         [:t :admin/button-new {:entity (or (get-in relationship [:entity-config :label]) label)}]])
      (if (empty? records)
        [:p.empty-state [:t :admin/relationship-empty-state {:label label}]]
-       [:div.table-wrapper
-        [:table.related-table
-         [:thead
-          [:tr
-           (for [f fields]
-             [:th (-> (name f) (str/replace #"-" " ") text/capitalize)])
-           (when editable?
-             [:th])]]
-         [:tbody
-          (for [record records]
+       (let [child-cfg (:entity-config relationship)
+             cols      (cells/columns child-cfg fields)
+             display   (assoc display :overview (:overview relationship))]
+         [:div.table-wrapper
+          [:table.related-table
+           [:thead
             [:tr
-             (for [f fields]
-               ;; Rendered by field type, like a list table: a timestamp here
-               ;; used to print as the raw database value (BOU-382).
-               [:td (if-some [v (get record f)]
-                      (base/render-field-value f v (get-in relationship [:entity-config :fields f]) display)
-                      "—")])
+             (for [{:keys [label] role-class :class} cols]
+               [:th {:class role-class} label])
              (when editable?
-               [:td
-                [:a.button.secondary
-                 {:href (str "/web/admin/" entity "/" (:id record)
-                             (when return-qs (str "?" return-qs)))}
-                 [:t :common/button-edit]]])])]]])
+               [:th])]]
+           [:tbody
+            (for [record records
+                  :let [edit-url (str "/web/admin/" entity "/" (get record (:primary-key child-cfg :id))
+                                      (when return-qs (str "?" return-qs)))]]
+              [:tr
+               ;; The list's cells, read-only (ADR-040)
+               (for [column cols]
+                 (list/entity-cell entity record child-cfg nil display column
+                                   (when editable? edit-url)))
+               (when editable?
+                 [:td
+                  [:a.button.secondary {:href edit-url}
+                   [:t :common/button-edit]]])])]]]))
      (when (and (:has-more? relationship) fk-param (some? (:parent-id relationship)))
        [:a.button.secondary {:href (base/filtered-list-url entity fk-param (:parent-id relationship))}
         [:t :admin/relationship-view-all {:label label}]])]))

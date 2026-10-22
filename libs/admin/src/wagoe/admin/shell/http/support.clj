@@ -26,7 +26,9 @@
    [clojure.tools.logging :as log]
    [ring.util.codec :as codec]
    [ring.util.response :as ring-response])
-  (:import [java.util UUID]))
+  (:import [java.io File]
+           [java.nio.file Files]
+           [java.util UUID]))
 
 ;; =============================================================================
 ;; Error Mappings
@@ -74,6 +76,21 @@
 ;; Form Data Parsing
 ;; =============================================================================
 
+(defn- no-file?
+  "A file input left empty: the browser still sends the part, with no name."
+  [v]
+  (if (map? v) (str/blank? (:filename v)) (and (string? v) (str/blank? v))))
+
+(defn- upload-bytes
+  "The content of a multipart file part, which Ring stores in a temp file."
+  [field-keyword v]
+  (if (instance? File (:tempfile v))
+    (Files/readAllBytes (.toPath ^File (:tempfile v)))
+    (throw (ex-info "Not a file upload"
+                    {:type :validation-error
+                     :field field-keyword
+                     :message (str "Field '" (name field-keyword) "' must be an uploaded file")}))))
+
 (defn parse-form-params
   "Parse form parameters into entity data map.
 
@@ -109,9 +126,19 @@
             normalized-value (if (vector? value)
                                (last value)
                                value)
+            ;; A file input left empty keeps the stored file
+            keep-stored? (and (= field-type :binary) (no-file? normalized-value))
 
              ; Convert string value to appropriate type
             typed-value (cond
+                          keep-stored? nil
+
+                          ;; A JSON null clears the column
+                          (nil? normalized-value) nil
+
+                          (= field-type :binary)
+                          (upload-bytes field-keyword normalized-value)
+
                            ; Empty strings become nil
                           (str/blank? normalized-value) nil
 
@@ -201,7 +228,9 @@
        ;; validation instead of being rejected (BOU-477). A field the form did
        ;; not submit is still absent, which is what makes a partial update
        ;; partial.
-        (assoc acc field-keyword typed-value)))
+        (if keep-stored?
+          acc
+          (assoc acc field-keyword typed-value))))
     {}
     params)))
 
@@ -291,16 +320,16 @@
   [request]
   (keyword (get-in request [:path-params :entity])))
 
+(defn parse-id
+  "`s` as a record's UUID. One that is not a UUID names no record: :not-found."
+  [s]
+  (or (when (string? s) (parse-uuid s))
+      (throw (ex-info "Entity not found" {:type :not-found :id s}))))
+
 (defn get-entity-id
-  "Extract entity ID from path parameters.
-
-   Args:
-     request: Ring request map
-
-   Returns:
-     Entity ID as UUID"
+  "The record id in the path, a UUID; :not-found when it is not one."
   [request]
-  (UUID/fromString (get-in request [:path-params :id])))
+  (parse-id (get-in request [:path-params :id])))
 
 (defn t-fn
   "The request's translation function; without i18n on the request, one that
@@ -516,6 +545,19 @@
      :locale           (request-locale request)
      :date-time-format (:date-time-format config)
      :date-format      (:date-format config)}))
+
+(defn overview
+  "What the cells of `records` need (ADR-040), or nil when the service does
+   not provide it."
+  [admin-service entity-name options records]
+  (when (satisfies? ports/IListOverview admin-service)
+    (ports/list-overview admin-service entity-name options records)))
+
+(defn display-with-overview
+  "The display options, with the overview of `records`."
+  [admin-service config request entity-name options records]
+  (assoc (display-options config request)
+         :overview (overview admin-service entity-name options records)))
 
 (defn form-zone-options
   "The zones to parse a submitted form's :instant fields in, and `params`
@@ -969,13 +1011,18 @@
         related-records (when (seq has-many-rels)
                           (mapv (fn [rel]
                                   (let [rows (ports/list-related-entities admin-service entity-name record-id
-                                                                          (assoc rel :limit (inc panel-size)))]
+                                                                          (assoc rel :limit (inc panel-size)))
+                                        page (vec (take panel-size rows))]
                                     [(cond-> (assoc rel
                                                     :entity-config (get entity-configs (:entity rel))
                                                     :parent-id record-id
                                                     :has-more? (> (count rows) panel-size))
-                                       (:editable rel) (assoc :return-to parent-url))
-                                     (vec (take panel-size rows))]))
+                                       (:editable rel) (assoc :return-to parent-url)
+                                       ;; Relation titles for its cells (ADR-040)
+                                       (seq page)
+                                       (assoc :overview (overview admin-service (:entity rel)
+                                                                  {:overview/fields (:fields rel)} page)))
+                                     page]))
                                 has-many-rels))
 
         ; Return URL when navigating back from a child entity (e.g. order-items → order)
