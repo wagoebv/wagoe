@@ -23,18 +23,6 @@
       (dissoc options :filters))))
 
 ;; =============================================================================
-;; List Overview (ADR-040)
-;; =============================================================================
-
-(defn- display-with-overview
-  "The display options for a list page, with the overview its cells need when
-   the service provides one (ADR-040)."
-  [admin-service config request entity-name options records]
-  (cond-> (support/display-options config request)
-    (satisfies? ports/IListOverview admin-service)
-    (assoc :overview (ports/list-overview admin-service entity-name options records))))
-
-;; =============================================================================
 ;; Admin Home Handler
 ;; =============================================================================
 
@@ -102,7 +90,7 @@
                          {:page-size (:page-size result)
                           :page (:page-number result)})
      :permissions (permissions/get-entity-permissions user entity-name entity-config)
-     :display (display-with-overview admin-service config request entity-name options records)}))
+     :display (support/display-with-overview admin-service config request entity-name options records)}))
 
 (defn- table-fragment-response
   "The table, or with the filter summary when that is the target, plus the

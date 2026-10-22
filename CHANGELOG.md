@@ -263,6 +263,9 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`jwt-authentication-middleware` and `protect-with-jwt` without a user service** (BOU-682): they trust the token, so a
   deactivated user passes. Pass the user service first; the 1-arity warns once and goes in 2.0.
 
+- **Admin `render-field-value` and `render-inline-edit-cell`** (BOU-799): no page renders through them. Use
+  `cells/cell` and `field-cell`; they go in 2.0.
+
 ### Removed
 
 - **`:dashboard-extra-cards`** (BOU-765): the page it extended is gone. For a dashboard card, give a module's nav
@@ -274,6 +277,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin inline edit: Save did nothing, and the cell came back as a UUID or raw enum name** (BOU-799). Inline and
+  related-record cells now match the list; an enum edits as a select. Nothing to change.
 - **Admin list on a narrow screen** (BOU-801): rows are compact cards that no longer overlap, the pager covers none,
   and a select sorts them. Nothing to change.
 - **Web pages answered errors as JSON** (BOU-800): a browser now gets an error page in the app's layout with the

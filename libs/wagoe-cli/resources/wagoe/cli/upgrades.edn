@@ -80,4 +80,9 @@
  {:ticket    "BOU-796"
   :since     "1.0.2"
   :note      "wagoe.shared.ui.core.alpine/mobile-menu-toggle-attrs is sidebar-toggle-attrs, which works at every width. sidebar-attrs returns {} and can stay until 2.0."
-  :fn-rename {wagoe.shared.ui.core.alpine/mobile-menu-toggle-attrs wagoe.shared.ui.core.alpine/sidebar-toggle-attrs}}]
+  :fn-rename {wagoe.shared.ui.core.alpine/mobile-menu-toggle-attrs wagoe.shared.ui.core.alpine/sidebar-toggle-attrs}}
+
+ {:ticket "BOU-799"
+  :since  "1.0.2"
+  :note   "wagoe.admin.core.ui/render-field-value is wagoe.admin.core.ui.cells/cell; render-inline-edit-cell is field-cell."
+  :manual "Both take the record and its entity config, not one value and its field config."}]
