@@ -271,6 +271,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin: a failed htmx request said nothing** (BOU-802); it now shows an error toast with a reference, and a refused
+  inline edit shows its message. Nothing to change.
+- **Admin lists start newest first** (BOU-802): `created-at` desc, else the title field, and `:default-sort-dir` is
+  honoured. Set `:default-sort` to keep another order; the record count now reads "25 records".
 - **Admin inline edit: Save did nothing, and the cell came back as a UUID or raw enum name** (BOU-799). Inline and
   related-record cells now match the list; an enum edits as a select. Nothing to change.
 - **Admin list on a narrow screen** (BOU-801): rows are compact cards that no longer overlap, the pager covers none,

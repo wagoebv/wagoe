@@ -1186,7 +1186,9 @@
      (fn [{:keys [_params]}]
        (let [entity-config (ports/get-entity-config schema-provider entity-name)
              sort-field (:sort options)
-             sort-dir (:sort-dir options)
+             ;; The default direction goes with the default field only
+             sort-dir (or (:sort-dir options)
+                          (when-not sort-field (:default-sort-dir entity-config)))
              default-sort (:default-sort entity-config :id)
 
              {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)

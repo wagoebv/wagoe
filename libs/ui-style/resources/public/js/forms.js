@@ -10,8 +10,8 @@
 
   // Any one of these marks a body as an answer meant for the page: a re-rendered
   // form, or the message `ui/error-message` renders, which carries none of the
-  // form markup and was thrown away.
-  const FORM_MARKERS = '.field-errors, .validation-errors, .form-field, .alert-error';
+  // form markup and was thrown away, or admin's inline edit refused.
+  const FORM_MARKERS = '.field-errors, .validation-errors, .form-field, .alert-error, .inline-edit-error';
 
   // htmx marks [45].. as `swap: false` — right for a 500 or a 404, wrong for a
   // failed form POST, which this application answers with the same form

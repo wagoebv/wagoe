@@ -819,7 +819,9 @@
           body (:body (*handler* (translated :post "/web/admin/test-users/bulk-delete"
                                              {:path {:entity "test-users"} :form {"ids[]" [id]}})))]
       (is (re-find #"hx-swap-oob=\"beforeend:#toasts\"" body))
-      (is (re-find #"<span (?=[^>]*hx-swap-oob=\"true\")(?=[^>]*id=\"record-count-badge\")" body)))))
+      (is (re-find #"<span (?=[^>]*hx-swap-oob=\"true\")(?=[^>]*id=\"record-count-badge\")" body))
+      (is (re-find #"aria-live=\"polite\"[^>]*id=\"record-count-badge\">\d+ records?</span>" body)
+          "labelled and announced"))))
 
 ;; =============================================================================
 ;; Error Response Tests

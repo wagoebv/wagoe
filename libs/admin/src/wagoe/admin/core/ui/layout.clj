@@ -77,7 +77,7 @@
       [:div.entity-card-description description])
     (when-let [n (get-in stats [entity :count])]
       [:div.entity-card-meta
-       [:span.entity-card-count [:t :admin/entity-card-count {:count n}]]])]])
+       [:span.entity-card-count [:t :admin/entity-card-count {:count n} n]]])]])
 
 (defn dashboard
   "Admin dashboard home page content: a section per group of `groups` (the

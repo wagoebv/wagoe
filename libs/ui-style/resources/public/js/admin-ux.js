@@ -753,6 +753,50 @@ document.addEventListener('alpine:init', function () {
   }
 
   // =========================================================================
+  // Failed requests
+  // =========================================================================
+
+  function sameOrigin(path) {
+    try {
+      return new URL(path || '', window.location.href).origin === window.location.origin;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function newCorrelationId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    // randomUUID needs a secure context; plain http on a LAN host has none
+    return Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 14);
+  }
+
+  function responseHeader(xhr, name) {
+    try {
+      return (xhr && xhr.getResponseHeader(name)) || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // A failed request shows a toast, unless its response asked for one.
+  // A re-rendered 400/422 form never gets here: forms.js swaps it and clears
+  // isError, so htmx fires no responseError for it.
+  function toastFailure(detail) {
+    if (!detail) return;
+    var xhr = detail.xhr;
+    if (/showToast/.test(responseHeader(xhr, 'HX-Trigger') || '')) return;
+    var region = document.getElementById('toasts');
+    if (!region) return;
+    var headers = (detail.requestConfig && detail.requestConfig.headers) || {};
+    var id = responseHeader(xhr, 'X-Correlation-ID') || headers['X-Correlation-ID'];
+    var message = region.getAttribute('data-error-message') || 'Something went wrong.';
+    if (id) message += ' ' + (region.getAttribute('data-error-reference') || 'Reference:') + ' ' + id;
+    document.dispatchEvent(new CustomEvent('showToast', { detail: { type: 'error', message: message } }));
+  }
+
+  // =========================================================================
   // Initialization
   // =========================================================================
 
@@ -777,7 +821,15 @@ document.addEventListener('alpine:init', function () {
     function onTransportFailure(event) {
       hideProgress();
       restoreTableOnError(event && event.detail && event.detail.xhr);
+      toastFailure(event && event.detail);
     }
+    // Each request carries an id the server logs it under, so a failure the
+    // user reports can be found, even one that never got a response.
+    document.addEventListener('htmx:configRequest', function (event) {
+      if (sameOrigin(event.detail.path)) {
+        event.detail.headers['X-Correlation-ID'] = newCorrelationId();
+      }
+    });
     document.addEventListener('htmx:responseError', onTransportFailure);
     document.addEventListener('htmx:sendError', onTransportFailure);
     document.addEventListener('htmx:timeout', onTransportFailure);

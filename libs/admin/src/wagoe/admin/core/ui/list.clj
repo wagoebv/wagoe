@@ -52,9 +52,10 @@
 
 (defn record-count-badge
   "The toolbar's record count. A table fragment carries it out of band, so
-   it follows search and filters."
+   it follows search and filters, and a screen reader hears the new count."
   [total-count]
-  [:span {:id "record-count-badge" :class "record-count-badge"} (str total-count)])
+  [:span {:id "record-count-badge" :class "record-count-badge" :aria-live "polite"}
+   [:t :admin/entity-card-count {:count total-count} total-count]])
 
 (defn- workflow-column?
   "An entity with a workflow gets a column for its state (BOU-563)."

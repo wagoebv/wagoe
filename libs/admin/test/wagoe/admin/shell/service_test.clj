@@ -259,6 +259,28 @@
         (is (= "Alice" (first names)))
         (is (= "Charlie" (last names)))))))
 
+(deftest ^:integration list-entities-default-sort-test
+  (testing "an entity with created_at lists newest first"
+    (let [t0 (Instant/parse "2026-01-01T00:00:00Z")]
+      (doseq [[i email] (map-indexed vector ["old@example.com" "mid@example.com" "new@example.com"])]
+        (db/execute-one! *db-ctx*
+                         {:insert-into :test-users
+                          :values [{:id (UUID/randomUUID) :email email :name email
+                                    :password-hash "h" :active true
+                                    :created-at (.plusSeconds t0 (* 60 i))}]}))
+      (is (= [:created-at :desc]
+             ((juxt :default-sort :default-sort-dir) (ports/get-entity-config *schema-provider* :test-users))))
+      (is (= ["new@example.com" "mid@example.com" "old@example.com"]
+             (mapv :email (:records (ports/list-entities *admin-service* :test-users {})))))
+      (testing "a sort the caller picks without a direction is ascending"
+        (is (= "mid@example.com"
+               (:email (first (:records (ports/list-entities *admin-service* :test-users {:sort :email})))))))))
+  (testing "an explicit :default-sort wins, ascending unless its direction is given"
+    (let [provider (schema-repo/create-schema-repository
+                    *db-ctx* (assoc-in admin-config [:entities :test-items :default-sort] :name))
+          cfg      (ports/get-entity-config provider :test-items)]
+      (is (= [:name :asc] ((juxt :default-sort :default-sort-dir) cfg))))))
+
 (deftest ^:integration list-entities-search-test
   (testing "List entities with text search"
     ;; Create diverse test data

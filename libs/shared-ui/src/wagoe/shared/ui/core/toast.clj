@@ -44,10 +44,13 @@
 (defn toast-region
   "The region toasts appear in. A swap of the body keeps it (hx-preserve), so
    it stays the live region a screen reader is watching. An empty toast of
-   each type waits in a template, for components.js to fill in."
+   each type waits in a template, for components.js to fill in. The data
+   attributes are the words admin-ux.js toasts a failed request with."
   []
   (into [:div {:id region-id :class "toast toast-top toast-end z-(--z-toast)"
-               :aria-live "polite" :hx-preserve "true"}]
+               :aria-live "polite" :hx-preserve "true"
+               :data-error-message   [:t :common/error-generic]
+               :data-error-reference [:t :common/error-page-reference]}]
         (for [type types]
           [:template {:data-toast-type (name type)} (toast {:type type})])))
 

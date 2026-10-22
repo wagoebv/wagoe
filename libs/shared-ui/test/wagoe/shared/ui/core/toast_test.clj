@@ -44,7 +44,10 @@
     (is (str/includes? out "class=\"toast toast-top toast-end"))
     (testing "and an empty toast of each type, for the client to fill in"
       (is (str/includes? out "<template data-toast-type=\"error\"><div class=\"alert alert-error shadow-lg\""))
-      (is (= 4 (count (re-seq #"<template" out)))))))
+      (is (= 4 (count (re-seq #"<template" out))))))
+  (testing "and the words a failed request is toasted with, for admin-ux.js"
+    (is (= [[:t :common/error-generic] [:t :common/error-page-reference]]
+           ((juxt :data-error-message :data-error-reference) (second (toast/toast-region)))))))
 
 (deftest ^:unit every-page-layout-has-the-region-and-its-flash
   (let [find (fn [page pred] (some #(when (and (vector? %) (map? (second %)) (pred %)) %) (tree-seq vector? seq page)))

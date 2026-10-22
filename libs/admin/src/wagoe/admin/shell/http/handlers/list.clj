@@ -85,7 +85,9 @@
      :total-count (:total-count result)
      ;; The page size and page the service used; sort/dir defaulted
      :table-query (merge {:sort (or (:sort options) (:default-sort entity-config) :id)
-                          :dir (or (:dir options) (:sort-dir options) :asc)}
+                          :dir (or (:dir options) (:sort-dir options)
+                                   (when-not (:sort options) (:default-sort-dir entity-config))
+                                   :asc)}
                          options
                          {:page-size (:page-size result)
                           :page (:page-number result)})
