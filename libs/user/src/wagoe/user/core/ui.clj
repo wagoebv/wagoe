@@ -1318,7 +1318,7 @@
      [:span.audit-detail-label [:t :common/audit-error]]
      [:code#audit-detail-error.audit-detail-value "-"]]]))
 
-(def ^:private audit-url "/web/audit")
+(def audit-url "/web/audit")
 (def ^:private audit-target "#audit-table-container")
 
 (defn audit-count-badge

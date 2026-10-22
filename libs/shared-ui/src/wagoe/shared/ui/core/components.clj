@@ -4,6 +4,7 @@
    These are reusable, generic components that can be used across all domain modules.
    No domain-specific logic should be placed here - only pure presentation functions."
   (:require [clojure.string :as str]
+            [clojure.walk :as walk]
             [hiccup2.core :as h]
             [hiccup.util :as hutil]))
 
@@ -303,7 +304,7 @@
   [headers rows & [opts]]
   (let [{:keys [id class hx-get hx-target hx-trigger]} opts]
     (if (empty? rows)
-      [:div.empty-state "No data available."]
+      [:div.empty-state [:t :common/empty-no-data]]
       [:table (merge {:class (if (seq class)
                                (str class " ui-table")
                                "data-table ui-table")}
@@ -436,7 +437,7 @@
   [errors]
   (when (seq errors)
     [:div.validation-errors {:role "alert"}
-     [:h4 "Please correct the following errors:"]
+     [:h4 [:t :common/validation-errors-heading]]
      (cond
        (map? errors)
        [:ul
@@ -464,8 +465,49 @@
 ;; Utility Functions
 ;; =============================================================================
 
+(def english
+  "This library's own markers in English, for a page rendered by `render-html`
+   rather than through wagoe-i18n. The catalogues carry the same keys."
+  {:common/nav-audit                 "Audit Trail"
+   :common/nav-profile               "Profile & Security"
+   :common/button-login              "Login"
+   :common/button-logout             "Logout"
+   :common/button-dismiss            "Dismiss"
+   :common/button-close              "Close"
+   :common/button-confirm            "Confirm"
+   :common/button-cancel             "Cancel"
+   :common/button-go-home            "Go Home"
+   :common/theme-toggle              "Toggle theme"
+   :common/theme-light               "Switch to light mode"
+   :common/theme-dark                "Switch to dark mode"
+   :common/empty-no-data             "No data available."
+   :common/validation-errors-heading "Please correct the following errors:"
+   :common/error-title               "Error"
+   :common/error-details             "Details:"
+   :common/home-welcome              "Welcome to Wagoe Application"
+   :common/home-description          "This is a modular application built with Clojure."
+   :common/home-manage-users         "Manage Users"})
+
+(defn marker?
+  "Whether `x` is a [:t key …] marker."
+  [x]
+  (and (vector? x) (= :t (first x)) (keyword? (second x))))
+
+(defn plain-marker
+  "Marker [:t k params] as text from `catalogue`, else the key's name."
+  [catalogue [_ k params]]
+  (reduce-kv (fn [s pk pv] (str/replace s (str "{" (name pk) "}") (str pv)))
+             (get catalogue k (name k))
+             (or params {})))
+
+(defn- plain-markers
+  "`hiccup` with each marker in English."
+  [hiccup]
+  (walk/postwalk #(if (marker? %) (plain-marker english %) %) hiccup))
+
 (defn render-html
-  "Convert Hiccup data structure to HTML string.
+  "Convert Hiccup data structure to HTML string. A [:t …] marker left in it
+   renders in English; wagoe-i18n's renderer translates them.
    
    Args:
      hiccup-data: Hiccup data structure
@@ -475,7 +517,7 @@
   [hiccup-data]
   ;; Hiccup2 returns RawString, must call str to get plain String for Ring
   (let [full-page? (and (vector? hiccup-data) (= :html (first hiccup-data)))
-        html-str   (str (h/html hiccup-data))]
+        html-str   (str (h/html (plain-markers hiccup-data)))]
     (if full-page?
       (str "<!DOCTYPE html>" html-str)
       html-str)))

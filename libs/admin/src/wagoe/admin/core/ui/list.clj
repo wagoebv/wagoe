@@ -401,7 +401,7 @@
   "The list's keys (keyboard.js), shown once below the table."
   []
   [:p {:class "kbd-hints" :aria-hidden "true"}
-   (for [[ks label] [[["/"] :admin/kbd-search] [["j" "k"] :admin/kbd-move] [["PgUp" "PgDn"] :admin/kbd-page]
+   (for [[ks label] [[["/"] :admin/kbd-search] [["j" "k"] :admin/kbd-move] [["PgUp" "PgDn"] :admin/kbd-page] ; i18n-ignore: key caps
                      [["x"] :admin/kbd-select] [["f"] :admin/kbd-filter] [["↵"] :admin/kbd-open] [["e"] :admin/kbd-edit]
                      [["q"] :admin/kbd-close]]]
      [:span (for [k ks] [:kbd k]) " " [:t label]])])

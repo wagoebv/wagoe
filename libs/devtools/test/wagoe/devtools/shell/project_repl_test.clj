@@ -5,6 +5,7 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [integrant.repl.state :as state]
+            [wagoe.admin.ports :as admin-ports]
             [wagoe.config.secrets :as secrets]
             [wagoe.devtools.shell.project-repl :as sut]))
 
@@ -54,6 +55,29 @@
 
 (deftest ^:unit fix-without-an-error-says-so-rather-than-throwing
   (is (str/includes? (with-out-str (sut/fix! nil)) "No recent error")))
+
+(deftest ^:unit explain-entity-prints-the-overview-or-says-why-not
+  (let [provider (reify admin-ports/ISchemaProvider
+                   (fetch-table-metadata [_ _] [])
+                   (get-entity-config [_ entity]
+                     (case entity
+                       :invoices {:fields {:number {:type :string} :total {:type :decimal}}
+                                  :list-fields [:number :total]}
+                       :typo     (throw (ex-info "Table not found: typo" {:type :schema-fetch-error}))
+                       nil))
+                   (list-available-entities [_] #{:invoices})
+                   (get-entity-label [_ _] "Invoices")
+                   (validate-entity-exists [_ _] true))
+        run      (fn [system entity]
+                   (with-redefs [state/system system]
+                     (with-out-str (sut/explain-entity entity))))]
+    (is (str/includes? (run {:wagoe/admin-schema-provider provider} :invoices)
+                       "Admin overview of invoices"))
+    (is (str/includes? (run {:wagoe/admin-schema-provider provider} :nope) "No admin entity :nope"))
+    (is (str/includes? (run {:wagoe/admin-schema-provider provider} :typo)
+                       "No admin entity :typo: Table not found"))
+    (is (str/includes? (run {} :invoices) "needs wagoe-admin"))
+    (is (str/includes? (run nil :invoices) "System not running"))))
 
 (deftest ^:integration the-generated-user-clj-resolves-every-var-it-delegates-to
   ;; dev/user.clj reaches these by quoted symbol, so a typo — /moduls, /fix —

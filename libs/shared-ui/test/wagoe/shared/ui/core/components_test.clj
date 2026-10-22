@@ -4,6 +4,8 @@
    Tests verify that UI component functions generate correct Hiccup structures
    with proper HTML attributes, classes, and content."
   (:require [wagoe.shared.ui.core.components :as components]
+            [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]))
 
@@ -388,6 +390,21 @@
 ;; =============================================================================
 ;; HTML Rendering Tests
 ;; =============================================================================
+
+(deftest ^:unit render-html-writes-markers-in-english
+  ;; A generated module renders without wagoe-i18n; a marker would otherwise
+  ;; come out as a <t> element.
+  (is (= "<div aria-label=\"Dismiss\">No data available.</div>"
+         (components/render-html [:div {:aria-label [:t :common/button-dismiss]}
+                                  [:t :common/empty-no-data]])))
+  (testing "a key it does not carry renders as its name"
+    (is (= "<p>other-key</p>" (components/render-html [:p [:t :x/other-key]])))))
+
+(deftest ^:unit the-english-fallback-matches-the-catalogues
+  (let [en (edn/read-string (slurp (io/resource "wagoe/i18n/translations/en.edn")))
+        nl (edn/read-string (slurp (io/resource "wagoe/i18n/translations/nl.edn")))]
+    (is (= components/english (select-keys en (keys components/english))))
+    (is (every? nl (keys components/english)))))
 
 (deftest ^:unit render-html-test
   (testing "Hiccup to HTML string conversion"

@@ -22,8 +22,6 @@
             [wagoe.workflow.shell.module-wiring]
             [wagoe.search.shell.module-wiring]
             [wagoe.tenant.shell.module-wiring]
-            [wagoe.admin.core.display :as display]
-            [wagoe.admin.ports :as admin-ports]
             [wagoe.devtools.core.guidance :as guidance]
             [wagoe.devtools.core.project-repl :as project-repl]
             [wagoe.devtools.core.introspection :as introspection]
@@ -34,6 +32,7 @@
             [wagoe.devtools.core.auto-fix :as auto-fix]
             [wagoe.devtools.shell.dashboard.server :as dashboard]  ;; Load dashboard Integrant init/halt methods
             [wagoe.devtools.shell.repl :as devtools-repl]
+            [wagoe.devtools.shell.project-repl :as project-repl-shell]
             [wagoe.devtools.shell.repl-error-handler :as repl-errors]
             [wagoe.devtools.shell.fcis-checker :as fcis]
             [wagoe.devtools.shell.auto-fix :as auto-fix-shell]
@@ -344,9 +343,7 @@
    running system's schema provider, so Malli enums count.
    (explain-entity :users)"
   [entity]
-  (when-let [provider (get (system) :wagoe/admin-schema-provider)]
-    (println (display/format-explain
-              entity (display/explain (admin-ports/get-entity-config provider entity))))))
+  (project-repl-shell/explain-entity entity))
 
 (defn schema
   "Pretty-print a Malli schema.
