@@ -552,24 +552,24 @@
        (merge {hx-attr form-action
                :hx-target "body"
                :hx-swap "outerHTML"
-             ;; Dirty tracking and ⌘S / Ctrl+S for the save bar (admin-ux.js)
+               ;; Dirty tracking and ⌘S / Ctrl+S for the save bar (admin-ux.js)
                :x-data "dirtyForm"
                :x-on:input "track()"
                :x-on:change "track()"
                :x-on:keydown.meta.s.window.prevent "save()"
                :x-on:keydown.ctrl.s.window.prevent "save()"
-             ;; The form's own save only: a field's live check bubbles up here too
+               ;; The form's own save only: a field's live check bubbles up here too
                "hx-on::afterRequest" (str "if (event.detail.successful && event.detail.elt === this) { localStorage.setItem('"
                                           optional-details-key
                                           "', 'false'); }")}
               ;; htmx sends url-encoded otherwise, and the file never arrives
               (when (some #(= :file-input (get-in entity-config [:fields % :widget])) editable-fields)
                 {:hx-encoding "multipart/form-data"})
-            ;; After a successful edit, push the same URL (including return_to) so the
-            ;; browser stays on the detail page with context intact
+              ;; After a successful edit, push the same URL (including return_to) so the
+              ;; browser stays on the detail page with context intact
               (when is-edit?
                 {:hx-push-url form-action
-               ;; ⌘↵ / Ctrl+↵: save, then back to the list
+                 ;; ⌘↵ / Ctrl+↵: save, then back to the list
                  :x-on:keydown.meta.enter.window.prevent "saveAndBack()"
                  :x-on:keydown.ctrl.enter.window.prevent "saveAndBack()"})))
      ;; No longer need hidden _method field since HTMX sends proper HTTP method

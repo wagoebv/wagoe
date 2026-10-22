@@ -86,9 +86,9 @@
   (if (instance? File (:tempfile v))
     (Files/readAllBytes (.toPath ^File (:tempfile v)))
     (throw (ex-info "Not a file upload"
-                          {:type :validation-error
-                           :field field-keyword
-                           :message (str "Field '" (name field-keyword) "' must be an uploaded file")}))))
+                    {:type :validation-error
+                     :field field-keyword
+                     :message (str "Field '" (name field-keyword) "' must be an uploaded file")}))))
 
 (defn parse-form-params
   "Parse form parameters into entity data map.
@@ -131,6 +131,9 @@
              ; Convert string value to appropriate type
             typed-value (cond
                           keep-stored? nil
+
+                          ;; A JSON null clears the column
+                          (nil? normalized-value) nil
 
                           (= field-type :binary)
                           (upload-bytes field-keyword normalized-value)

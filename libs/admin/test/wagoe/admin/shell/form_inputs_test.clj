@@ -142,3 +142,12 @@
     (is (re-find #"<input[^>]*name=\"datasheet\"[^>]*type=\"file\"" body)
         "the binary column gets a file input")))
 
+(deftest ^:integration a-rejected-form-does-not-show-its-upload-as-stored
+  (let [db-ctx   (:h2 @backends)
+        {:keys [schema svc]} (system db-ctx)
+        response ((crud/create-entity-handler svc schema admin-config)
+                  (multipart-request :post {"name" "Widget" "price" "x" "datasheet" (upload "sheet.txt" "v1")}))]
+    (is (= 422 (:status response)))
+    (is (not (str/includes? (str (:body response)) "is stored"))
+        "nothing was stored, so a resubmit must choose the file again")))
+

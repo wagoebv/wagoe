@@ -48,13 +48,19 @@
       (log/info "admin form rejected" {:entity entity-name :fields (vec (keys errors))}))
     errors))
 
+(defn- without-uploads
+  "`data` without its files. A rejected form stored none, and one shown as
+   stored would be dropped by a resubmit that leaves the input empty."
+  [entity-config data]
+  (into {} (remove #(= :binary (get-in entity-config [:fields (key %) :type]))) data))
+
 (defn- rejected-create-opts
   "Page opts for a create form shown again after it failed. The values go in
    as :prefill, not as the record: a record makes it an edit form that PUTs to
    an id-less URL (BOU-533). return_to keeps a child create tied to its parent."
   [admin-service config entity-configs entity-name request form-data & [nested]]
   {:display       (support/display-options config request)
-   :prefill       form-data
+   :prefill       (without-uploads (get entity-configs entity-name) form-data)
    :return-to     (support/safe-return-to request)
    :field-options (support/foreign-key-options admin-service config entity-configs entity-name form-data)
    :links         (support/link-fields admin-service config entity-configs entity-name nil (:admin/links form-data))
@@ -389,11 +395,12 @@
               errors      (log-rejected! entity-name entity-config
                                          (merge (:errors validation-result) parse-errors rejected
                                                 (some-> conflict support/conflict-errors)))
-              ctx         (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config merged request)]
+              shown       (merge existing (without-uploads entity-config form-data))
+              ctx         (support/build-entity-detail-opts admin-service schema-provider config entity-name entity-config shown request)]
 
           (-> (support/html-response request
                                      (admin-ui/admin-layout
-                                      (admin-ui/entity-detail-page entity-name entity-config merged errors permissions
+                                      (admin-ui/entity-detail-page entity-name entity-config shown errors permissions
                                                                    (assoc (:page-opts ctx) :flash
                                                                           {:type :error
                                                                            :message (if conflict
