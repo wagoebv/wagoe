@@ -174,6 +174,9 @@
     (let [field-name-str (name field-name)
           field-name-lower (text/lower-case field-name-str)]
       (cond
+        ;; Before the name heuristics: a `content` BYTEA is a file, not a textarea
+        (= field-type :binary) :file-input
+
         ; Special field name heuristics
         (str/includes? field-name-lower "email") :email-input
         (str/includes? field-name-lower "password") :password-input
@@ -198,7 +201,6 @@
         (= field-type :date) :date-input
         (= field-type :enum) :select
         (= field-type :json) :textarea
-        (= field-type :binary) :file-input
 
         ; Default fallback
         :else :text-input))))
@@ -519,6 +521,9 @@
      :table-name table-name
      :primary-key primary-key
      :fields fields-by-name
+     ;; Every column, in table order: a read that must leave out a binary
+     ;; column names the others instead of `*`.
+     :table-columns (mapv :name fields)
      :list-fields list-fields
      :detail-fields visible-fields
      :search-fields search-fields
@@ -714,6 +719,42 @@
                                     (assoc :required false))))
                          {}
                          fields)))))
+
+(defn upload-field?
+  "Whether `field-config` takes an uploaded file: a :binary field does, and
+   nothing else. The form posts multipart for one, and reads its file."
+  [field-config]
+  (= :binary (:type field-config)))
+
+(defn upload-errors
+  "Fields of `entity-config` whose :widget and :type disagree on that: a
+   :file-input on a field that is not :binary, or a :binary field with another
+   widget. As [{:field :message}]; empty when they agree."
+  [entity-name entity-config]
+  (vec (for [[field cfg] (sort-by key (:fields entity-config))
+             :let [binary? (upload-field? cfg)
+                   widget  (:widget cfg :text-input)]
+             :when (not= binary? (= :file-input widget))]
+         {:field   field
+          :message (str "Admin entity '" (name entity-name) "', field " field ": "
+                        (if binary?
+                          (str "a :binary field takes a file, so its :widget must be :file-input, not " widget
+                               ". Leave it off the form with :hide-fields instead.")
+                          (str ":widget :file-input needs a :binary field (a BLOB or BYTEA column), and this one is "
+                               (or (:type cfg) :string) ". Use another widget, or a binary column.")))})))
+
+(defn without-upload-errors
+  "`entity-config` with the fields of `errors` (see `upload-errors`) off its
+   form and read-only, so neither is written, and the errors as
+   :upload-config-errors for the form to show."
+  [entity-config errors]
+  (if (empty? errors)
+    entity-config
+    (let [fields (set (map :field errors))]
+      (-> entity-config
+          (update :editable-fields #(vec (remove fields %)))
+          (update :readonly-fields #(into (set %) fields))
+          (assoc :upload-config-errors errors)))))
 
 (defn- off-form-reason
   [field entity-config]

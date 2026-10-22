@@ -282,6 +282,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin lists loaded every stored file** (BOU-811); reads now take its size only, and a stored file can be removed.
+  A `:file-input` field that is not `:binary` (or the reverse) leaves the form with a logged config error; fix the config.
 - **Access admin gaps** (BOU-795): a signed-in non-admin gets a 403 page on Groups, not the login form; scopes show
   record titles; the lockout message says the real minutes; a read-only checkbox no longer saves false.
 - **`wagoe upgrade authorization check` names admin entities missing from the `:allowlist`** (BOU-795), which have no
