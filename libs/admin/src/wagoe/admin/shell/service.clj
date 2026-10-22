@@ -1157,7 +1157,7 @@
                                             (id-strings records (:primary-key entity-config :id))
                                             links-per-cell
                                             (get-in options [:overview/link-scopes %])))
-     :facets  (when (and facet (not record?))
+     :facets  (when (and facet (not record?) (not (:overview/summary-only? options)))
                 {facet (overview-part entity-name [:facet facet]
                                       #(facet-counts db-ctx entity-config qc options))})
      :summary (if record? [] (summary-values db-ctx entity-name entity-config qc options))}))
