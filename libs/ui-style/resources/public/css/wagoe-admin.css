@@ -25,10 +25,14 @@
 [data-theme="light"] { color-scheme: light; }
 [data-theme="dark"]  { color-scheme: dark; }
 
-:root {
+/* Scoped as wagoe-tokens.css scopes its OS-dark block, so this one wins on
+   equal specificity by loading later. A plain :root lost to it. */
+:root:not([data-theme="light"]),
+:root[data-theme="light"] {
   /* wagoe.org */
   --wg-ink:          #0F1C18;   /* dark green: chrome */
   --wg-teal:         #5FD3B6;   /* accent on dark */
+  --wg-copper:       #E0A579;   /* attention */
   --wg-chrome-text:  #C9D6D1;   /* text on the dark green */
   --wg-chrome-muted: #7F918A;
   --wg-chrome-hover: rgba(255, 255, 255, 0.06);
