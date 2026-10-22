@@ -247,6 +247,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **`wagoe.platform.shell.database.migrations/create-config`** (BOU-813): `create-migration` no longer calls
+  migratus/create, so nothing needs it; goes in 2.0. Call `create-migration`.
 - **`:require-role` in the admin config** (BOU-774): nothing reads it; boot warns outside `:off`, and it goes in 2.0.
   Drop it.
 - **Group grants, `:role :user` and OIDC `:default-role`** (BOU-771): grants move onto managed roles, their rows kept
@@ -290,6 +292,8 @@ for what is public API, what is internal, and how deprecations are announced.
   honoured. Set `:default-sort` to keep another order; the record count now reads "25 records".
 - **`bb scaffold` could pick a framework migration's id** (BOU-812), and boot refused. Scaffolded ids now end in an even
   second; framework ids end in an odd one.
+- **`bb migrate create` could pick a framework migration's id** (BOU-813), as `bb scaffold` could. It now takes a
+  free even second too.
 - **Page chrome and user error pages were English in every locale** (BOU-805): navigation, theme toggle, toasts and
   sibling nav now translate. A page rendered with `components/render-html` shows them in English.
 - **`(explain-entity :e)` was missing from a generated app's REPL** (BOU-805). Add the one-line `explain-entity` from

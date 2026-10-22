@@ -2,6 +2,7 @@
   "Orchestrates module generation: scaffold -> migrate -> reset -> summary."
   (:require [wagoe.devtools.core.prototype :as core]
             [wagoe.scaffolder.core.generators :as gen]
+            [wagoe.core.utils.migration-id :as migration-id]
             [wagoe.platform.database :as db]
             [clojure.java.io :as io]
             [clojure.java.shell :as shell]))
@@ -102,12 +103,9 @@
         ;; Where migratus reads, so this never splits a project's migrations
         ;; across two directories (BOU-489).
         mig-dir           (db/create-destination)
-        used-ids          (into #{} (keep #(second (re-find #"^(\d+)-" %)))
-                                (.list (io/file mig-dir)))
-        migration-ts      (gen/next-migration-id
-                           used-ids
-                           (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
-                                    (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))
+        used-ids          (into #{} (keep migration-id/id-of) (.list (io/file mig-dir)))
+        migration-ts      (migration-id/next-id
+                           used-ids (java.time.LocalDateTime/now java.time.ZoneOffset/UTC))
         migration-content (gen/generate-migration-file ctx migration-ts)
         up-path           (format "%s%s-add-%s-table.up.sql" mig-dir migration-ts module-name)
         down-path         (format "%s%s-add-%s-table.down.sql" mig-dir migration-ts module-name)
