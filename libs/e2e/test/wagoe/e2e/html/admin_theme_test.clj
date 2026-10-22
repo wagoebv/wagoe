@@ -29,7 +29,7 @@
 (def ^:private light ["rgb(14, 124, 102)" "rgb(255, 255, 255)" "rgb(224, 165, 121)" "rgb(15, 28, 24)"])
 
 (deftest ^:integration ^:e2e the-admin-palette-wins-over-the-os-colour-scheme
-  (spel/with-testing-page {:color-scheme :dark} [pg]
+  (spel/with-testing-page [pg]
     (admin/login-as-admin! pg fx/*seed*)
     (doseq [[os theme expected] [[:dark nil dark]  [:dark "dark" dark]  [:dark "light" light]
                                  [:light nil light] [:light "dark" dark] [:light "light" light]]]
