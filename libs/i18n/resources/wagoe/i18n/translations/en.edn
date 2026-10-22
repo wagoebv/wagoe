@@ -2,6 +2,10 @@
  ;; Common — shared across all modules
  ;; =============================================================================
  :common/error-generic      "Something went wrong. Please try again later."
+ :common/error-page-title     "Something went wrong"
+ :common/error-page-not-found "Page not found"
+ :common/error-page-reference "Reference:"
+ :common/error-page-home      "Go to home"
  :common/column-name        "Name"
  :common/column-email       "Email"
  :common/column-role        "Role"
