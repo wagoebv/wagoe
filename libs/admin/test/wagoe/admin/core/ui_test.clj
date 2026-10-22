@@ -774,6 +774,28 @@
         ;; Should show create button if can-create (i18n key)
         (is (str/includes? (str table) ":admin/button-create-first-record"))))))
 
+(deftest ^:unit the-card-view-sorts-with-a-select
+  (let [table   (ui/entity-table :users [sample-record] sample-entity-config
+                                 {:page 2 :page-size 20 :sort :name :dir :desc} 1
+                                 sample-permissions {:active {:value "true"}})
+        sort-ui (some #(when (and (vector? %) (= "card-sort" (:class (second %)))) %)
+                      (tree-seq vector? seq table))
+        [[_ field-attrs & field-opts] [_ dir-attrs & dir-opts]] (filter vector? (drop 2 sort-ui))
+        options (fn [opts] (->> opts (mapcat #(if (seq? %) % [%])) (filter vector?)))
+        picked  (fn [opts] (some #(when (:selected (second %)) (:value (second %))) (options opts)))]
+    (is (some? sort-ui))
+    (testing "a field select of the sortable columns and a direction select"
+      (is (= ["sort" "dir"] [(:name field-attrs) (:name dir-attrs)]))
+      (is (= ["email" "name" "active"] (map (comp :value second) (options field-opts))))
+      (is (= "name" (picked field-opts)))
+      (is (= "desc" (picked dir-opts))))
+    (testing "each keeps the filters and goes back to page one"
+      (is (= (:hx-get field-attrs) (:hx-get dir-attrs)))
+      (is (str/includes? (:hx-get field-attrs) "filters"))
+      (is (not (str/includes? (:hx-get field-attrs) "page=2")))
+      (is (not (str/includes? (:hx-get field-attrs) "sort=")))
+      (is (= "closest .card-sort" (:hx-include field-attrs))))))
+
 (deftest ^:unit entity-list-page-test
   (testing "Complete entity list page"
     (let [records [sample-record]

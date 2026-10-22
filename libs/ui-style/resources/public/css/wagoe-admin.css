@@ -1311,3 +1311,150 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 .workflow-details dd { margin: 0; }
 
 .admin-content .audit-table th.field-created-at { width: 11rem; }
+
+/* -----------------------------------------------------------------------------
+   9. The list on a narrow screen: each row a compact card. The title heads it,
+      at most four other fields follow on a line or two, a tap opens the record
+      and a sort select stands in for the hidden headers.
+   ----------------------------------------------------------------------------- */
+
+.card-sort { display: none; }
+
+@media (max-width: 768px) {
+  :root { --pager-height: 48px; }
+
+  /* Any admin table as cards: a cell grows with its label and value */
+  .admin-content .data-table td { height: auto; }
+
+  .admin-content:has(> .entity-list-page) {
+    padding: 12px !important;
+    /* Focus and keyboard scrolling stop above the sticky pager */
+    scroll-padding-bottom: var(--pager-height);
+  }
+
+  .card-sort { display: flex; gap: 8px; margin-bottom: 8px; }
+  .card-sort .select { width: auto; height: 32px; min-height: 0; padding-block: 0; padding-inline-end: 32px; font-size: 13px; line-height: 30px; }
+  .card-sort .select:first-child { flex: 1 1 auto; min-width: 0; }
+
+  .entity-list-page .table-wrapper {
+    margin: 0 !important;
+    background: none !important;
+    border: 0 !important;
+    overflow: visible;
+  }
+
+  .admin-content .entity-list-page .data-table tbody tr:nth-child(n) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 12px;
+    position: relative;
+    margin: 0 0 8px;
+    padding: 10px 36px 10px 44px;
+    border: 1px solid var(--color-base-300) !important;
+    border-radius: var(--radius-box);
+    background: var(--color-base-100);
+    box-shadow: none;
+    cursor: pointer;
+  }
+  .admin-content .entity-list-page .data-table tbody tr.row-cursor,
+  .admin-content .entity-list-page .data-table tbody tr.row-open { box-shadow: inset 2px 0 0 var(--accent-primary); }
+  .admin-content .entity-list-page .data-table tbody tr td:first-child { box-shadow: none !important; }
+
+  .admin-content .entity-list-page .data-table tbody td {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    height: auto;
+    padding: 0;
+    border: 0;
+    position: static;
+    z-index: auto;
+    background: none;
+    font-size: 13px;
+    line-height: 20px;
+    text-align: left !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .admin-content .entity-list-page .data-table tbody td:nth-child(n)::before {
+    content: attr(data-label);
+    display: inline;
+    margin: 0 4px 0 0;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-muted);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .entity-list-page .data-table td :is(span, a, .c-mono) { display: inline; }
+  .entity-list-page .data-table td .c-badge { display: inline-flex; vertical-align: middle; }
+
+  /* The value says what it is: no label */
+  .admin-content .entity-list-page .data-table tbody td:is(.c-title, .c-enum, .c-email, .c-url)::before { content: none; }
+
+  /* The title heads the card; with no title field, the first field does */
+  .admin-content .entity-list-page .data-table tbody td.c-title,
+  .admin-content .entity-list-page .data-table tbody tr:not(:has(> td.c-title)) > td:nth-child(2) {
+    order: -1;
+    flex: 0 0 100%;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 22px;
+  }
+  .admin-content .entity-list-page .data-table tbody tr:not(:has(> td.c-title)) > td:nth-child(2)::before { content: none; }
+
+  /* At most four fields under the heading; empty ones take no place */
+  .admin-content .entity-list-page .data-table tbody td:empty,
+  .admin-content .entity-list-page .data-table tbody td:nth-child(n+5 of :not(.checkbox-cell, .actions-cell, .c-title, :empty)) {
+    display: none;
+  }
+
+  /* A boolean in words: a lone check after its label reads as nothing */
+  .entity-list-page .data-table td.c-boolean .c-check { color: inherit; }
+  .entity-list-page .data-table td.c-boolean .c-check svg { display: none; }
+  .entity-list-page .data-table td.c-boolean .sr-only {
+    position: static !important;
+    width: auto; height: auto;
+    overflow: visible; clip: auto; clip-path: none;
+    margin: 0;
+  }
+
+  /* An inline edit gets the card's width */
+  .admin-content .entity-list-page .data-table tbody td.editable:has(form) {
+    flex: 0 0 100%;
+    white-space: normal;
+    overflow: visible;
+  }
+
+  .admin-content .entity-list-page .data-table tbody td.checkbox-cell {
+    position: absolute;
+    top: 11px;
+    left: 14px;
+    width: auto;
+  }
+  .admin-content .entity-list-page .data-table tbody td.checkbox-cell::before,
+  .admin-content .entity-list-page .data-table tbody td.actions-cell::before { content: none; }
+  .admin-content .entity-list-page .data-table tbody td.actions-cell {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    margin: 0;
+    border: 0;
+  }
+  .admin-content .entity-list-page .data-table tbody tr td.actions-cell .row-nav-hint { opacity: 1; color: var(--text-muted); }
+
+  /* The pager: one line, sticky under the cards */
+  .admin-content .entity-list-page .table-pagination {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 8px;
+    min-height: var(--pager-height);
+    padding: 6px 10px;
+    border-radius: var(--radius-box);
+  }
+}

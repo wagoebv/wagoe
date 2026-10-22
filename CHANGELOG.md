@@ -268,6 +268,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin list on a narrow screen** (BOU-801): rows are compact cards that no longer overlap, the pager covers none,
+  and a select sorts them. Nothing to change.
 - **Admin dark mode showed the old navy palette when the OS was dark** (BOU-797); the topbar initials and the
   unsaved-changes dot were invisible. A theme file's `:root` now also wins over an OS-dark preference.
 - **The admin sidebar fell back to closed** (BOU-796): it is now open or closed, changed only by its one toggle; the pin
