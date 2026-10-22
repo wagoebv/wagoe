@@ -74,7 +74,7 @@
   /* Wagoe variables the older admin.css reads */
   --text-primary:   var(--color-base-content);
   --text-muted:     light-dark(#5E6B66, #9FB2AB);
-  --text-faint:     light-dark(#8A9691, #7F918A);
+  --text-faint:     light-dark(#687470, #7F918A); /* 4.5:1 on the page and card backgrounds */
   --border-default: var(--color-base-300);
   --border-subtle:  light-dark(#EDF0EE, #1E2D27);
   --surface-0:      var(--color-base-100);
