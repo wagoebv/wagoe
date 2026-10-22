@@ -270,6 +270,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin list on a narrow screen** (BOU-801): rows are compact cards that no longer overlap, the pager covers none,
+  and a select sorts them. Nothing to change.
 - **Web pages answered errors as JSON** (BOU-800): a browser now gets an error page in the app's layout with the
   reference to quote, htmx an error toast. API routes keep the JSON body. Nothing to change.
 - **Admin: a malformed id in a URL was a 500** (BOU-800); it is a 404. Nothing to change.
