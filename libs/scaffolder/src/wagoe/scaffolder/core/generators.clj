@@ -440,30 +440,6 @@
 (defn- index-sql [table column]
   (format "CREATE INDEX IF NOT EXISTS idx_%s_%s ON %s(%s);" table column table column))
 
-(defn next-migration-id
-  "First even id at or after `now` that is not in `used`, as a string.
-
-   Even because framework migrations share the id space and end in an odd
-   second (test/wagoe/migration_ids_test.clj), so an even id never collides
-   with one.
-
-   Second precision alone is not unique: two scaffold operations within the
-   same second produce different filenames sharing one id, and migratus throws
-   \"Multiple migrations with id N\" — which fails the entire migration run, not
-   just the offending pair. So step forward until the id is free.
-
-   Stepping into the next second rather than adding sub-second precision is
-   deliberate. Every id already in this repo, and every id `migratus create`
-   generates, is 14 digits; a 17-digit id is ~1000x larger numerically, so it
-   would sort after all 14-digit ones forever and any later hand-made migration
-   would sort before it. That trades a rare collision for a permanent ordering
-   hazard."
-  [used now]
-  (loop [id (let [n (parse-long now)] (if (odd? n) (inc n) n))]
-    (if (contains? used (str id))
-      (recur (+ id 2))
-      (str id))))
-
 (defn generate-migration-file
   "Generate migration SQL file content.
 

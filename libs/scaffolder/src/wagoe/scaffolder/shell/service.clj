@@ -6,6 +6,7 @@
             [wagoe.scaffolder.schema :as schema]
             [wagoe.scaffolder.core.template :as template]
             [wagoe.scaffolder.core.generators :as generators]
+            [wagoe.core.utils.migration-id :as migration-id]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [malli.core :as m]
@@ -79,9 +80,9 @@
                :let  [d (resolve-path root dir)]
                :when (.isDirectory d)
                f     (.listFiles d)
-               :let  [m (re-find #"^(\d+)-" (.getName f))]
-               :when m]
-           (second m)))))
+               :let  [id (migration-id/id-of (.getName f))]
+               :when id]
+           id))))
 
 (defn- get-next-migration-number
   "Timestamp id for a new migration, e.g. 20260801120000.
@@ -94,9 +95,9 @@
    branch."
   ([] (get-next-migration-number "."))
   ([output-dir]
-   (generators/next-migration-id (existing-migration-ids output-dir)
-                      (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
-                               (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))))
+   (migration-id/next-id (existing-migration-ids output-dir)
+                         (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
+                                  (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))))
 
 (defn- existing-migration-for
   "The id of this module's create-<table> migration, if one is already there.
@@ -120,7 +121,7 @@
         used (existing-migration-ids output-dir)]
     (reduce (fn [ids table]
               (conj ids (or (when force? (existing-migration-for output-dir table))
-                            (generators/next-migration-id (into used ids) now))))
+                            (migration-id/next-id (into used ids) now))))
             []
             tables)))
 

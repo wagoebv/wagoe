@@ -23,6 +23,7 @@
             [migratus.database :as migratus-database]
             [next.jdbc :as jdbc]
             [wagoe.platform.core.database.migration-sql :as migration-sql]
+            [wagoe.core.utils.migration-id :as migration-id]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.shell.adapters.database.config :as db-config]
             [wagoe.platform.shell.modules :as modules]
@@ -261,15 +262,14 @@
     :else (str "'" (readable-path resolved) "'")))
 
 (defn create-destination
-  "The directory `migratus/create` will actually write to.
-
-   Not the one `create-config` names, when they differ: a `resources/migrations`
-   takes the file while the config still says `migrations/`. Reporting the
+  "The directory `bb migrate create` writes to: the one `migrations/` resolves
+   to, so a `resources/migrations` takes the file while the config still says
+   `migrations/`. Reporting the
    config value is why `bb migrate create` printed \"Migration files created in:
    migrations/\" for files it had written to resources/.
 
    A jar cannot be written to, so it falls back to the project directory — the
-   create path is a development command, and migratus fails on its own there."
+   create path is a development command."
   ([] (with-resolved-dir create-destination))
   ([resolved]
    (if (instance? java.io.File resolved)
@@ -558,21 +558,6 @@
   ([db-config enabled-libs]
    (migratus-config (:datasource db-config) (migration-dirs enabled-libs))))
 
-(defn create-config
-  "Narrow a read config to one suitable for *creating* a migration.
-
-   `:migration-dir` must be a single directory string here. The read config
-   carries the discovered vector of every directory on the classpath, which
-   `up`, `status` and `rollback` accept — but `migratus/create` casts it to
-   String, so `bb migrate create` died with a ClassCastException and a stack
-   trace for everyone who followed `bb migrate --help` (BOU-271).
-
-   The override is the project directory rather than the first element of the
-   discovered list: a migration you author belongs to your project, and a
-   dependency reordering that list must not decide where your files land."
-  [read-config]
-  (assoc read-config :migration-dir project-migration-dir))
-
 (defn refuse-shadowed-migration-dirs!
   "Throw when migrations sit in a directory nothing reads.
 
@@ -829,6 +814,22 @@
        :total-pending 0
        :error (.getMessage e)})))
 
+(defn write-migration-pair!
+  "Write empty up and down files for `name` into `dir`, under a free app id.
+
+   Not `migratus/create`: it stamps the current second, and an odd second can
+   be a framework migration's id."
+  [dir name]
+  (let [d    (io/file dir)
+        _    (.mkdirs d)
+        id   (migration-id/next-id
+              (into #{} (keep migration-id/id-of) (.list d))
+              (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
+                       (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))
+        base (migratus-migrations/->kebab-case (str id "-" name))]
+    (doseq [ext [".up.sql" ".down.sql"]]
+      (.createNewFile (io/file d (str base ext))))))
+
 (defn create-migration
   "Creates a new migration file pair (up and down).
 
@@ -858,17 +859,17 @@
     ;; `get-migration-config` below.
     (when-not (with-resolved-dir #(capturing-source % project-migration-dir))
       (ensure-project-migration-dir!))
-    (let [config (create-config (get-migration-config))]
-      (migratus/create config name)
+    ;; For its refusal of a split migrations directory.
+    (get-migration-config)
+    ;; Resolved after the mkdir above, which may have just created the
+    ;; directory that now answers to the name. The CLI prints it and tells the
+    ;; user to edit the files there.
+    (let [dir (create-destination)]
+      (write-migration-pair! dir name)
       (log/info "Migration files created" {:name name})
       {:success true
        :message (format "Created migration files for: %s" name)
-       ;; Computed from the resolved source, not the literal "migrations/" this
-       ;; used to return: the CLI prints this value as "Migration files created
-       ;; in: …" and then tells the user to go edit the files there. Resolved
-       ;; after the mkdir above, which may have just created the directory that
-       ;; now answers to the name.
-       :directory (create-destination)})
+       :directory dir})
     (catch Exception e
       (rethrow-config-conflict! e)
       (log/error e "Failed to create migration" {:name name})
