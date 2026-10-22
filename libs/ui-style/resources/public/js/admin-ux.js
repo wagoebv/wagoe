@@ -753,6 +753,42 @@ document.addEventListener('alpine:init', function () {
   }
 
   // =========================================================================
+  // Failed requests
+  // =========================================================================
+
+  function sameOrigin(path) {
+    try {
+      return new URL(path || '', window.location.href).origin === window.location.origin;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function newCorrelationId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    // randomUUID needs a secure context; plain http on a LAN host has none
+    return Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 14);
+  }
+
+  // A failed request shows a toast, unless its response asked for one.
+  // A re-rendered 400/422 form never gets here: forms.js swaps it and clears
+  // isError, so htmx fires no responseError for it.
+  function toastFailure(detail) {
+    if (!detail) return;
+    var xhr = detail.xhr;
+    if (!xhr || /showToast/.test(xhr.getResponseHeader('HX-Trigger') || '')) return;
+    var region = document.getElementById('toasts');
+    if (!region) return;
+    var headers = (detail.requestConfig && detail.requestConfig.headers) || {};
+    var id = xhr.getResponseHeader('X-Correlation-ID') || headers['X-Correlation-ID'];
+    var message = region.dataset.errorMessage;
+    if (id) message += ' ' + region.dataset.errorReference + ' ' + id;
+    document.dispatchEvent(new CustomEvent('showToast', { detail: { type: 'error', message: message } }));
+  }
+
+  // =========================================================================
   // Initialization
   // =========================================================================
 
@@ -764,10 +800,12 @@ document.addEventListener('alpine:init', function () {
     });
     document.addEventListener('htmx:afterRequest', function (event) {
       hideProgress();
-      // htmx:afterRequest fires after error events too; restoreTableOnError
-      // has already removed the entry in that case, so this is a no-op for
-      // failed requests.
-      clearSavedTable(event.detail && event.detail.xhr);
+      // After a response error restoreTableOnError has already removed the
+      // entry. A request that got no response (status 0) fires this before
+      // sendError or timeout, so restore the table here.
+      var xhr = event.detail && event.detail.xhr;
+      if (xhr && xhr.status === 0) restoreTableOnError(xhr);
+      else clearSavedTable(xhr);
     });
     // htmx:responseError fires when the server returns a non-2xx status.
     // htmx:sendError and htmx:timeout fire when the request fails before any
@@ -777,7 +815,15 @@ document.addEventListener('alpine:init', function () {
     function onTransportFailure(event) {
       hideProgress();
       restoreTableOnError(event && event.detail && event.detail.xhr);
+      toastFailure(event && event.detail);
     }
+    // Each request carries an id the server logs it under, so a failure the
+    // user reports can be found, even one that never got a response.
+    document.addEventListener('htmx:configRequest', function (event) {
+      if (sameOrigin(event.detail.path)) {
+        event.detail.headers['X-Correlation-ID'] = newCorrelationId();
+      }
+    });
     document.addEventListener('htmx:responseError', onTransportFailure);
     document.addEventListener('htmx:sendError', onTransportFailure);
     document.addEventListener('htmx:timeout', onTransportFailure);

@@ -84,7 +84,7 @@
 (defn- user-table-row
   "A row that opens the user (admin-ux.js), with a box for bulk actions."
   [user]
-  (let [href (str "/web/users/" (:id user))]
+  (let [href (str "/web/admin/users/" (:id user))]
     [:tr {:class "clickable-row" :data-href href}
      [:td.checkbox-cell [:input (alpine/row-checkbox-attrs (:id user))]]
      (map (fn [{:keys [field] col-class :class} cell]
@@ -116,7 +116,7 @@
          filter-params (table-ui/search-filters->params filters)]
      [:div#users-table-container
       {:hx-get     (table-ui/list-url base-url table-query filters)
-       :hx-trigger "userCreated from:body, userUpdated from:body, userDeleted from:body"
+       :hx-trigger "userCreated from:body"
        :hx-target  hx-target
        :hx-swap    "outerHTML"}
       ;; What the toolbar's search, role filter and bulk form send along: they
@@ -299,62 +299,6 @@
     [:div.form-section-header [:h3.form-section-title title]]
     (into [:div.form-fields] fields)]])
 
-(defn user-detail-form
-  "Generate a form for viewing/editing user details based on User schema.
-
-   Args:
-     user:   User entity map (from User schema)
-     errors: Optional validation errors map, field keyword -> messages
-
-   Returns:
-     Hiccup structure for user detail form"
-  ([user] (user-detail-form user nil))
-  ([user errors]
-   (let [active? (boolean (:active user))
-         ;; outerHTML: the response is itself a #user-detail, so an innerHTML swap
-         ;; nests one inside the other and leaves a duplicate id behind (BOU-381).
-         put     {:hx-put    (str "/web/users/" (:id user))
-                  :hx-target "#user-detail"
-                  :hx-swap   "outerHTML"}
-         ;; An update with the form's values and `active` set: DELETE on this
-         ;; URL soft-deletes (BOU-681). hx-vals wins over the checkbox.
-         set-active (fn [v] (assoc put :type "button" :hx-vals (str "{\"active\":\"" v "\"}")))]
-     [:div#user-detail
-      [:form (assoc put :class "entity-form")
-       (form-section
-        [:t :user/form-detail-title]
-        (ui/form-field :name [:t :common/label-name]
-                       (ui/text-input :name (:name user) {:required true})
-                       (:name errors))
-        (ui/form-field :email [:t :common/label-email]
-                       (ui/email-input :email (:email user) {:required true})
-                       (:email errors))
-        (ui/form-field :role [:t :common/label-role]
-                       (ui/select-field :role
-                                        [[:admin [:t :common/role-admin]]
-                                         [:user [:t :common/role-user]]]
-                                        (or (:role user) :user))
-                       (:role errors))
-        (ui/form-field :active [:t :user/field-active]
-                       (ui/checkbox :active active?)
-                       (:active errors)))
-       [:div.form-actions.save-bar
-        [:div.save-actions
-         (if active?
-           [:button#deactivate-user.button.danger
-            (merge (set-active "false") (modal/confirm-attrs "deactivate-confirm"))
-            [:t :user/button-deactivate]]
-           [:button#reactivate-user.button.primary (set-active "true")
-            [:t :user/button-reactivate]])
-         (ui/submit-button [:t :user/button-update] {:loading-text [:t :user/button-update-loading]})]]]
-      ;; Outside the form: the modal holds forms of its own
-      (when active?
-        (modal/confirm-modal {:id            "deactivate-confirm"
-                              :title         [:t :user/button-deactivate]
-                              :message       [:t :user/confirm-deactivate]
-                              :confirm-label [:t :user/button-deactivate]
-                              :danger?       true}))])))
-
 (defn create-user-form
   "Generate a form for creating new users based on CreateUserRequest schema.
 
@@ -477,37 +421,6 @@
         [:p [:t :user/page-created-signin-prompt]]
         [:a.button.primary {:href "/web/login"} [:t :user/button-signin]]]]]
      {:skip-header false})))
-
-(defn user-updated-success
-  "Generate success message for user update based on User schema.
-   
-   Args:
-     user: Updated User entity map
-     
-   Returns:
-     Hiccup structure showing success message"
-  [user]
-  (ui/success-message
-   [:div
-    [:h3 [:t :user/message-updated]]
-    [:p [:t :user/message-updated-details {:name (:name user) :email (:email user)}]]
-    [:div.user-details
-     [:p [:t :user/updated-role {:role (text/upper-case (name (or (:role user) :user)))}]]]
-    [:a.button {:href (str "/web/users/" (:id user))} [:t :user/button-view-user]]]))
-(defn user-deleted-success
-  "Generate success message for user deletion.
-   
-   Args:
-     user-id: ID of deleted user
-     
-   Returns:
-     Hiccup structure showing success message"
-  [user-id]
-  (ui/success-message
-   [:div
-    [:h3 [:t :user/message-deleted]]
-    [:p [:t :user/message-deleted-details {:id user-id}]]
-    [:a.button {:href "/web/users"} [:t :user/button-view-all-users]]]))
 
 ;; =============================================================================
 ;; User-specific Validation Display
@@ -633,47 +546,6 @@
        (bulk-bar)
        (users-table users table-query total-count filters)]
       opts))))
-
-(defn user-detail-page
-  "Complete user detail page.
-
-   Args:
-     user: User entity
-     opts: Optional page options (user context, flash messages, etc.)
-
-   Returns:
-     Complete HTML page for user details"
-  [user & [opts]]
-  (let [current-user (:user opts)
-        is-admin? (= :admin (:role current-user))]
-    (admin-page
-     [:t :user/detail-page-title {:name (:name user)}]
-     [:t :user/page-users-title]
-     [:div.entity-detail-page.user-detail-page
-      (page-header
-       [[[:t :user/page-users-title] "/web/users"] [(:name user)]]
-       [[:a.button.secondary {:href (str "/web/users/" (:id user) "/sessions") :class "gap-2"}
-         (icons/icon :key {:size 14})
-         [:t :user/button-view-sessions]]
-        ;; Only an inactive user, and only an admin: there is no undo
-        (when (and is-admin? (not (:active user)))
-          (list
-           [:button.button.ghost.button-danger-text
-            (merge (modal/confirm-attrs "hard-delete-confirm")
-                   ;; The handler sends the browser to the list (HX-Redirect)
-                   {:type    "button"
-                    :class   "gap-2"
-                    :hx-post (str "/web/users/" (:id user) "/hard-delete")})
-            (icons/icon :trash {:size 14})
-            [:t :user/button-delete-permanently]]
-           (modal/confirm-modal {:id            "hard-delete-confirm"
-                                 :title         [:t :user/button-delete-permanently]
-                                 :message       [:t :user/confirm-delete-permanently]
-                                 :confirm-label [:t :user/button-delete-permanently]
-                                 :danger?       true})))]
-       (:name user))
-      (user-detail-form user)]
-     opts)))
 
 (defn create-user-page
   "Complete create user page.
@@ -1152,6 +1024,24 @@
                                  :confirm-label [:t :user/button-reset-mfa]
                                  :danger?       true})))]]]]))
 
+(defn- hard-delete-button
+  "Delete `user` for good, after the confirm modal. The handler sends the
+   browser to the users list (HX-Redirect)."
+  [user]
+  (list
+   [:button.button.ghost.button-danger-text
+    (merge (modal/confirm-attrs "hard-delete-confirm")
+           {:type    "button"
+            :class   "gap-2"
+            :hx-post (str "/web/users/" (:id user) "/hard-delete")})
+    (icons/icon :trash {:size 14})
+    [:t :user/button-delete-permanently]]
+   (modal/confirm-modal {:id            "hard-delete-confirm"
+                         :title         [:t :user/button-delete-permanently]
+                         :message       [:t :user/confirm-delete-permanently]
+                         :confirm-label [:t :user/button-delete-permanently]
+                         :danger?       true})))
+
 (defn user-sessions-page
   "Complete page for managing user sessions.
 
@@ -1185,7 +1075,10 @@
                   {:type    "button"
                    :hx-post (str "/web/users/" (:id user) "/sessions/revoke-all")
                    :hx-vals "{\"keep-current\": \"true\"}"})
-           [:t :user/button-revoke-all-others]])]
+           [:t :user/button-revoke-all-others]])
+        ;; Only an inactive user, and only an admin: there is no undo
+        (when (and admin? (not (:active user)))
+          (hard-delete-button user))]
        [:t :user/sessions-manage-for {:name (:name user)}])
       (when admin? (rights-ui/user-tabs (:id user) :sessions))
       (when (:account-recovery? opts) (sign-in-panel user current-time))

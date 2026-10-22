@@ -1190,7 +1190,9 @@
      (fn [{:keys [_params]}]
        (let [entity-config (ports/get-entity-config schema-provider entity-name)
              sort-field (:sort options)
-             sort-dir (:sort-dir options)
+             ;; The default direction goes with the default field only
+             sort-dir (or (:sort-dir options)
+                          (when-not sort-field (:default-sort-dir entity-config)))
              default-sort (:default-sort entity-config :id)
 
              {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
@@ -1201,7 +1203,13 @@
 
              ; Search, filters and soft delete, shared with the overview (ADR-040)
              where-clause (list-where (:adapter db-ctx) entity-config field-aliases options)
-             ordering (build-ordering resolved-sort-field sort-dir resolved-default-sort)
+             primary-key (:primary-key entity-config :id)
+             ;; created-at or a name repeats; without the key as tie-breaker
+             ;; a row can show on two pages, or on none
+             ordering (cond-> (build-ordering resolved-sort-field sort-dir resolved-default-sort)
+                        (and (not= (or sort-field default-sort) primary-key)
+                             (contains? (:fields entity-config) primary-key))
+                        (conj [(get field-aliases primary-key primary-key) :asc]))
              pagination (build-pagination options config)
 
               ; Build list query
@@ -1236,7 +1244,9 @@
           :total-count total-count
           :page-size page-size
           :page-number page-number
-          :total-pages total-pages}))
+          :total-pages total-pages
+          :sort (or sort-field default-sort)
+          :sort-dir (or sort-dir :asc)}))
      db-ctx))
 
   (get-entity [_ entity-name id]

@@ -4,7 +4,6 @@
   (:require [clojure.test :refer [deftest is use-fixtures]]
             [support.test-db :as test-db]
             [wagoe.user.ports :as user-ports]
-            [wagoe.user.shell.middleware :as middleware]
             [wagoe.user.shell.persistence :as persistence]
             [wagoe.user.shell.service :as user-service]
             [wagoe.user.shell.web-handlers :as web-handlers]))
@@ -55,21 +54,5 @@
   (let [[repo svc] (service)
         boss (user! repo "boss@example.com" :admin)
         resp (bulk svc [(:id boss)] "role-user")]
-    (is (= 409 (:status resp)))
-    (is (= :admin (:role (user-ports/get-user-by-id svc (:id boss)))))))
-
-(deftest ^:integration an-admin-demoting-themselves-gets-409
-  (let [[repo svc] (service)
-        new!    #(user! repo % :admin)
-        boss    (new! "boss@example.com")
-        _other  (new! "other@example.com")
-        handler (middleware/flexible-authentication-middleware
-                 svc (web-handlers/update-user-htmx-handler svc {}))
-        resp    (handler {:request-method :put
-                          :uri            (str "/web/users/" (:id boss))
-                          :user           boss
-                          :path-params    {:id (str (:id boss))}
-                          :form-params    {"name" "Boss" "email" "boss@example.com"
-                                           "role" "user" "active" "on"}})]
     (is (= 409 (:status resp)))
     (is (= :admin (:role (user-ports/get-user-by-id svc (:id boss)))))))

@@ -22,10 +22,8 @@
    Web UI Endpoints (mounted under /web):
    - GET    /web/users           - Users listing page
    - GET    /web/users/new       - Create user page
-   - GET    /web/users/:id       - User detail page
+   - GET    /web/users/:id       - Redirect to /web/admin/users/:id
    - POST   /web/users           - Create user (HTMX fragment)
-   - PUT    /web/users/:id       - Update user (HTMX fragment)
-   - DELETE /web/users/:id       - Delete user (HTMX fragment)
    
    Static Assets (mounted at root):
    - GET    /css/*                - CSS assets
@@ -604,28 +602,15 @@
                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                               'wagoe.user.shell.http-interceptors/require-admin]
                :summary "Bulk user operations (HTMX)"}}]
+      ;; The admin's edit page is the user's page now
       ["/users/:id"
        {:no-doc     true
         :authorization :self
         :middleware [auth-middleware]
-        :get    {:handler (web-handlers/user-detail-page-handler user-service config)
-                 ;; Admin-only: this is the user-MANAGEMENT detail page
-                 ;; (edit/deactivate/delete controls). Self-service lives at
-                 ;; /web/profile, so a non-admin has no reason to load it —
-                 ;; not even for their own id.
-                 :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                'wagoe.user.shell.http-interceptors/require-admin]
-                 :summary "User detail page (admin)"}
-        :put    {:handler (web-handlers/update-user-htmx-handler user-service config)
-                 ;; Admin-only: updates include role — self-or-admin would
-                 ;; allow privilege escalation via self-edit.
-                 :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                'wagoe.user.shell.http-interceptors/require-admin]
-                 :summary "Update user (HTMX)"}
-        :delete {:handler (web-handlers/delete-user-htmx-handler user-service config)
-                 :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                                'wagoe.user.shell.http-interceptors/require-admin]
-                 :summary "Delete user (HTMX)"}}]
+        :get {:handler      web-handlers/user-detail-redirect
+              :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                             'wagoe.user.shell.http-interceptors/require-admin]
+              :summary      "Redirect to the user's admin page"}}]
       ["/users/:id/hard-delete"
        {:no-doc     true
         :authorization :self

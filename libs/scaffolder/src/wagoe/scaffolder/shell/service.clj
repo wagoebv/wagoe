@@ -83,28 +83,6 @@
                :when m]
            (second m)))))
 
-(defn- next-migration-id
-  "First id at or after `now` that is not in `used`, as a string.
-
-   Second precision alone is not unique: two scaffold operations within the
-   same second produce different filenames sharing one id, and migratus throws
-   \"Multiple migrations with id N\" — which fails the entire migration run, not
-   just the offending pair. So step forward until the id is free.
-
-   Stepping into the next second rather than adding sub-second precision is
-   deliberate. Every id already in this repo, and every id `migratus create`
-   generates, is 14 digits; a 17-digit id is ~1000x larger numerically, so it
-   would sort after all 14-digit ones forever and any later hand-made migration
-   would sort before it. That trades a rare collision for a permanent ordering
-   hazard.
-
-   Pure: takes the used set and the current timestamp rather than reading either."
-  [used now]
-  (loop [id (Long/parseLong now)]
-    (if (contains? used (str id))
-      (recur (inc id))
-      (str id))))
-
 (defn- get-next-migration-number
   "Timestamp id for a new migration, e.g. 20260801120000.
 
@@ -116,7 +94,7 @@
    branch."
   ([] (get-next-migration-number "."))
   ([output-dir]
-   (next-migration-id (existing-migration-ids output-dir)
+   (generators/next-migration-id (existing-migration-ids output-dir)
                       (.format (java.time.LocalDateTime/now java.time.ZoneOffset/UTC)
                                (java.time.format.DateTimeFormatter/ofPattern "yyyyMMddHHmmss")))))
 
@@ -142,7 +120,7 @@
         used (existing-migration-ids output-dir)]
     (reduce (fn [ids table]
               (conj ids (or (when force? (existing-migration-for output-dir table))
-                            (next-migration-id (into used ids) now))))
+                            (generators/next-migration-id (into used ids) now))))
             []
             tables)))
 

@@ -316,7 +316,9 @@
                          [:map {:closed true}
                           [:warn-days {:optional true} [:int {:min 0}]]
                           [:until {:optional true} [:map-of :keyword [:sequential :any]]]]]]
-              [:total :boolean]))
+              [:total :boolean]
+              ;; A combobox over a list the admin knows, rather than a text input
+              [:options-source [:enum :timezones]]))
 
 (def SummaryEntry
   (closed-map :label

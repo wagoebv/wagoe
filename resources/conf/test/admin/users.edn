@@ -41,6 +41,7 @@
    :name       {:label [:t :admin.users/field-name]       :filterable false}
    :role       {:type :enum
                 :label [:t :admin.users/field-role]
+                :help-text [:t :admin.users/role-help]
                 :options [[:admin [:t :common/role-admin]]
                           [:user  [:t :common/role-user]]]
                 :filterable true}
@@ -55,7 +56,7 @@
                 :label [:t :admin.users/field-language]
                 :options [[:en [:t :admin.users/language-en]]
                           [:nl [:t :admin.users/language-nl]]]}
-   :timezone   {:label [:t :admin.users/field-timezone]}
+   :timezone   {:options-source :timezones :label [:t :admin.users/field-timezone]}
    :date-format {:type :enum
                  :label [:t :admin.users/field-date-format]
                  :options [[:iso [:t :admin.users/date-format-iso]]

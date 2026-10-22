@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **An admin can unlock a user and reset their two-factor authentication** (BOU-795), under *Sign-in* on the user's
   Sessions tab; both are audited. Nothing to change.
+- **`:options-source :timezones` on an admin field** (BOU-804): a combobox over the IANA zones. `admin/users.edn`
+  uses it for `:timezone`; add it there in an existing app.
 - **The admin dashboard shows counts, summaries and recent activity** (BOU-806) instead of a hero. Counts run in
   parallel and a failing one shows "—"; non-entity pages are a compact link row.
 - **The admin dashboard has the sidebar's sections** (BOU-809), a card per sidebar item. A `:sidebar-hidden` entity
@@ -199,6 +201,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **`/web/users/:id` redirects to `/web/admin/users/:id`** (BOU-804), which has the Details, Sessions and Rights
+  tabs. Delete permanently moved to the Sessions tab; `PUT`/`DELETE /web/users/:id` are gone.
+
 - **`response-shape-cli` leaves a response already set alone** (BOU-790); it no longer rewrites an HTTP error response
   to `{:exit :stderr}`. In `create-cli-pipeline` it never saw one.
 - **`POST /api/auth/mfa/disable` needs `password` or a TOTP/backup `code`** (BOU-782); wrong ones count towards the
@@ -279,6 +284,12 @@ for what is public API, what is internal, and how deprecations are announced.
   record titles; the lockout message says the real minutes; a read-only checkbox no longer saves false.
 - **`wagoe upgrade authorization check` names admin entities missing from the `:allowlist`** (BOU-795), which have no
   `admin.<entity>` permissions; `prepare` adds them. `authz-report` shows `/api/...` redirects as redirects.
+- **Admin: a failed htmx request said nothing** (BOU-802); it now shows an error toast with a reference, and a refused
+  inline edit shows its message. Nothing to change.
+- **Admin lists start newest first** (BOU-802): `created-at` desc, else the title field, and `:default-sort-dir` is
+  honoured. Set `:default-sort` to keep another order; the record count now reads "25 records".
+- **`bb scaffold` could pick a framework migration's id** (BOU-812), and boot refused. Scaffolded ids now end in an even
+  second; framework ids end in an odd one.
 - **Page chrome and user error pages were English in every locale** (BOU-805): navigation, theme toggle, toasts and
   sibling nav now translate. A page rendered with `components/render-html` shows them in English.
 - **`(explain-entity :e)` was missing from a generated app's REPL** (BOU-805). Add the one-line `explain-entity` from
