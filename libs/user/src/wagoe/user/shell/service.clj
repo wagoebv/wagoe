@@ -507,10 +507,12 @@
                  ;; is the layer that flattens it, so `login` keeps answering
                  ;; {:authenticated false :reason … :message … :retry-after …}
                  ;; to every existing caller (BOU-323).
-                 {:authenticated false
-                  :reason (get-in auth-result [:error :type])
-                  :message (get-in auth-result [:error :message])
-                  :retry-after (get-in auth-result [:error :retry-after])}))))))
+                 (cond-> {:authenticated false
+                          :reason (get-in auth-result [:error :type])
+                          :message (get-in auth-result [:error :message])
+                          :retry-after (get-in auth-result [:error :retry-after])}
+                   ;; Only a right password gets here with a user: one to enrol.
+                   (:user auth-result) (assoc :user (:user auth-result)))))))))
      {:system {:user-repository user-repository
                :session-repository session-repository
                :audit-repository audit-repository

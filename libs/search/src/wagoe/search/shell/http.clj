@@ -68,8 +68,8 @@
   (fn [request]
     (if (access/admin? request)
       (handler request)
-      (access/forbidden-response "Admin role required" request
-                                 (access/correlation-id request (str (random-uuid)))))))
+      (access/refusal-response 403 "forbidden" "Admin role required"
+                               (access/correlation-id request (str (random-uuid)))))))
 
 (defn- served?
   "Whether `definition` is served to `request`."
@@ -107,8 +107,8 @@
       :else                                        ::refused)))
 
 (defn- refused [request]
-  (access/forbidden-response "Tenant membership required" request
-                             (access/correlation-id request (str (random-uuid)))))
+  (access/refusal-response 403 "forbidden" "Tenant membership required"
+                           (access/correlation-id request (str (random-uuid)))))
 
 (defn- parse-uuid-param
   "`s` as a UUID — already one when coercion read it — or a :validation-error."

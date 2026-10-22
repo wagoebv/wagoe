@@ -126,9 +126,10 @@ per login, name a function under `:auth`:
 It gets the user and the login context (`:ip-address`, `:user-agent`, and
 `:provider` for an OpenID Connect sign-in) and applies to password and OpenID
 Connect logins alike. Returning false waives the code; MFA stays on for the user.
-Returning true for a user without MFA refuses the login: enrolling needs a
-signed-in user, so they must sign in where MFA is not required, or ask an
-administrator. The symbol is resolved at boot, and one that does not resolve stops
+Returning true for a user without MFA refuses the session. On the web, the
+right password then leads to setting up an authenticator at
+`/web/login/mfa-setup`, after which they sign in with a code. The API answers
+403 `mfa-enrolment-required`, and so does an OpenID Connect sign-in. The symbol is resolved at boot, and one that does not resolve stops
 the boot. A function that throws fails the login.
 
 A hook that needs one of your components, say the allowed networks kept in the

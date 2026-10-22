@@ -340,7 +340,9 @@
                      (log/warn "MFA required but not enrolled" {:email email})
                      {:success? false
                       :error {:type    :mfa-enrolment-required
-                              :message (:reason mfa-requirement)}})
+                              :message (:reason mfa-requirement)}
+                      ;; Who to enrol: the password was right.
+                      :user (dissoc user :password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used)})
 
                    ;; MFA required but not provided
                    (and (:requires-mfa? mfa-requirement)

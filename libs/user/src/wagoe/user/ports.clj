@@ -330,7 +330,8 @@
   ;; on a pending second factor, {:authenticated false :requires-mfa? true
   ;;                              :user … :message "…"};
   ;; otherwise {:authenticated false :reason <keyword> :message "…"
-  ;;            :retry-after <Instant-or-nil>}.
+  ;;            :retry-after <Instant-or-nil>}, with the :user to enrol when
+  ;; the :reason is :mfa-enrolment-required.
   ;; Does not throw on a bad password — it returns the failure shape.
 
   (validate-session [this session-token])

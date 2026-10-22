@@ -370,6 +370,8 @@
      issuer: Application name
      account-name: User's email
      errors: Validation errors (optional)
+     form: {:action :cancel} to post the code as a plain form rather than
+           through HTMX to the profile (optional)
      
    Returns:
      Hiccup structure for QR code step"
@@ -377,7 +379,9 @@
    (mfa-qr-code-step secret qr-code-url issuer account-name [] {}))
   ([secret qr-code-url issuer account-name backup-codes]
    (mfa-qr-code-step secret qr-code-url issuer account-name backup-codes {}))
-  ([secret qr-code-url _issuer _account-name backup-codes errors]
+  ([secret qr-code-url issuer account-name backup-codes errors]
+   (mfa-qr-code-step secret qr-code-url issuer account-name backup-codes errors nil))
+  ([secret qr-code-url _issuer _account-name backup-codes errors {:keys [action cancel]}]
    [:div.mfa-setup-steps
     [:div.mfa-step
      [:h3 [:t :user/mfa-step1-title]]
@@ -399,9 +403,12 @@
     [:div.mfa-step
      [:h3 [:t :user/mfa-step2-title]]
      [:p [:t :user/mfa-step2-description]]
-     [:form {:hx-post "/web/profile/mfa/verify"
-             :hx-target "#mfa-setup-content"
-             :hx-swap "innerHTML"}
+     [:form (if action
+              {:method "post" :action action}
+              {:hx-post "/web/profile/mfa/verify"
+               :hx-target "#mfa-setup-content"
+               :hx-swap "innerHTML"})
+      (when action (csrf/hidden-field))
        ;; Store secret and backup codes in hidden fields for verification
       [:input {:type "hidden" :name "secret" :value secret}]
       [:input {:type "hidden" :name "backup-codes" :value (pr-str backup-codes)}]
@@ -416,7 +423,7 @@
        [:button.button.primary {:type "submit"}
         (icons/icon :check {:size 16})
         " " [:t :user/button-verify-code]]
-       [:a.button.secondary {:href "/web/profile"}
+       [:a.button.secondary {:href (or cancel "/web/profile")}
         [:t :common/button-cancel]]]]]]))
 
 (defn mfa-backup-codes-display
@@ -425,7 +432,8 @@
    Args:
      backup-codes: Vector of backup code strings
      full-page?: Boolean indicating if this should be a full page
-     opts: Optional map with :user, :flash, etc.
+     opts: Optional map with :user, :flash, etc., and :done {:href :label}
+           for where the last button leads, the profile by default.
      
    Returns:
      Hiccup structure for backup codes display"
@@ -463,8 +471,8 @@
             [:input {:type "checkbox" :id "codes-saved"}]
             " " [:t :user/mfa-backup-codes-confirmation]]]
           [:div.form-actions
-           [:a.button.primary {:href "/web/profile"}
-            [:t :user/button-done-return]]]]]
+           [:a.button.primary {:href (get-in opts [:done :href] "/web/profile")}
+            (get-in opts [:done :label] [:t :user/button-done-return])]]]]
      (if full-page?
        (page-layout [:t :user/mfa-backup-codes-page-title]
                     [:div.profile-content.profile-grid content]

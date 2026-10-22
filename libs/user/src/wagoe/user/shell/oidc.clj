@@ -12,7 +12,6 @@
             [buddy.core.hash :as hash]
             [buddy.core.keys :as keys]
             [buddy.sign.jws :as jws]
-            [buddy.sign.jwt :as jwt]
             [cheshire.core :as json]
             [clj-http.client :as http]
             [clojure.string :as str]
@@ -23,7 +22,8 @@
             [wagoe.user.core.oidc :as oidc]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
-            [wagoe.user.shell.lockout :as lockout])
+            [wagoe.user.shell.lockout :as lockout]
+            [wagoe.user.shell.sealed :as sealed])
   (:import (java.net URLEncoder)
            (java.nio.charset StandardCharsets)
            (java.time Instant)))
@@ -50,18 +50,14 @@
 (defn seal
   "Encrypt `claims` for a cookie of kind `typ` that expires in `ttl` seconds."
   [client typ claims ttl]
-  (jwt/encrypt (assoc claims :typ (name typ) :exp (+ (now-epoch) ttl))
-               (:key client) {:alg :dir :enc :a256gcm}))
+  (sealed/seal (:key client) typ claims ttl))
 
 (defn unseal
   "The claims of a sealed cookie of kind `typ`, or nil when it is absent,
    forged, expired, or sealed for another step — a pending sign-in is not an
    MFA ticket."
   [client typ value]
-  (when-not (str/blank? value)
-    (let [claims (try (jwt/decrypt value (:key client) {:alg :dir :enc :a256gcm})
-                      (catch Exception _ nil))]
-      (when (= (name typ) (:typ claims)) claims))))
+  (sealed/unseal (:key client) typ value))
 
 (defn- basic-auth-header
   "client_secret_basic: id and secret are form-urlencoded before Base64

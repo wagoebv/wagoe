@@ -58,9 +58,9 @@
                 (access/admin? request)
                 (and member (or (nil? roles) (contains? roles (:role member)))))
           (handler request)
-          (access/forbidden-response
-           (if roles "Tenant admin role required" "Tenant membership required")
-           request (access/correlation-id request (str (random-uuid)))))))))
+          (access/refusal-response
+           403 "forbidden" (if roles "Tenant admin role required" "Tenant membership required")
+           (access/correlation-id request (str (random-uuid)))))))))
 
 (defn- membership-in-tenant
   "The membership `membership-id`, or a :not-found throw when it belongs to a

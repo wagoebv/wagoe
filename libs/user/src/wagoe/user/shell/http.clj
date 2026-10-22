@@ -534,219 +534,227 @@
     ;; filterv: the dashboard route is nil under `:dashboard false`, and
     ;; registration under `:registration false`.
     (filterv some?
-     [;; Public: the landing page, registration and sign-in come before a
+             [;; Public: the landing page, registration and sign-in come before a
       ;; session exists (BOU-568).
-      [""
-       {:no-doc true
-        :public true
-        :get {:handler (web-handlers/web-root-page-handler user-service config)
-              :summary "Web root landing page"}}]
-      (when (landing/registration? config)
-        ["/register"
-         {:no-doc true
-          :public true
-          :get  {:handler (web-handlers/register-page-handler config)
-                 :summary "Self-service registration page"}
-          :post {:handler (web-handlers/register-submit-handler user-service config)
-                 :summary "Submit registration form"}}])
-      ["/login"
-       {:no-doc true
-        :public true
-        :get  {:handler (web-handlers/login-page-handler config)
-               :summary "Login page"}
-        :post {:handler (web-handlers/login-submit-handler user-service config)
-               :summary "Submit login form"}}]
-      ["/logout"
-       {:no-doc true
-        :authorization :signed-in
-        :post {:middleware [auth-middleware]
-               :handler    (web-handlers/logout-handler user-service config)
-               :summary    "Logout current user"}}]
-      (when-let [handler (landing/dashboard-handler config)]
-        ["/dashboard"
-         {:no-doc     true
-          :authorization :signed-in
-          :middleware [auth-middleware]
-          :get {:handler handler
-                :summary "Dashboard, or a redirect to it"}}])
+              [""
+               {:no-doc true
+                :public true
+                :get {:handler (web-handlers/web-root-page-handler user-service config)
+                      :summary "Web root landing page"}}]
+              (when (landing/registration? config)
+                ["/register"
+                 {:no-doc true
+                  :public true
+                  :get  {:handler (web-handlers/register-page-handler config)
+                         :summary "Self-service registration page"}
+                  :post {:handler (web-handlers/register-submit-handler user-service config)
+                         :summary "Submit registration form"}}])
+              ["/login"
+               {:no-doc true
+                :public true
+                :get  {:handler (web-handlers/login-page-handler config)
+                       :summary "Login page"}
+                :post {:handler (web-handlers/login-submit-handler user-service config)
+                       :summary "Submit login form"}}]
+      ;; Public: the sealed ticket login set is what admits the caller.
+              ["/login/mfa-setup"
+               {:no-doc true
+                :public true
+                :get  {:handler (web-handlers/mfa-enrolment-page-handler mfa-service config)
+                       :summary "Set up a second factor before signing in"}
+                :post {:handler (web-handlers/mfa-enrolment-submit-handler mfa-service config)
+                       :summary "Turn the second factor on"}}]
+              ["/logout"
+               {:no-doc true
+                :authorization :signed-in
+                :post {:middleware [auth-middleware]
+                       :handler    (web-handlers/logout-handler user-service config)
+                       :summary    "Logout current user"}}]
+              (when-let [handler (landing/dashboard-handler config)]
+                ["/dashboard"
+                 {:no-doc     true
+                  :authorization :signed-in
+                  :middleware [auth-middleware]
+                  :get {:handler handler
+                        :summary "Dashboard, or a redirect to it"}}])
       ;; User creation routes (admin-only). The admin panel delegates to this flow
       ;; for split-table entities like :users where the generic admin create cannot
       ;; write both auth_users and users atomically.
-      ["/users/new"
-       {:no-doc     true
-        :authorization :self
-        :middleware [auth-middleware user-middleware/require-admin-middleware]
-        :get {:handler (web-handlers/create-user-page-handler config)
-              :summary "Create user page"}}]
-      ["/users"
-       {:no-doc     true
-        :authorization :self
-        :middleware [auth-middleware user-middleware/require-admin-middleware]
-        :get  {:handler (web-handlers/users-page-handler user-service config)
-               :summary "Users management list page (admin)"}
-        :post {:handler (web-handlers/create-user-htmx-handler user-service email-sender config)
-               :summary "Create user (HTMX fragment)"}}]
-      ["/users/table"
-       {:no-doc     true
-        :authorization :self
-        :middleware [auth-middleware]
-        :get {:handler (web-handlers/users-table-fragment-handler user-service config)
-              :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                             'wagoe.user.shell.http-interceptors/require-admin]
-              :summary "Users table fragment (HTMX refresh)"}}]
-      ["/users/bulk"
-       {:no-doc     true
-        :authorization :self
-        :middleware [auth-middleware]
-        :post {:handler (web-handlers/bulk-update-users-htmx-handler user-service config)
-               :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                              'wagoe.user.shell.http-interceptors/require-admin]
-               :summary "Bulk user operations (HTMX)"}}]
+              ["/users/new"
+               {:no-doc     true
+                :authorization :self
+                :middleware [auth-middleware user-middleware/require-admin-middleware]
+                :get {:handler (web-handlers/create-user-page-handler config)
+                      :summary "Create user page"}}]
+              ["/users"
+               {:no-doc     true
+                :authorization :self
+                :middleware [auth-middleware user-middleware/require-admin-middleware]
+                :get  {:handler (web-handlers/users-page-handler user-service config)
+                       :summary "Users management list page (admin)"}
+                :post {:handler (web-handlers/create-user-htmx-handler user-service email-sender config)
+                       :summary "Create user (HTMX fragment)"}}]
+              ["/users/table"
+               {:no-doc     true
+                :authorization :self
+                :middleware [auth-middleware]
+                :get {:handler (web-handlers/users-table-fragment-handler user-service config)
+                      :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                                     'wagoe.user.shell.http-interceptors/require-admin]
+                      :summary "Users table fragment (HTMX refresh)"}}]
+              ["/users/bulk"
+               {:no-doc     true
+                :authorization :self
+                :middleware [auth-middleware]
+                :post {:handler (web-handlers/bulk-update-users-htmx-handler user-service config)
+                       :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                                      'wagoe.user.shell.http-interceptors/require-admin]
+                       :summary "Bulk user operations (HTMX)"}}]
       ;; The admin's edit page is the user's page now
-      ["/users/:id"
-       {:no-doc     true
-        :authorization :self
-        :middleware [auth-middleware]
-        :get {:handler      web-handlers/user-detail-redirect
-              :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                             'wagoe.user.shell.http-interceptors/require-admin]
-              :summary      "Redirect to the user's admin page"}}]
-      ["/users/:id/hard-delete"
-       {:no-doc     true
-        :authorization :self
-        :middleware [auth-middleware]
-        :post {:handler (web-handlers/hard-delete-user-handler user-service config)
-               :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                              'wagoe.user.shell.http-interceptors/require-admin]
-               :summary "Permanently delete user (admin)"}}]
+              ["/users/:id"
+               {:no-doc     true
+                :authorization :self
+                :middleware [auth-middleware]
+                :get {:handler      web-handlers/user-detail-redirect
+                      :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                                     'wagoe.user.shell.http-interceptors/require-admin]
+                      :summary      "Redirect to the user's admin page"}}]
+              ["/users/:id/hard-delete"
+               {:no-doc     true
+                :authorization :self
+                :middleware [auth-middleware]
+                :post {:handler (web-handlers/hard-delete-user-handler user-service config)
+                       :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                                      'wagoe.user.shell.http-interceptors/require-admin]
+                       :summary "Permanently delete user (admin)"}}]
        ;; Session management routes (user-specific, not duplicated in admin)
-      ["/users/:id/sessions"
-       {:no-doc     true
-        :authorization :self
-        :middleware [auth-middleware]
-        :get {:handler (web-handlers/user-sessions-page-handler user-service config)
+              ["/users/:id/sessions"
+               {:no-doc     true
+                :authorization :self
+                :middleware [auth-middleware]
+                :get {:handler (web-handlers/user-sessions-page-handler user-service config)
               ;; The handler reads the :id path param, so a non-admin must
               ;; not view another user's sessions (IDOR) — own or admin only.
-              :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                             'wagoe.user.shell.http-interceptors/require-self-or-admin]
-              :summary "User sessions management page"}}]
-      ["/users/:id/sessions/revoke-all"
-       {:no-doc     true
-        :authorization :self
-        :middleware [auth-middleware]
-        :post {:handler (web-handlers/revoke-all-sessions-handler user-service config)
+                      :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                                     'wagoe.user.shell.http-interceptors/require-self-or-admin]
+                      :summary "User sessions management page"}}]
+              ["/users/:id/sessions/revoke-all"
+               {:no-doc     true
+                :authorization :self
+                :middleware [auth-middleware]
+                :post {:handler (web-handlers/revoke-all-sessions-handler user-service config)
                ;; Revoking by :id path param — own or admin only, else a
                ;; non-admin could force-logout any user (IDOR / DoS).
-               :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                              'wagoe.user.shell.http-interceptors/require-self-or-admin]
-               :summary "Revoke all user sessions"}}]
-      ["/users/:id/sessions/:session-id/revoke"
-       {:no-doc     true
-        :authorization :self
-        :middleware [auth-middleware]
-        :post {:handler (web-handlers/revoke-session-handler user-service config)
-               :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
-                              'wagoe.user.shell.http-interceptors/require-self-or-admin]
-               :summary "Revoke specific session"}}]
-      (account-recovery-route "/users/:id/unlock" auth-middleware
-                              (web-handlers/unlock-user-handler user-service config)
-                              "End a user's sign-in lockout (admin)")
-      (account-recovery-route "/users/:id/mfa/reset" auth-middleware
-                              (web-handlers/reset-mfa-handler user-service config)
-                              "Turn off a user's second factor (admin)")
+                       :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                                      'wagoe.user.shell.http-interceptors/require-self-or-admin]
+                       :summary "Revoke all user sessions"}}]
+              ["/users/:id/sessions/:session-id/revoke"
+               {:no-doc     true
+                :authorization :self
+                :middleware [auth-middleware]
+                :post {:handler (web-handlers/revoke-session-handler user-service config)
+                       :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
+                                      'wagoe.user.shell.http-interceptors/require-self-or-admin]
+                       :summary "Revoke specific session"}}]
+              (account-recovery-route "/users/:id/unlock" auth-middleware
+                                      (web-handlers/unlock-user-handler user-service config)
+                                      "End a user's sign-in lockout (admin)")
+              (account-recovery-route "/users/:id/mfa/reset" auth-middleware
+                                      (web-handlers/reset-mfa-handler user-service config)
+                                      "Turn off a user's second factor (admin)")
       ;; Audit trail routes
-      ["/audit"
-       {:no-doc     true
-        :authorization :self
-        :middleware [auth-middleware]
-        :get {:handler (web-handlers/audit-page-handler user-service config)
-              :interceptors ['wagoe.user.shell.http-interceptors/require-platform-admin]
-              :summary "Audit trail page"}}]
-      ["/audit/table"
-       {:no-doc     true
-        :authorization :self
-        :middleware [auth-middleware]
-        :get {:handler (web-handlers/audit-table-fragment-handler user-service config)
-              :interceptors ['wagoe.user.shell.http-interceptors/require-platform-admin]
-              :summary "Audit table fragment (HTMX refresh)"}}]
+              ["/audit"
+               {:no-doc     true
+                :authorization :self
+                :middleware [auth-middleware]
+                :get {:handler (web-handlers/audit-page-handler user-service config)
+                      :interceptors ['wagoe.user.shell.http-interceptors/require-platform-admin]
+                      :summary "Audit trail page"}}]
+              ["/audit/table"
+               {:no-doc     true
+                :authorization :self
+                :middleware [auth-middleware]
+                :get {:handler (web-handlers/audit-table-fragment-handler user-service config)
+                      :interceptors ['wagoe.user.shell.http-interceptors/require-platform-admin]
+                      :summary "Audit table fragment (HTMX refresh)"}}]
        ;; Profile routes
-      ["/profile"
-       {:no-doc     true
-        :authorization :signed-in
-        :middleware [auth-middleware]
-        :get  {:handler (web-handlers/profile-page-handler user-service mfa-service config)
-               :summary "User profile page"}
-        :post {:handler (web-handlers/profile-edit-handler user-service config)
-               :summary "Update profile (HTMX fragment)"}}]
-      ["/profile/edit"
-       {:no-doc     true
-        :authorization :signed-in
-        :middleware [auth-middleware]
-        :get {:handler (web-handlers/profile-edit-form-handler user-service config)
-              :summary "Show profile edit form (HTMX fragment)"}}]
-      ["/profile/info"
-       {:no-doc     true
-        :authorization :signed-in
-        :middleware [auth-middleware]
-        :get {:handler (web-handlers/profile-info-fragment-handler user-service config)
-              :summary "Show profile info card (HTMX fragment)"}}]
-      ["/profile/preferences/edit"
-       {:no-doc     true
-        :authorization :signed-in
-        :middleware [auth-middleware]
-        :get {:handler (web-handlers/preferences-edit-form-handler user-service config)
-              :summary "Show preferences edit form (HTMX fragment)"}}]
-      ["/profile/preferences"
-       {:no-doc     true
-        :authorization :signed-in
-        :middleware [auth-middleware]
-        :get  {:handler (web-handlers/preferences-fragment-handler user-service config)
-               :summary "Show preferences card (HTMX fragment)"}
-        :post {:handler (web-handlers/preferences-edit-handler user-service config)
-               :summary "Update preferences (HTMX fragment)"}}]
-      ["/profile/password/form"
-       {:no-doc     true
-        :authorization :signed-in
-        :middleware [auth-middleware]
-        :get {:handler (web-handlers/password-change-form-handler config)
-              :summary "Show password change form (HTMX fragment)"}}]
-      ["/profile/password"
-       {:no-doc     true
-        :authorization :signed-in
-        :middleware [auth-middleware]
-        :get  {:handler (web-handlers/password-section-fragment-handler config)
-               :summary "Show collapsed password section (HTMX fragment)"}
-        :post {:handler (web-handlers/password-change-handler user-service config)
-               :summary "Change password (HTMX fragment)"}}]
+              ["/profile"
+               {:no-doc     true
+                :authorization :signed-in
+                :middleware [auth-middleware]
+                :get  {:handler (web-handlers/profile-page-handler user-service mfa-service config)
+                       :summary "User profile page"}
+                :post {:handler (web-handlers/profile-edit-handler user-service config)
+                       :summary "Update profile (HTMX fragment)"}}]
+              ["/profile/edit"
+               {:no-doc     true
+                :authorization :signed-in
+                :middleware [auth-middleware]
+                :get {:handler (web-handlers/profile-edit-form-handler user-service config)
+                      :summary "Show profile edit form (HTMX fragment)"}}]
+              ["/profile/info"
+               {:no-doc     true
+                :authorization :signed-in
+                :middleware [auth-middleware]
+                :get {:handler (web-handlers/profile-info-fragment-handler user-service config)
+                      :summary "Show profile info card (HTMX fragment)"}}]
+              ["/profile/preferences/edit"
+               {:no-doc     true
+                :authorization :signed-in
+                :middleware [auth-middleware]
+                :get {:handler (web-handlers/preferences-edit-form-handler user-service config)
+                      :summary "Show preferences edit form (HTMX fragment)"}}]
+              ["/profile/preferences"
+               {:no-doc     true
+                :authorization :signed-in
+                :middleware [auth-middleware]
+                :get  {:handler (web-handlers/preferences-fragment-handler user-service config)
+                       :summary "Show preferences card (HTMX fragment)"}
+                :post {:handler (web-handlers/preferences-edit-handler user-service config)
+                       :summary "Update preferences (HTMX fragment)"}}]
+              ["/profile/password/form"
+               {:no-doc     true
+                :authorization :signed-in
+                :middleware [auth-middleware]
+                :get {:handler (web-handlers/password-change-form-handler config)
+                      :summary "Show password change form (HTMX fragment)"}}]
+              ["/profile/password"
+               {:no-doc     true
+                :authorization :signed-in
+                :middleware [auth-middleware]
+                :get  {:handler (web-handlers/password-section-fragment-handler config)
+                       :summary "Show collapsed password section (HTMX fragment)"}
+                :post {:handler (web-handlers/password-change-handler user-service config)
+                       :summary "Change password (HTMX fragment)"}}]
       ;; MFA routes
-      ["/profile/mfa/setup"
-       {:no-doc     true
-        :authorization :signed-in
-        :middleware [auth-middleware]
-        :get  {:handler (web-handlers/mfa-setup-page-handler mfa-service config)
-               :summary "MFA setup page"}
-        :post {:handler (web-handlers/mfa-setup-initiate-handler mfa-service config)
-               :summary "Initiate MFA setup (HTMX fragment)"}}]
-      ["/profile/mfa/verify"
-       {:no-doc     true
-        :authorization :signed-in
-        :middleware [auth-middleware]
-        :post {:handler (web-handlers/mfa-verify-handler mfa-service config)
-               :summary "Verify MFA code (HTMX fragment)"}}]
-      ["/profile/mfa/backup-codes"
-       {:no-doc     true
-        :authorization :signed-in
-        :middleware [auth-middleware]
-        :get {:handler (web-handlers/mfa-backup-codes-page-handler mfa-service config)
-              :summary "View MFA backup codes"}}]
-      ["/profile/mfa/disable"
-       {:no-doc     true
-        :authorization :signed-in
-        :middleware [auth-middleware]
-        :get  {:handler (web-handlers/mfa-disable-page-handler mfa-service config)
-               :summary "MFA disable confirmation page"}
-        :post {:handler (web-handlers/mfa-disable-handler mfa-service config)
-               :summary "Disable MFA"}}]])))
+              ["/profile/mfa/setup"
+               {:no-doc     true
+                :authorization :signed-in
+                :middleware [auth-middleware]
+                :get  {:handler (web-handlers/mfa-setup-page-handler mfa-service config)
+                       :summary "MFA setup page"}
+                :post {:handler (web-handlers/mfa-setup-initiate-handler mfa-service config)
+                       :summary "Initiate MFA setup (HTMX fragment)"}}]
+              ["/profile/mfa/verify"
+               {:no-doc     true
+                :authorization :signed-in
+                :middleware [auth-middleware]
+                :post {:handler (web-handlers/mfa-verify-handler mfa-service config)
+                       :summary "Verify MFA code (HTMX fragment)"}}]
+              ["/profile/mfa/backup-codes"
+               {:no-doc     true
+                :authorization :signed-in
+                :middleware [auth-middleware]
+                :get {:handler (web-handlers/mfa-backup-codes-page-handler mfa-service config)
+                      :summary "View MFA backup codes"}}]
+              ["/profile/mfa/disable"
+               {:no-doc     true
+                :authorization :signed-in
+                :middleware [auth-middleware]
+                :get  {:handler (web-handlers/mfa-disable-page-handler mfa-service config)
+                       :summary "MFA disable confirmation page"}
+                :post {:handler (web-handlers/mfa-disable-handler mfa-service config)
+                       :summary "Disable MFA"}}]])))
 
 (defn oidc-routes
   "OpenID Connect sign-in, mounted under /web. Public: the provider's redirect
@@ -819,47 +827,47 @@
      :static []
      :web    (when (web-ui-enabled? config)
                [["/admin/groups"
-                    (route ""
-                           {:get  {:handler (group-handlers/list-page group-service)}
-                            :post {:handler (group-handlers/create group-service)}})
-                    (route "/:id"
-                           {:get  {:handler (group-handlers/show group-service)}
-                            :post {:handler (group-handlers/update-group group-service)}})
-                    (route "/:id/delete"
-                           {:post {:handler (group-handlers/delete-group group-service)}})
-                    (route "/:id/members"
-                           {:post {:handler (group-handlers/add-member user-service group-service)}})
-                    (route "/:id/members/options"
-                           {:get {:handler (group-handlers/member-options user-service group-service)}})
-                    (route "/:id/provider-members"
-                           {:get {:handler (group-handlers/provider-members group-service)}})
-                    (route "/:id/members/:user-id/remove"
-                           {:post {:handler (group-handlers/remove-member group-service)}})
-                    (route "/:id/roles"
-                           {:post {:handler (group-handlers/add-role group-service)}})
-                    (route "/:id/roles/:assignment-id/remove"
-                           {:post {:handler (group-handlers/remove-role group-service)}})]
+                 (route ""
+                        {:get  {:handler (group-handlers/list-page group-service)}
+                         :post {:handler (group-handlers/create group-service)}})
+                 (route "/:id"
+                        {:get  {:handler (group-handlers/show group-service)}
+                         :post {:handler (group-handlers/update-group group-service)}})
+                 (route "/:id/delete"
+                        {:post {:handler (group-handlers/delete-group group-service)}})
+                 (route "/:id/members"
+                        {:post {:handler (group-handlers/add-member user-service group-service)}})
+                 (route "/:id/members/options"
+                        {:get {:handler (group-handlers/member-options user-service group-service)}})
+                 (route "/:id/provider-members"
+                        {:get {:handler (group-handlers/provider-members group-service)}})
+                 (route "/:id/members/:user-id/remove"
+                        {:post {:handler (group-handlers/remove-member group-service)}})
+                 (route "/:id/roles"
+                        {:post {:handler (group-handlers/add-role group-service)}})
+                 (route "/:id/roles/:assignment-id/remove"
+                        {:post {:handler (group-handlers/remove-role group-service)}})]
                    ;; A role or permission name holds a slash, so it travels as
                    ;; a query or form parameter rather than in the path.
-                   ["/admin/roles"
-                    (route ""
-                           {:get  {:handler (rights-handlers/list-roles group-service)}
-                            :post {:handler (rights-handlers/create-role group-service)}})
-                    (route "/view"
-                           {:get {:handler (rights-handlers/show-role group-service)}})
-                    (route "/save"
-                           {:post {:handler (rights-handlers/save-role group-service)}})
-                    (route "/delete"
-                           {:post {:handler (rights-handlers/delete-role group-service)}})
-                    (route "/duplicate"
-                           {:post {:handler (rights-handlers/duplicate-role group-service)}})]
-                   ["/admin/permissions"
-                    (route ""
-                           {:get {:handler (rights-handlers/list-permissions group-service)}})
-                    (route "/view"
-                           {:get {:handler (rights-handlers/show-permission group-service)}})]
-                   (route "/users/:id/rights"
-                          {:get {:handler (rights-handlers/user-rights user-service group-service)}})])}))
+                ["/admin/roles"
+                 (route ""
+                        {:get  {:handler (rights-handlers/list-roles group-service)}
+                         :post {:handler (rights-handlers/create-role group-service)}})
+                 (route "/view"
+                        {:get {:handler (rights-handlers/show-role group-service)}})
+                 (route "/save"
+                        {:post {:handler (rights-handlers/save-role group-service)}})
+                 (route "/delete"
+                        {:post {:handler (rights-handlers/delete-role group-service)}})
+                 (route "/duplicate"
+                        {:post {:handler (rights-handlers/duplicate-role group-service)}})]
+                ["/admin/permissions"
+                 (route ""
+                        {:get {:handler (rights-handlers/list-permissions group-service)}})
+                 (route "/view"
+                        {:get {:handler (rights-handlers/show-permission group-service)}})]
+                (route "/users/:id/rights"
+                       {:get {:handler (rights-handlers/user-rights user-service group-service)}})])}))
 
 (defn- export-response
   "`doc`, a user's data export, as a download, logged with who asked."

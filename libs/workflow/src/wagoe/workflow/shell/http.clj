@@ -119,7 +119,7 @@
                (group/holds? grants read-permission))))))
 
 (defn- forbidden [message request]
-  (access/forbidden-response message request (access/correlation-id request (str (random-uuid)))))
+  (access/refusal-response 403 "forbidden" message (access/correlation-id request (str (random-uuid)))))
 
 (defn- scoped
   "`handler` for a caller in the request's tenant; 403 for anyone else."

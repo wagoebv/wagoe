@@ -87,6 +87,11 @@
   :note   "wagoe.platform.shell.database.migrations/create-config, the config migratus/create needed. create-migration writes the files itself now."
   :manual "Call create-migration to make a migration pair. A rewrite cannot replace a config that fed migratus/create."}
 
+ {:ticket "BOU-815"
+  :since  "1.0.2"
+  :note   "wagoe.platform.core.http.access/forbidden-response. It answers a browser with the 403 now, as refusal-response does, not the login redirect."
+  :manual "Call (refusal-response 403 \"forbidden\" message correlation-id). The arguments change shape, which a rename cannot do."}
+
  {:ticket "BOU-799"
   :since  "1.0.2"
   :note   "wagoe.admin.core.ui/render-field-value is wagoe.admin.core.ui.cells/cell; render-inline-edit-cell is field-cell."
