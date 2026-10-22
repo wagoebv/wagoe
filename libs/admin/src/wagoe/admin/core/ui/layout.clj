@@ -90,11 +90,13 @@
         [:div.entity-card-description description])]]))
 
 (defn- dashboard-link
-  "A page that is not an entity, as a compact link: the sidebar has it too."
+  "A page that is not an entity: a tile like an entity's, without a count."
   [{:keys [href icon label description] :or {icon :file}}]
-  [:a {:href href :class "dashboard-link" :title description}
-   (icons/icon icon {:size 16})
-   [:span.dashboard-link-label label]])
+  [:div.entity-card
+   [:a {:href href :class "entity-card-link dashboard-link" :title description}
+    [:div.entity-card-head
+     [:span.entity-card-icon (icons/icon icon {:size 18})]
+     [:span.entity-card-title.dashboard-link-label label]]]])
 
 (defn- activity-entry
   [{:keys [action result actor-email target-user-email created-at]} {:keys [now display]}]
@@ -151,13 +153,10 @@
          [:h2.admin-home-section-title {:id heading}
           (icons/icon (or icon :folder) {:size 18})
           [:span label]]
-         (when (seq tiles)
-           [:div.entity-grid
-            (for [item tiles]
-              (dashboard-tile item stats opts))])
-         (when (seq links)
-           [:div.dashboard-links
-            (map dashboard-link links)])])]
+         [:div.entity-grid
+          (for [item tiles]
+            (dashboard-tile item stats opts))
+          (map dashboard-link links)]])]
      (when activity
        (activity-panel activity opts))]]))
 

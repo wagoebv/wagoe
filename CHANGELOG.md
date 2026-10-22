@@ -197,6 +197,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Admin dashboard tiles line up**: at most four a row, counts on one line, other pages as tiles too. 25 more Lucide
+  icons for an entity's `:icon`, e.g. `landmark`, `map-pin`, `history` (`wagoe.shared.ui.core.icons/available-icons`).
+
 - **`response-shape-cli` leaves a response already set alone** (BOU-790); it no longer rewrites an HTTP error response
   to `{:exit :stderr}`. In `create-cli-pipeline` it never saw one.
 - **`POST /api/auth/mfa/disable` needs `password` or a TOTP/backup `code`** (BOU-782); wrong ones count towards the
