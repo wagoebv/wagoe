@@ -260,7 +260,14 @@
         table-params (table-ui/table-query->params table-query)
         filter-params (table-ui/search-filters->params (or filters {}))
         list-fields (:list-fields entity-config)
-        cols (cells/columns entity-config list-fields)]
+        cols (cells/columns entity-config list-fields)
+        ;; The role aligns a header with its cells; the field class lets the
+        ;; column menu hide it
+        table-columns (for [{:keys [field config label data?] role-class :class} cols]
+                        {:field     field
+                         :label     label
+                         :class     role-class
+                         :sortable? (boolean (and data? (:sortable config true)))})]
     ;; Table container - Alpine.js scope is at parent entity-list-page level
     ;; MutationObserver automatically handles HTMX DOM updates (no afterSwap needed)
     [:div#entity-table-container
@@ -320,6 +327,8 @@
              has-pagination? (some? pagination)
              wrapper-class (if has-pagination? "table-and-pagination" "")]
          [:div {:class wrapper-class}
+          (table-ui/sort-select {:url list-path :hx-target hx-target :table-query table-query
+                                 :filters filters :columns table-columns})
           [:div.table-wrapper
            ;; Form for checkbox submission (hidden inputs + table)
            [:form#table-form
@@ -334,13 +343,7 @@
               :hx-target   hx-target
               :table-query table-query
               :filters     filters
-              ;; The role aligns a header with its cells; the field class
-              ;; lets the column menu hide it
-              :columns     (for [{:keys [field config label data?] role-class :class} cols]
-                             {:field     field
-                              :label     label
-                              :class     role-class
-                              :sortable? (boolean (and data? (:sortable config true)))})
+              :columns     table-columns
               ;; Column sizing for table-layout: fixed — framing columns via CSS
               ;; classes, data columns via proportional inline widths
               ;; (overridable via :width in the field config).
