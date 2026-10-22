@@ -32,7 +32,7 @@
 
 ;; --- base: URL helpers, field-value rendering, column sizing, utilities ---
 (def entity-create-url base/entity-create-url)
-(def render-field-value base/render-field-value)
+(def ^{:deprecated "1.0.2"} render-field-value base/render-field-value)
 (def list-column-weight base/list-column-weight)
 (def list-column-styles base/list-column-styles)
 (def format-field-label base/format-field-label)
@@ -59,6 +59,7 @@
 ;; --- list: search form, table row, table, list page ---
 (def entity-search-form list/entity-search-form)
 (def entity-table-row list/entity-table-row)
+(def field-cell list/field-cell)
 (def entity-table list/entity-table)
 (def entity-list-page list/entity-list-page)
 (def filter-table-container list/filter-table-container)
@@ -73,7 +74,7 @@
 (def filter-drawer filters/filter-drawer)
 
 ;; --- inline-editing: double-click cell editing ---
-(def render-inline-edit-cell inline-editing/render-inline-edit-cell)
+(def ^{:deprecated "1.0.2"} render-inline-edit-cell inline-editing/render-inline-edit-cell)
 (def render-inline-edit-form inline-editing/render-inline-edit-form)
 (def render-inline-edit-form-with-error inline-editing/render-inline-edit-form-with-error)
 

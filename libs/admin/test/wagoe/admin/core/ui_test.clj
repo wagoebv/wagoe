@@ -336,6 +336,12 @@
         (is (= :span.enum-badge (first result)))
         (is (= "Active" (last result)))))
 
+    (testing "an enum shows its :options label, a translation marker included"
+      (is (= [:t :admin.users/date-format-iso]
+             (last (ui/render-field-value :date-format "iso"
+                                          {:type :enum
+                                           :options [[:iso [:t :admin.users/date-format-iso]]]})))))
+
     (testing "JSON values"
       (let [result (ui/render-field-value :metadata {:key "value"} {:type :json})]
         (is (vector? result))
@@ -435,6 +441,15 @@
                            (tree-seq coll? seq (ui/render-inline-edit-form :users 1 :active true {:widget :checkbox})))]
         (is (= #{["hidden" "false"] ["checkbox" "true"]}
                (set (map (comp (juxt :type :value) second) inputs))))))
+
+    (testing "an inline enum edits as a select of its option labels"
+      (let [cfg     {:type :enum :options [[:iso [:t :admin.users/date-format-iso]] [:us "US"]]}
+            options (fn [form] (filter #(and (vector? %) (= :option (first %)))
+                                       (tree-seq coll? seq form)))]
+        (doseq [form [(ui/render-inline-edit-form :users 1 :date-format :us cfg)
+                      (ui/render-inline-edit-form-with-error :users 1 :date-format "us" cfg ["bad"])]]
+          (is (= [[:t :admin.users/date-format-iso] "US"] (map last (options form))))
+          (is (= ["us"] (keep #(when (:selected (second %)) (:value (second %))) (options form)))))))
 
     (testing "Select widget"
       (let [widget (ui/render-field-widget :role :admin
@@ -1109,6 +1124,11 @@
 (def ^:private sample-related-records
   [{:id 1 :sku "ABC-1" :created-at "2026-08-27T06:12:50.459979Z"}])
 
+(defn- tds
+  "The `[:td …]` elements of a Hiccup tree."
+  [tree]
+  (filter #(and (vector? %) (= :td (first %))) (tree-seq coll? seq tree)))
+
 (deftest ^:unit related-records-table-test
   ;; The has-many table on a detail page printed whatever the database handed
   ;; back, the same bug the list table had (BOU-382).
@@ -1124,10 +1144,34 @@
                                                :zone-id (java.time.ZoneId/of "Europe/Amsterdam")}))]
       (is (str/includes? html "2026-08-27 08:12:50"))))
 
-  (testing "a missing value still renders the placeholder"
-    (let [html (str (ui/related-records-table sample-relationship
-                                              [{:id 1 :sku nil :created-at nil}]))]
-      (is (str/includes? html "—"))))
+  (testing "a missing value renders an empty cell, as in the list"
+    (let [tds (tds (ui/related-records-table sample-relationship
+                                             [{:id 1 :sku nil :created-at nil}]))]
+      (is (= 2 (count tds)))
+      (is (every? #(nil? (last %)) tds)))))
+
+(deftest ^:unit related-records-table-renders-list-cells-test
+  ;; The has-many table printed headers from the key and cells through the
+  ;; legacy renderer: a relation as its UUID, an enum capitalized.
+  (let [client "00000000-0000-0000-0000-0000000000c1"
+        rel    {:label         "Invoices"
+                :entity        :invoices
+                :fields        [:client-id :status]
+                :entity-config {:fields        {:client-id {:type :uuid :label "Client"}
+                                                :status    {:type :enum :label "State"
+                                                            :options [[:sent "Sent out"]]}}
+                                :relationships {:belongs-to [{:field :client-id :entity :clients}]}}
+                :overview      {:titles {:client-id {client "Veldhuis"}}}}
+        table  (ui/related-records-table rel [{:id 1 :client-id client :status "sent"}])
+        html   (str table)]
+    (testing "headers are the field labels"
+      (is (str/includes? html "\"Client\""))
+      (is (str/includes? html "\"State\"")))
+    (testing "cells carry their role and render as the list does"
+      (is (= ["field-client-id c-relation" "field-status c-enum"] (map (comp :class second) (tds table))))
+      (is (str/includes? html "Veldhuis"))
+      (is (str/includes? html "/web/admin/clients/"))
+      (is (str/includes? html "Sent out"))))
 
   (testing "a relationship without an entity config still renders"
     (let [html (str (ui/related-records-table (dissoc sample-relationship :entity-config)
