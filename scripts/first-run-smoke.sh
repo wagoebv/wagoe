@@ -74,6 +74,7 @@ docker run --rm \
   -e "TARGET=$TARGET" \
   -e "SMOKE_AI=${SMOKE_AI:-}" \
   -e "GITHUB_TOKEN=${GITHUB_TOKEN:-}" \
+  -e "APT_MIRROR=${SMOKE_APT_MIRROR:-}" \
   "$IMAGE" bash -euo pipefail -c "$(declare -f quickstart_failed_steps log_excerpt)"'
 # On failure, show the log the failing step just wrote. Steps send
 # their output to /tmp/*.log, so the failure line alone said what broke but
@@ -101,6 +102,11 @@ ok()   { echo "  ok — $*"; }
 export DEBIAN_FRONTEND=noninteractive
 if command -v apt-get >/dev/null 2>&1; then
   PKG=apt; EXPECT_HINT="apt-get install"
+  # archive.ubuntu.com took up to four minutes from a GitHub runner; CI points
+  # the container at the mirror the runner itself uses.
+  if [ -n "${APT_MIRROR:-}" ] && [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+    sed -i "s|http://archive.ubuntu.com/ubuntu|$APT_MIRROR|" /etc/apt/sources.list.d/ubuntu.sources
+  fi
   apt-get update -qq >/tmp/pkg.log 2>&1 || { log_excerpt /tmp/pkg.log 5; fail "apt-get update failed"; }
   pkg_install() { apt-get install -y -qq "$@" >/tmp/pkg.log 2>&1 || { log_excerpt /tmp/pkg.log 5; fail "apt-get install $* failed"; }; }
 elif command -v dnf >/dev/null 2>&1; then

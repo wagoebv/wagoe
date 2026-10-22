@@ -287,6 +287,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **After an admin reset, a user in an app whose `:mfa-required?` hook requires MFA sets it up again at sign-in**
+  (BOU-815), within 72 hours (`:auth :mfa-reset-enrolment-hours`). Anyone else without MFA is still refused.
+- **Tenant, search and workflow show a signed-in user they refuse the 403 page** (BOU-815), not the login form; so
+  does `access/forbidden-response` in an app.
 - **Admin list accessibility** (BOU-803): sort headers are column headers with a sort button and `aria-sort`, checkboxes
   are named, and focus returns after the drawer or a sort/page swap. Tests clicking `th.sortable-header` click its button.
 - **Admin lists loaded every stored file** (BOU-811); reads now take its size only, and a stored file can be removed.

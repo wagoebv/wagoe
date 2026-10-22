@@ -295,6 +295,13 @@
    :user-agent user-agent
    :result :success})
 
+(defn mfa-enrolled-audit-entry
+  "Audit log entry for a user setting up a second factor at sign-in, with the
+   password alone: after an admin reset, or on registering."
+  [user-id user-email ip-address user-agent]
+  (assoc (mfa-disabled-audit-entry user-id user-email ip-address user-agent)
+         :action :mfa-enabled :metadata {:at-sign-in true}))
+
 (defn mfa-reset-audit-entry
   "Audit log entry for an admin turning off another user's second factor."
   [actor-id actor-email target-user-id target-user-email ip-address user-agent]
