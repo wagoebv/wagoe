@@ -202,7 +202,7 @@
         handler  (reduce (fn [h mw] (mw h))
                          (:handler endpoint)
                          (reverse (concat (:middleware data) (:middleware endpoint))))]
-    (handler (assoc request :request-method method :uri (str "/api/v1" path)))))
+    (handler (merge {:uri (str "/api/v1" path)} request {:request-method method}))))
 
 (deftest ^:contract ^:security only-the-invitee-accepts
   (let [handler  (sut/accept-invitation-handler *service*)
@@ -244,6 +244,12 @@
     (is (= 403 (:status (list-as {:id stranger :role :user}))))
     (is (= 403 (:status (list-as {:id user-id-1 :role :user})))
         "an open invitation is not a membership yet")
+    (testing "a signed-in browser refused gets the 403, not the login form"
+      (let [resp (through-route "/tenants/:tenant-id/memberships" :get
+                                (assoc (make-request :get {:tenant-id (str tenant-id-1)})
+                                       :uri "/web/tenants/memberships" :user {:id stranger :role :user}))]
+        (is (= 403 (:status resp)))
+        (is (nil? (get-in resp [:headers "Location"])))))
     (is (= 200 (:status (list-as {:id active-user :role :user}))))))
 
 (deftest ^:contract ^:security a-tenant-admin-cannot-reach-another-tenants-memberships

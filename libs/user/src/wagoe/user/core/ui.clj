@@ -16,6 +16,7 @@
             [wagoe.shared.ui.core.alpine :as alpine]
             [wagoe.platform.core.csrf :as csrf]
             [wagoe.user.core.authentication :as auth-core]
+            [wagoe.user.core.profile-ui :as profile-ui]
             [wagoe.user.core.rights-ui :as rights-ui]
             [clojure.string :as str]))
 
@@ -791,6 +792,44 @@
      (auth-header opts :user/mfa-subtitle)
      [(mfa-login-form data-with-return errors)]
      opts)))
+
+;; =============================================================================
+;; MFA enrolment at sign-in
+;; =============================================================================
+
+(def mfa-enrolment-path
+  "Where a user the app requires a second factor of, who has none, sets one up
+   before signing in."
+  "/web/login/mfa-setup")
+
+(defn- enrolment-page [title body opts]
+  (auth-page title :mfa-enrolment :div.mfa-enrolment-page.auth-page
+             (auth-header opts :user/mfa-subtitle)
+             [[:div {:class "auth-card ui-card"} (into [:div.card-body] body)]]
+             opts))
+
+(defn mfa-enrolment-page
+  "The authenticator setup for a user who signed in with the right password
+   but must enrol first. `setup` is what `setup-mfa` returned."
+  [{:keys [secret qr-code-url issuer account-name backup-codes]} errors opts]
+  (enrolment-page
+   [:t :user/mfa-enrolment-title]
+   [[:p [:t :user/mfa-enrolment-intro]]
+    (profile-ui/mfa-qr-code-step secret qr-code-url issuer account-name backup-codes errors
+                                 {:action mfa-enrolment-path :cancel "/web/login"})]
+   opts))
+
+(defn mfa-enrolment-done-page
+  "The backup codes, once the second factor is on, and the way back to sign in."
+  [backup-codes opts]
+  (enrolment-page
+   [:t :user/mfa-backup-codes-page-title]
+   [(profile-ui/mfa-backup-codes-display
+     backup-codes false
+     {:done {:href  (cond-> "/web/login"
+                      (:return-to opts) (str "?" (table-ui/encode-query-params {"return-to" (:return-to opts)})))
+             :label [:t :user/mfa-enrolment-sign-in]}})]
+   opts))
 
 ;; =============================================================================
 ;; Self-Service Registration Form & Page

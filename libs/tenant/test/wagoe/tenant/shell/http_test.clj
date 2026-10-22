@@ -249,4 +249,11 @@
       (testing (str (name method) " " path)
         (is (= 403 (:status (call path method {:id (UUID/randomUUID) :role :user}))))))
     (testing "an admin gets through"
-      (is (= 200 (:status (call "/tenants" :get {:id (UUID/randomUUID) :role :admin})))))))
+      (is (= 200 (:status (call "/tenants" :get {:id (UUID/randomUUID) :role :admin})))))
+    (testing "a signed-in browser refused gets the 403, not the login form"
+      (let [data    (some (fn [[p d]] (when (= p "/tenants") d)) routes)
+            handler (reduce (fn [h mw] (mw h)) (get-in data [:get :handler]) (reverse (:middleware data)))
+            resp    (handler {:request-method :get :uri "/web/tenants" :params {}
+                              :user {:id (UUID/randomUUID) :role :user}})]
+        (is (= 403 (:status resp)))
+        (is (nil? (get-in resp [:headers "Location"])))))))

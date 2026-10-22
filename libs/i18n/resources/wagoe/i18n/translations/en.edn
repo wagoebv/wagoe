@@ -191,6 +191,10 @@
  :user/oidc-account-unavailable "This account cannot sign in right now."
  :user/oidc-mfa-invalid        "Invalid code"
  :user/mfa-enrolment-required  "This sign-in needs two-factor authentication, and your account has none set up. Ask an administrator."
+ :user/mfa-enrolment-title     "Set up two-factor authentication"
+ :user/mfa-enrolment-intro     "Your password is right. This app needs a second factor as well, and your account has none yet: set one up, then sign in with it."
+ :user/mfa-enrolment-sign-in   "Sign in"
+ :user/mfa-enrolment-invalid-code "That code is not right. Enter the one your app shows now."
  :user/error-locked            {:one "Too many failed attempts, please try again in {n} minute"
                                 :many "Too many failed attempts, please try again in {n} minutes"}
 

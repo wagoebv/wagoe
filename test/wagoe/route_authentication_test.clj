@@ -76,6 +76,8 @@
     [:get "/api/v1/sessions/:token"] [:delete "/api/v1/sessions/:token"]
     [:get "/web"] [:get "/web/login"] [:post "/web/login"]
     [:get "/web/register"] [:post "/web/register"]
+    ;; A sealed ticket from login admits the caller
+    [:get "/web/login/mfa-setup"] [:post "/web/login/mfa-setup"]
     [:post "/api/push/callback"]})
 
 (deftest ^:integration ^:security the-public-set-is-exactly-what-was-decided

@@ -269,6 +269,17 @@
       (is (= {:type "forbidden" :message "Reading workflow instances needs the workflow/read permission"}
              (select-keys (:error (body-data response)) [:type :message]))))))
 
+(deftest ^:unit a-signed-in-browser-refused-gets-the-403-not-the-login-form
+  ;; Signing in again would only lead back here.
+  (let [handler  ((user-middleware/authenticate-if-present user-service)
+                  (reitit/compile-routes [["/web" (sut/workflow-routes *service* group-service)]] {}))
+        token    (token-for {:id (UUID/randomUUID) :email "u@example.com" :role :user})
+        response (handler {:request-method :get
+                           :uri            (str "/web/workflow/instances/" (:id (new-instance)))
+                           :headers        {"authorization" (str "Bearer " token)}})]
+    (is (= 403 (:status response)))
+    (is (nil? (get-in response [:headers "Location"])))))
+
 (deftest ^:unit every-api-route-refuses-a-caller-outside-the-tenant
   (let [tenant-a (UUID/randomUUID)
         tenant-b (UUID/randomUUID)

@@ -191,6 +191,10 @@
  :user/oidc-account-unavailable "Dit account kan nu niet inloggen."
  :user/oidc-mfa-invalid        "Ongeldige code"
  :user/mfa-enrolment-required  "Voor deze aanmelding is tweestapsverificatie nodig, maar die is voor uw account niet ingesteld. Vraag een beheerder."
+ :user/mfa-enrolment-title     "Tweestapsverificatie instellen"
+ :user/mfa-enrolment-intro     "Uw wachtwoord klopt. Deze app vraagt ook een tweede stap, en uw account heeft die nog niet: stel hem in en meld u daarmee aan."
+ :user/mfa-enrolment-sign-in   "Aanmelden"
+ :user/mfa-enrolment-invalid-code "Die code klopt niet. Vul de code in die uw app nu toont."
  :user/error-locked            {:one "Te veel mislukte pogingen, probeer het over {n} minuut opnieuw"
                                 :many "Te veel mislukte pogingen, probeer het over {n} minuten opnieuw"}
 

@@ -63,6 +63,9 @@
        [:mfa-backup-codes {:optional true} [:maybe [:vector :string]]]
        [:mfa-backup-codes-used {:optional true} [:maybe [:vector :string]]]
        [:mfa-enabled-at {:optional true} [:maybe inst?]]
+       ;; When an admin turned the second factor off: the user may set a new
+       ;; one up at sign-in with the password alone for a while after.
+       [:mfa-reset-at {:optional true} [:maybe inst?]]
        [:failed-login-count {:optional true} :int]
        [:lockout-until {:optional true} [:maybe inst?]]]
       (into audit-timestamps-flat-fields)))
@@ -126,6 +129,7 @@
              [:mfa-backup-codes {:optional true} [:maybe [:vector :string]]]
              [:mfa-backup-codes-used {:optional true} [:maybe [:vector :string]]]
              [:mfa-enabled-at {:optional true} [:maybe inst?]]
+             [:mfa-reset-at {:optional true} [:maybe inst?]]
              [:failed-login-count {:optional true} :int]
              [:lockout-until {:optional true} [:maybe inst?]]])
       (into audit-timestamps-flat-fields)))
@@ -244,7 +248,7 @@
    `:permanent-delete` did (BOU-682)."
   [:create :update :delete :permanent-delete :activate :deactivate :role-change
    :bulk-action :login :logout :session-revoked :group-join :group-leave :grant-add :grant-remove
-   :data-export :mfa-disabled])
+   :data-export :mfa-disabled :mfa-enabled])
 
 (def UserAuditLog
   "Schema for User Audit Log entity - tracks all user-related actions for compliance and security.
