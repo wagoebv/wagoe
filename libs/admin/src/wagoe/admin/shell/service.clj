@@ -187,8 +187,8 @@
 
 (defn- own-columns
   "The select of an entity read straight from its table: `*`, or with a
-   binary column the columns by name, so its content is never read. Each
-   binary field in `sized` (`:all` for every one) reads as its size instead."
+   binary column the columns by name, so its content is never read. A binary
+   field reads as its size, when in `sized` (nil: every one), else not at all."
   [entity-config sized]
   (let [binary (into #{} (keep (fn [[f cfg]] (when (introspection/upload-field? cfg) f)))
                      (:fields entity-config))
@@ -197,7 +197,7 @@
       [:*]
       (vec (for [field cols
                  :let  [col (case-conversion/kebab-case->snake-case-keyword field)]
-                 :when (or (not (binary field)) (= :all sized) (contains? sized field))]
+                 :when (or (not (binary field)) (nil? sized) (contains? sized field))]
              (if (binary field) [[:octet_length col] col] col))))))
 
 (defn- resolve-query-config
@@ -263,7 +263,7 @@
                                                     missing)]
                           (into (vec raw-select) extra))
                         (or raw-select
-                            (if (:join overrides) [:*] (own-columns entity-config (or sized :all)))))]
+                            (if (:join overrides) [:*] (own-columns entity-config sized))))]
     {:from-clause       (or (:from overrides) [table-name])
      :select-clause     select-clause
      :join-clause       (:join overrides)
@@ -514,10 +514,10 @@
    holds its size in bytes, never its content."
   [entity-config row]
   (when row
-    (reduce-kv (fn [m k {:keys [type]}]
+    (reduce-kv (fn [m k {:keys [type] :as cfg}]
                  (let [v (get m k)]
                    (cond-> m
-                     (and (= :binary type) (some? v))
+                     (and (introspection/upload-field? cfg) (some? v))
                      (assoc k (file-size v))
 
                      (and (= :uuid type) (string? v))
@@ -895,7 +895,7 @@
       (catch Exception e
         (throw (refused-write entity-config e))))
     (typed-record entity-config
-                  (db/execute-one! conn {:select (own-columns entity-config :all) :from [table-name]
+                  (db/execute-one! conn {:select (own-columns entity-config nil) :from [table-name]
                                          :where  [:= primary-key id-str]}))))
 
 (defn- nested-relationships

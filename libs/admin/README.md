@@ -318,6 +318,7 @@ A list cell renders by its field's **display role** ([ADR-040](../../dev-docs/ad
 | `:date` / `:datetime` | `:date` / `:instant` | relative, absolute on hover |
 | `:email` / `:url` / `:identifier` | name ends in mail or mail-address / ends in url, website / a code, number, sku, UUID | link / host / monospace |
 | `:boolean` | `:boolean` | check mark |
+| `:file` | `:binary` | the file's size |
 | `:text` | anything else | one line, ellipsis |
 
 ```clojure

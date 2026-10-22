@@ -136,4 +136,5 @@
     (is (str/includes? html ">On hold<"))))
 
 (deftest ^:unit a-file-cell-shows-its-size
-  (is (str/includes? (render :text :datasheet 15 :field-config {:type :binary}) "file-size{:n 15}")))
+  (is (= :file (display/display-role {:fields {:datasheet {:type :binary}}} :datasheet)))
+  (is (str/includes? (render :file :datasheet 15) "file-size{:n 15}")))

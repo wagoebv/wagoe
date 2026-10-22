@@ -11,7 +11,7 @@
 (def roles
   "Every display role. Closed: the cell renderer and the CSS know each one."
   #{:title :relation :count :links :enum :money :number :percent :date :datetime
-    :boolean :identifier :email :url :text})
+    :boolean :identifier :email :url :file :text})
 
 (def tones
   "Tones an enum value can carry. The CSS colours each one."
@@ -68,6 +68,7 @@
     :instant            :datetime
     :boolean            :boolean
     :enum               :enum
+    :binary             :file
     :text))
 
 ;; -----------------------------------------------------------------------------

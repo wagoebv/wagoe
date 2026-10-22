@@ -504,6 +504,11 @@
     (when is-edit?
       [:span [:kbd "⌘↵"] " " [:t :admin/save-and-back]])]])
 
+(defn- uploads?
+  "Whether any of `fields` of `entity-config` takes a file."
+  [entity-config fields]
+  (some #(introspection/upload-field? (get-in entity-config [:fields %])) fields))
+
 (defn entity-form
   "Render entity create/edit form.
 
@@ -571,10 +576,8 @@
                                           optional-details-key
                                           "', 'false'); }")}
               ;; htmx sends url-encoded otherwise, and the file never arrives
-              (when (or (some #(introspection/upload-field? (get-in entity-config [:fields %])) editable-fields)
-                        (some (fn [{:keys [rel]}]
-                                (some #(introspection/upload-field? (get-in rel [:entity-config :fields %])) (:fields rel)))
-                              nested))
+              (when (or (uploads? entity-config editable-fields)
+                        (some (fn [{:keys [rel]}] (uploads? (:entity-config rel) (:fields rel))) nested))
                 {:hx-encoding "multipart/form-data"})
               ;; After a successful edit, push the same URL (including return_to) so the
               ;; browser stays on the detail page with context intact
