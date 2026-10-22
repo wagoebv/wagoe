@@ -209,7 +209,7 @@
   [request e log-message]
   (log/error e log-message)
   (html-response request
-                 (layout/pilot-page-layout "Error" (ui/error-message [:t :common/error-generic]))
+                 (layout/pilot-page-layout [:t :common/error-title] (ui/error-message [:t :common/error-generic]))
                  500))
 
 (defn- toast-text
@@ -382,13 +382,13 @@
         (if user-result
           (html-response request (user-ui/user-detail-page user-result page-opts))
           (html-response request
-                         (layout/error-layout 404 "User Not Found"
-                                              "The requested user could not be found.")
+                         (layout/error-layout 404 [:t :user/page-user-not-found-title]
+                                              [:t :user/page-user-not-found-message])
                          404)))
       (catch IllegalArgumentException _
         (html-response request
-                       (layout/error-layout 400 "Invalid User ID"
-                                            "User ID must be a valid UUID.")
+                       (layout/error-layout 400 [:t :user/page-invalid-user-id-title]
+                                            [:t :user/page-invalid-user-id-message])
                        400))
       (catch Exception e
         (server-error-page request e "Error in user-detail-page-handler")))))
@@ -1049,7 +1049,7 @@
             ;; Fetch existing user and merge updates
             (let [existing-user (user-ports/get-user-by-id user-service uuid)]
               (if-not existing-user
-                (html-response request (ui/error-message "User not found") 404)
+                (html-response request (ui/error-message [:t :user/error-user-not-found]) 404)
                 (let [;; Only the submitted fields: writing back the rest of a
                       ;; cached user failed validation on its empty optionals.
                       user-data (into {:id uuid}
@@ -1068,7 +1068,7 @@
                 (refused request e)
                 (server-error request e "Error updating user"))))))
       (catch IllegalArgumentException _
-        (html-response request (ui/error-message "Invalid user ID") 400)))))
+        (html-response request (ui/error-message [:t :user/error-invalid-user-id]) 400)))))
 
 (defn delete-user-htmx-handler
   "HTMX handler for deleting a user (DELETE /web/users/:id).
@@ -1091,7 +1091,7 @@
                        200
                        {"HX-Trigger" "userDeleted"}))
       (catch IllegalArgumentException _
-        (html-response request (ui/error-message "Invalid user ID") 400))
+        (html-response request (ui/error-message [:t :user/error-invalid-user-id]) 400))
       (catch Exception e
         (if (user-core/refusal? e)
           (refused request e)
@@ -1198,8 +1198,8 @@
           (redirect-with-toast request sessions-url :success :user/toast-session-revoked)
           (redirect-with-toast request sessions-url :error :user/toast-session-not-found)))
       (catch IllegalArgumentException _
-        (-> (html-response request (ui/error-message "Invalid session") 400)
-            (with-error-toast request "Invalid session")))
+        (-> (html-response request (ui/error-message [:t :user/error-invalid-session]) 400)
+            (with-error-toast request :user/error-invalid-session)))
       (catch Exception e
         (-> (server-error request e "Error revoking session")
             (with-error-toast request :common/error-generic))))))
@@ -1742,7 +1742,7 @@
                                                             {:verification-code ["Invalid verification code. Please try again."]})
                                400))))
           ;; No setup data in form
-          (html-response request (ui/error-message "MFA setup data missing. Please start again.") 400)))
+          (html-response request (ui/error-message [:t :user/error-mfa-setup-missing]) 400)))
       (catch Exception e
         (server-error request e "Error in mfa-verify-handler")))))
 

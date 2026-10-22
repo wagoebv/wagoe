@@ -60,9 +60,11 @@
   (let [provider (reify admin-ports/ISchemaProvider
                    (fetch-table-metadata [_ _] [])
                    (get-entity-config [_ entity]
-                     (when (= :invoices entity)
-                       {:fields {:number {:type :string} :total {:type :decimal}}
-                        :list-fields [:number :total]}))
+                     (case entity
+                       :invoices {:fields {:number {:type :string} :total {:type :decimal}}
+                                  :list-fields [:number :total]}
+                       :typo     (throw (ex-info "Table not found: typo" {:type :schema-fetch-error}))
+                       nil))
                    (list-available-entities [_] #{:invoices})
                    (get-entity-label [_ _] "Invoices")
                    (validate-entity-exists [_ _] true))
@@ -72,6 +74,8 @@
     (is (str/includes? (run {:wagoe/admin-schema-provider provider} :invoices)
                        "Admin overview of invoices"))
     (is (str/includes? (run {:wagoe/admin-schema-provider provider} :nope) "No admin entity :nope"))
+    (is (str/includes? (run {:wagoe/admin-schema-provider provider} :typo)
+                       "No admin entity :typo: Table not found"))
     (is (str/includes? (run {} :invoices) "needs wagoe-admin"))
     (is (str/includes? (run nil :invoices) "System not running"))))
 

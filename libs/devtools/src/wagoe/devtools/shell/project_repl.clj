@@ -95,12 +95,16 @@
    at call time, since devtools does not depend on wagoe-admin."
   [entity]
   (let [provider (get state/system :wagoe/admin-schema-provider)
+        ;; The schema repository throws for a table it cannot find.
         config   (when provider
-                   ((requiring-resolve 'wagoe.admin.ports/get-entity-config) provider entity))]
+                   (try ((requiring-resolve 'wagoe.admin.ports/get-entity-config) provider entity)
+                        (catch clojure.lang.ExceptionInfo e e)))]
     (cond
       (nil? state/system) (println "System not running. Start it with (go)")
       (nil? provider)     (println "No admin in this system: (explain-entity) needs wagoe-admin.")
       (nil? config)       (println (str "No admin entity " entity "."))
+      (instance? clojure.lang.ExceptionInfo config)
+      (println (str "No admin entity " entity ": " (ex-message config)))
       :else               (println ((requiring-resolve 'wagoe.admin.core.display/format-explain)
                                     entity ((requiring-resolve 'wagoe.admin.core.display/explain) config))))))
 

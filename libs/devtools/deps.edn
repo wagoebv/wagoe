@@ -26,5 +26,6 @@
           :ns-default   build}
   :test  {:extra-paths ["test"]
           :extra-deps  {lambdaisland/kaocha           {:mvn/version "1.91.1392"}
+                        wagoe/admin                   {:local/root "../admin"}
                         org.clj-commons/clj-http-lite {:mvn/version "1.0.13"}}
           :main-opts   ["-m" "kaocha.runner"]}}}
