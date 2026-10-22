@@ -68,10 +68,10 @@
 (defn- dashboard-card
   "A sidebar item as a card: its icon, label and description, and an entity's
    record count when `stats` has one."
-  [{:keys [href icon label description entity]} stats]
+  [{:keys [href icon label description entity] :or {icon :file}} stats]
   [:div.entity-card
    [:a {:href href :class "entity-card-link"}
-    [:div.entity-card-icon (icons/icon (or icon :file) {:size 20})]
+    [:div.entity-card-icon (icons/icon icon {:size 20})]
     [:div.entity-card-title label]
     (when description
       [:div.entity-card-description description])
@@ -92,8 +92,9 @@
       [:h1 [:t :admin/page-heading]]
       [:p [:t :admin/page-description]]]]]
    (for [{:keys [id label icon items]} groups
-         :let [heading (str "admin-home-" (name id))]]
-     [:section.admin-home-section {:aria-labelledby heading :data-group (name id)}
+         ;; A group may have no id: the shell's plain list
+         :let [heading (some->> id name (str "admin-home-"))]]
+     [:section.admin-home-section {:aria-labelledby heading :data-group (some-> id name)}
       [:h2.admin-home-section-title {:id heading}
        (icons/icon (or icon :folder) {:size 18})
        [:span label]]
