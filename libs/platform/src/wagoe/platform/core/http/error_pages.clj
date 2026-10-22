@@ -40,7 +40,7 @@
   "`response` with `body`, HTML, in place of the error body."
   [response body]
   (-> response
-      (update :headers dissoc "content-type")
+      (update :headers dissoc "content-type" "Content-Length" "content-length")
       (assoc :body body)
       (assoc-in [:headers "Content-Type"] "text/html; charset=utf-8")))
 

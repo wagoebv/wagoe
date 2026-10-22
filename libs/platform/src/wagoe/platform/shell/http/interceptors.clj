@@ -533,7 +533,11 @@
       (error-pages/page-response
        response
        (or (when-let [render (:error-page system)]
-             (try (render request error)
+             ;; Rendered after the handler's binding has ended: the layout's
+             ;; logout form and nav read these, as they do on any page.
+             (try (binding [csrf/*token*     (:anti-forgery-token request)
+                            pages/*mounted?* (partial shell-pages/mounted? request)]
+                    (render request error))
                   (catch Throwable t
                     ;; The bare page rather than a second failure
                     (when-let [logger (:logger system)]

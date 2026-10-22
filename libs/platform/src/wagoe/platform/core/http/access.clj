@@ -23,7 +23,9 @@
 (defn web-request?
   "Whether `request` is for a page under /web."
   [request]
-  (str/starts-with? (str (:uri request)) "/web"))
+  (let [uri (str (:uri request))]
+    ;; Not /webhooks: a server calling one wants the error body
+    (or (= "/web" uri) (str/starts-with? uri "/web/"))))
 
 (defn- login-redirect [request]
   {:status  302

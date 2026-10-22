@@ -9,6 +9,7 @@
             [wagoe.observability.errors.ports :as error-ports]
             [wagoe.observability.logging.ports :as log-ports]
             [wagoe.platform.core.http.errors :as errors]
+            [wagoe.platform.core.http.pages :as pages]
             [ring.util.codec :as codec]
             [ring.util.request :as ring-request]))
 
@@ -1287,7 +1288,8 @@
     ["/web/refused" {:get {:handler (fn [_] (errors/response 422 :unprocessable "Widget is locked"))}}]
     ["/web/coerced" {:get {:handler    (fn [_] {:status 200 :body "ok"})
                            :parameters {:query [:map [:n :int]]}}}]
-    ["/api/missing" {:get {:handler (fn [_] (throw (ex-info "No such widget" {:type :not-found})))}}]]
+    ["/api/missing" {:get {:handler (fn [_] (throw (ex-info "No such widget" {:type :not-found})))}}]
+    ["/webhooks/missing" {:get {:handler (fn [_] (throw (ex-info "No such widget" {:type :not-found})))}}]]
    {:system system}))
 
 (defn- web-get
@@ -1326,6 +1328,13 @@
     (is (= ["/web/missing" {:status 404 :type "not-found" :message "No such widget"
                             :correlation-id "cid-800"}]
            @seen)))
+  (testing "it renders as a page does: the layout can ask what is mounted"
+    (let [seen    (atom nil)
+          handler (web-error-handler {:error-page (fn [_ _]
+                                                    (reset! seen (pages/mounted? "/web/not-a-route"))
+                                                    "<html></html>")})]
+      (web-get handler "/web/missing")
+      (is (false? @seen))))
   (testing "one that fails leaves the bare page"
     (let [handler (web-error-handler {:error-page (fn [_ _] (throw (RuntimeException. "layout broke")))})
           resp    (web-get handler "/web/missing")]
@@ -1343,6 +1352,7 @@
 (deftest ^:unit the-api-and-a-script-asking-for-json-keep-the-error-body
   (let [handler (web-error-handler {})]
     (doseq [[uri headers] [["/api/missing" {}]
+                           ["/webhooks/missing" {}]
                            ["/web/missing" {"accept" "application/json"}]]]
       (let [resp (web-get handler uri headers)]
         (is (= 404 (:status resp)))
