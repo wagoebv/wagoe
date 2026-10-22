@@ -97,13 +97,16 @@
    [:span.dashboard-link-label label]])
 
 (defn- activity-entry
-  [{:keys [action actor-email target-user-email created-at]} {:keys [now display]}]
+  [{:keys [action result actor-email target-user-email created-at]} {:keys [now display]}]
   [:li.dashboard-activity-entry
    (user-ui/action-badge action)
    [:span.dashboard-activity-who
     (or actor-email [:em [:t :user/audit-actor-system]])
     (when target-user-email
-      (list " → " target-user-email))]
+      (list " → " target-user-email))
+    ;; A failed login must not read as a login
+    (when (= :failure result)
+      (list " " (user-ui/result-badge result)))]
    (when created-at
      [:time.dashboard-activity-when {:datetime (str created-at)
                                      :title    (base/format-instant created-at display)}

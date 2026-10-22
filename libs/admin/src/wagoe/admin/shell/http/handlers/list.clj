@@ -45,16 +45,17 @@
 
 (defn- isolated
   "`(f)`, or nil when it throws: logged, and the dashboard shows the part as
-   missing instead of failing."
+   missing instead of failing. In a savepoint, so a failed query in a tenant
+   request's transaction does not abort the parts after it on PostgreSQL."
   [part f]
-  (try (f)
+  (try (db/in-savepoint (db/current-transaction) f)
        (catch Exception e
          (log/warn e "admin dashboard query failed" {:part part})
          nil)))
 
 (def ^:private parallel-counts
   "How many entities the dashboard counts at once: each takes a pool connection."
-  8)
+  4)
 
 (defn- in-parallel
   "`(f x)` for each of `xs`, a few at a time, or one by one when a transaction

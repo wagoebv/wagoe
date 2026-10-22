@@ -42,10 +42,10 @@
                   (list-available-entities [_] (vec entities))
                   (get-entity-label [_ _] nil)
                   (validate-entity-exists [_ _] false))
+        ;; Asserted, not thrown: the dashboard swallows a failing count
         counted (fn [e]
-                  (if (= :admin (:role user :admin))
-                    (if count-of (count-of e) 7)
-                    (throw (ex-info "counted for a non-admin" {:entity e}))))
+                  (is (= :admin (:role user :admin)) (str "counted " e " for a non-admin"))
+                  (if count-of (count-of e) 7))
         service #_{:clj-kondo/ignore [:missing-protocol-method]}
                 (reify
                   admin-ports/IAdminService
@@ -135,13 +135,16 @@
              (reify user-ports/IUserService
                (list-audit-logs [_ opts]
                  (is (= 10 (:limit opts)))
-                 {:audit-logs [{:action :login :actor-email "ann@example.com"
+                 {:audit-logs [{:action :login :result :success :actor-email "ann@example.com"
                                 :target-user-email "bob@example.com"
+                                :created-at (java.time.Instant/now)}
+                               {:action :login :result :failure :actor-email "eve@example.com"
                                 :created-at (java.time.Instant/now)}]}))]
     (testing "a platform admin: the last entries, and a link to the trail"
       (let [body (home nil nil [] {:user-service usvc})]
         (is (str/includes? body "dashboard-activity"))
         (is (str/includes? body "ann@example.com"))
+        (is (= 1 (count (re-seq #"audit-result-badge" body))) "only the failed entry is marked")
         (is (str/includes? body "href=\"/web/audit\""))))
     (testing "a tenant admin and a plain user: no panel"
       (is (not (str/includes? (home nil {:tenant-id (random-uuid)} [] {:user-service usvc}) "dashboard-activity")))
