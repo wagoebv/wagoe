@@ -1,6 +1,6 @@
 (ns wagoe.e2e.html.web-users-test
   "E2E browser tests for the user module's own pages in the admin shell:
-   creating a user and revoking a session."
+   creating a user, revoking a session, and a user's pages as tabs."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [clojure.string :as str]
             [com.blockether.spel.core :as spel]
@@ -52,20 +52,37 @@
 (defn- await! [pg js]
   (is (not (map? (page/wait-for-function pg js {:timeout 5000.0}))) js))
 
-(deftest ^:integration ^:e2e deactivate-asks-the-confirm-modal
-  (testing "Deactivate asks in the modal, Reactivate undoes it"
+(defn- active-tab [pg]
+  (str/trim (loc/inner-text (page/locator pg "nav.record-tabs a[aria-current='page']"))))
+
+(defn- open-tab! [pg label url-re]
+  (loc/click (page/locator pg (str "nav.record-tabs a:has-text('" label "')")))
+  (page/wait-for-url pg url-re {:timeout 10000.0})
+  (page/wait-for-selector pg "nav.record-tabs" {:timeout 10000.0}))
+
+(deftest ^:integration ^:e2e a-users-pages-are-tabs-of-one-another
+  (testing "From the admin list: Details, Sessions and Rights, each tab marked when open"
     (spel/with-testing-page [pg]
       (admin/login-as-admin! pg fx/*seed*)
-      (page/navigate pg (admin/app-url (str "/web/users/" (-> fx/*seed* :user :id))))
-      (page/wait-for-load-state pg)
-      (loc/click (page/locator pg "#deactivate-user"))
-      (page/wait-for-selector pg "#deactivate-confirm[open]" {:timeout 5000.0})
-      (loc/click (page/locator pg "#deactivate-confirm button[value='confirm']"))
-      (page/wait-for-selector pg "#reactivate-user" {:timeout 10000.0})
-      (is (not (loc/is-checked? (page/locator pg "#user-detail input#active"))))
-      (loc/click (page/locator pg "#reactivate-user"))
-      (page/wait-for-selector pg "#deactivate-user" {:timeout 10000.0})
-      (is (loc/is-checked? (page/locator pg "#user-detail input#active"))))))
+      (let [{:keys [id email]} (:user fx/*seed*)]
+        (page/navigate pg (admin/admin-url "/users"))
+        (page/wait-for-load-state pg)
+        (loc/click (page/locator pg (str "table.data-table tbody tr:has-text('" email "') a.row-nav-hint")))
+        (page/wait-for-url pg (re-pattern (str ".*/web/admin/users/" id "(\\?.*)?$")) {:timeout 10000.0})
+        (is (= "Details" (active-tab pg)))
+        (open-tab! pg "Sessions" (re-pattern (str ".*/web/users/" id "/sessions$")))
+        (is (= "Sessions" (active-tab pg)))
+        (open-tab! pg "Rights" (re-pattern (str ".*/web/users/" id "/rights$")))
+        (is (= "Rights" (active-tab pg)))
+        (open-tab! pg "Details" (re-pattern (str ".*/web/admin/users/" id "$")))
+        (is (= "Details" (active-tab pg))))))
+  (testing "The old user page redirects to the admin's"
+    (spel/with-testing-page [pg]
+      (admin/login-as-admin! pg fx/*seed*)
+      (let [id (-> fx/*seed* :user :id)]
+        (page/navigate pg (admin/app-url (str "/web/users/" id)))
+        (page/wait-for-url pg (re-pattern (str ".*/web/admin/users/" id "$")) {:timeout 10000.0})
+        (is (loc/is-visible? (page/locator pg "nav.record-tabs")))))))
 
 (deftest ^:integration ^:e2e users-table-pushes-its-own-url
   (testing "Sorting pushes the page's URL once; a refresh adds no history entry"
@@ -79,7 +96,7 @@
         (is (= (inc before) (page/evaluate pg "history.length")))
         (page/evaluate pg (str "window.e2eSettled = false;"
                                "document.body.addEventListener('htmx:afterSettle', () => window.e2eSettled = true, {once: true});"
-                               "htmx.trigger(document.body, 'userUpdated')"))
+                               "htmx.trigger(document.body, 'userCreated')"))
         (await! pg "window.e2eSettled")
         (is (= (inc before) (page/evaluate pg "history.length")))
         (is (str/includes? (page/url pg) "sort=email"))))))
