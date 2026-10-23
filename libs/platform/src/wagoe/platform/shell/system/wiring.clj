@@ -457,7 +457,9 @@
         csrf-config (merge {:enabled?     false
                             :secret       (or (System/getenv "CSRF_SECRET")
                                               (System/getenv "JWT_SECRET"))
-                            :exempt-paths []}
+                            :exempt-paths []
+                            ;; For the csrf-session cookie (BOU-819).
+                            :secure-cookies? (get-in config [:active :wagoe/settings :secure-cookies?] true)}
                            (get-in config [:active :wagoe/http :security :csrf]))
         ;; Fail-loud guard: an enabled CSRF interceptor with no secret cannot validate
         ;; (the interceptor short-circuits to a no-op — fail OPEN). Refuse to boot rather
