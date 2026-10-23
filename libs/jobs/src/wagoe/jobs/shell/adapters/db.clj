@@ -23,11 +23,11 @@
    indexed columns (queue, priority_rank, status, execute_at, locked_at) exist
    only for ordering, claiming, and reclaim.
 
+   The worker renews the lease while a handler runs (`ports/ILeasedJobQueue`),
+   so `lease-ms` bounds how long a crashed worker's job waits, not how long a
+   job may run (BOU-823).
+
    Caveats:
-   - The lease is fixed, not renewed (no heartbeat): a job still running after
-     `lease-ms` is reclaimed and may run again concurrently. Set `:lease-ms`
-     comfortably above your longest job, and/or keep handlers idempotent.
-     (Lease renewal is a possible future addition.)
    - `payload` is `VARCHAR(1000000)` (`LONGTEXT` on MySQL); keep serialized
      jobs under ~1 MB."
   (:require [next.jdbc :as jdbc]
@@ -341,7 +341,19 @@
       ds
       ["UPDATE job_queue SET status = 'ready'
           WHERE status = 'scheduled' AND execute_at <= ?"
-       (ts (Instant/now))]))))
+       (ts (Instant/now))])))
+
+  ports/ILeasedJobQueue
+
+  (renew-interval-ms [_]
+    ;; A third of the lease: two renewals can fail before it lapses.
+    (max 10 (quot (long lease-ms) 3)))
+
+  (renew-lease! [_ _queue-name worker-id job-id]
+    (pos? (::jdbc/update-count
+           (execute-one! ds ["UPDATE job_queue SET locked_at = ?
+                                WHERE id = ? AND locked_by = ? AND status = 'processing'"
+                             (ts (Instant/now)) job-id worker-id])))))
 
 (defn ^:deprecated enqueue-in-tx!
   "DEPRECATED — use `wagoe.jobs.ports/enqueue-in-tx!` on the queue component.

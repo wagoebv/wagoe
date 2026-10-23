@@ -297,6 +297,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A DB-queue job running past its lease no longer runs twice** (BOU-823): the worker renews the lease while
+  the handler runs. Nothing to change; `:lease-ms` now only bounds how fast a crashed worker's job is retried.
 - **The email README's production config is the shape `:wagoe/email` reads** (BOU-824): flat keys and `:provider
   :smtp`. A config copied from it logged mail instead of sending it; move its `:smtp` keys up and add `:provider :smtp`.
 - **The parent banner on a child record's admin page shows values as the list does** (BOU-390): a date formatted, a

@@ -103,6 +103,8 @@ required, survives a Redis outage.
   a row (status `processing`, `locked_by`/`locked_at`); `ack-job!` removes it;
   `reclaim-abandoned-jobs!` returns rows whose **lease** (`locked_at` older than
   `:lease-ms`) has expired back to `ready` (at-least-once).
+- The worker renews the lease while the handler runs, so a long job is not
+  reclaimed; `:lease-ms` only bounds how long a crashed worker's job waits.
 - **Portable SQL** (no `SELECT … FOR UPDATE SKIP LOCKED`): claim is a SELECT of
   the best candidate + a conditional `UPDATE … WHERE status='ready'`; the row
   lock serialises concurrent workers (one wins, losers retry). Runs identically
