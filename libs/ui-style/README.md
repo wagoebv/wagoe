@@ -40,12 +40,14 @@ Example:
 ```
 
 Contains:
-- Tailwind input source: `resources/tailwind/admin-pilot.css`
-- Compiled CSS output: `resources/public/css/daisy-admin.css`
+- Tailwind entries in `resources/tailwind/`, compiled into `resources/public/css/`:
+  - `pilot.css` → `daisy-admin.css`, the `:pilot` bundle's daisyUI/Tailwind layer
+  - `admin.css` → `wagoe-admin.css`, the `:admin-pilot` bundle's one stylesheet:
+    fonts, tokens, `admin/legacy.css`, `app.css`, `pilot-rules.css` and
+    `admin/wagoe-admin.css`, in that cascade order
 - Shared CSS tokens/components:
   - `resources/public/css/wagoe-tokens.css`
   - `resources/public/css/app.css`
-  - `resources/public/css/admin.css`
 - Shared JavaScript assets:
   - `resources/public/js/theme.js`
   - `resources/public/js/alpine.min.js`
@@ -57,8 +59,11 @@ Contains:
 Build from monorepo root:
 
 ```bash
-npm run build:css:admin
+npm run build:css
 ```
+
+Both compiled files are committed; CI fails when they are not what the
+sources build.
 
 ## Module Migration Checklist
 

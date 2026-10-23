@@ -1,7 +1,3 @@
-@import "tailwindcss";
-@plugin "daisyui" {
-  themes: light --default, dark --prefersdark;
-}
 
 /* Admin pilot: daisyUI look while preserving existing class contracts. */
 
@@ -100,17 +96,17 @@ body .main-content {
 /* Stable button colors across legacy + daisy styles (prevents white hover regression) */
 .button.primary,
 .icon-button.primary {
-  background-color: var(--color-primary) !important;
-  border-color: var(--color-primary) !important;
-  color: var(--color-primary-content) !important;
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-content);
 }
 
 .button.primary:hover:not(:disabled),
 .icon-button.primary:hover:not(:disabled) {
-  background-color: color-mix(in oklab, var(--color-primary) 86%, black 14%) !important;
-  border-color: color-mix(in oklab, var(--color-primary) 84%, black 16%) !important;
-  color: var(--color-primary-content) !important;
-  filter: none !important;
+  background-color: color-mix(in oklab, var(--color-primary) 86%, black 14%);
+  border-color: color-mix(in oklab, var(--color-primary) 84%, black 16%);
+  color: var(--color-primary-content);
+  filter: none;
 }
 
 .button.secondary,
@@ -124,73 +120,73 @@ body .main-content {
 .icon-button.secondary:hover:not(:disabled) {
   background-color: color-mix(in oklab, var(--color-base-100) 60%, var(--color-primary) 40%) !important;
   border-color: color-mix(in oklab, var(--color-base-300) 55%, var(--color-primary) 45%) !important;
-  color: white !important;
-  filter: none !important;
+  color: var(--text-on-accent) !important;
+  filter: none;
 }
 
 .button.danger,
 .icon-button.danger {
-  background-color: var(--color-error) !important;
-  border-color: var(--color-error) !important;
-  color: var(--color-error-content) !important;
+  background-color: var(--color-error);
+  border-color: var(--color-error);
+  color: var(--color-error-content);
 }
 
 .button.danger:hover:not(:disabled),
 .icon-button.danger:hover:not(:disabled) {
-  background-color: color-mix(in oklab, var(--color-error) 85%, black 15%) !important;
-  border-color: color-mix(in oklab, var(--color-error) 83%, black 17%) !important;
-  color: var(--color-error-content) !important;
-  filter: none !important;
+  background-color: color-mix(in oklab, var(--color-error) 85%, black 15%);
+  border-color: color-mix(in oklab, var(--color-error) 83%, black 17%);
+  color: var(--color-error-content);
+  filter: none;
 }
 
 /* Light theme: keep delete icon legible even when muted/disabled. */
 [data-theme="light"] .icon-button.danger {
-  color: color-mix(in oklab, var(--color-error-content) 90%, black 10%) !important;
+  color: color-mix(in oklab, var(--color-error-content) 90%, black 10%);
 }
 
 [data-theme="light"] .icon-button.danger svg {
-  opacity: 1 !important;
+  opacity: 1;
 }
 
 [data-theme="light"] .icon-button.danger:disabled {
-  color: color-mix(in oklab, var(--color-error-content) 75%, black 25%) !important;
-  opacity: 0.82 !important;
+  color: color-mix(in oklab, var(--color-error-content) 75%, black 25%);
+  opacity: 0.82;
 }
 
 .button.success,
 .icon-button.success {
-  background-color: var(--color-success) !important;
-  border-color: var(--color-success) !important;
-  color: var(--color-success-content) !important;
+  background-color: var(--color-success);
+  border-color: var(--color-success);
+  color: var(--color-success-content);
 }
 
 .button.success:hover:not(:disabled),
 .icon-button.success:hover:not(:disabled) {
-  background-color: color-mix(in oklab, var(--color-success) 84%, black 16%) !important;
-  border-color: color-mix(in oklab, var(--color-success) 82%, black 18%) !important;
-  color: var(--color-success-content) !important;
-  filter: none !important;
+  background-color: color-mix(in oklab, var(--color-success) 84%, black 16%);
+  border-color: color-mix(in oklab, var(--color-success) 82%, black 18%);
+  color: var(--color-success-content);
+  filter: none;
 }
 
 .button.ghost,
 .icon-button.ghost {
-  background-color: transparent !important;
-  border-color: transparent !important;
-  color: var(--color-base-content) !important;
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--color-base-content);
 }
 
 .button.ghost:hover:not(:disabled),
 .icon-button.ghost:hover:not(:disabled) {
-  background-color: color-mix(in oklab, var(--color-base-100) 86%, var(--color-base-content) 14%) !important;
-  border-color: var(--color-base-300) !important;
-  color: var(--color-base-content) !important;
-  filter: none !important;
+  background-color: color-mix(in oklab, var(--color-base-100) 86%, var(--color-base-content) 14%);
+  border-color: var(--color-base-300);
+  color: var(--color-base-content);
+  filter: none;
 }
 
 [data-theme="dark"] .audit-detail-trigger:hover {
   background-color: color-mix(in oklab, var(--color-base-100) 45%, var(--color-info) 55%);
   border-color: color-mix(in oklab, var(--color-base-300) 40%, var(--color-info) 60%);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 .alert {
@@ -518,7 +514,7 @@ input[type="number"] {
 /* Remove legacy sticky-column seam next to the Name header/cells */
 .admin-content .data-table th:nth-child(2),
 .admin-content .data-table td:nth-child(2) {
-  box-shadow: none !important;
+  box-shadow: none;
   border-right: 0;
 }
 
@@ -554,8 +550,8 @@ input[type="number"] {
 
 .admin-content .form-meta {
   display: flex;
-  justify-content: flex-start !important;
-  text-align: left !important;
+  justify-content: flex-start;
+  text-align: left;
 }
 
 .form-fields {
@@ -1013,10 +1009,10 @@ input[type="number"] {
 
 /* Password CTA in profile security card: keep compact size and stable hover contrast */
 .profile-card #password-section > .button.secondary {
-  width: auto !important;
+  width: auto;
   min-width: 14rem;
   max-width: 100%;
-  display: inline-flex !important;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   background-color: transparent;
@@ -1027,7 +1023,7 @@ input[type="number"] {
 .profile-card #password-section > .button.secondary:hover:not(:disabled) {
   background-color: color-mix(in oklab, var(--color-base-100) 50%, var(--color-primary) 50%);
   border-color: color-mix(in oklab, var(--color-base-300) 45%, var(--color-primary) 55%);
-  color: white;
+  color: var(--text-on-accent);
   filter: none;
 }
 
@@ -1040,7 +1036,7 @@ input[type="number"] {
 [data-theme="dark"] .profile-card #password-section > .button.secondary:hover:not(:disabled) {
   background-color: color-mix(in oklab, var(--color-base-100) 45%, var(--color-primary) 55%);
   border-color: color-mix(in oklab, var(--color-base-300) 42%, var(--color-primary) 58%);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 .info-row {
@@ -1079,17 +1075,17 @@ input[type="number"] {
 
 /* Profile role badge must stay compact/subtle, regardless of variant class */
 .profile-card .user-role-badge {
-  min-width: 0 !important;
+  min-width: 0;
   @apply px-3 font-semibold;
-  border-color: color-mix(in oklab, var(--color-primary) 36%, var(--color-base-300) 64%) !important;
-  background-color: color-mix(in oklab, var(--color-primary) 9%, transparent) !important;
-  color: color-mix(in oklab, var(--color-primary) 58%, var(--color-base-content) 42%) !important;
+  border-color: color-mix(in oklab, var(--color-primary) 36%, var(--color-base-300) 64%);
+  background-color: color-mix(in oklab, var(--color-primary) 9%, transparent);
+  color: color-mix(in oklab, var(--color-primary) 58%, var(--color-base-content) 42%);
 }
 
 [data-theme="dark"] .profile-card .user-role-badge {
-  border-color: color-mix(in oklab, var(--color-primary) 50%, var(--color-base-300) 50%) !important;
-  background-color: color-mix(in oklab, var(--color-primary) 16%, transparent) !important;
-  color: color-mix(in oklab, white 80%, var(--color-primary) 20%) !important;
+  border-color: color-mix(in oklab, var(--color-primary) 50%, var(--color-base-300) 50%);
+  background-color: color-mix(in oklab, var(--color-primary) 16%, transparent);
+  color: color-mix(in oklab, white 80%, var(--color-primary) 20%);
 }
 
 .mfa-setup-intro {
@@ -1128,18 +1124,18 @@ input[type="number"] {
 
 .user-status-badge.ui-badge-warning {
   background-color: color-mix(in oklab, var(--color-warning) 85%, black 15%);
-  color: black;
+  color: var(--color-warning-content);
   border-color: transparent;
 }
 
 [data-theme="dark"] .user-status-badge.ui-badge-success {
   background-color: color-mix(in oklab, var(--color-success) 70%, black 30%);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 [data-theme="dark"] .user-status-badge.ui-badge-warning {
   background-color: color-mix(in oklab, var(--color-warning) 70%, black 30%);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 .text-muted {
@@ -1261,16 +1257,16 @@ input[type="number"] {
 
 .audit-filters-card .form-actions {
   @apply mt-1 flex items-center gap-2;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
+  flex-direction: row;
+  flex-wrap: nowrap;
 }
 
 .audit-filters-card .form-actions .button,
 .audit-filters-card .form-actions a.button,
 .audit-filters-card .form-actions button {
-  width: auto !important;
+  width: auto;
   min-width: 8rem;
-  display: inline-flex !important;
+  display: inline-flex;
   justify-content: center;
 }
 
@@ -1292,7 +1288,7 @@ input[type="number"] {
 [data-theme="dark"] .audit-filters-card .form-actions button.secondary:hover {
   background-color: color-mix(in oklab, var(--color-base-100) 55%, var(--color-primary) 45%);
   border-color: color-mix(in oklab, var(--color-base-300) 50%, var(--color-primary) 50%);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 .audit-table-card {
@@ -1328,13 +1324,13 @@ input[type="number"] {
 }
 
 .audit-table-card #audit-table th.sortable-header {
-  display: table-cell !important;
+  display: table-cell;
   white-space: nowrap;
   padding-right: 0.75rem;
 }
 
 .audit-table-card #audit-table th.sortable-header::after {
-  content: none !important;
+  content: none;
 }
 
 .audit-table-card #audit-table th.sortable-header .sort-label {
@@ -1344,7 +1340,7 @@ input[type="number"] {
 }
 
 .audit-table-card #audit-table th.sortable-header .sort-icon {
-  display: inline-flex !important;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   margin-left: 0.15rem;
@@ -1427,37 +1423,37 @@ input[type="number"] {
 
 .audit-result-badge.ui-badge-success {
   background-color: color-mix(in oklab, var(--color-success) 85%, black 15%);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 .audit-result-badge.ui-badge-danger {
   background-color: color-mix(in oklab, var(--color-error) 80%, black 20%);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 [data-theme="dark"] .audit-result-badge.ui-badge-success {
   background-color: color-mix(in oklab, var(--color-success) 70%, black 30%);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 [data-theme="dark"] .audit-action-badge.ui-badge-success {
   background-color: color-mix(in oklab, var(--color-success) 70%, black 30%);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 [data-theme="dark"] .audit-action-badge.ui-badge-info {
   background-color: color-mix(in oklab, var(--color-info) 68%, black 32%);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 [data-theme="dark"] .audit-action-badge.ui-badge-warning {
   background-color: color-mix(in oklab, var(--color-warning) 70%, black 30%);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 [data-theme="dark"] .audit-action-badge.ui-badge-danger {
   background-color: color-mix(in oklab, var(--color-error) 65%, black 35%);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 [data-theme="dark"] .audit-action-badge.ui-badge-neutral {
@@ -1467,7 +1463,7 @@ input[type="number"] {
 
 [data-theme="dark"] .audit-result-badge.ui-badge-danger {
   background-color: color-mix(in oklab, var(--color-error) 65%, black 35%);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 /* Admin table boolean badges (Yes/No) */
@@ -1488,7 +1484,7 @@ input[type="number"] {
 
 [data-theme="dark"] .admin-bool-badge-true {
   background-color: color-mix(in oklab, var(--color-success) 70%, black 30%);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 [data-theme="dark"] .admin-bool-badge-false {
@@ -1563,7 +1559,7 @@ input[type="number"] {
 .entity-detail-page .page-title {
   @apply mt-0 text-left;
   align-self: flex-start;
-  text-align: left !important;
+  text-align: left;
 }
 
 .entity-detail-page .page-header-row {
@@ -1581,8 +1577,8 @@ input[type="number"] {
 [data-theme="dark"] .entity-detail-page .form-actions a.button.secondary:hover {
   background-color: color-mix(in oklab, var(--color-base-100) 55%, var(--color-primary) 45%) !important;
   border-color: color-mix(in oklab, var(--color-base-300) 50%, var(--color-primary) 50%) !important;
-  color: white !important;
-  filter: none !important;
+  color: var(--text-on-accent) !important;
+  filter: none;
 }
 
 .entity-detail-page .page-header-actions .button.secondary,
@@ -1596,8 +1592,8 @@ input[type="number"] {
 [data-theme="dark"] .entity-detail-page .page-header-actions a.button.secondary:hover {
   background-color: color-mix(in oklab, var(--color-base-100) 55%, var(--color-primary) 45%) !important;
   border-color: color-mix(in oklab, var(--color-base-300) 50%, var(--color-primary) 50%) !important;
-  color: white !important;
-  filter: none !important;
+  color: var(--text-on-accent) !important;
+  filter: none;
 }
 
 .page-header-row {
@@ -1677,30 +1673,30 @@ input[type="number"] {
 }
 
 .dashboard-card .button.secondary {
-  background-color: transparent !important;
-  border-color: var(--color-base-300) !important;
-  color: var(--color-base-content) !important;
+  background-color: transparent;
+  border-color: var(--color-base-300);
+  color: var(--color-base-content);
 }
 
 [data-theme="dark"] .dashboard-card .button.secondary {
-  background-color: transparent !important;
-  border-color: var(--color-base-300) !important;
-  color: var(--color-base-content) !important;
+  background-color: transparent;
+  border-color: var(--color-base-300);
+  color: var(--color-base-content);
 }
 
 [data-theme="light"] .dashboard-card .button.secondary:hover,
 .dashboard-card .button.secondary:hover {
-  background-color: color-mix(in oklab, var(--color-base-100) 62%, var(--color-primary) 38%) !important;
-  border-color: color-mix(in oklab, var(--color-base-300) 55%, var(--color-primary) 45%) !important;
-  color: color-mix(in oklab, white 92%, black 8%) !important;
-  filter: none !important;
+  background-color: color-mix(in oklab, var(--color-base-100) 62%, var(--color-primary) 38%);
+  border-color: color-mix(in oklab, var(--color-base-300) 55%, var(--color-primary) 45%);
+  color: color-mix(in oklab, var(--text-on-accent) 92%, black 8%);
+  filter: none;
 }
 
 [data-theme="dark"] .dashboard-card .button.secondary:hover {
-  background-color: color-mix(in oklab, var(--color-base-100) 45%, var(--color-primary) 55%) !important;
-  border-color: color-mix(in oklab, var(--color-base-300) 42%, var(--color-primary) 58%) !important;
-  color: white !important;
-  filter: none !important;
+  background-color: color-mix(in oklab, var(--color-base-100) 45%, var(--color-primary) 55%);
+  border-color: color-mix(in oklab, var(--color-base-300) 42%, var(--color-primary) 58%);
+  color: var(--text-on-accent);
+  filter: none;
 }
 
 @media (max-width: 640px) {
@@ -1772,7 +1768,7 @@ input[type="number"] {
     }
     input[type="submit"] { @apply cursor-pointer rounded-field px-5 py-2 font-semibold; }
     button:not([class]):hover, input[type="submit"]:hover {
-      background-color: color-mix(in oklab, var(--color-primary), #000 10%);
+      background-color: color-mix(in oklab, var(--color-primary), black 10%);
     }
   }
 }

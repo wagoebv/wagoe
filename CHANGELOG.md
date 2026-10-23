@@ -208,6 +208,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **The admin loads one stylesheet** (BOU-808): `:admin-pilot` is `/css/wagoe-admin.css`, built by `npm run build:css`,
+  with focus rings and shadows on the tokens. Load the bundle rather than listing the old CSS files.
 - **Groups, roles, permissions and workflow instances are searchable, sortable admin lists** (BOU-807); roles and a
   user's rights group by module, audit badges and IPs read quieter. Nothing to change.
 - **Admin dashboard tiles line up**: at most four a row, counts on one line, other pages as tiles too. 25 more Lucide

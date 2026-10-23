@@ -1,0 +1,7 @@
+/* The :pilot bundle's daisy-admin.css. */
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark;
+}
+
+@import "./pilot-rules.css";

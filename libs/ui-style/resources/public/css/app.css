@@ -279,13 +279,13 @@ body {
 .page-actions .icon-button.primary {
   background: var(--color-primary-500);
   border-color: var(--color-primary-500);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 .page-actions .icon-button.primary:hover:not(:disabled) {
   background: var(--color-primary-600);
   border-color: var(--color-primary-600);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 .page-actions .icon-button.danger:hover:not(:disabled) {
@@ -567,7 +567,7 @@ select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--color-primary-600);
-  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary) 20%, transparent);
 }
 
 /* Error state */
@@ -580,7 +580,7 @@ textarea.error {
 input.error:focus,
 select.error:focus,
 textarea.error:focus {
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-error) 15%, transparent);
 }
 
 /* Success state */
@@ -1054,20 +1054,20 @@ button.primary {
   font-size: var(--text-sm);
   cursor: pointer;
   transition: all var(--transition-normal);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow-sm);
 }
 
 .button.primary:hover:not(:disabled),
 button.primary:hover:not(:disabled) {
   background: var(--color-primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  box-shadow: var(--shadow-md);
 }
 
 .button.primary:active:not(:disabled),
 button.primary:active:not(:disabled) {
   transform: translateY(0);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Secondary button */
@@ -1103,7 +1103,7 @@ button.secondary:hover:not(:disabled) {
 button.danger {
   background-color: var(--status-error);
   border-color: var(--status-error);
-  color: white;
+  color: var(--text-on-accent);
   box-shadow: var(--shadow-sm);
 }
 
@@ -1121,7 +1121,7 @@ button.danger:hover:not(:disabled) {
 button.success {
   background-color: var(--status-success);
   border-color: var(--status-success);
-  color: white;
+  color: var(--text-on-accent);
   box-shadow: var(--shadow-sm);
 }
 
@@ -1219,7 +1219,7 @@ button.full-width {
 .icon-button.primary {
   background: var(--color-primary-600);
   border-color: var(--color-primary-600);
-  color: white;
+  color: var(--text-on-accent);
 }
 
 .icon-button.primary:hover:not(:disabled) {
@@ -1859,30 +1859,30 @@ select:focus-visible {
 
 /* Light mode: show light logo (dark text), hide dark logo */
 .brand-logo-light {
-  display: block !important;
+  display: block;
 }
 
 .brand-logo-dark {
-  display: none !important;
+  display: none;
 }
 
 /* Dark mode: show dark logo (light text), hide light logo */
 [data-theme="dark"] .brand-logo-light {
-  display: none !important;
+  display: none;
 }
 
 [data-theme="dark"] .brand-logo-dark {
-  display: block !important;
+  display: block;
 }
 
 /* Also support prefers-color-scheme when no data-theme is set */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .brand-logo-light {
-    display: none !important;
+    display: none;
   }
   
   :root:not([data-theme="light"]) .brand-logo-dark {
-    display: block !important;
+    display: block;
   }
 }
 
@@ -1912,7 +1912,7 @@ select:focus-visible {
   background: var(--color-neutral-50);
   border-color: var(--color-neutral-300);
   color: var(--text-primary);
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
 }
 
 [data-theme="dark"] .icon-button:hover:not(:disabled) {
@@ -1938,15 +1938,15 @@ select:focus-visible {
 .icon-button.primary {
   background: var(--color-primary-600);
   border-color: var(--color-primary-600);
-  color: white;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  color: var(--text-on-accent);
+  box-shadow: var(--shadow-sm);
 }
 
 .icon-button.primary:hover:not(:disabled) {
   background: var(--color-primary-700);
   border-color: var(--color-primary-700);
-  color: white;
-  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+  color: var(--text-on-accent);
+  box-shadow: var(--shadow-md);
 }
 
 .icon-button.secondary {
@@ -2078,7 +2078,7 @@ select:focus-visible {
   height: auto;
   line-height: 1.4;
   padding: var(--space-1) var(--space-3);
-  background: rgba(99, 102, 241, 0.12);
+  background: color-mix(in oklab, var(--color-primary) 12%, transparent);
   color: var(--accent-secondary);
   border-radius: var(--radius-full);
   font-weight: var(--font-semibold);
@@ -2107,35 +2107,35 @@ select:focus-visible {
 
 .search-input {
   width: 320px;
-  height: 40px !important;
-  padding: 0 var(--space-3) !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  margin: 0 !important;
-  margin-bottom: 0 !important;
+  height: 40px;
+  padding: 0 var(--space-3);
+  padding-top: 0;
+  padding-bottom: 0;
+  margin: 0;
+  margin-bottom: 0;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   background: var(--bg-primary);
   color: var(--text-primary);
   font-size: var(--font-size-sm);
   transition: all var(--transition-normal);
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
   line-height: normal;
   box-sizing: border-box;
 }
 
 /* Specific override for toolbar search input */
 .table-toolbar-container .search-input {
-  height: 40px !important;
-  padding: 0 12px !important;
-  min-height: 40px !important;
-  max-height: 40px !important;
+  height: 40px;
+  padding: 0 12px;
+  min-height: 40px;
+  max-height: 40px;
 }
 
 .search-input:focus {
   outline: none;
   border-color: var(--color-primary-500);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary) 20%, transparent);
 }
 
 .search-input::placeholder {
@@ -2149,20 +2149,20 @@ select:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin: 0 !important;
-  padding: 0 !important;
+  margin: 0;
+  padding: 0;
   min-height: 40px;
   max-height: 40px;
 }
 
 /* Toolbar buttons */
 .table-toolbar-container .icon-button {
-  margin: 0 !important;
-  padding: 0 !important;
-  height: 40px !important;
-  min-height: 40px !important;
-  max-height: 40px !important;
-  width: 40px !important;
+  margin: 0;
+  padding: 0;
+  height: 40px;
+  min-height: 40px;
+  max-height: 40px;
+  width: 40px;
 }
 
 /* Mobile responsive toolbar */
@@ -2197,22 +2197,22 @@ select:focus-visible {
   .search-input {
     flex: 1;
     width: 100%;
-    height: 48px !important;
-    min-height: 48px !important;
-    max-height: 48px !important;
+    height: 48px;
+    min-height: 48px;
+    max-height: 48px;
     font-size: var(--text-base);
   }
 
   /* Search and clear buttons - perfectly aligned with input */
   .toolbar-search .icon-button {
-    width: 48px !important;
-    height: 48px !important;
-    min-height: 48px !important;
-    max-height: 48px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 0 !important;
+    width: 48px;
+    height: 48px;
+    min-height: 48px;
+    max-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
     margin: 0;
     flex-shrink: 0;
   }
@@ -2242,16 +2242,16 @@ select:focus-visible {
 
   /* Delete button - always visible, just disabled when no selection */
   .toolbar-row-actions .icon-button.danger {
-    width: 48px !important;
-    height: 48px !important;
-    min-height: 48px !important;
-    max-height: 48px !important;
+    width: 48px;
+    height: 48px;
+    min-height: 48px;
+    max-height: 48px;
     border-radius: var(--radius-md);
     flex-shrink: 0;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 0 !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
     margin: 0;
   }
 
@@ -2264,27 +2264,27 @@ select:focus-visible {
   /* Create button - always visible */
   .toolbar-row-actions > .icon-button.primary {
     flex-shrink: 0;
-    width: 48px !important;
-    height: 48px !important;
-    min-height: 48px !important;
-    max-height: 48px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 0 !important;
+    width: 48px;
+    height: 48px;
+    min-height: 48px;
+    max-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
     margin: 0;
   }
 
   /* Icon buttons - consistent touch-friendly size and perfect centering */
   .table-toolbar-container .icon-button {
-    width: 48px !important;
-    height: 48px !important;
-    min-height: 48px !important;
-    max-height: 48px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 0 !important;
+    width: 48px;
+    height: 48px;
+    min-height: 48px;
+    max-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
   }
 
   /* Ensure SVG icons are perfectly centered */
@@ -2323,7 +2323,7 @@ select:focus-visible {
 .entity-search-form .search-input:focus {
   outline: none;
   border-color: var(--color-primary-500);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary) 20%, transparent);
 }
 
 .entity-search-form .search-input::placeholder {
@@ -2405,13 +2405,13 @@ select:focus-visible {
   color: var(--text-primary);
   font-size: var(--text-sm);
   transition: all var(--transition-normal);
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
 }
 
 .entity-search-form .search-input:focus {
   outline: none;
   border-color: var(--color-primary-500);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-primary) 20%, transparent), var(--shadow-sm);
 }
 
 .entity-search-form .search-input::placeholder {
@@ -2734,7 +2734,7 @@ select:focus-visible {
 .qr-code-container {
   text-align: center;
   padding: var(--space-6);
-  background: white;
+  background: var(--qr-code-bg);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   margin: var(--space-6) 0;
@@ -2965,12 +2965,12 @@ select:focus-visible {
 /* Mobile: Enforce single column layout */
 @media (max-width: 767px) {
   .dashboard-stats {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: 1fr;
     gap: var(--space-3);
   }
   
   .dashboard-cards {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: 1fr;
     gap: var(--space-3);
   }
   
