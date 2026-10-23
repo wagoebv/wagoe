@@ -188,7 +188,10 @@
     (filterv #(when (get @state %) (swap! state dissoc %)) user-ids))
 
   ports/IUserSessionRevocation
-  (revoke-user-session [_ _ _] {:invalidated false}))
+  (revoke-user-session [_ _ _] {:invalidated false})
+
+  (revoke-sessions-except [this user-id _keep-session-id]
+    (.logout-user-everywhere this user-id)))
 
 (defn create-mock-service
   []
