@@ -1,0 +1,1636 @@
+/* =============================================================================
+   wagoe-admin.css — the admin as the working sister of wagoe.org
+
+   Loads last in the :admin-pilot bundle. In parts:
+   1. Tokens: the wagoe.org palette and type, as daisyUI and Wagoe variables,
+      for light and dark.
+   2. Density: chrome, toolbar and table without the cards, gradients, pills
+      and row animations of the earlier look.
+   3. Display roles (ADR-040): every list cell carries `c-<role>`; this file
+      styles roles, never fields, so a new entity looks right unstyled.
+   4–6. The record drawer, the bulk bar and the form's save bar.
+
+   Colour rule: the dark green is chrome, not content. Bright teal (#5FD3B6)
+   only on dark; on light the accent is the deeper teal (#0E7C66), which passes
+   4.5:1 for text. Copper marks attention (due soon, unsaved), never decoration.
+   ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   1. Tokens
+   ----------------------------------------------------------------------------- */
+
+/* One block for both themes: light-dark() picks by `color-scheme`, which the
+   system sets and [data-theme] (theme.js, daisyUI) overrides. */
+:root                { color-scheme: light dark; }
+[data-theme="light"] { color-scheme: light; }
+[data-theme="dark"]  { color-scheme: dark; }
+
+:root {
+  /* wagoe.org */
+  --wg-ink:          #0F1C18;   /* dark green: chrome */
+  --wg-teal:         #5FD3B6;   /* accent on dark */
+  --wg-copper:       #E0A579;   /* attention */
+  --wg-chrome-text:  #C9D6D1;   /* text on the dark green */
+  --wg-chrome-muted: #7F918A;
+  --wg-chrome-hover: rgba(255, 255, 255, 0.06);
+  --wg-chrome-strong: #F2F6F4;  /* hovered and heading text on the dark green */
+  --wg-chrome-dim:   #9FB2AB;
+  --wg-chrome-active: rgba(95, 211, 182, 0.12);  /* the teal, faint */
+  --wg-shadow-float: 0 8px 24px rgba(15, 28, 24, 0.12);  /* drawers, popovers */
+
+  /* daisyUI */
+  --color-base-100:          light-dark(#FFFFFF, #14231E);
+  --color-base-200:          light-dark(#F6F7F6, #0F1C18);
+  --color-base-300:          light-dark(#E3E7E5, #26372F);
+  --color-base-content:      light-dark(#15201C, #E6EEEB);
+  --color-primary:           light-dark(#0E7C66, #5FD3B6);
+  --color-primary-content:   light-dark(#FFFFFF, #0F1C18);
+  /* wagoe-tokens.css hard-codes navy for these; app.css hovers primary buttons with it */
+  --color-primary-hover:     color-mix(in oklab, var(--color-primary), black 12%);
+  --color-primary-light:     var(--accent-primary-light);
+  --color-secondary:         light-dark(#9A5B26, var(--wg-copper));
+  --color-secondary-content: light-dark(#FFFFFF, #0F1C18);
+  --color-accent:            var(--wg-copper);
+  --color-accent-content:    #0F1C18;
+  --color-neutral:           #0F1C18;
+  --color-neutral-content:   #E6EEEB;
+  --color-info:              light-dark(#2D4E7A, #8DB4E8);
+  --color-info-content:      light-dark(#FFFFFF, #0F1C18);
+  --color-success:           light-dark(#0B6B57, #5FD3B6);
+  --color-success-content:   light-dark(#FFFFFF, #0F1C18);
+  --color-warning:           light-dark(#9A5B26, var(--wg-copper));
+  --color-warning-content:   light-dark(#FFFFFF, #0F1C18);
+  --color-error:             light-dark(#A33A1C, #F2A48C);
+  --color-error-content:     light-dark(#FFFFFF, #0F1C18);
+  --radius-selector: 4px;
+  --radius-field:    4px;
+  --radius-box:      6px;
+  --depth: 0;
+  --noise: 0;
+
+  /* Tones: foreground and background of each */
+  --tone-neutral-fg: light-dark(#4A5651, #B6C3BE);  --tone-neutral-bg: light-dark(#EEF0EF, rgba(255, 255, 255, 0.06));
+  --tone-info-fg:    var(--color-info);     --tone-info-bg:    light-dark(#E7EEF7, rgba(141, 180, 232, 0.12));
+  --tone-success-fg: var(--color-success);  --tone-success-bg: light-dark(#E1F3EC, rgba(95, 211, 182, 0.12));
+  --tone-warning-fg: var(--color-warning);  --tone-warning-bg: light-dark(#FBEFE3, rgba(224, 165, 121, 0.14));
+  --tone-danger-fg:  var(--color-error);    --tone-danger-bg:  light-dark(#FBE7E1, rgba(242, 164, 140, 0.14));
+
+  /* Wagoe variables the older admin.css reads */
+  --text-primary:   var(--color-base-content);
+  --text-muted:     light-dark(#5E6B66, #9FB2AB);
+  --text-faint:     light-dark(#687470, #7F918A); /* 4.5:1 on the page and card backgrounds */
+  --border-default: var(--color-base-300);
+  --border-subtle:  light-dark(#EDF0EE, #1E2D27);
+  --surface-0:      var(--color-base-100);
+  --surface-1:      light-dark(#FAFBFA, #172822);
+  --surface-2:      var(--color-base-200);
+  --accent-primary: var(--color-primary);
+  --accent-primary-light: light-dark(rgba(14, 124, 102, 0.10), rgba(95, 211, 182, 0.12));
+  --color-primary-faint:  light-dark(rgba(14, 124, 102, 0.06), rgba(95, 211, 182, 0.06));
+  --row-hover:      light-dark(#F1F6F4, #1A2C25);
+  --row-selected:   light-dark(#E9F5F0, #1E3A30); /* the accent on it stays over 4.5:1 */
+
+  /* Type */
+  --font-sans:    'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* Density */
+  --table-row-height: 34px;
+  --cell-pad-y: 6px;
+  --cell-pad-x: 12px;
+}
+
+/* -----------------------------------------------------------------------------
+   2. Type and chrome
+   ----------------------------------------------------------------------------- */
+
+.admin-shell {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.4;
+  font-feature-settings: "cv11", "ss01";   /* Inter: single-storey a, open digits */
+}
+
+.admin-shell h1,
+.admin-shell h2,
+.admin-shell .entity-list-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.admin-content .entity-list-title { font-size: 22px; line-height: 1.2; }
+
+/* The sidebar is the dark green in both themes: chrome, not content */
+.admin-sidebar,
+.admin-sidebar-header {
+  background: var(--wg-ink) !important;
+  border-right-color: var(--wg-chrome-hover) !important;
+  box-shadow: none;
+  backdrop-filter: none;
+  color: var(--wg-chrome-text);
+}
+.admin-sidebar-nav h3 {
+  color: var(--wg-chrome-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.admin-sidebar .entity-list a,
+.admin-sidebar .nav-module-toggle,
+.admin-sidebar-footer a {
+  color: var(--wg-chrome-text);
+  border-radius: 4px;
+}
+.admin-sidebar .entity-list a:hover,
+.admin-sidebar .entity-list a:focus-visible,
+.admin-sidebar .nav-module-toggle:hover,
+.admin-sidebar .nav-module-toggle:focus-visible,
+.admin-sidebar-footer a:hover,
+.admin-sidebar-footer a:focus-visible {
+  background: var(--wg-chrome-hover);
+  color: var(--wg-chrome-strong);
+}
+/* admin.css slides a --surface-2 panel in on hover, near-white in the light
+   theme; the chrome stays dark in both, so it hid the text */
+.admin-sidebar .entity-list a::after { content: none; }
+.admin-sidebar .entity-list li.active a {
+  background: var(--wg-chrome-active);
+  color: var(--wg-teal);
+  font-weight: 500;
+}
+.admin-sidebar button { color: var(--wg-chrome-dim); }
+.admin-sidebar .nav-module.has-active > .nav-module-toggle { color: var(--wg-teal); }
+@media (min-width: 769px) {
+  :root[data-sidebar="closed"] .admin-sidebar .nav-module > .entity-list {
+    background: var(--wg-ink);
+    border-color: var(--wg-chrome-hover);
+  }
+}
+.admin-sidebar .nav-flyout-title { color: var(--wg-chrome-muted); }
+
+.admin-topbar {
+  background: var(--color-base-100) !important;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+/* No cards around the list: structure from hairlines and alignment */
+.admin-content .table-toolbar-container,
+.admin-content #filter-table-container,
+.admin-content .filter-builder {
+  box-shadow: none;
+  background: transparent;
+}
+
+/* -----------------------------------------------------------------------------
+   2a. The frame: the shell is exactly the window. Only the content scrolls,
+       and on a list only the table, between a fixed toolbar and pagination.
+   ----------------------------------------------------------------------------- */
+
+/* The page layout pads and the wrapper pulls back with negative margins; the
+   admin shell wants neither */
+.main-content:has(> .hiccup-fragment-wrapper > .admin-shell) { padding: 0; }
+.main-content > .hiccup-fragment-wrapper:has(> .admin-shell) { margin: 0; }
+
+.admin-content { padding: 16px 24px !important; }
+
+@media (min-width: 769px) {
+  .admin-content:has(> .entity-list-page) {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .entity-list-page,
+  .entity-list-page > #filter-table-container,
+  #filter-table-container > #entity-table-container,
+  #entity-table-container > .table-and-pagination {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .entity-list-page { gap: 12px; }
+  .entity-list-page > #filter-table-container { gap: 10px; }
+  .entity-list-page > *,
+  #filter-table-container > * { margin: 0 !important; flex: none; }
+  .entity-list-page > #filter-table-container,
+  #filter-table-container > #entity-table-container { flex: 1 1 auto; }
+  .table-and-pagination > .table-wrapper {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+  }
+  .table-and-pagination > .table-pagination { position: static; flex: none; }
+}
+
+/* The list's blocks span the width (a flex parent may centre them) */
+#filter-table-container > *,
+.entity-list-page > * { align-self: stretch; }
+
+/* Toolbar, filters and pagination at table density */
+.record-count-badge {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+/* The filter line above the table: Filter (n), active filters as chips,
+   Clear all. Editing is in the filter drawer. */
+.filter-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.filter-summary .filter-open {
+  height: 28px;
+  min-height: 0;
+  padding: 0 10px;
+  gap: 6px;
+  font-size: 12px;
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  color: var(--text-muted);
+  box-shadow: none;
+}
+.filter-summary .filter-open.has-filters {
+  color: var(--accent-primary);
+  border-color: color-mix(in oklab, var(--accent-primary) 40%, transparent);
+  background: var(--accent-primary-light);
+}
+.filter-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 2px 0 10px;
+  border: 1px solid var(--color-base-300);
+  border-radius: 4px;
+  background: var(--color-base-100);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.filter-chip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.filter-chip button:hover { background: var(--surface-2); color: var(--text-primary); }
+.filter-summary .filter-clear {
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.filter-summary .filter-clear:hover { color: var(--text-primary); }
+
+/* The filter drawer: every field under the other; the fields scroll, the
+   footer stays */
+.filter-drawer { overflow: hidden !important; }
+.filter-drawer-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.filter-fields {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 8px 20px 16px;
+  display: flex;
+  flex-direction: column;
+}
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.filter-field-name { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.filter-field.is-active .filter-field-name { color: var(--accent-primary); }
+.filter-field-inputs { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
+.filter-field-inputs select,
+.filter-field-inputs input {
+  height: 30px;
+  min-height: 0;
+  margin: 0;
+  padding: 0 8px;
+  font-size: 13px;
+  border: 1px solid var(--color-base-300) !important;
+  border-radius: 4px !important;
+  background: var(--color-base-100);
+  box-shadow: none !important;
+}
+.filter-field-inputs select[multiple] { height: auto; padding: 4px; }
+.filter-field-inputs .filter-operator-select { flex: 0 0 auto; width: auto; color: var(--text-muted); }
+.filter-field-inputs .filter-value-input,
+.filter-field-inputs .filter-value-range,
+.filter-field-inputs .combobox { flex: 1 1 160px; min-width: 0; width: auto; }
+.filter-field-inputs .combobox input { width: 100%; }
+.filter-value-range { display: flex; align-items: center; gap: 6px; }
+.filter-value-range input { flex: 1 1 0; min-width: 0; }
+.filter-field-inputs :focus { border-color: var(--accent-primary) !important; outline: none; box-shadow: 0 0 0 3px var(--accent-primary-light) !important; }
+.drawer-footer {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--color-base-300);
+  background: var(--color-base-100);
+}
+.drawer-footer kbd { font-family: var(--font-mono); font-size: 11px; opacity: 0.75; margin-left: 4px; }
+
+.admin-content .table-pagination {
+  padding: 8px 12px !important;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--color-base-100);
+  box-shadow: none;
+}
+.admin-content .table-pagination .page-btn,
+.admin-content .table-pagination .page-nav-btn {
+  height: 28px;
+  min-width: 28px;
+  min-height: 0;
+  padding: 0 8px;
+  font-size: 13px;
+  box-shadow: none;
+  transform: none;
+}
+.admin-content .table-pagination .page-btn.active {
+  border-color: var(--accent-primary) !important;
+  color: var(--accent-primary) !important;
+  background: var(--accent-primary-light) !important;
+}
+.admin-content .pagination-nav { gap: 4px; }
+
+/* The sidebar's brand row lines up with the topbar */
+.admin-sidebar-header {
+  min-height: var(--topbar-height);
+  height: var(--topbar-height);
+  padding: 0 10px 0 12px !important;
+  border-bottom: 1px solid var(--wg-chrome-hover);
+}
+.sidebar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  text-decoration: none;
+}
+/* The sidebar is dark in both themes, so always the logo made for dark */
+.admin-sidebar .brand-logo-light { display: none; }
+.admin-sidebar .brand-logo-dark { display: inline-block; }
+/* The mark fills the row, less an 8px margin above and below */
+.sidebar-brand .brand-logo img,
+.sidebar-brand-mark img {
+  height: calc(var(--topbar-height) - 16px) !important;
+  width: auto !important;
+}
+.sidebar-brand .brand-logo { display: inline-flex; }
+.sidebar-wordmark {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: var(--wg-chrome-strong);
+}
+.admin-sidebar-nav { padding-top: 14px; }
+.admin-sidebar .entity-list a,
+.admin-sidebar .nav-module-toggle,
+.admin-sidebar-footer a { padding: 7px 10px !important; font-size: 13px; gap: 10px; }
+/* The footer links line up with the group toggles above them */
+.admin-sidebar-footer a { margin: 0 var(--space-2); }
+.admin-sidebar .entity-list a svg,
+.admin-sidebar .nav-module-toggle > svg:first-child,
+.admin-sidebar-footer a svg { width: 16px !important; height: 16px !important; }
+.admin-sidebar-footer { border-top: 1px solid var(--wg-chrome-hover); }
+
+/* -----------------------------------------------------------------------------
+   2b. The table
+   ----------------------------------------------------------------------------- */
+
+.admin-content .table-wrapper {
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  overflow-x: auto;
+}
+
+.admin-content .data-table {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-content .data-table th,
+.admin-content .data-table td {
+  height: var(--table-row-height);
+  padding: var(--cell-pad-y) var(--cell-pad-x);
+}
+
+.admin-content .data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-1) !important;
+  color: var(--text-muted) !important;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  border-bottom: 1px solid var(--color-base-300);
+}
+
+/* The sort control is a button inside the th; it looks like the header text */
+.data-table th.sortable-header .sort-button {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  border-radius: 4px;
+}
+/* The whole header cell is the hit area, as when the th was the control. The
+   button's `all: unset` leaves it static, so this spans the positioned th */
+.admin-content .data-table th.sortable-header .sort-button::after { content: ""; position: absolute; inset: 0; }
+.data-table th.sortable-header .sort-button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.admin-content .data-table tbody tr.clickable-row:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
+.admin-content .data-table th.sortable-header--active .sort-label { color: var(--text-primary); }
+.admin-content .data-table th.sortable-header .sort-icon {
+  background: none !important;
+  color: var(--accent-primary);
+  width: auto;
+  height: auto;
+}
+
+.admin-content .data-table tbody tr {
+  animation: none;
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+.admin-content .data-table tbody td { border-bottom: 1px solid var(--border-subtle); }
+.admin-content .data-table tbody tr:hover,
+.admin-content .data-table tbody tr:nth-child(even):hover { background: var(--row-hover) !important; }
+.admin-content .data-table tbody tr:hover td:first-child { box-shadow: none; }
+.admin-content .data-table tbody tr:has(input[type="checkbox"]:checked) { background: var(--row-selected) !important; }
+
+.admin-content .data-table input[type="checkbox"] { accent-color: var(--accent-primary); }
+
+/* Row actions appear on hover or focus, like the mockup */
+.admin-content .data-table .row-nav-hint { opacity: 0; transition: opacity 120ms; }
+.admin-content .data-table tbody tr:hover .row-nav-hint,
+.admin-content .data-table .row-nav-hint:focus-visible { opacity: 1; }
+
+.admin-content .data-table tfoot td {
+  background: var(--surface-1);
+  border-top: 1px solid var(--color-base-300);
+  font-weight: 600;
+}
+.admin-content .totals-label { color: var(--text-muted); font-weight: 400; font-size: 12px; }
+
+/* -----------------------------------------------------------------------------
+   3. Display roles (ADR-040)
+   ----------------------------------------------------------------------------- */
+
+td.c-money, td.c-number, td.c-percent, td.c-count,
+th.c-money, th.c-number, th.c-percent, th.c-count { text-align: right; }
+
+.c-money   { font-weight: 500; }
+/* The accent is under 4.5:1 on a hovered editable cell's tint */
+.admin-content .data-table td.editable:hover a { color: var(--text-primary); text-decoration: underline; }
+
+/* daisyUI dims an inactive tab to half opacity, under 4.5:1 */
+.record-tabs .tab:not(.tab-active):not(:hover) { color: var(--text-muted); }
+
+.c-title a { font-weight: 500; color: var(--text-primary); text-decoration: none; }
+.c-title a:hover { color: var(--accent-primary); text-decoration: underline; }
+
+.c-relation a,
+.c-count a,
+.c-email a,
+.c-url a { color: var(--accent-primary); text-decoration: none; }
+.c-relation a:hover,
+.c-count a:hover,
+.c-email a:hover,
+.c-url a:hover { text-decoration: underline; }
+
+.c-zero { color: var(--text-faint); }
+
+.c-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.c-text span,
+.c-relation a,
+.c-identifier .c-mono {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c-date time,
+.c-datetime time { color: var(--text-muted); }
+
+.c-boolean { text-align: center; }
+.c-check { color: var(--accent-primary); display: inline-flex; }
+
+/* Tones: enum badges, urgent dates, facet tab dots */
+.c-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 0 !important;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  min-width: 0;
+  width: auto;
+}
+.c-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.c-badge.tone-neutral { --tone-fg: var(--tone-neutral-fg); --tone-bg: var(--tone-neutral-bg); }
+.c-badge.tone-info    { --tone-fg: var(--tone-info-fg);    --tone-bg: var(--tone-info-bg); }
+.c-badge.tone-success { --tone-fg: var(--tone-success-fg); --tone-bg: var(--tone-success-bg); }
+.c-badge.tone-warning { --tone-fg: var(--tone-warning-fg); --tone-bg: var(--tone-warning-bg); }
+.c-badge.tone-danger  { --tone-fg: var(--tone-danger-fg);  --tone-bg: var(--tone-danger-bg); }
+.c-badge[class*="tone-"] { color: var(--tone-fg) !important; background: var(--tone-bg) !important; }
+
+time.tone-warning { color: var(--tone-warning-fg); font-weight: 500; }
+time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
+
+/* -----------------------------------------------------------------------------
+   3b. Summary and facet tabs above the table
+   ----------------------------------------------------------------------------- */
+
+.list-overview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-bottom: 10px;
+}
+
+.list-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 28px;
+  margin: 0;
+}
+.list-summary-item { display: flex; flex-direction: column; gap: 2px; }
+.list-summary-item dt { font-size: 12px; color: var(--text-muted); }
+.list-summary-item dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.facet-tabs { display: flex; flex-wrap: wrap; gap: 4px; order: -1; width: 100%; }
+.facet-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-decoration: none;
+}
+.facet-tab:hover { background: var(--surface-2); color: var(--text-primary); }
+.facet-tab.active {
+  background: var(--accent-primary-light);
+  border-color: color-mix(in oklab, var(--accent-primary) 30%, transparent);
+  color: var(--accent-primary);
+}
+.facet-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.facet-tab.active .facet-count { color: inherit; }
+.facet-tab.tone-danger .facet-count  { color: var(--tone-danger-fg); }
+.facet-tab.tone-warning .facet-count { color: var(--tone-warning-fg); }
+
+/* -----------------------------------------------------------------------------
+   4. Record drawer: one record beside its list
+   ----------------------------------------------------------------------------- */
+
+:root { --drawer-width: 420px; }
+
+.record-drawer {
+  position: fixed;
+  top: var(--topbar-height, 48px);
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  width: min(var(--drawer-width), 100vw);
+  overflow-y: auto;
+  background: var(--color-base-100);
+  border-left: 1px solid var(--color-base-300);
+  display: flex;
+  flex-direction: column;
+}
+
+/* On a wide screen the list makes room, so the drawer sits beside it */
+@media (min-width: 1100px) {
+  .admin-content:has(.record-drawer) { padding-right: calc(var(--drawer-width) + 16px); }
+}
+
+.drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.drawer-nav { display: flex; gap: 2px; flex-shrink: 0; }
+.drawer-nav button:disabled { opacity: 0.35; cursor: default; }
+.drawer-heading { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.drawer-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.drawer-actions:empty { display: none; }
+
+.drawer-fields {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+  padding: 14px 20px;
+}
+.drawer-fields dt { color: var(--text-muted); }
+.drawer-fields dd { margin: 0; text-align: left; overflow-wrap: anywhere; }
+.drawer-fields dd.c-money,
+.drawer-fields dd.c-number,
+.drawer-fields dd.c-percent { font-variant-numeric: tabular-nums; }
+
+.drawer-empty { padding: 0 20px 14px; color: var(--text-muted); font-size: 12px; }
+.drawer-empty summary { cursor: pointer; width: fit-content; }
+.drawer-empty p { margin: 6px 0 0; line-height: 1.6; }
+.drawer-section { padding: 14px 20px; border-top: 1px solid var(--border-subtle); }
+.drawer-section-title { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.drawer-related { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.drawer-related li { display: flex; justify-content: space-between; gap: 12px; }
+.drawer-related a { color: var(--accent-primary); text-decoration: none; }
+.drawer-related a:hover { text-decoration: underline; }
+
+.admin-content .data-table tbody tr.row-open,
+.admin-content .data-table tbody tr.row-open:hover { background: var(--row-selected); }
+.admin-content .data-table tbody tr.row-open td:first-child,
+.admin-content .data-table tbody tr.row-cursor td:first-child { box-shadow: inset 2px 0 0 var(--accent-primary); }
+
+.kbd-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.kbd-hints kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 5px;
+  margin-right: 2px;
+  border: 1px solid var(--color-base-300);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: var(--color-base-100);
+  color: var(--text-muted);
+}
+@media (pointer: coarse) { .kbd-hints { display: none; } }
+
+/* -----------------------------------------------------------------------------
+   5. Bulk bar: what to do with the selected rows
+   ----------------------------------------------------------------------------- */
+
+.bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  border-radius: var(--radius-box);
+  /* The selection's own colour, like the selected rows below it */
+  background: var(--row-selected);
+  border: 1px solid color-mix(in oklab, var(--accent-primary) 35%, transparent);
+  color: var(--text-primary);
+}
+.bulk-count { font-weight: 600; margin-right: 8px; color: var(--accent-primary); }
+.bulk-bar form { margin: 0; }
+.bulk-bar .button {
+  height: 28px;
+  min-height: 0;
+  padding: 0 10px;
+  gap: 6px;
+  font-size: 12px;
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+.bulk-bar .button:hover { border-color: var(--text-faint); }
+.bulk-bar .bulk-danger { color: var(--tone-danger-fg); }
+.bulk-bar .bulk-danger:hover { background: var(--tone-danger-bg); border-color: var(--tone-danger-fg); }
+.bulk-bar .bulk-clear {
+  margin-left: auto;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-muted);
+}
+.bulk-bar .bulk-clear:hover { color: var(--text-primary); }
+/* A select in the bulk bar or beside the toolbar search */
+:is(.bulk-bar, .toolbar-filter) select { width: auto; min-height: 0; padding: 0 28px 0 10px; font-size: 13px; }
+.bulk-bar select { height: 28px; font-size: 12px; }
+.toolbar-filter select { height: 32px; }
+.bulk-bar kbd,
+.save-bar kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  opacity: 0.75;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+/* -----------------------------------------------------------------------------
+   6. Save bar: the form's foot, sticky while it scrolls
+   ----------------------------------------------------------------------------- */
+
+.admin-content .save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 10px 16px;
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+}
+.save-state { display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted); }
+.save-state > span:last-child { color: var(--text-primary); font-weight: 500; }
+.save-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-base-300); }
+.save-dot.is-dirty { background: var(--wg-copper); }
+.save-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.save-kbd { margin-left: 4px; }
+
+@media (max-width: 640px) {
+  .admin-content .save-bar { flex-direction: column; align-items: stretch; }
+  .save-actions { margin-left: 0; }
+  .save-actions .button { flex: 1; justify-content: center; }
+  .save-kbd, .bulk-bar kbd { display: none; }
+}
+
+/* -----------------------------------------------------------------------------
+   7. Detail / edit page: the record's name as heading, sections without
+      cards, labels above compact inputs, two columns where there is room.
+   ----------------------------------------------------------------------------- */
+
+.entity-detail-page { max-width: 1040px; }
+.entity-detail-page > * + * { margin-top: 16px; }
+
+.entity-detail-page .page-header { gap: 6px; margin: 0; padding: 0; }
+.entity-detail-page .page-header-row {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+:is(.entity-detail-page, .entity-list-page, .workflow-page) .page-breadcrumbs { font-size: 12px; color: var(--text-muted); }
+:is(.entity-detail-page, .entity-list-page, .workflow-page) .page-breadcrumbs a { color: var(--text-muted); text-decoration: none; }
+:is(.entity-detail-page, .entity-list-page, .workflow-page) .page-breadcrumbs a:hover { color: var(--accent-primary); text-decoration: underline; }
+.entity-detail-page .page-header-actions .button {
+  height: 30px;
+  min-height: 0;
+  padding: 0 10px;
+  font-size: 12px;
+  box-shadow: none !important;
+}
+.entity-detail-page .sibling-nav { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-muted); }
+.entity-detail-page .sibling-nav .button { width: 30px; padding: 0; justify-content: center; }
+.entity-detail-page .sibling-nav-count { font-family: var(--font-mono); font-size: 11px; padding: 0 4px; }
+.entity-detail-page .button-danger-text { color: var(--tone-danger-fg); }
+.entity-detail-page .button-danger-text:hover { background: var(--tone-danger-bg); }
+.entity-detail-page .page-heading { display: flex; flex-direction: column; gap: 2px; }
+.entity-detail-page .page-kicker { font-size: 12px; color: var(--text-muted); }
+.entity-detail-page .page-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+/* The form: no card; sections separated by a hairline, their title beside
+   the fields on a wide screen */
+.entity-detail-page .form-card,
+.entity-detail-page .form-section {
+  background: none;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none;
+}
+.entity-detail-page .form-card-body { padding: 0; }
+.entity-detail-page .form-card-body > * + * { margin-top: 0; }
+.entity-detail-page .form-meta { display: none; }   /* the asterisks say it */
+.entity-detail-page .form-section {
+  margin: 0;
+  padding: 14px 0 16px !important;
+  border-top: 1px solid var(--color-base-300) !important;
+  gap: 12px;
+}
+.entity-detail-page .form-section-title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+.entity-detail-page .form-section-description { font-size: 12px; color: var(--text-muted); margin: 2px 0 0; }
+@media (min-width: 1100px) {
+  .entity-detail-page .form-section:not(details) {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    column-gap: 32px;
+    align-items: start;
+  }
+  .entity-detail-page details.form-section[open] {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    column-gap: 32px;
+    align-items: start;
+  }
+  /* Open or closed, the chevron stays beside the title */
+  .entity-detail-page details.form-section > .form-section-toggle {
+    width: 200px;
+    justify-content: space-between;
+  }
+}
+.entity-detail-page .form-section-toggle { cursor: pointer; list-style: none; align-items: flex-start; gap: 8px; }
+.entity-detail-page .form-section-toggle::-webkit-details-marker { display: none; }
+.entity-detail-page .form-section-toggle-icon {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: none !important;
+  color: var(--text-muted);
+}
+
+.entity-detail-page .form-fields { gap: 12px 16px; }
+/* Spacing between fields is the grid's gap alone; the field's own bottom
+   margin added 24px below the last row, above the next line */
+.entity-detail-page .form-field { padding-left: 0; margin: 0; }
+.entity-detail-page .form-field::before { display: none; }   /* no bar beside required fields */
+.entity-detail-page .form-field label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.entity-detail-page .form-field .required { color: var(--accent-primary); margin-left: 2px; }
+.entity-detail-page .form-field .form-control {
+  height: 32px !important;
+  min-height: 0 !important;
+  padding: 0 10px !important;
+  font-size: 13px;
+  border: 1px solid var(--color-base-300) !important;
+  border-radius: 4px !important;
+  background: var(--color-base-100) !important;
+  box-shadow: none !important;
+}
+.entity-detail-page .form-field textarea.form-control { height: auto !important; min-height: 72px !important; padding: 6px 10px !important; }
+.entity-detail-page .form-field .form-control:focus {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 3px var(--accent-primary-light) !important;
+  outline: none;
+}
+.entity-detail-page .form-field .form-control[readonly],
+.entity-detail-page .form-field .form-control:disabled {
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+.entity-detail-page .form-field.has-errors .form-control,
+.entity-detail-page .form-field .form-control[aria-invalid="true"] {
+  border-color: var(--tone-danger-fg);
+  box-shadow: 0 0 0 3px var(--tone-danger-bg);
+}
+.entity-detail-page .field-errors,
+.entity-detail-page .field-error { font-size: 12px; color: var(--tone-danger-fg); margin-top: 4px; }
+.entity-detail-page .field-zone,
+.entity-detail-page .form-field small { font-size: 11px; color: var(--text-faint); }
+.entity-detail-page .form-checkbox { accent-color: var(--accent-primary); width: 16px; height: 16px; margin-top: 8px; }
+
+/* The read-only side of the record beside the fields, and what this edit
+   changes; below the form on a narrower screen */
+.entity-detail-page:has(.record-summary) { max-width: 1320px; }
+@media (min-width: 1100px) {
+  .entity-detail-page .entity-form:has(> .record-summary) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    column-gap: 32px;
+    align-items: start;
+  }
+  .entity-detail-page .entity-form > .form-card { grid-column: 1; grid-row: 1; }
+  .entity-detail-page .entity-form > .record-summary { grid-column: 2; grid-row: 1; position: sticky; top: 0; }
+  .entity-detail-page .entity-form > .save-bar { grid-column: 1 / -1; }
+}
+.record-summary {
+  padding: 14px 0;
+  border-top: 1px solid var(--color-base-300);
+  font-size: 12px;
+}
+.record-summary-fields {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0;
+}
+.record-summary-fields dt { color: var(--text-muted); }
+.record-summary-fields dd { margin: 0; text-align: left; overflow-wrap: anywhere; }
+.record-summary-changes {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+.record-summary-changes h3 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.record-summary-changes p { margin: 0; color: var(--text-muted); line-height: 1.5; }
+
+/* The save bar spans the form, flush with the content's edges */
+.entity-detail-page .save-bar { border-radius: var(--radius-box); padding: 8px 12px; }
+.save-bar .button {
+  height: 32px;
+  min-height: 0;
+  padding: 0 12px;
+  font-size: 13px;
+  box-shadow: none !important;
+}
+
+.save-bar .save-hint {
+  flex-basis: 100%;
+  order: 3;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 14px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.save-bar .save-hint kbd { margin: 0 3px 0 0; }
+.entity-detail-page:not(:has([data-nav])) .save-hint-nav { display: none; }
+@media (min-width: 900px) {
+  .save-bar .save-hint { flex-basis: auto; order: 0; margin-left: auto; }
+  .save-bar .save-actions { margin-left: 12px; }
+}
+
+/* A key hint inside a button is plain text, not daisyUI's keycap */
+.save-bar kbd,
+.save-hint kbd,
+.bulk-bar kbd,
+.drawer-footer kbd,
+.drawer-actions kbd {
+  all: unset;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+/* Related records below the form: the list's table, without its card */
+.entity-detail-page .related-records,
+.entity-detail-page .related-records-section {
+  background: none;
+  box-shadow: none;
+}
+
+/* -----------------------------------------------------------------------------
+   8. Topbar and list toolbar: the topbar names the page and holds the user
+      menu; the toolbar is search, count and actions at 32px.
+   ----------------------------------------------------------------------------- */
+
+:root { --topbar-height: 52px; }
+
+.admin-topbar {
+  height: var(--topbar-height);
+  min-height: 0;
+  padding: 0 16px 0 24px;
+  border-bottom: 1px solid var(--color-base-300);
+}
+.admin-topbar-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.admin-topbar-actions { display: flex; align-items: center; gap: 6px; }
+.admin-topbar > .sidebar-toggle,
+.admin-topbar-actions > button,
+.admin-topbar-actions .theme-toggle {
+  width: 32px;
+  height: 32px;
+  min-height: 0;
+  padding: 0;
+}
+/* On a small screen the toggle is the only way to the menu: a full touch target */
+@media (max-width: 768px) {
+  .admin-topbar > .sidebar-toggle { width: 44px; height: 44px; }
+}
+
+.user-menu { position: relative; }
+.user-menu > summary { list-style: none; }
+.user-menu > summary::-webkit-details-marker { display: none; }
+.user-menu-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--wg-copper);
+  color: var(--wg-ink);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.user-menu[open] .user-menu-button { box-shadow: 0 0 0 3px var(--accent-primary-light); }
+.user-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  min-width: 220px;
+  padding: 6px;
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  box-shadow: var(--wg-shadow-float);
+}
+.user-menu-who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+.user-menu-email { font-size: 12px; color: var(--text-muted); }
+.user-menu .logout-form { margin: 0; }
+/* Links and the logout button alike; the button resets the global button rule */
+.user-menu .user-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 0;
+  font-weight: inherit;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.user-menu .user-menu-item:hover { background: var(--surface-2); }
+
+/* Filter inputs in the toolbar (table/filter-input), one line where there is room */
+.admin-content .toolbar-filters { display: flex; flex-wrap: wrap; gap: var(--space-2); flex: 1; justify-content: flex-end; }
+.admin-content .toolbar-filters > * {
+  width: auto; min-width: 11rem; flex: 0 1 14rem;
+  height: 34px; min-height: 0; font-size: var(--text-sm);
+}
+
+/* Search: the magnifier inside the field, `/` as its hint */
+.admin-content .toolbar-search { position: relative; display: flex; align-items: center; }
+.admin-content .toolbar-search .search-input {
+  width: 300px;
+  height: 32px;
+  min-height: 0;
+  padding: 0 30px 0 32px;
+  font-size: 13px;
+  border: 1px solid var(--color-base-300);
+  border-radius: 4px;
+  background: var(--color-base-100);
+  box-shadow: none;
+}
+.admin-content .toolbar-search .search-input:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-light);
+  outline: none;
+}
+.admin-content .toolbar-search .icon-button {
+  position: absolute;
+  top: 4px;
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+.admin-content .toolbar-search .search-icon {
+  position: absolute;
+  left: 10px;
+  display: inline-flex;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.admin-content .toolbar-search .icon-button.secondary { right: 4px; }
+.admin-content .toolbar-search .icon-button svg { width: 15px; height: 15px; }
+.admin-content .toolbar-search::after {
+  content: "/";
+  position: absolute;
+  right: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  border: 1px solid var(--color-base-300);
+  border-radius: 3px;
+  padding: 0 5px;
+  pointer-events: none;
+}
+.admin-content .toolbar-search:has(.icon-button.secondary)::after,
+.admin-content .toolbar-search:focus-within::after { display: none; }
+
+.admin-content .table-toolbar-container { padding: 0; min-height: 0; }
+.admin-content .toolbar-row-actions { gap: 12px; align-items: center; }
+.admin-content .toolbar-actions .button,
+.admin-content .toolbar-actions .icon-button {
+  height: 32px;
+  min-height: 0;
+  font-size: 13px;
+  box-shadow: none !important;
+}
+.admin-content .toolbar-actions .icon-button { width: 32px; padding: 0; }
+
+/* View menu: density and columns */
+.view-menu { position: relative; }
+.view-menu > summary { list-style: none; }
+.view-menu > summary::-webkit-details-marker { display: none; }
+.admin-content .view-menu-button {
+  width: 32px;
+  height: 32px;
+  min-height: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.view-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  min-width: 220px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 8px 10px;
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box);
+  box-shadow: var(--wg-shadow-float);
+}
+.view-menu-panel fieldset { border: 0; margin: 0; padding: 4px 0 8px; }
+.view-menu-panel fieldset + fieldset { border-top: 1px solid var(--border-subtle); padding-top: 8px; }
+.view-menu-panel legend { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); padding: 0 0 4px; }
+.view-menu-panel label { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.view-menu-panel input { accent-color: var(--accent-primary); margin: 0; }
+
+.record-summary .record-summary-blank { color: var(--text-faint); }
+
+/* Comfortable density: taller rows, same type size */
+.entity-list-page[data-density="comfortable"] {
+  --table-row-height: 44px;
+  --cell-pad-y: 10px;
+}
+
+/* Filtered to nothing: say so, offer the way back */
+.empty-state-filtered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 16px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.empty-state-filtered .button { height: 32px; min-height: 0; font-size: 13px; }
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* -----------------------------------------------------------------------------
+   Focus and touch
+   ----------------------------------------------------------------------------- */
+
+.admin-shell :focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
+
+@media (pointer: coarse) {
+  .facet-tab { min-height: 44px; }
+  .admin-content .data-table th,
+  .admin-content .data-table td { height: 44px; }
+}
+
+@media (pointer: coarse) {
+  .bulk-bar .button { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-content .data-table .row-nav-hint { transition: none; }
+}
+
+/* -----------------------------------------------------------------------------
+   Dashboard (/web/admin): entity tiles with counts, the other pages as links,
+   recent activity beside them on a wide screen
+   ----------------------------------------------------------------------------- */
+
+.admin-home { display: grid; gap: var(--space-4); }
+.admin-home-header h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+}
+.admin-home-body { display: grid; gap: var(--space-6); align-items: start; }
+@media (min-width: 1100px) {
+  .admin-home-body.with-activity { grid-template-columns: minmax(0, 1fr) 22rem; }
+}
+.admin-home-sections { display: grid; gap: var(--space-5); }
+.admin-home .admin-home-section { padding-top: 0; }
+
+/* At most four tiles a row: a tile is never narrower than a quarter of the row */
+.admin-home .entity-grid {
+  grid-template-columns: repeat(auto-fill, minmax(max(200px, calc((100% - 3 * var(--space-3)) / 4)), 1fr));
+  gap: var(--space-3);
+}
+.admin-home .entity-card { box-shadow: none; }
+.admin-home .entity-card:hover { transform: none; box-shadow: none; border-color: var(--color-primary); }
+/* Column flex with the count pushed down, so counts line up across a row
+   whether a title takes one line or two */
+.admin-home .entity-card-link {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  height: 100%;
+  min-height: 5rem;
+  padding: var(--space-3) var(--space-4);
+}
+.admin-home .entity-card-head { justify-content: flex-start; align-items: flex-start; gap: var(--space-2); margin: 0; }
+.admin-home .entity-card-icon { width: 28px; height: 28px; flex: none; }
+.admin-home .entity-card-title { min-width: 0; padding-top: 3px; line-height: 1.3; overflow-wrap: anywhere; }
+.admin-home .entity-card:hover .entity-card-icon { transform: none; }
+.admin-home .entity-card-meta { margin-top: auto; padding-left: calc(28px + var(--space-2)); }
+.admin-home .entity-card-count {
+  height: auto; padding: 0; border: 0; background: none;
+  font-size: var(--text-base);
+  font-weight: 400;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+/* The list page's summary, smaller and stacked */
+.entity-card .list-summary { display: grid; gap: 2px; font-size: var(--text-sm); }
+.entity-card .list-summary-item { flex-direction: row; justify-content: space-between; gap: var(--space-2); }
+.entity-card .list-summary-item dt { font-size: inherit; }
+.entity-card .list-summary-item dd { font-family: inherit; font-size: inherit; font-weight: 400; }
+.admin-home .entity-card-description {
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.dashboard-activity {
+  display: grid; gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--surface-0);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+}
+.dashboard-activity-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.dashboard-activity-all { font-size: var(--text-sm); }
+.dashboard-activity-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.dashboard-activity-entry {
+  /* A fixed badge column, so Login and Logout rows start their text at one edge */
+  display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); align-items: start;
+  gap: 2px var(--space-2);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border-default);
+  font-size: var(--text-sm);
+}
+.dashboard-activity-entry:first-child { border-top: 0; padding-top: 0; }
+.dashboard-activity-entry .audit-action-badge { min-width: 0; width: 100%; justify-content: center; }
+.dashboard-activity-who { overflow-wrap: anywhere; }
+.dashboard-activity-when { grid-column: 2; color: var(--text-muted); font-size: var(--text-xs); }
+.admin-home .dashboard-activity-empty { margin: 0; color: var(--text-muted); }
+
+/* -----------------------------------------------------------------------------
+   Workflow pages (wagoe.workflow.core.ui)
+   ----------------------------------------------------------------------------- */
+
+/* .admin-content pads it already; the grid gap spaces the filter form */
+.workflow-page { display: grid; gap: var(--space-5); padding: 0; }
+/* Not an entity list: no checkbox, sticky identifier or actions column */
+.admin-content .workflow-page .data-table { table-layout: auto; }
+.admin-content .workflow-page .data-table :is(th, td) { width: auto; text-align: left; box-shadow: none; }
+/* Not th: a sort button's hit area spans its positioned header cell */
+.admin-content .workflow-page .data-table td { position: static; }
+.workflow-card {
+  background: var(--surface-0);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-5);
+}
+.workflow-card-header { margin-bottom: var(--space-4); }
+.workflow-card-title {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.workflow-card-count { margin-left: auto; font-size: var(--text-sm); font-weight: 400; color: var(--text-muted); }
+.workflow-details {
+  display: grid; grid-template-columns: 140px 1fr; gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+.workflow-details dt { color: var(--text-muted); }
+.workflow-details dd { margin: 0; }
+
+.admin-content .audit-table th.field-created-at { width: 11rem; }
+
+/* -----------------------------------------------------------------------------
+   Groups, roles and permissions lists (wagoe.user.core.rights-ui)
+   ----------------------------------------------------------------------------- */
+
+.rights-list-page .list-intro { margin: 0; color: var(--text-muted); font-size: var(--text-sm); }
+/* Not an entity list: no checkbox or sticky identifier column */
+.admin-content .rights-list-page .data-table,
+.admin-content .workflow-page .entity-list-page .data-table { table-layout: auto; }
+.admin-content .rights-list-page .data-table td { position: static; box-shadow: none; }
+/* A module's heading row in a list grouped by module */
+.admin-content .data-table tbody tr.list-group-row,
+.admin-content .data-table tbody tr.list-group-row:hover { background: var(--surface-1) !important; }
+.admin-content .data-table tbody tr.list-group-row th {
+  height: auto;
+  padding-block: 6px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.list-create-modal { max-width: 40rem; }
+/* A detail page's tables wrap rather than cut a scope or a list of codes */
+.admin-content .rights-page .data-table { table-layout: auto; }
+.admin-content .rights-page .data-table td { white-space: normal; overflow-wrap: break-word; }
+/* Its Remove buttons fit their column rather than spill out of it */
+.admin-content .rights-page .data-table td.actions-cell { width: 1%; min-width: 0; max-width: none; }
+
+/* -----------------------------------------------------------------------------
+   9. The list on a narrow screen: each row a compact card. The title heads it,
+      at most four other fields follow on a line or two, a tap opens the record
+      and a sort select stands in for the hidden headers.
+   ----------------------------------------------------------------------------- */
+
+@media (max-width: 768px) {
+  :root { --pager-height: 48px; }
+
+  /* Any admin table as cards: a cell grows with its label and value */
+  .admin-content .data-table td { height: auto; }
+
+  .admin-content:has(> .entity-list-page) {
+    padding: 12px !important;
+    /* Focus and keyboard scrolling stop above the sticky pager */
+    scroll-padding-bottom: var(--pager-height);
+  }
+
+  .card-sort { display: flex; gap: 8px; margin-bottom: 8px; }
+  .card-sort .select { width: auto; height: 32px; min-height: 0; padding-block: 0; padding-inline-end: 32px; font-size: 13px; line-height: 30px; }
+  .card-sort .select:first-child { flex: 1 1 auto; min-width: 0; }
+
+  .entity-list-page .table-wrapper {
+    width: auto;
+    margin: 0;
+    background: none;
+    border: 0;
+    overflow: visible;
+  }
+
+  .admin-content .entity-list-page .data-table tbody tr:nth-child(n) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 12px;
+    position: relative;
+    margin: 0 0 8px;
+    padding: 10px 36px 10px 44px;
+    border: 1px solid var(--color-base-300) !important;
+    border-radius: var(--radius-box);
+    background: var(--color-base-100);
+    box-shadow: none;
+  }
+  .admin-content .entity-list-page .data-table tbody tr.row-cursor,
+  .admin-content .entity-list-page .data-table tbody tr.row-open { box-shadow: inset 2px 0 0 var(--accent-primary); }
+  .admin-content .entity-list-page .data-table tbody tr td:first-child { box-shadow: none; }
+
+  /* No display here: a flex item is a block anyway, and setting one would
+     outrank the column menu's display: none */
+  .admin-content .entity-list-page .data-table tbody td {
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    position: static;
+    z-index: auto;
+    background: none;
+    font-size: 13px;
+    line-height: 20px;
+    text-align: left !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .admin-content .entity-list-page .data-table tbody td:not(.checkbox-cell, .actions-cell)::before {
+    content: attr(data-label);
+    display: inline;
+    margin: 0 4px 0 0;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-muted);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .entity-list-page .data-table td :is(span, a, .c-mono) { display: inline; }
+  .entity-list-page .data-table td .c-badge { display: inline-flex; vertical-align: middle; }
+
+  /* The value says what it is: no label */
+  .admin-content .entity-list-page .data-table tbody td:is(.c-title, .c-enum, .c-email, .c-url)::before,
+  .admin-content .entity-list-page .data-table tbody tr:not(:has(> td.c-title)) > td:nth-child(2)::before { content: none; }
+
+  /* The title heads the card; with no title field, the first field does */
+  .admin-content .entity-list-page .data-table tbody td.c-title,
+  .admin-content .entity-list-page .data-table tbody tr:not(:has(> td.c-title)) > td:nth-child(2) {
+    order: -1;
+    flex: 0 0 100%;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 22px;
+  }
+
+  /* At most four fields under the heading; empty ones take no place */
+  .admin-content .entity-list-page .data-table tbody td:empty,
+  .admin-content .entity-list-page .data-table tbody td:nth-child(n+5 of :not(.checkbox-cell, .actions-cell, .c-title, :empty)),
+  .admin-content .entity-list-page .data-table tbody tr:not(:has(> td.c-title)) > td:nth-child(n+6 of :not(.checkbox-cell, .actions-cell, :empty)) {
+    display: none;
+  }
+
+  /* A boolean in words: a lone check after its label reads as nothing */
+  .entity-list-page .data-table td.c-boolean .c-check { color: inherit; }
+  .entity-list-page .data-table td.c-boolean .c-check svg { display: none; }
+  .entity-list-page .data-table td.c-boolean .sr-only {
+    position: static;
+    width: auto; height: auto;
+    overflow: visible; clip: auto; clip-path: none;
+    margin: 0;
+  }
+
+  /* An inline edit gets the card's width */
+  .admin-content .entity-list-page .data-table tbody td.editable:has(form) {
+    flex: 0 0 100%;
+    white-space: normal;
+    overflow: visible;
+  }
+
+  .admin-content .entity-list-page .data-table tbody td.checkbox-cell {
+    position: absolute;
+    top: 11px;
+    left: 14px;
+  }
+  .admin-content .entity-list-page .data-table tbody td.actions-cell {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    margin: 0;
+  }
+  .admin-content .entity-list-page .data-table tbody tr td.actions-cell .row-nav-hint { opacity: 1; color: var(--text-muted); }
+
+  /* No checkbox to make room for */
+  .admin-content .entity-list-page .data-table tbody tr:not(:has(> td.checkbox-cell), .list-group-row):nth-child(n) { padding-left: 14px; }
+  /* A module's heading row heads its cards */
+  .admin-content :is(.entity-list-page, .rights-page) .data-table tbody tr.list-group-row:nth-child(n) {
+    display: block;
+    margin: 12px 0 6px;
+    padding: 0;
+    border: 0 !important;
+    background: none !important;
+  }
+  .admin-content :is(.entity-list-page, .rights-page) .data-table tbody tr.list-group-row th { display: block; padding: 0; border: 0; background: none; }
+  .admin-content .rights-list-page .data-table tbody td.c-title code { font-size: 14px; }
+
+  /* A detail page's tables: a row a card, its actions beside the fields */
+  .admin-content .rights-page .data-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 2px 12px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    box-shadow: none;
+  }
+  .admin-content .rights-page .data-table tbody td {
+    grid-column: 1;
+    width: auto;
+    padding: 0;
+    border: 0;
+  }
+  .admin-content .rights-page .data-table tbody td:not(.actions-cell)::before {
+    display: inline;
+    margin-right: 4px;
+    font-size: 12px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .admin-content .rights-page .data-table tbody td.actions-cell {
+    grid-column: 2;
+    grid-row: 1 / span 4;
+    width: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  /* The pager: one line, sticky under the cards */
+  .admin-content .entity-list-page .table-pagination {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 8px;
+    min-height: var(--pager-height);
+    padding: 6px 10px;
+    border-radius: var(--radius-box);
+  }
+}

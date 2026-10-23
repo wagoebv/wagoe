@@ -338,7 +338,7 @@ no-API trade the rest of that gate makes.
 ----
 - Setup Clojure + Babashka       # DeLaGuardo/setup-clojure with bb: latest
 - Cache ~/.m2 and ~/.gitlibs     # Speeds up subsequent runs
-- npm ci + npm run build:css:admin  # Builds Tailwind CSS for ui-style jar
+- npm ci + npm run build:css        # Builds Tailwind CSS for ui-style jar
 - bb deploy --all                # Deploys all 33 artifacts in order, 30s between each
 - Create GitHub Release          # Only on tag pushes; pre-release for alpha/beta
 ----
@@ -467,12 +467,12 @@ Could not find artifact com.wagoe/wagoe-core:jar:1.0.1-alpha-14
 
 === CSS not included in ui-style jar
 
-The compiled Tailwind CSS (`daisy-admin.css`) is gitignored and must be built before packaging.
+The compiled Tailwind CSS (`daisy-admin.css`, `wagoe-admin.css`) is committed, and CI fails when it is not what the sources build. Rebuild it before packaging all the same.
 
 Locally:
 [source,bash]
 ----
-npm ci && npm run build:css:admin
+npm ci && npm run build:css
 cd libs/ui-style && clojure -T:build deploy
 ----
 

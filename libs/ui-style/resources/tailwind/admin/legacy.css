@@ -15,7 +15,7 @@
 
 /* Prevent flash of unstyled content for Alpine components */
 [x-cloak] {
-  display: none !important;
+  display: none;
 }
 
 /* =============================================================================
@@ -412,11 +412,8 @@
    ============================================================================= */
 
 .admin-topbar {
-  background: rgba(255,255,255,0.8);
   backdrop-filter: var(--topbar-backdrop);
   -webkit-backdrop-filter: var(--topbar-backdrop);
-  border-bottom: 1px solid rgba(0,0,0,0.06);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
   padding: 0 var(--space-4);
   display: flex;
   align-items: center;
@@ -808,7 +805,7 @@
 }
 
 .toolbar-actions {
-  display: flex !important;
+  display: flex;
   align-items: center;
   gap: var(--space-2);
   margin-left: auto !important;
@@ -900,8 +897,8 @@
   height: 24px;
   border-radius: var(--radius-full);
   transform: translateY(-50%);
-  background: rgba(148, 163, 184, 0.18);
-  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: color-mix(in oklab, var(--color-base-content) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-base-content) 16%, transparent);
   opacity: 0.65;
 }
 
@@ -973,7 +970,6 @@
 }
 
 .admin-content .data-table tbody tr:nth-child(even) {
-  background: rgba(0,0,0,0.015);
 }
 
 .admin-content .data-table tbody tr:nth-child(even):hover {
@@ -981,7 +977,6 @@
 }
 
 .admin-content .data-table tbody tr:nth-child(even) .checkbox-cell + td {
-  background: rgba(0,0,0,0.015);
 }
 
 .admin-content .data-table tbody tr:hover .checkbox-cell + td {
@@ -1045,7 +1040,6 @@
 }
 
 .admin-content .data-table .checkbox-cell + td {
-  box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.2);
 }
 
 /* Actions column: by class, not position, so a last column of data keeps its width */
@@ -1261,7 +1255,6 @@
   position: sticky;
   bottom: 0;
   z-index: 1;
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .page-info {
@@ -1361,7 +1354,6 @@
   border-color: var(--color-primary);
   cursor: default;
   font-weight: var(--font-bold);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.18), 0 0 0 3px var(--color-primary-faint);
   transform: scale(1.1);
   min-width: 36px;
   height: 36px;
@@ -1407,7 +1399,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: color-mix(in oklab, var(--wg-ink) 40%, transparent);
   z-index: calc(var(--z-sidebar) - 1);
   opacity: 0;
   transition: opacity var(--transition-normal);
@@ -1523,16 +1515,16 @@
   /* Unified icon button style for mobile header - applies to all icon buttons */
   .sidebar-toggle,
   .admin-topbar-actions .theme-toggle {
-    width: 44px !important;
-    height: 44px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 0 !important;
-    margin: 0 !important;
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
     flex-shrink: 0;
     /* Consistent appearance */
-    background: transparent !important;
+    background: transparent;
     border: 1px solid var(--border-default) !important;
     border-radius: var(--radius-sm) !important;
     color: var(--text-muted) !important;
@@ -1544,7 +1536,7 @@
 
   .sidebar-toggle:hover,
   .admin-topbar-actions .theme-toggle:hover {
-    background: var(--surface-2) !important;
+    background: var(--surface-2);
     color: var(--text-primary) !important;
     border-color: var(--border-strong) !important;
   }
@@ -1589,8 +1581,8 @@
   /* Theme toggle icon spans - use flexbox centering for SVG */
 .admin-topbar-actions .theme-toggle span {
   display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
+  align-items: center;
+  justify-content: center;
   width: 100% !important;
   height: 100% !important;
 }
@@ -2005,7 +1997,7 @@
 
 .inline-save {
   background: var(--status-success);
-  color: white;
+  color: var(--color-success-content);
 }
 
 .inline-save:hover {
@@ -2312,13 +2304,13 @@ button:focus-visible {
 }
 
 .icon-button.danger {
-  border-color: rgba(185, 28, 28, 0.2);
+  border-color: color-mix(in oklab, var(--status-error) 20%, transparent);
   color: var(--status-error);
-  background: rgba(185, 28, 28, 0.08);
+  background: color-mix(in oklab, var(--status-error) 8%, transparent);
 }
 
 .icon-button.danger:hover {
-  background: rgba(185, 28, 28, 0.16);
+  background: color-mix(in oklab, var(--status-error) 16%, transparent);
   color: var(--status-error);
 }
 
@@ -2700,7 +2692,6 @@ button:focus-visible {
 .table-loading-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(255,255,255,0.6);
   display: none;
   align-items: center;
   justify-content: center;
@@ -2710,7 +2701,6 @@ button:focus-visible {
 }
 
 [data-theme="dark"] .table-loading-overlay {
-  background: rgba(12,15,23,0.6);
 }
 
 .htmx-request .table-loading-overlay,
@@ -2746,7 +2736,7 @@ button.htmx-request::after,
   position: absolute;
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255,255,255,0.3);
+  border: 2px solid color-mix(in oklab, currentColor 30%, transparent);
   border-top-color: currentColor;
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
@@ -2822,7 +2812,7 @@ button.htmx-request::after,
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
   border-radius: var(--radius-sm);
-  color: transparent !important;
+  color: transparent;
   pointer-events: none;
   user-select: none;
 }
@@ -2876,7 +2866,6 @@ button.htmx-request::after,
 
   .admin-content {
     padding: 0;
-    background: white;
   }
 }
 
@@ -2886,26 +2875,21 @@ button.htmx-request::after,
 
 /* Frosted topbar in dark mode */
 [data-theme="dark"] .admin-topbar {
-  background: rgba(12, 15, 23, 0.85);
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
-  border-bottom-color: rgba(255,255,255,0.06);
 }
 
 /* Sidebar dark gradient */
 [data-theme="dark"] .admin-sidebar {
-  background: linear-gradient(180deg, var(--surface-0) 0%, rgba(12,15,23,0.95) 100%);
-  border-right-color: rgba(255,255,255,0.06);
 }
 
 /* Table dark mode — slightly luminous rows */
 [data-theme="dark"] .data-table tbody tr:hover {
-  background: rgba(var(--color-primary-rgb), 0.06);
 }
 
 /* Cards in dark mode — subtle border glow on hover */
 [data-theme="dark"] .entity-card:hover {
-  border-color: rgba(var(--color-primary-rgb), 0.2);
+  border-color: color-mix(in oklab, var(--color-primary) 20%, transparent);
   box-shadow: var(--shadow-card-hover);
 }
 
