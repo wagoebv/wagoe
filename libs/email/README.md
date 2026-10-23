@@ -356,18 +356,22 @@ docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
 
 ### Environment-Based Configuration
 
-**Production config** (`config/prod.edn`):
+**Production config** (`:active` in `resources/conf/prod/config.edn`), as
+`wagoe add email` and `bb setup --email smtp` write it:
 
 ```clojure
-{:wagoe/email
- {:smtp {:host #env SMTP_HOST
-         :port #long #env [SMTP_PORT 587]
-         :username #env SMTP_USERNAME
-         :password #env SMTP_PASSWORD
-         :tls? true}
-  
-  :from-address #env [EMAIL_FROM_ADDRESS "no-reply@myapp.com"]}}
+:wagoe/email
+{:provider :smtp
+ :host     #env SMTP_HOST
+ :port     #or [#long #or [#env SMTP_PORT 587] 587]
+ :username #env SMTP_USERNAME
+ :password #env SMTP_PASSWORD
+ :tls?     true
+ :from     #env SMTP_FROM}
 ```
+
+The keys sit directly under `:wagoe/email`. Without `:provider :smtp` the
+module uses the logging sender and sends nothing.
 
 **Environment variables**:
 
@@ -376,7 +380,7 @@ export SMTP_HOST="smtp.gmail.com"
 export SMTP_PORT="587"
 export SMTP_USERNAME="your-email@gmail.com"
 export SMTP_PASSWORD="your-app-password"
-export EMAIL_FROM_ADDRESS="no-reply@myapp.com"
+export SMTP_FROM="no-reply@myapp.com"
 ```
 
 ---

@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **An HTML page's `<link>` and `<script>` assets carry `?v=<digest>`, and browsers keep those for good** (BOU-391).
+  Any layout rendered as a string; nothing to change.
 - **`:wagoe/user :profile-layout`, the profile and MFA pages in the app's own page** (BOU-817), as `:login-layout`.
   Link `/css/profile.css` there; unset, nothing changes.
 - **`wagoe.shared.ui.core.user-menu/user-menu`, the admin's user menu for any layout** (BOU-816), showing `:avatar-url`
@@ -295,6 +297,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A DB-queue job running past its lease no longer runs twice** (BOU-823): the worker renews the lease while
+  the handler runs. Nothing to change; `:lease-ms` now only bounds how fast a crashed worker's job is retried.
+- **The email README's production config is the shape `:wagoe/email` reads** (BOU-824): flat keys and `:provider
+  :smtp`. A config copied from it logged mail instead of sending it; move its `:smtp` keys up and add `:provider :smtp`.
 - **The parent banner on a child record's admin page shows values as the list does** (BOU-390): a date formatted, a
   relation by its title, not its UUID. Nothing to change.
 - **The `csrf-session` cookie carries `Secure` under `:wagoe/settings :secure-cookies? true`** (BOU-819), as the session
