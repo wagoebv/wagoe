@@ -2,9 +2,7 @@
   "Shared app-wide UI asset bundles.
 
    Keep CSS/JS asset ordering centralized here so modules can reuse the same
-   rendering contract without hardcoding per-page lists."
-  (:require [clojure.java.io :as io])
-  (:import [java.security MessageDigest]))
+   rendering contract without hardcoding per-page lists.")
 
 (def pilot-css
   "The default stack: daisyUI/Tailwind on wagoe-tokens."
@@ -80,41 +78,3 @@
    An unknown key warns once and gets `:pilot`."
   [k]
   (lookup js-bundles k pilot-js))
-
-(defn- digest
-  "A copy of `digest-stream` in wagoe.platform.shell.http.reitit-router, the
-   ETag the static handler compares `v` with. Neither library depends on the
-   other; test/wagoe/asset_url_test.clj fails when the two drift."
-  [url]
-  (with-open [in (io/input-stream url)]
-    (let [md  (MessageDigest/getInstance "SHA-256")
-          buf (byte-array 8192)]
-      (loop []
-        (let [n (.read in buf)]
-          (when (pos? n)
-            (.update md buf 0 n)
-            (recur))))
-      (->> (.digest md) (take 16) (map #(format "%02x" (bit-and % 0xff))) (apply str)))))
-
-(defonce ^:private digests
-  ;; path -> [stamp digest]. A jar entry cannot change while the process runs,
-  ;; so its stamp is :jar; a file a developer edits is rehashed when it is saved.
-  (atom {}))
-
-(defn- stamp [^java.net.URL url]
-  (if (= "file" (.getProtocol url)) (.lastModified (io/file url)) :jar))
-
-(defn asset-url
-  "`path` with `?v=<digest>` when it names a resource under public/, so a
-   changed asset is a new URL and the old one may be cached for good (BOU-391).
-   Anything else is returned as it is."
-  [path]
-  (let [[cached-stamp cached] (get @digests path)]
-    (if (= :jar cached-stamp)
-      (str path "?v=" cached)
-      (if-let [url (and (string? path) (.startsWith ^String path "/") (io/resource (str "public" path)))]
-        (let [s (stamp url)]
-          (str path "?v=" (if (= s cached-stamp)
-                            cached
-                            (let [d (digest url)] (swap! digests assoc path [s d]) d))))
-        path))))

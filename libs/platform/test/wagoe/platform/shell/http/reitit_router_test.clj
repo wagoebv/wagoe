@@ -942,9 +942,38 @@
   ;; URL. Any other `v` must not freeze whatever the path serves today.
   (let [digest  (str/replace (get-in (static-asset-response) [:headers "ETag"]) "\"" "")
         cc      #(get-in (static-asset-response {:query-string %}) [:headers "Cache-Control"])]
-    (is (= "public, max-age=31536000, immutable" (cc (str "v=" digest))))
+    (is (= "private, max-age=31536000, immutable" (cc (str "v=" digest))))
     (is (= "no-cache" (cc (str "v=" (apply str (repeat 32 "0"))))))
     (is (= "no-cache" (cc "v=stale")))))
+
+(deftest ^:contract a-page-links-its-assets-by-content
+  ;; BOU-391: every HTML page, whatever layout drew it, links a local asset with
+  ;; its digest, and that URL is the one the static handler lets a browser keep.
+  (let [page    (str "<html><head><script src=\"/bou389/asset.js\"></script>"
+                     "<link rel=\"stylesheet\" href=\"/css/no-such.css\">"
+                     "<a href=\"/web/admin\">x</a></head></html>")
+        handler (reitit/compile-routes
+                 [["/page" {:get {:handler (fn [_] {:status 200
+                                                    :headers {"Content-Type" "text/html; charset=utf-8"}
+                                                    :body page})}}]
+                  ["/json" {:get {:handler (fn [_] {:status 200
+                                                    :headers {"Content-Type" "application/json"}
+                                                    :body page})}}]]
+                 {})
+        html    (:body (handler {:request-method :get :uri "/page" :headers {}}))
+        src     (second (re-find #"src=\"([^\"]+)\"" html))]
+    (testing "a shipped asset carries its digest"
+      (is (re-matches #"/bou389/asset\.js\?v=[0-9a-f]{32}" src)))
+    (testing "and that URL may be kept for good"
+      (let [[uri query] (str/split src #"\?")]
+        (is (= "private, max-age=31536000, immutable"
+               (get-in (handler {:request-method :get :uri uri :query-string query :headers {}})
+                       [:headers "Cache-Control"])))))
+    (testing "an asset that is not there, and a page link, are left alone"
+      (is (str/includes? html "href=\"/css/no-such.css\""))
+      (is (str/includes? html "href=\"/web/admin\"")))
+    (testing "only HTML is rewritten"
+      (is (= page (:body (handler {:request-method :get :uri "/json" :headers {}})))))))
 
 (deftest ^:contract a-matching-validator-answers-304-without-a-body
   (let [etag (get-in (static-asset-response) [:headers "ETag"])
