@@ -29,6 +29,7 @@
             [ring.util.codec :as codec]
             [ring.util.io :as ring-io]
             [ring.util.request :as ring-request]
+            [ring.util.response :as ring-response]
             [wagoe.config :as wagoe-config]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
@@ -745,46 +746,94 @@
   digest)
 
 (defn- cache-headers
-  "Mark a static asset cacheable but always revalidated, with a digest of its
-   bytes as the validator.
+  "Mark a static asset cacheable, with a digest of its bytes as the validator.
 
    `no-cache` means \"store it, but ask before reusing it\" — not \"do not
    store\". With a validator the ask is a 304 carrying no body, so the bytes
-   travel once.
+   travel once. A path alone gets no lifetime: `app.css` changes meaning under
+   a fixed name. Nor is size-and-mtime the validator — a rebuild producing a
+   same-length file in the same second would keep serving the old asset.
 
-   Deliberately not `max-age`/`immutable`: these filenames carry no content
-   hash. `app.css` changes meaning under a fixed name, so any lifetime is a
-   window in which a shipped fix cannot reach a browser that already holds the
-   old one. Nor size-and-mtime, which the ticket first proposed — a rebuild
-   producing a same-length file in the same second reuses the validator and the
-   304 path keeps serving the old asset.
+   A URL whose `?v=` equals the digest names its content, so it is kept for
+   good (BOU-391). `private`: a CDN that ignores the query string would
+   otherwise pin one version under every `v`.
 
    Nothing is held in memory whole. A file is hashed by streaming it, leaving
    ring's own body to be streamed out in turn. Hashing a jar entry consumes the
    stream, so `reopen` repeats the lookup that produced this response — rather
    than rebuilding a path, which would mean re-deriving ring's decoding and
    traversal rules."
-  [response path reopen]
+  [response path reopen version]
   (let [body    (:body response)
-        with-cc (assoc-in response [:headers "Cache-Control"] "no-cache")
-        etag    (fn [r d] (assoc-in r [:headers "ETag"] (str "\"" d "\"")))]
+        headers (fn [r d]
+                  (-> r
+                      (assoc-in [:headers "Cache-Control"]
+                                (if (= version d) "private, max-age=31536000, immutable" "no-cache"))
+                      (assoc-in [:headers "ETag"] (str "\"" d "\""))))]
     (cond
       (instance? java.io.File body)
-      (etag with-cc (with-open [in (io/input-stream ^java.io.File body)]
-                      (digest-stream in)))
+      (headers response (with-open [in (io/input-stream ^java.io.File body)]
+                          (digest-stream in)))
 
       (instance? java.io.InputStream body)
       (if-let [cached (and path (get @packaged-digests path))]
         ;; Nothing to read: ring's stream is the body, and the writer closes it.
-        (etag with-cc cached)
+        (headers response cached)
         (let [d (with-open [^java.io.InputStream in body] (digest-stream in))]
           ;; No path means no key to remember it under — hash it again next time
           ;; rather than let unrelated resources share an entry.
           (when path (remember-digest! path d))
           (when-let [fresh (:body (reopen))]
-            (-> with-cc (assoc :body fresh) (etag d)))))
+            (-> response (assoc :body fresh) (headers d)))))
 
-      :else with-cc)))
+      :else (assoc-in response [:headers "Cache-Control"] "no-cache"))))
+
+(defn- query-version
+  "The `v` a versioned asset URL carries, when it has the shape of a digest."
+  [request]
+  (some->> (:query-string request) (re-find #"(?:^|&)v=([0-9a-f]{32})(?:&|$)") second))
+
+(defn- asset-version
+  "The digest the static handler would send as the ETag of `path`, or nil when
+   it serves nothing there: the link is then left as it was. Looked up as that
+   handler looks it up, under the same key. A file is keyed by its mtime and
+   length too, so a page does not rehash it; a stale guess costs only the
+   long lifetime, since the handler compares `v` with the bytes it serves."
+  [path]
+  (try
+    (let [k (codec/url-decode path)]
+      (or (get @packaged-digests k)
+          (let [body (:body (resource-request {:request-method :get :uri path} "public"))]
+            (cond
+              (instance? java.io.File body)
+              (let [fk [k (.lastModified ^java.io.File body) (.length ^java.io.File body)]]
+                (or (get @packaged-digests fk)
+                    (remember-digest! fk (with-open [in (io/input-stream ^java.io.File body)] (digest-stream in)))))
+
+              (instance? java.io.InputStream body)
+              (remember-digest! k (with-open [^java.io.InputStream in body] (digest-stream in)))))))
+    (catch Exception _ nil)))
+
+(def ^:private asset-ref
+  "A local asset in a <link> or <script> tag, without a query or fragment.
+   Only those two: an asset in a body's own HTML, which a user may have
+   written and will save again, keeps its URL."
+  #"(<(?:link|script)\b[^>]*?\s(?:href|src)=\")(/(?!/)[^\"?#]+\.(?:css|js|png|svg|ico|webp))\"")
+
+(defn- wrap-asset-versions
+  "Add `?v=<digest>` to the stylesheets, scripts and icons an HTML page links,
+   so a changed asset is a new URL and `cache-headers` may let the browser
+   keep it for good (BOU-391). Done here, on the rendered page, so every
+   layout gets it and core stays pure."
+  [handler]
+  (fn [request]
+    (let [response (handler request)]
+      (if (and (string? (:body response))
+               (some-> (ring-response/get-header response "Content-Type") (str/includes? "text/html")))
+        (update response :body str/replace asset-ref
+                (fn [[_ attr path]]
+                  (str attr path (some->> (asset-version path) (str "?v=")) "\"")))
+        response))))
 
 (defn- without-header
   "Drop a header from a request or response map, whatever casing it was written
@@ -842,7 +891,7 @@
                             (catch Exception _ nil))]
             (some-> (lookup)
                     (typed (or path (:uri request)))
-                    (cache-headers path lookup)
+                    (cache-headers path lookup (query-version request))
                     ;; The digest decides, so If-Modified-Since gets no vote.
                     ;; Ring resolves a 304 from whichever validators the request
                     ;; carries, and for If-Modified-Since alone that is mtime —
@@ -902,6 +951,7 @@
           ;; parse them a second time for every request.
         handler (-> (ring/ring-handler router default-handler)
                     (flash/wrap-flash {:secure? (get config :secure-cookies? true)})
+                    (wrap-asset-versions)
                     (wrap-gzip)
                     (wrap-static-resources)
                     (wrap-cookies))]
