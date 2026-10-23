@@ -993,6 +993,47 @@
               prev (assoc :prev-url (apply url prev))
               next (assoc :next-url (apply url next)))))))))
 
+(defn- belongs-to-filter
+  "[field id] of the first `eq` filter in `filters` on a belongs-to of
+   `entity-config`: a list of one parent's children."
+  [entity-config filters]
+  (let [bts (display/belongs-to-fields entity-config)]
+    (some (fn [[field {:keys [op value]}]]
+            (when (and (= :eq op) (some? value) (contains? bts field))
+              [field (str value)]))
+          filters)))
+
+(defn parent-trail
+  "The record a page of `entity-name` hangs under, for its breadcrumbs: the
+   one `return-to` opens, or the one an `eq` filter on a belongs-to names —
+   in `filters`, or in the list `return-to` points at. {:label :href :title
+   :title-href :list-href}, :list-href being this entity's list of that
+   record's children; nil when there is none."
+  [admin-service schema-provider entity-name entity-config {:keys [filters return-to]}]
+  (let [bts          (display/belongs-to-fields entity-config)
+        [path qs]    (when return-to (str/split return-to #"\?" 2))
+        parts        (vec (remove str/blank? (some-> path (str/split #"/"))))
+        [field id]   (or (belongs-to-filter entity-config filters)
+                         (when (= 4 (count parts))
+                           (let [parent (keyword (nth parts 2))]
+                             (some (fn [[f rel]] (when (= parent (:entity rel)) [f (nth parts 3)])) bts)))
+                         (when (and (= 3 (count parts)) (= (name entity-name) (nth parts 2)) (not (str/blank? qs)))
+                           (let [params (codec/form-decode qs)]
+                             (when (map? params)
+                               (belongs-to-filter entity-config
+                                                  (ui-filters/active-filters (:filters (parse-query-params params))))))))
+        parent       (:entity (get bts field))]
+    (when (and parent (ports/validate-entity-exists schema-provider parent))
+      (when-let [record (try (ports/get-entity admin-service parent id)
+                             (catch Exception _ nil))]
+        (let [pcfg (ports/get-entity-config schema-provider parent)
+              pk   (:primary-key pcfg :id)]
+          {:label      (:label pcfg)
+           :href       (str "/web/admin/" (name parent))
+           :title      (str (get record (:title-field pcfg pk) (get record pk)))
+           :title-href (str "/web/admin/" (name parent) "/" id)
+           :list-href  (ui-base/filtered-list-url entity-name field id)})))))
+
 (def ^:private sibling-cap
   "The most siblings a child page reads for its prev/next navigation. A record
    past them gets none; the count reads \"500+\"."
@@ -1082,6 +1123,8 @@
     {:entity-configs entity-configs
      :page-opts      {:related-records related-records
                       :return-to       return-to
+                      :parent-trail    (parent-trail admin-service schema-provider entity-name entity-config
+                                                     {:return-to return-to})
                       :parent-context  parent-context
                       ;; Within a parent's children, else within the list it came from
                       :sibling-nav     (or sibling-nav

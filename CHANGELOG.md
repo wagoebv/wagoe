@@ -31,6 +31,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **A child record's page and its parent's filtered list lead back to the parent**: breadcrumbs Admin / parent list /
+  parent / children. Works for any belongs-to; nothing to configure.
+
 - **An admin can unlock a user and reset their two-factor authentication** (BOU-795), under *Sign-in* on the user's
   Sessions tab; both are audited. Nothing to change.
 - **`:options-source :timezones` on an admin field** (BOU-804): a combobox over the IANA zones. `admin/users.edn`

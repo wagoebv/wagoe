@@ -536,6 +536,18 @@
     (str "/web/admin/" (name entity) "?" (param "op") "=eq&"
          (param "value") "=" (url-encode (str value)))))
 
+(defn parent-breadcrumbs
+  "Admin / the parent's list / the parent / `tail`: the trail of a page under
+   a parent record, `trail` as the shell's `parent-trail` gives it. `tail` are
+   the crumbs after the parent, the page itself last."
+  [{:keys [label href title title-href]} & tail]
+  (into [:div.page-breadcrumbs
+         [:a {:href "/web/admin"} [:t :admin/breadcrumb-admin]] " / "
+         [:a {:href href} label] " / "
+         [:a {:href title-href} title]]
+        (mapcat #(list " / " %))
+        tail))
+
 (defn format-field-label
   "Format field name as human-readable label.
 
