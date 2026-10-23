@@ -186,7 +186,7 @@ jobs:
         run: npm ci
 
       - name: Build shared UI CSS bundle
-        run: npm run build:css:admin
+        run: npm run build:css
 
       # Resolve the release version: explicit dispatch input, else the pushed tag,
       # else the source-of-truth in libs/core/build.clj.
