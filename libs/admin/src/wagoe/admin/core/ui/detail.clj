@@ -662,20 +662,24 @@
    Shown at the top of a child entity edit page (e.g. order-item → order).
 
    Args:
-     ctx: {:config {:label \"Order\" :fields [:order-number :status ...]}
-           :record  parent-record-map}"
-  [{:keys [config record]}]
-  (let [label  (:label config)
-        fields (:fields config [])]
+     ctx: {:config        {:label \"Order\" :fields [:order-number :status ...]}
+           :record        parent-record-map
+           :entity-config the parent's config, for each value's role
+           :overview      relation titles of the record (ADR-040)}
+     display: Optional display options (zone/date patterns)"
+  [{:keys [config record entity-config overview]} & [display]]
+  (let [display (assoc display :overview overview)]
     [:div.parent-context-banner
-     [:span.parent-context-label label]
+     [:span.parent-context-label (:label config)]
      [:div.parent-context-fields
-      (for [f fields]
-        (when-let [v (get record f)]
-          [:div.parent-context-field
-           [:span.parent-context-field-label
-            (-> (name f) (str/replace #"-" " ") text/capitalize)]
-           [:span.parent-context-field-value (str v)]]))]]))
+      (for [{:keys [field label role relation] field-config :config :as column}
+            (cells/columns entity-config (:fields config []))
+            :when (some? (get record field))]
+        [:div.parent-context-field
+         [:span.parent-context-field-label label]
+         [:span {:class (str "parent-context-field-value " (:class column))}
+          (cells/cell field record {:role role :field-config field-config :entity-config entity-config
+                                    :relation relation :display display})]])]]))
 
 (defn- new-child-url
   "The \"New <child>\" link of an editable has-many, or nil when the child's
@@ -913,7 +917,7 @@
      (when (and is-edit? (seq (:detail-tabs entity-config)))
        (detail-tabs entity-name entity-config (get record pk)))
      (when-let [ctx (:parent-context opts)]
-       (parent-context-banner ctx))
+       (parent-context-banner ctx (:display opts)))
      (error-summary entity-config errors)
      (entity-form entity-name entity-config record errors permissions list-url (:display opts) (:prefill opts)
                   (:nested opts) (:links opts))

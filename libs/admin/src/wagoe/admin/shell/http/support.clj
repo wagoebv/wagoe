@@ -709,35 +709,35 @@
    (foreign-key-options admin-service config entity-configs entity-name
                         (get-in entity-configs [entity-name :editable-fields]) values))
   ([admin-service config entity-configs entity-name fields values]
-  (let [entity-config (get entity-configs entity-name)
-        page-size     (get-in config [:pagination :max-page-size] 200)]
-    (into (into {} (for [field fields :when (timezone-field? entity-config field)]
-                     [field (timezone-combobox entity-name field values)]))
-          (for [[field parent] (introspection/declared-parents entity-name entity-configs)
-                :when (some #{field} fields)
-                :let  [parent-cfg (get entity-configs parent)
-                       label      (label-field parent-cfg)
-                       page       (try (ports/list-entities admin-service parent
-                                                            {:limit page-size :sort label :sort-dir :asc})
-                                       (catch Exception e
-                                         (log/warn e "foreign key left as a text input: parent rows unreadable"
-                                                   {:entity entity-name :field field :parent parent})
-                                         ::unreadable))
-                       rows       (:records page)
-                       current    (some-> (get values field) str)
-                       readable?  (not= ::unreadable page)
-                       fits?      (and readable? (<= (:total-count page 0) (count rows)))]
-                :when (and readable? (or fits? (text-label? parent-cfg)))]
-            (if-not fits?
-              [field {:url   (options-url entity-name field)
-                      :label (when current (current-label admin-service parent parent-cfg rows current))}]
-              (let [options (mapv #(row->option parent-cfg %) rows)]
-                [field (cond->> (cond-> options
+   (let [entity-config (get entity-configs entity-name)
+         page-size     (get-in config [:pagination :max-page-size] 200)]
+     (into (into {} (for [field fields :when (timezone-field? entity-config field)]
+                      [field (timezone-combobox entity-name field values)]))
+           (for [[field parent] (introspection/declared-parents entity-name entity-configs)
+                 :when (some #{field} fields)
+                 :let  [parent-cfg (get entity-configs parent)
+                        label      (label-field parent-cfg)
+                        page       (try (ports/list-entities admin-service parent
+                                                             {:limit page-size :sort label :sort-dir :asc})
+                                        (catch Exception e
+                                          (log/warn e "foreign key left as a text input: parent rows unreadable"
+                                                    {:entity entity-name :field field :parent parent})
+                                          ::unreadable))
+                        rows       (:records page)
+                        current    (some-> (get values field) str)
+                        readable?  (not= ::unreadable page)
+                        fits?      (and readable? (<= (:total-count page 0) (count rows)))]
+                 :when (and readable? (or fits? (text-label? parent-cfg)))]
+             (if-not fits?
+               [field {:url   (options-url entity-name field)
+                       :label (when current (current-label admin-service parent parent-cfg rows current))}]
+               (let [options (mapv #(row->option parent-cfg %) rows)]
+                 [field (cond->> (cond-> options
                                   ;; A parent the list does not show (soft-deleted): kept,
                                   ;; so saving the form does not change it.
-                                  (and current (not-any? #(= current (first %)) options))
-                                  (conj [current current]))
-                         (not (get-in entity-config [:fields field :required])) (into [["" "—"]]))])))))))
+                                   (and current (not-any? #(= current (first %)) options))
+                                   (conj [current current]))
+                          (not (get-in entity-config [:fields field :required])) (into [["" "—"]]))])))))))
 
 (defn- all-entity-configs [schema-provider]
   (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)]))
@@ -1096,7 +1096,11 @@
                            (when-let [parent-rec (ports/get-entity admin-service
                                                                    (:entity parent-ref)
                                                                    (:id parent-ref))]
-                             {:config ctx-cfg :record parent-rec})))
+                             {:config        ctx-cfg
+                              :record        parent-rec
+                              :entity-config (get entity-configs (:entity parent-ref))
+                              :overview      (overview admin-service (:entity parent-ref)
+                                                       {:overview/fields (:fields ctx-cfg)} [parent-rec])})))
 
         ; Sibling navigation — prev/next within the parent's has-many list
         sibling-nav (when (and parent-ref (:parent-context entity-config)
