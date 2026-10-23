@@ -19,6 +19,7 @@
    "/css/admin.css"
    "/css/app.css"
    "/css/daisy-admin.css"
+   "/css/user-menu.css"
    "/css/wagoe-admin.css"])
 
 (def css-bundles
