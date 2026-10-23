@@ -27,6 +27,7 @@ Pure functions from data to Hiccup. No I/O, no state, no HTTP.
 | `core.toast` | The toast region, toasts swapped in out of band, and response helpers for a toast across an `HX-Redirect` or on a failed request |
 | `core.layout` | Page scaffolding shared by the module UIs |
 | `core.shell` | The admin shell: sidebar from nav data, topbar, user menu |
+| `core.user-menu` | Who is signed in, behind their avatar or initials, with profile and sign-out; for any layout with `/css/user-menu.css` |
 | `core.icons` | The icon set those components reference |
 | `core.modal` | Modal and confirm on native `<dialog>`, opened by a trigger, an htmx swap, or an htmx request awaiting confirmation |
 | `core.alpine` | Alpine.js attribute helpers, for the interactions HTMX does not cover |

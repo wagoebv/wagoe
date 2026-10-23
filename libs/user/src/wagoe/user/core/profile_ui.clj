@@ -15,10 +15,13 @@
          password-section-fragment)
 
 (defn- page-layout
-  "`content` in the admin shell, `title` in the topbar."
+  "`content` in the admin shell, `title` in the topbar; or, when opts carry
+   the app's `:profile-layout`, handed to it."
   [title content opts]
-  (shell/shell-page title [:div.profile-page.profile-shell content]
-                    (assoc opts :page-title title)))
+  (if-let [app-layout (:profile-layout opts)]
+    (app-layout title [:div.profile-page content] (dissoc opts :profile-layout))
+    (shell/shell-page title [:div.profile-page.profile-shell content]
+                      (assoc opts :page-title title))))
 
 ;; =============================================================================
 ;; Helper Functions
@@ -51,7 +54,7 @@
    Returns:
      Hiccup structure for profile info card"
   [user]
-  [:div.profile-card
+  [:div.profile-card.profile-card--info
    [:div.card-header
     [:h2 [:t :user/profile-card-info-title]]
     [:button.button.secondary {:type "button"
@@ -129,7 +132,7 @@
    Returns:
      Hiccup structure for preferences card"
   [user]
-  [:div.profile-card
+  [:div.profile-card.profile-card--preferences
    [:div.card-header
     [:h2 [:t :user/preferences-card-title]]
     [:button.button.secondary {:type "button"
@@ -220,7 +223,7 @@
      Hiccup structure for password change card"
   ([expanded?] (password-change-card expanded? {}))
   ([expanded? errors]
-   [:div.profile-card
+   [:div.profile-card.profile-card--password
     [:div.card-header
      [:h2 [:t :user/profile-card-password-title]]
      [:span.text-muted "••••••••"]]
@@ -290,7 +293,7 @@
     Returns:
       Hiccup structure for MFA status card"
   [_user mfa-status]
-  [:div.profile-card
+  [:div.profile-card.profile-card--mfa
    [:div.card-header
     [:h2 [:t :user/mfa-card-title]]
     (if (:enabled mfa-status)
@@ -543,7 +546,7 @@
     (preferences-card user)
     (password-change-card false)
     (mfa-status-card user mfa-status)
-    [:div.profile-card
+    [:div.profile-card.profile-card--sessions
      [:div.card-header
       [:h2 [:t :user/sessions-title]]]
      [:div.card-body
@@ -553,7 +556,7 @@
         [:a {:href (str "/web/users/" (:id user) "/sessions")}
          [:t :user/button-manage-sessions] " "
          (icons/icon :chevron-right {:size 16})]]]]]
-    [:div.profile-card
+    [:div.profile-card.profile-card--data
      [:div.card-header
       [:h2 [:t :user/profile-card-data-title]]]
      [:div.card-body

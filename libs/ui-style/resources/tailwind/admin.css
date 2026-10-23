@@ -10,4 +10,5 @@
 @import "./admin/legacy.css";
 @import "../public/css/app.css";
 @import "./pilot-rules.css";
+@import "../public/css/user-menu.css";
 @import "./admin/wagoe-admin.css";

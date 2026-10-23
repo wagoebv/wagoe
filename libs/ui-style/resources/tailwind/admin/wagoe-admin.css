@@ -1087,66 +1087,7 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   .admin-topbar > .sidebar-toggle { width: 44px; height: 44px; }
 }
 
-.user-menu { position: relative; }
-.user-menu > summary { list-style: none; }
-.user-menu > summary::-webkit-details-marker { display: none; }
-.user-menu-button {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--wg-copper);
-  color: var(--wg-ink);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  user-select: none;
-}
-.user-menu[open] .user-menu-button { box-shadow: 0 0 0 3px var(--accent-primary-light); }
-.user-menu-panel {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 40;
-  min-width: 220px;
-  padding: 6px;
-  background: var(--color-base-100);
-  border: 1px solid var(--color-base-300);
-  border-radius: var(--radius-box);
-  box-shadow: var(--wg-shadow-float);
-}
-.user-menu-who {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 8px 8px;
-  border-bottom: 1px solid var(--border-subtle);
-  margin-bottom: 4px;
-  font-size: 13px;
-}
-.user-menu-email { font-size: 12px; color: var(--text-muted); }
-.user-menu .logout-form { margin: 0; }
-/* Links and the logout button alike; the button resets the global button rule */
-.user-menu .user-menu-item {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  min-height: 0;
-  font-weight: inherit;
-  width: 100%;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 4px;
-  background: none;
-  color: var(--text-primary);
-  font-size: 13px;
-  text-decoration: none;
-  cursor: pointer;
-}
-.user-menu .user-menu-item:hover { background: var(--surface-2); }
+/* The user menu: user-menu.css */
 
 /* Filter inputs in the toolbar (table/filter-input), one line where there is room */
 .admin-content .toolbar-filters { display: flex; flex-wrap: wrap; gap: var(--space-2); flex: 1; justify-content: flex-end; }
