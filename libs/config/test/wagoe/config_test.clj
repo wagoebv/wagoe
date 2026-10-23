@@ -5,7 +5,8 @@
    whole monorepo was loaded. The point of BOU-306 is that published libraries
    read configuration through this namespace, so it has to work with nothing
    but its own dependencies."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.java.io :as io]
+            [clojure.test :refer [deftest is testing]]
             [wagoe.config :as sut]))
 
 (deftest ^:unit the-active-adapter-decides-the-db-spec
@@ -80,6 +81,24 @@
     (is (= :configuration-error (:type (ex-data e))))
     (is (re-find #"admin/gone\.edn" (str (ex-message e))))
     (is (re-find #"conf/test/config\.edn" (str (ex-message e))))))
+
+(deftest ^:unit a-missing-profile-names-the-ones-on-the-classpath
+  ;; It said [:dev :test :prod] whatever there was, acc included (BOU-820).
+  (let [dir (doto (.toFile (java.nio.file.Files/createTempDirectory "wagoe-conf" (make-array java.nio.file.attribute.FileAttribute 0)))
+              (.deleteOnExit))
+        _   (doseq [p ["acc" "dev"]]
+              (io/make-parents (io/file dir "conf" p "config.edn"))
+              (spit (io/file dir "conf" p "config.edn") "{}"))
+        _   (.mkdirs (io/file dir "conf" "notes"))
+        jar (temp-jar {"conf/" "" "conf/prod/config.edn" "{}" "conf/prod/admin/users.edn" "{}"})
+        cl  (java.net.URLClassLoader. (into-array java.net.URL [(.toURL (.toURI dir)) (.toURL (.toURI jar))]) nil)
+        t   (Thread/currentThread)
+        old (.getContextClassLoader t)
+        e   (try (.setContextClassLoader t cl)
+                 (sut/load-config {:profile :staging}) nil
+                 (catch clojure.lang.ExceptionInfo e e)
+                 (finally (.setContextClassLoader t old)))]
+    (is (= [:acc :dev :prod] (:available-profiles (ex-data e))))))
 
 (deftest ^:unit wag-env-names-the-active-profile
   (is (= :dev (sut/active-profile nil)))
