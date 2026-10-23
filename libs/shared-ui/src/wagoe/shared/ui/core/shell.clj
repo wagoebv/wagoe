@@ -10,15 +10,12 @@
        :open? true
        :items [{:href \"/web/admin/users\" :label \"Users\"
                 :icon :users :active? true}]}]"
-  (:require [wagoe.core.utils.text :as text]
-            [wagoe.shared.ui.core.alpine :as alpine]
+  (:require [wagoe.shared.ui.core.alpine :as alpine]
             [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.layout :as layout]
-            [wagoe.platform.core.csrf :as csrf]
-            [wagoe.platform.core.http.nav :as nav]
-            [wagoe.platform.core.http.pages :as pages]
-            [clojure.string :as str]))
+            [wagoe.shared.ui.core.user-menu :as user-menu]
+            [wagoe.platform.core.http.nav :as nav]))
 
 (defn- nav-text
   "A label that truncates with an ellipsis; the title shows all of it."
@@ -85,19 +82,6 @@
      (nav-link {:href home/*path*} :home [:t :admin/sidebar-dashboard])
      (nav-link {:href "/web"} :external-link [:t :admin/sidebar-main-site])]]))
 
-(defn- user-initials
-  "One or two letters for the user menu: from the display name's words, else
-   the email's local part."
-  [user]
-  (let [name-words (some-> (:display-name user) str/trim not-empty (str/split #"\s+"))
-        from-email (some-> (:email user) (str/split #"@") first)]
-    (text/upper-case
-     (cond
-       (< 1 (count name-words)) (str (ffirst name-words) (first (last name-words)))
-       (seq name-words)         (subs (first name-words) 0 (min 2 (count (first name-words))))
-       (seq from-email)         (subs from-email 0 (min 2 (count from-email)))
-       :else                    "?"))))
-
 (defn admin-shell
   "`content` in the shell. `opts`: :user, :page-title, :logo-url, and :nav to
    replace the request's navigation (see the ns docstring)."
@@ -121,27 +105,9 @@
         [:h1 {:class "admin-topbar-title"} (or page-title [:t :admin/page-heading])]
         [:div.admin-topbar-actions
          (icons/theme-toggle-button)
-         ;; Who is signed in, and signing out, behind the initials: the
+         ;; Who is signed in, and signing out, behind the avatar: the
          ;; topbar keeps its room for the page
-         (let [who (:display-name user (:email user))]
-           [:details {:class "user-menu"}
-            [:summary {:class "user-menu-button" :aria-label [:t :admin/user-menu] :title (str who)}
-             (user-initials user)]
-            [:div {:class "user-menu-panel"}
-             [:div {:class "user-menu-who"}
-              [:span [:t :admin/header-welcome {:name who}]]
-              (when (and (:display-name user) (:email user))
-                [:span {:class "user-menu-email"} (:email user)])]
-             (when (pages/mounted? "/web/profile")
-               [:a {:href "/web/profile" :class "user-menu-item"}
-                (icons/icon :user {:size 14})
-                [:span [:t :user/profile-page-title]]])
-             (when (pages/mounted? "/web/logout")
-               [:form {:method "POST" :action "/web/logout" :class "logout-form"}
-                (csrf/hidden-field)
-                [:button {:type "submit" :class "user-menu-item"}
-                 (icons/icon :log-out {:size 14})
-                 [:span [:t :admin/button-logout]]]])]])]]
+         (user-menu/user-menu user)]]
        [:main.admin-content
         content]]]]))
 
