@@ -1,0 +1,626 @@
+From 0f16046ffc2fa4ed3efc890b48ada74b833b3afc Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 23 Oct 2026 18:13:31 +0000
+Subject: [PATCH 1/2] check:ports-diff: a stable port gains, loses or moves no
+ method unless [Unreleased] ### Breaking names it
+
+---
+ .github/workflows/ci.yml                      |   4 +
+ AGENTS.md                                     |   2 +-
+ CHANGELOG.md                                  |   2 +
+ bb.edn                                        |   3 +
+ libs/tools/src/wagoe/tools/check.clj          |   8 +
+ .../src/wagoe/tools/check_ports_diff.clj      | 297 ++++++++++++++++++
+ .../wagoe/tools/check_ports_diff_test.clj     | 145 +++++++++
+ libs/tools/test/wagoe/tools/check_test.clj    |   2 +-
+ .../test/wagoe/tools/gate_firing_test.clj     |  30 +-
+ 9 files changed, 490 insertions(+), 3 deletions(-)
+ create mode 100644 libs/tools/src/wagoe/tools/check_ports_diff.clj
+ create mode 100644 libs/tools/test/wagoe/tools/check_ports_diff_test.clj
+
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 29ec87193..efe355dc2 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -253,6 +253,10 @@ jobs:
+           CHANGELOG_BASE: origin/${{ github.base_ref || github.event.repository.default_branch }}
+         run: bb check:changelog
+ 
++      - name: Check stable ports against the last release
++        if: ${{ !cancelled() }}
++        run: bb check:ports-diff
++
+       - name: Check documented library counts and publishing claims
+         if: ${{ !cancelled() }}
+         run: bb check:doc-counts
+diff --git a/AGENTS.md b/AGENTS.md
+index 72df94890..99c4d466c 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -1003,7 +1003,7 @@ separate and unchanged.
+ 
+ ## Quality Gates
+ 
+-Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) to prevent regressions caught during QA review (PRs #108–#116). `bb check` runs the full set — currently 21 — and `wagoe.tools.check/all-checks` is its registry; the table below covers the ones with non-obvious rules.
++Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) to prevent regressions caught during QA review (PRs #108–#116). `bb check` runs the full set — currently 22 — and `wagoe.tools.check/all-checks` is its registry; the table below covers the ones with non-obvious rules.
+ 
+ | Gate | Command | What it catches | Hard fail? |
+ |------|---------|-----------------|------------|
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 2ec17a780..2d1a5a9f4 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
+ 
+ ### Added
+ 
++- **`bb check:ports-diff` compares every protocol in a stable library's ports with the last final release**: a method
++  or arity gained, lost or moved fails CI unless `[Unreleased]` `### Breaking` names it in backticks. Nothing to change.
+ - **An HTML page's `<link>` and `<script>` assets carry `?v=<digest>`, and browsers keep those for good** (BOU-391).
+   Any layout rendered as a string; nothing to change.
+ - **`:wagoe/user :profile-layout`, the profile and MFA pages in the app's own page** (BOU-817), as `:login-layout`.
+diff --git a/bb.edn b/bb.edn
+index a103f6a1e..058f95bd7 100644
+--- a/bb.edn
++++ b/bb.edn
+@@ -39,6 +39,7 @@
+              [wagoe.tools.check-hygiene :as check-hygiene]
+              [wagoe.tools.check-doc-counts :as check-doc-counts]
+              [wagoe.tools.check-changelog :as check-changelog]
++             [wagoe.tools.check-ports-diff :as check-ports-diff]
+              [wagoe.tools.check-versions :as check-versions]
+              [wagoe.tools.check-isolation :as check-isolation]
+              [wagoe.tools.check-error-shape :as check-error-shape]
+@@ -161,6 +162,8 @@
+                  :task (check-roadmap/-main)}
+   check:changelog {:doc "A branch changing shipped src/ must add a CHANGELOG.md entry, every ^:deprecated var must be announced in one, and the stability page must count the unreleased breaks (bb check:changelog)"
+                    :task (check-changelog/-main)}
++  check:ports-diff {:doc "A stable library's protocols gained, lost or moved no method since the last final release unless [Unreleased] ### Breaking names it (bb check:ports-diff [ref])"
++                    :task (apply check-ports-diff/-main *command-line-args*)}
+   check:no-boundary {:doc "Rename gate: scan for residual boundary tokens (ns/keys/coords/env/dirs/urls); args select groups (bb check:no-boundary)"
+                      :task (apply check-no-boundary/-main *command-line-args*)}
+   docs:lint     {:doc "Documentation drift: fails on a documented command naming a deps.edn alias that does not exist, or a tracker id on a published page; reports broken links + unknown namespaces (bb docs:lint)"
+diff --git a/libs/tools/src/wagoe/tools/check.clj b/libs/tools/src/wagoe/tools/check.clj
+index ef11bb5bb..754691c69 100644
+--- a/libs/tools/src/wagoe/tools/check.clj
++++ b/libs/tools/src/wagoe/tools/check.clj
+@@ -134,6 +134,14 @@
+     :scope :monorepo
+     :label "Changelog covers source and deprecations"
+     :cmd   ["bb" "check:changelog"]}
++   ;; Eight stable protocols gained twenty methods between 1.0.1 and the 1.1
++   ;; branch with no breaking entry; callers kept working, so nothing noticed,
++   ;; and an application's own defrecord would have failed at runtime.
++   ;; :monorepo because it compares against the framework's release tags.
++   {:id    :ports-diff
++    :scope :monorepo
++    :label "Stable ports match the last release"
++    :cmd   ["bb" "check:ports-diff"]}
+    ;; "30 independently publishable libraries" was documented and never
+    ;; checked. The CI matrix job compiles each library against its own
+    ;; deps.edn; this catches what a compile cannot see, which turned out to be
+diff --git a/libs/tools/src/wagoe/tools/check_ports_diff.clj b/libs/tools/src/wagoe/tools/check_ports_diff.clj
+new file mode 100644
+index 000000000..d81ac5b40
+--- /dev/null
++++ b/libs/tools/src/wagoe/tools/check_ports_diff.clj
+@@ -0,0 +1,297 @@
++#!/usr/bin/env bb
++;; libs/tools/src/wagoe/tools/check_ports_diff.clj
++;;
++;; A stable library's ports may grow, but not under the people implementing them.
++;;
++;; Between 1.0.1 and the 1.1 branch, eight protocols in stable libraries gained
++;; twenty methods or arities — `IUserRepository` four, `DBAdapter` seven —
++;; and not one of them was under `### Breaking`. Every caller kept working, so
++;; nothing in the suite noticed; the only code that breaks is an application's
++;; own `defrecord` or `reify`, and it breaks at runtime, on the first call the
++;; framework makes to a method the record never had. `check:changelog` counts
++;; `### Breaking` entries and could not see these, because nobody wrote any.
++;;
++;; This gate reads the protocols, not the prose. It compares every `defprotocol`
++;; in a `ports` or `protocols` namespace at the last final release tag with the
++;; working tree, and fails when a stable library's protocol lost or moved a
++;; method (callers break) or gained one (implementers break) without the
++;; changelog naming it under `[Unreleased]` `### Breaking`.
++;;
++;; Deliberately narrow, like its sibling. A new protocol is not a break, and is
++;; how a minor release should add a capability. Argument names are not compared,
++;; only arities. Incubating and tooling libraries are reported, never failed.
++;; Whether a named break may ship in a minor is not this gate's question:
++;; `check:changelog` already refuses breaking entries after 1.0.0, so naming one
++;; here moves the decision there, where the stability page records exceptions.
++
++(ns wagoe.tools.check-ports-diff
++  (:require [clojure.string :as str]
++            [clojure.edn :as edn]
++            [babashka.process :as process]
++            [edamame.core :as e]
++            [wagoe.tools.ansi :as ansi]))
++
++(def changelog-path "CHANGELOG.md")
++(def catalogue-path "libs/wagoe-cli/resources/wagoe/cli/modules-catalogue.edn")
++(def version-path "libs/core/build.clj")
++
++(def uncatalogued-tiers
++  "Libraries `wagoe list modules` does not offer, with the tier the stability
++   page gives them. Anything in neither place is treated as stable: a library
++   this gate cannot place is one it must not wave through."
++  {"test"       :incubating
++   "tools"      :tooling
++   "devtools"   :tooling
++   "wagoe-cli"  :tooling
++   "wagoe-mcp"  :tooling
++   "scaffolder" :tooling
++   "e2e"        :tooling})
++
++;; =============================================================================
++;; Reading protocols
++;; =============================================================================
++
++(defn port-file?
++  "Whether `path` is shipped source that can hold a supported protocol.
++
++   The stability page draws the line at `wagoe.<lib>.ports` and its documented
++   equivalents: `ports/` directories, per-concern `ports.clj` files, and the
++   `protocols` namespaces `DBAdapter` and `IFileSystemAdapter` lived in."
++  [path]
++  (boolean (and (re-matches #"libs/[^/]+/src/.*\.clj[cs]?" path)
++                (some #{"ports" "protocols"}
++                      (map #(str/replace % #"\.clj[cs]?$" "") (str/split path #"/"))))))
++
++(defn lib-of [path] (second (re-find #"^libs/([^/]+)/" path)))
++
++(defn- parse-forms
++  [raw]
++  (e/parse-string-all raw
++                      {:all          true
++                       :auto-resolve (fn [a] (if (= a :current) (symbol "this.ns") (symbol (str a))))
++                       :readers      (fn [_tag] identity)
++                       :features     #{:clj :bb}
++                       :read-cond    :allow}))
++
++(defn- defprotocol? [form]
++  (and (seq? form) (symbol? (first form)) (= "defprotocol" (name (first form)))))
++
++(defn method-arities
++  "`{method-name #{arity …}}` for a `defprotocol` form.
++
++   A declaration is `(name [args]+ docstring?)`; its arity is the length of each
++   argument vector, `this` included, so `[this] [this opts]` is `#{1 2}`.
++   Options (`:extend-via-metadata true`) and the docstring are not lists."
++  [form]
++  (into {}
++        (for [decl (drop 2 form)
++              :when (and (seq? decl) (symbol? (first decl)))]
++          [(name (first decl)) (into (sorted-set) (map count (filter vector? (rest decl))))])))
++
++(defn protocols-in
++  "Every top-level protocol in `content`, as `{\"ns/Name\" {…}}`.
++
++   Top-level only: a `defprotocol` inside `(comment …)` is a REPL note, not
++   surface. Throws when the file does not parse; the caller reports it, because
++   a gate that skipped what it could not read would pass by not looking."
++  [path content]
++  (let [forms (parse-forms content)
++        nsn   (some #(when (and (seq? %) (= 'ns (first %))) (str (second %))) forms)]
++    (into {}
++          (for [form forms :when (defprotocol? form)]
++            [(str nsn "/" (second form))
++             {:lib (lib-of path) :path path :name (str (second form))
++              :methods (method-arities form)}]))))
++
++;; =============================================================================
++;; Comparing
++;; =============================================================================
++
++(defn- method-changes
++  [base-key {:keys [lib methods]} {new-methods :methods}]
++  (concat
++   (for [[m arities] (sort methods)
++         :let [now (get new-methods m)]
++         :when (not= arities now)
++         c (if (nil? now)
++             [{:kind :removed-method :arities arities}]
++             (concat (when-let [gone (seq (remove now arities))]
++                       [{:kind :removed-arity :arities (vec gone)}])
++                     (when-let [added (seq (remove arities now))]
++                       [{:kind :added-arity :arities (vec added)}])))]
++     (assoc c :lib lib :protocol base-key :method m))
++   (for [[m arities] (sort new-methods)
++         :when (not (contains? methods m))]
++     {:kind :added-method :lib lib :protocol base-key :method m :arities (vec arities)})))
++
++(defn changes
++  "What happened to each protocol in `base` by `head`, both `{\"ns/Name\" {…}}`.
++
++   A protocol whose namespace changed is matched by its simple name within the
++   library and reported as `:moved` — the var callers name is gone — and its
++   methods are still compared against where it went. Pure, so a test can prove
++   each kind still fires."
++  [base head]
++  (mapcat (fn [[k {:keys [lib name] :as p}]]
++            (if-let [now (get head k)]
++              (method-changes k p now)
++              (if-let [[k2 now] (first (filter (fn [[_ q]] (and (= lib (:lib q)) (= name (:name q))))
++                                               head))]
++                (cons {:kind :moved :lib lib :protocol k :to k2}
++                      (method-changes k p now))
++                [{:kind :removed-protocol :lib lib :protocol k}])))
++          (sort-by key base)))
++
++(def breaks-callers #{:removed-protocol :moved :removed-method :removed-arity})
++
++;; =============================================================================
++;; What the changelog and the catalogue say
++;; =============================================================================
++
++(defn tiers
++  "`{lib-name tier}` from the module catalogue, over `uncatalogued-tiers`."
++  [catalogue]
++  (merge uncatalogued-tiers
++         (into {} (map (juxt :name :tier)) (:modules catalogue))))
++
++(defn tier-of [tiers lib] (get tiers lib :stable))
++
++(defn unreleased-breaking
++  "The body of `### Breaking` under `## [Unreleased]`, or \"\"."
++  [changelog]
++  (let [section (second (re-find #"(?s)## \[Unreleased\][^\n]*(.*?)(?=\n## \[|\z)" changelog))]
++    (or (second (re-find #"(?s)### Breaking\s*\n(.*?)(?=\n### |\z)" (str section))) "")))
++
++(defn named?
++  "Whether `breaking` names `ident` in backticks — `like`, `DBAdapter/like` or
++   `wagoe.platform.ports.database/DBAdapter`. Backticks are required: method
++   names such as `like` and `engine` are ordinary words in prose."
++  [breaking ident]
++  (boolean (re-find (re-pattern (str "`(?:[^`\\s]*/)?" (java.util.regex.Pattern/quote ident) "`"))
++                    breaking)))
++
++(defn acknowledged?
++  "Whether the changelog names what changed: the method, or for a removed or
++   moved protocol, the protocol."
++  [breaking {:keys [method protocol]}]
++  (if method
++    (named? breaking method)
++    (or (named? breaking (last (str/split protocol #"/")))
++        (named? breaking protocol))))
++
++(defn major [version] (some-> (re-find #"^(\d+)\." (str version)) second parse-long))
++
++(defn verdict
++  "`{:failing [...] :reported [...]}` for `all-changes`.
++
++   Failing: changes to stable libraries the changelog does not name. Reported:
++   everything in incubating and tooling libraries. Nothing fails when the
++   working tree's major version is past the base's — that is what a major is for."
++  [all-changes tiers breaking base-version head-version]
++  (let [major-bump? (and (major base-version) (major head-version)
++                         (> (major head-version) (major base-version)))
++        {stable true other false} (group-by #(= :stable (tier-of tiers (:lib %))) all-changes)]
++    {:failing  (if major-bump? [] (vec (remove #(acknowledged? breaking %) stable)))
++     :reported (vec other)
++     :major-bump? major-bump?}))
++
++;; =============================================================================
++;; Shell
++;; =============================================================================
++
++(defn- git [& args]
++  (let [{:keys [exit out err]} (apply process/shell {:out :string :err :string :continue true} "git" args)]
++    (when-not (zero? exit)
++      (throw (ex-info (str "git " (str/join " " args) " failed (exit " exit
++                           ") — this gate cannot report a verdict without it")
++                      {:exit exit :err (str/trim (or err ""))})))
++    out))
++
++(defn- lines [s] (remove str/blank? (str/split-lines s)))
++
++(defn base-ref
++  "The ref to compare against: the argument, then `PORTS_BASE`, then the newest
++   final release tag reachable from HEAD (`1.0.1`, not `1.1.0-rc-1`)."
++  [arg]
++  (or arg
++      (System/getenv "PORTS_BASE")
++      (let [{:keys [exit out]} (process/shell {:out :string :err :string :continue true}
++                                              "git" "describe" "--tags" "--abbrev=0"
++                                              "--match" "[0-9]*.[0-9]*.[0-9]*" "--exclude" "*-*" "HEAD")]
++        (when (zero? exit) (str/trim out)))))
++
++(defn- version-in [content]
++  (second (re-find #"\(def version\s+\"([^\"]+)\"" (str content))))
++
++(defn- collect
++  "Protocols in every port file `paths`, read with `read-file`; unreadable files
++   come back under `:unreadable` instead of being skipped."
++  [paths read-file]
++  (reduce (fn [acc path]
++            (try (update acc :protocols merge (protocols-in path (read-file path)))
++                 (catch Exception ex
++                   (update acc :unreadable conj (str path " — " (.getMessage ex))))))
++          {:protocols {} :unreadable []}
++          (filter port-file? paths)))
++
++(defn- describe [{:keys [kind method arities to]}]
++  (case kind
++    :removed-protocol "protocol removed"
++    :moved            (str "moved to " to)
++    :removed-method   (str "method `" method "` removed")
++    :removed-arity    (str "`" method "` lost arity " (str/join ", " arities))
++    :added-method     (str "method `" method "` added")
++    :added-arity      (str "`" method "` gained arity " (str/join ", " arities))))
++
++(defn- print-changes [cs]
++  (doseq [[protocol pcs] (group-by :protocol cs)]
++    (println (str "  " (ansi/bold protocol) (ansi/dim (str "  (" (:lib (first pcs)) ")"))))
++    (doseq [c pcs]
++      (println (str "    " (if (breaks-callers (:kind c)) (ansi/red "callers") (ansi/yellow "implementers"))
++                    "  " (describe c))))))
++
++(defn -main [& args]
++  (if-let [base (base-ref (first args))]
++    (let [old      (collect (lines (git "ls-tree" "-r" "--name-only" base "--" "libs"))
++                            #(git "show" (str base ":" %)))
++          new      (collect (lines (git "ls-files" "libs")) slurp)
++          all      (changes (:protocols old) (:protocols new))
++          {:keys [failing reported major-bump?]}
++          (verdict all
++                   (tiers (edn/read-string (slurp catalogue-path)))
++                   (unreleased-breaking (slurp changelog-path))
++                   (version-in (try (git "show" (str base ":" version-path)) (catch Exception _ nil)))
++                   (version-in (slurp version-path)))
++          unreadable (concat (:unreadable old) (:unreadable new))]
++      (when (seq reported)
++        (println (ansi/dim (str "Incubating and tooling ports changed since " base " (not gated):")))
++        (print-changes reported)
++        (println))
++      (when (seq unreadable)
++        (println (ansi/red "Port files this gate could not read:"))
++        (doseq [u unreadable] (println (str "  " u)))
++        (println))
++      (when (seq failing)
++        (println (ansi/red (str "Stable ports changed since " base " with no `[Unreleased]` `### Breaking` entry naming them:")))
++        (println)
++        (print-changes failing)
++        (println)
++        (println "An application's own defrecord or reify of these protocols breaks at runtime,")
++        (println "on the first call to what it does not implement. Either")
++        (println "  - add the capability as a new protocol and check it with satisfies?, or")
++        (println "  - name each method in backticks under ### Breaking in [Unreleased];")
++        (println "    check:changelog then holds you to a major version or a documented exception."))
++      (if (or (seq failing) (seq unreadable))
++        (System/exit 1)
++        (do (println (ansi/green (str "Stable ports match " base
++                                      (cond major-bump? " — skipped: this is a major version"
++                                            (seq all)   ", or every change is named under ### Breaking"
++                                            :else       ""))))
++            (System/exit 0))))
++    (do
++      (println (ansi/red "No final release tag reachable from HEAD — nothing to compare the ports with."))
++      (println "Pass a ref, or set PORTS_BASE.")
++      (System/exit 1))))
++
++(when (= *file* (System/getProperty "babashka.file"))
++  (apply -main *command-line-args*))
+diff --git a/libs/tools/test/wagoe/tools/check_ports_diff_test.clj b/libs/tools/test/wagoe/tools/check_ports_diff_test.clj
+new file mode 100644
+index 000000000..889971c15
+--- /dev/null
++++ b/libs/tools/test/wagoe/tools/check_ports_diff_test.clj
+@@ -0,0 +1,145 @@
++(ns wagoe.tools.check-ports-diff-test
++  "Unit tests for the ports-diff gate.
++
++   The protocols here are cut down from real ones: `IUserRepository` gained
++   `claim-login-attempts` between 1.0.1 and the 1.1 branch with no breaking
++   entry, and `IWorkflowEngine` gained a `tx` arity on `transition!`."
++  (:require [clojure.test :refer [deftest is testing]]
++            [wagoe.tools.check-ports-diff :as sut]))
++
++(def user-ports-1-0-1
++  "(ns wagoe.user.ports)
++   (defprotocol IUserRepository
++     \"Persistence for users.\"
++     (find-user-by-id [this user-id] \"One user.\")
++     (logout-user-everywhere [this user-id]))
++   (comment (defprotocol Scratch (x [this])))")
++
++(def user-ports-now
++  "(ns wagoe.user.ports)
++   (defprotocol IUserRepository
++     \"Persistence for users.\"
++     (find-user-by-id [this user-id] \"One user.\")
++     (logout-user-everywhere [this user-id] [this user-id keep-session-id])
++     (claim-login-attempts [this user-id n lockout]))
++   (defprotocol ILoginLayout (login-layout [this]))")
++
++(defn- read-one [path content] (sut/protocols-in path content))
++
++;; =============================================================================
++;; What counts as a port file
++;; =============================================================================
++
++(deftest ^:unit port-file-test
++  (testing "the places the stability page calls supported surface"
++    (is (sut/port-file? "libs/user/src/wagoe/user/ports.clj"))
++    (is (sut/port-file? "libs/platform/src/wagoe/platform/ports/database.clj"))
++    (is (sut/port-file? "libs/observability/src/wagoe/observability/metrics/ports.clj"))
++    (is (sut/port-file? "libs/platform/src/wagoe/platform/shell/adapters/database/protocols.clj")))
++
++  (testing "and what is not"
++    (is (not (sut/port-file? "libs/user/src/wagoe/user/shell/persistence.clj")))
++    (is (not (sut/port-file? "libs/user/test/wagoe/user/ports.clj")))
++    (is (not (sut/port-file? "libs/user/src/wagoe/user/core/reports.clj")))
++    (is (not (sut/port-file? "libs/user/src/wagoe/user/import_ports_helper.clj")))))
++
++;; =============================================================================
++;; Reading protocols
++;; =============================================================================
++
++(deftest ^:unit protocols-in-test
++  (let [ps (read-one "libs/user/src/wagoe/user/ports.clj" user-ports-now)]
++    (testing "keyed by namespace and name, with the library"
++      (is (= #{"wagoe.user.ports/IUserRepository" "wagoe.user.ports/ILoginLayout"} (set (keys ps))))
++      (is (= "user" (:lib (get ps "wagoe.user.ports/IUserRepository")))))
++
++    (testing "arity counts `this`, docstrings are not methods"
++      (is (= {"find-user-by-id"        #{2}
++              "logout-user-everywhere" #{2 3}
++              "claim-login-attempts"   #{4}}
++             (:methods (get ps "wagoe.user.ports/IUserRepository"))))))
++
++  (testing "a protocol in a comment form is not surface"
++    (is (= ["wagoe.user.ports/IUserRepository"]
++           (keys (read-one "libs/user/src/wagoe/user/ports.clj" user-ports-1-0-1))))))
++
++;; =============================================================================
++;; Comparing
++;; =============================================================================
++
++(deftest ^:unit changes-test
++  (let [old (read-one "libs/user/src/wagoe/user/ports.clj" user-ports-1-0-1)
++        new (read-one "libs/user/src/wagoe/user/ports.clj" user-ports-now)
++        cs  (sut/changes old new)]
++    (testing "an added method and an added arity break implementers"
++      (is (= #{[:added-method "claim-login-attempts"] [:added-arity "logout-user-everywhere"]}
++             (set (map (juxt :kind :method) cs)))))
++
++    (testing "a new protocol is not a change"
++      (is (not-any? #(= "wagoe.user.ports/ILoginLayout" (:protocol %)) cs)))
++
++    (testing "going the other way, the same edits break callers, and the new protocol is removed"
++      (is (= #{[:removed-method "claim-login-attempts"] [:removed-arity "logout-user-everywhere"]
++               [:removed-protocol nil]}
++             (set (map (juxt :kind :method) (sut/changes new old))))))))
++
++(deftest ^:unit moved-and-removed-test
++  (let [base {"wagoe.platform.shell.adapters.database.protocols/DBAdapter"
++              {:lib "platform" :name "DBAdapter" :methods {"dialect" #{1}}}
++              "wagoe.platform.ports/IGone"
++              {:lib "platform" :name "IGone" :methods {"x" #{1}}}}
++        head {"wagoe.platform.ports.database/DBAdapter"
++              {:lib "platform" :name "DBAdapter" :methods {"dialect" #{1} "engine" #{1}}}}
++        cs   (sut/changes base head)]
++    (testing "a protocol whose namespace changed is moved, and still compared"
++      (is (some #(= [:moved "wagoe.platform.ports.database/DBAdapter"] ((juxt :kind :to) %)) cs))
++      (is (some #(= [:added-method "engine"] ((juxt :kind :method) %)) cs)))
++    (testing "a protocol that went nowhere is removed"
++      (is (some #(= [:removed-protocol "wagoe.platform.ports/IGone"] ((juxt :kind :protocol) %)) cs)))))
++
++;; =============================================================================
++;; The verdict
++;; =============================================================================
++
++(def tiers (sut/tiers {:modules [{:name "user" :tier :stable} {:name "workflow" :tier :incubating}]}))
++
++(def user-change {:kind :added-method :lib "user" :protocol "wagoe.user.ports/IUserRepository"
++                  :method "claim-login-attempts" :arities [4]})
++(def workflow-change {:kind :added-arity :lib "workflow" :protocol "wagoe.workflow.ports/IWorkflowEngine"
++                      :method "transition!" :arities [3]})
++
++(deftest ^:unit verdict-test
++  (testing "a stable change nobody named fails; an incubating one is only reported"
++    (let [{:keys [failing reported]} (sut/verdict [user-change workflow-change] tiers "" "1.0.1" "1.1.0")]
++      (is (= [user-change] failing))
++      (is (= [workflow-change] reported))))
++
++  (testing "naming it under ### Breaking, in backticks, satisfies the gate"
++    (is (empty? (:failing (sut/verdict [user-change] tiers
++                                       "- **`IUserRepository/claim-login-attempts`** is new (BOU-785)."
++                                       "1.0.1" "1.1.0")))))
++
++  (testing "a library the gate cannot place counts as stable"
++    (is (= :stable (sut/tier-of tiers "something-new")))
++    (is (= :tooling (sut/tier-of tiers "wagoe-cli"))))
++
++  (testing "a major version is allowed to break"
++    (is (empty? (:failing (sut/verdict [user-change] tiers "" "1.4.2" "2.0.0-rc-1"))))))
++
++(deftest ^:unit named-test
++  (testing "the name in backticks, bare or qualified"
++    (is (sut/named? "`like` takes a mode" "like"))
++    (is (sut/named? "`DBAdapter/like` takes a mode" "like")))
++  (testing "not the word in prose, nor a longer name"
++    (is (not (sut/named? "works like before" "like")))
++    (is (not (sut/named? "`like-pattern` is new" "like")))))
++
++(deftest ^:unit unreleased-breaking-test
++  (let [changelog (str "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- `engine` is new\n\n"
++                       "### Breaking\n\n- `claim-login-attempts` on `IUserRepository`\n\n"
++                       "### Fixed\n\n- nothing\n\n## [1.0.1] — 2026-10-07\n\n### Breaking\n\n- `old-thing`\n")
++        breaking  (sut/unreleased-breaking changelog)]
++    (testing "only [Unreleased] ### Breaking counts"
++      (is (sut/named? breaking "claim-login-attempts"))
++      (is (not (sut/named? breaking "engine")))
++      (is (not (sut/named? breaking "old-thing"))))))
+diff --git a/libs/tools/test/wagoe/tools/check_test.clj b/libs/tools/test/wagoe/tools/check_test.clj
+index 12e40eb10..bbd75a66d 100644
+--- a/libs/tools/test/wagoe/tools/check_test.clj
++++ b/libs/tools/test/wagoe/tools/check_test.clj
+@@ -290,7 +290,7 @@
+     ;; test below enforces.
+     (is (= #{:doc-counts :versions :agents :poms :no-boundary :docs-lint
+              :branch-protection :changelog :isolation :error-shape :deps :jdk
+-             :roadmap}
++             :roadmap :ports-diff}
+            (set (map :id (remove #(= :any (:scope %)) check/all-checks)))))))
+ 
+ (deftest ^:unit the-template-defines-no-task-a-user-has-no-business-running
+diff --git a/libs/tools/test/wagoe/tools/gate_firing_test.clj b/libs/tools/test/wagoe/tools/gate_firing_test.clj
+index 736e9394b..83413aae4 100644
+--- a/libs/tools/test/wagoe/tools/gate_firing_test.clj
++++ b/libs/tools/test/wagoe/tools/gate_firing_test.clj
+@@ -31,6 +31,7 @@
+             [wagoe.tools.check-fcis :as check-fcis]
+             [wagoe.tools.check-hygiene :as check-hygiene]
+             [wagoe.tools.check-changelog :as check-changelog]
++            [wagoe.tools.check-ports-diff :as check-ports-diff]
+             [wagoe.tools.check-doc-counts :as check-doc-counts]
+             [wagoe.tools.check-versions :as check-versions]
+             [wagoe.tools.check-isolation :as check-isolation]
+@@ -788,7 +789,7 @@
+   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
+     :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary
+     :doc-counts :branch-protection :versions :changelog :isolation
+-    :error-shape :jdk :roadmap})
++    :error-shape :jdk :roadmap :ports-diff})
+ 
+ ;; =============================================================================
+ ;; check:roadmap
+@@ -1038,6 +1039,33 @@
+     (is (empty? (check-error-shape/unexplained-findings)))
+     (is (empty? (check-error-shape/stale-exemptions)))))
+ 
++;; =============================================================================
++;; check:ports-diff
++;; =============================================================================
++
++(deftest ^:unit ports-diff-gate-fires-test
++  ;; The shape it exists for: between 1.0.1 and the 1.1 branch IUserRepository
++  ;; gained claim-login-attempts, the changelog filed it under ### Fixed, and an
++  ;; application's own defrecord of the protocol would have failed on login.
++  (let [base   (check-ports-diff/protocols-in
++                "libs/user/src/wagoe/user/ports.clj"
++                "(ns wagoe.user.ports) (defprotocol IUserRepository (find-user-by-id [this id]))")
++        head   (check-ports-diff/protocols-in
++                "libs/user/src/wagoe/user/ports.clj"
++                (str "(ns wagoe.user.ports) (defprotocol IUserRepository (find-user-by-id [this id])"
++                     " (claim-login-attempts [this user-id n lockout]))"))
++        tiers  (check-ports-diff/tiers {:modules [{:name "user" :tier :stable}]})
++        all    (check-ports-diff/changes base head)]
++    (testing "a stable protocol that gained a method, named nowhere, fails"
++      (is (= ["claim-login-attempts"]
++             (map :method (:failing (check-ports-diff/verdict all tiers "" "1.0.1" "1.1.0"))))))
++
++    (testing "naming it under [Unreleased] ### Breaking satisfies it"
++      (is (empty? (:failing (check-ports-diff/verdict all tiers "- `claim-login-attempts`" "1.0.1" "1.1.0")))))
++
++    (testing "and an unchanged protocol is not reported"
++      (is (empty? (check-ports-diff/changes base base))))))
++
+ ;; =============================================================================
+ ;; check:changelog
+ ;; =============================================================================
+-- 
+2.43.0
+
