@@ -1003,7 +1003,7 @@ separate and unchanged.
 
 ## Quality Gates
 
-Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) to prevent regressions caught during QA review (PRs #108–#116). `bb check` runs the full set — currently 21 — and `wagoe.tools.check/all-checks` is its registry; the table below covers the ones with non-obvious rules.
+Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) to prevent regressions caught during QA review (PRs #108–#116). `bb check` runs the full set — currently 22 — and `wagoe.tools.check/all-checks` is its registry; the table below covers the ones with non-obvious rules.
 
 | Gate | Command | What it catches | Hard fail? |
 |------|---------|-----------------|------------|

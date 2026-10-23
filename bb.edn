@@ -39,6 +39,7 @@
              [wagoe.tools.check-hygiene :as check-hygiene]
              [wagoe.tools.check-doc-counts :as check-doc-counts]
              [wagoe.tools.check-changelog :as check-changelog]
+             [wagoe.tools.check-ports-diff :as check-ports-diff]
              [wagoe.tools.check-versions :as check-versions]
              [wagoe.tools.check-isolation :as check-isolation]
              [wagoe.tools.check-error-shape :as check-error-shape]
@@ -161,6 +162,8 @@
                  :task (check-roadmap/-main)}
   check:changelog {:doc "A branch changing shipped src/ must add a CHANGELOG.md entry, every ^:deprecated var must be announced in one, and the stability page must count the unreleased breaks (bb check:changelog)"
                    :task (check-changelog/-main)}
+  check:ports-diff {:doc "A stable library's protocols gained, lost or moved no method since the last final release unless [Unreleased] ### Breaking names it (bb check:ports-diff [ref])"
+                    :task (apply check-ports-diff/-main *command-line-args*)}
   check:no-boundary {:doc "Rename gate: scan for residual boundary tokens (ns/keys/coords/env/dirs/urls); args select groups (bb check:no-boundary)"
                      :task (apply check-no-boundary/-main *command-line-args*)}
   docs:lint     {:doc "Documentation drift: fails on a documented command naming a deps.edn alias that does not exist, or a tracker id on a published page; reports broken links + unknown namespaces (bb docs:lint)"
