@@ -9,6 +9,7 @@
             [wagoe.platform.core.http.problem-details :as problem-details]
             [wagoe.platform.shell.http.interceptors :as interceptors]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
+            [wagoe.platform.shell.system.wiring]
             [wagoe.admin.core.schema-introspection :as schema-intro]
             [buddy.core.nonce :as nonce]
             [honey.sql :as sql]
@@ -187,7 +188,8 @@
         (is (string? (get-in ctx [:request :anti-forgery-token])) "form token issued")
         (is (string? (:value cookie)) "pre-session cookie set")
         (is (= :strict (:same-site cookie)))
-        (is (true? (:http-only cookie)))))
+        (is (true? (:http-only cookie)))
+        (is (true? (:secure cookie)) "Secure unless :secure-cookies? false")))
 
     (testing "login POST with a token bound to the pre-session cookie passes"
       ;; The GET mints the binding (delivered as the csrf-session cookie); a token
@@ -286,6 +288,26 @@
                                        {:post {:handler (fn [_] {:status 200 :body "ok"})}}])
                  (req :post "/api/v1/things"))]
         (is (= 200 (:status api)))))))
+
+(deftest ^:security ^:unit csrf-session-cookie-follows-secure-cookies-test
+  ;; It went out without Secure even behind HTTPS with :secure-cookies? true (BOU-819).
+  (let [security-config #'wagoe.platform.shell.system.wiring/security-config
+        set-cookie      (fn [secure-cookies?]
+                          (let [csrf    (:csrf (security-config
+                                                {:config {:active {:wagoe/settings {:secure-cookies? secure-cookies?}
+                                                                   :wagoe/http {:security {:csrf {:enabled? true
+                                                                                                  :secret csrf-secret}}}}}}))
+                                handler (reitit-router/compile-routes
+                                         [["/web/login" {:no-doc true :get {:handler (fn [_] {:status 200 :body "ok"})}}]]
+                                         {:swagger-enabled false :system {:csrf csrf}})]
+                            (->> (get-in (handler (-> (req :get "/web/login")
+                                                      (assoc :scheme :https)
+                                                      (assoc-in [:headers "x-forwarded-proto"] "https")))
+                                         [:headers "Set-Cookie"])
+                                 (filter #(str/starts-with? % "csrf-session="))
+                                 first)))]
+    (is (re-find #"(?i);\s*Secure" (set-cookie true)))
+    (is (not (re-find #"(?i);\s*Secure" (set-cookie false))) "dev over plain HTTP")))
 
 (deftest ^:security ^:unit csrf-skip-interceptors-flag-test
   (testing ":skip-interceptors? routes bypass the stack (health/internal endpoints)"

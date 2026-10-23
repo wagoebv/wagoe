@@ -295,6 +295,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The `csrf-session` cookie carries `Secure` under `:wagoe/settings :secure-cookies? true`** (BOU-819), as the session
+  cookies do. Nothing to change; `wrap-csrf` callers can pass `:secure-cookies?`.
 - **`bb setup --email smtp` writes `:wagoe/email {:provider :smtp …}`** (BOU-818); its `:wagoe.external/smtp` left the app
   logging mail instead of sending it. Re-run setup, or move those settings to `:wagoe/email` with `:provider :smtp`.
 - **After an admin reset, a user in an app whose `:mfa-required?` hook requires MFA sets it up again at sign-in**
