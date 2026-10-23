@@ -937,6 +937,48 @@
     (testing "and carry a validator, so revalidating costs no body"
       (is (some? (get-in resp [:headers "ETag"]))))))
 
+(deftest ^:contract a-url-naming-its-content-is-cached-for-good
+  ;; BOU-391: `?v=` equal to the digest names these bytes, so a change is a new
+  ;; URL. Any other `v` must not freeze whatever the path serves today.
+  (let [digest  (str/replace (get-in (static-asset-response) [:headers "ETag"]) "\"" "")
+        cc      #(get-in (static-asset-response {:query-string %}) [:headers "Cache-Control"])]
+    (is (= "private, max-age=31536000, immutable" (cc (str "v=" digest))))
+    (is (= "no-cache" (cc (str "v=" (apply str (repeat 32 "0"))))))
+    (is (= "no-cache" (cc "v=stale")))))
+
+(deftest ^:contract a-page-links-its-assets-by-content
+  ;; BOU-391: every HTML page, whatever layout drew it, links a local asset with
+  ;; its digest, and that URL is the one the static handler lets a browser keep.
+  (let [page    (str "<html><head><script src=\"/bou389/asset.js\"></script>"
+                     "<link rel=\"stylesheet\" href=\"/css/no-such.css\">"
+                     "<script src=\"//cdn.example/bou389/asset.js\"></script>"
+                     "</head><body><a href=\"/web/admin\">x</a>"
+                     "<img src=\"/bou389/asset.js\"></body></html>")
+        handler (reitit/compile-routes
+                 [["/page" {:get {:handler (fn [_] {:status 200
+                                                    :headers {"content-type" "text/html; charset=utf-8"}
+                                                    :body page})}}]
+                  ["/json" {:get {:handler (fn [_] {:status 200
+                                                    :headers {"Content-Type" "application/json"}
+                                                    :body page})}}]]
+                 {})
+        html    (:body (handler {:request-method :get :uri "/page" :headers {}}))
+        src     (second (re-find #"src=\"([^\"]+)\"" html))]
+    (testing "a shipped asset carries its digest"
+      (is (re-matches #"/bou389/asset\.js\?v=[0-9a-f]{32}" src)))
+    (testing "and that URL may be kept for good"
+      (let [[uri query] (str/split src #"\?")]
+        (is (= "private, max-age=31536000, immutable"
+               (get-in (handler {:request-method :get :uri uri :query-string query :headers {}})
+                       [:headers "Cache-Control"])))))
+    (testing "an asset that is not there, another host, a page link and the body's own HTML are left alone"
+      (is (str/includes? html "href=\"/css/no-such.css\""))
+      (is (str/includes? html "src=\"//cdn.example/bou389/asset.js\""))
+      (is (str/includes? html "href=\"/web/admin\""))
+      (is (str/includes? html "<img src=\"/bou389/asset.js\">")))
+    (testing "only HTML is rewritten"
+      (is (= page (:body (handler {:request-method :get :uri "/json" :headers {}})))))))
+
 (deftest ^:contract a-matching-validator-answers-304-without-a-body
   (let [etag (get-in (static-asset-response) [:headers "ETag"])
         resp (static-asset-response {:headers {"if-none-match" etag}})]
@@ -1034,7 +1076,8 @@
         resp     (#'reitit/cache-headers
                   {:status 200 :headers {} :body (counting-stream "console.log(1)" closed)}
                   "/bou389/packaged.js"
-                  (fn [] {:status 200 :headers {} :body reopened}))]
+                  (fn [] {:status 200 :headers {} :body reopened})
+                  nil)]
     (is @closed "the stream that was hashed should be closed")
     (is (some? (get-in resp [:headers "ETag"])) "and it should still have produced a digest")
     (is (identical? reopened (:body resp))
@@ -1047,7 +1090,7 @@
   (reset! @#'reitit/packaged-digests {})
   (let [reopens (atom 0)
         fetch   #(#'reitit/cache-headers (packaged "console.log(1)") "/bou389/same.js"
-                                         (fn [] (swap! reopens inc) (packaged "console.log(1)")))
+                                         (fn [] (swap! reopens inc) (packaged "console.log(1)")) nil)
         first-etag (get-in (fetch) [:headers "ETag"])
         after-first @reopens
         second-etag (get-in (fetch) [:headers "ETag"])]
@@ -1071,7 +1114,7 @@
   (reset! @#'reitit/packaged-digests {})
   (dotimes [i (+ 50 @#'reitit/max-cached-digests)]
     (#'reitit/cache-headers (packaged "x") (str "/js/" i "-" (random-uuid) ".js")
-                            (fn [] (packaged "x"))))
+                            (fn [] (packaged "x")) nil))
   (is (<= (count @@#'reitit/packaged-digests) @#'reitit/max-cached-digests)
       "the cache must stay bounded whatever paths are thrown at it"))
 
