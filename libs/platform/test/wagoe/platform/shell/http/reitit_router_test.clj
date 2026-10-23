@@ -951,10 +951,12 @@
   ;; its digest, and that URL is the one the static handler lets a browser keep.
   (let [page    (str "<html><head><script src=\"/bou389/asset.js\"></script>"
                      "<link rel=\"stylesheet\" href=\"/css/no-such.css\">"
-                     "<a href=\"/web/admin\">x</a></head></html>")
+                     "<script src=\"//cdn.example/bou389/asset.js\"></script>"
+                     "</head><body><a href=\"/web/admin\">x</a>"
+                     "<img src=\"/bou389/asset.js\"></body></html>")
         handler (reitit/compile-routes
                  [["/page" {:get {:handler (fn [_] {:status 200
-                                                    :headers {"Content-Type" "text/html; charset=utf-8"}
+                                                    :headers {"content-type" "text/html; charset=utf-8"}
                                                     :body page})}}]
                   ["/json" {:get {:handler (fn [_] {:status 200
                                                     :headers {"Content-Type" "application/json"}
@@ -969,9 +971,11 @@
         (is (= "private, max-age=31536000, immutable"
                (get-in (handler {:request-method :get :uri uri :query-string query :headers {}})
                        [:headers "Cache-Control"])))))
-    (testing "an asset that is not there, and a page link, are left alone"
+    (testing "an asset that is not there, another host, a page link and the body's own HTML are left alone"
       (is (str/includes? html "href=\"/css/no-such.css\""))
-      (is (str/includes? html "href=\"/web/admin\"")))
+      (is (str/includes? html "src=\"//cdn.example/bou389/asset.js\""))
+      (is (str/includes? html "href=\"/web/admin\""))
+      (is (str/includes? html "<img src=\"/bou389/asset.js\">")))
     (testing "only HTML is rewritten"
       (is (= page (:body (handler {:request-method :get :uri "/json" :headers {}})))))))
 

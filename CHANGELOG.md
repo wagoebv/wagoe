@@ -31,8 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
-- **HTML pages link local assets with `?v=<digest>`, and browsers keep those for good** (BOU-391). Every layout gets
-  it, an app's own included; nothing to change.
+- **An HTML page's `<link>` and `<script>` assets carry `?v=<digest>`, and browsers keep those for good** (BOU-391).
+  Any layout rendered as a string; nothing to change.
 - **`:wagoe/user :profile-layout`, the profile and MFA pages in the app's own page** (BOU-817), as `:login-layout`.
   Link `/css/profile.css` there; unset, nothing changes.
 - **`wagoe.shared.ui.core.user-menu/user-menu`, the admin's user menu for any layout** (BOU-816), showing `:avatar-url`

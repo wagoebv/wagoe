@@ -29,6 +29,7 @@
             [ring.util.codec :as codec]
             [ring.util.io :as ring-io]
             [ring.util.request :as ring-request]
+            [ring.util.response :as ring-response]
             [wagoe.config :as wagoe-config]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
@@ -745,21 +746,17 @@
   digest)
 
 (defn- cache-headers
-  "Mark a static asset cacheable but always revalidated, with a digest of its
-   bytes as the validator.
+  "Mark a static asset cacheable, with a digest of its bytes as the validator.
 
    `no-cache` means \"store it, but ask before reusing it\" — not \"do not
    store\". With a validator the ask is a 304 carrying no body, so the bytes
-   travel once.
+   travel once. A path alone gets no lifetime: `app.css` changes meaning under
+   a fixed name. Nor is size-and-mtime the validator — a rebuild producing a
+   same-length file in the same second would keep serving the old asset.
 
-   Not `max-age`/`immutable` by path: `app.css` changes meaning under a fixed
-   name, so any lifetime is a window in which a shipped fix cannot reach a
-   browser that already holds the old one. Only a URL whose `?v=` equals the
-   digest, as `wrap-asset-versions` writes it, names its content and is
-   kept for good (BOU-391); any other `v` gets `no-cache`. `private`: a CDN that
-   ignores the query string would otherwise pin one version under every `v`. Nor size-and-mtime, which the ticket first proposed — a rebuild
-   producing a same-length file in the same second reuses the validator and the
-   304 path keeps serving the old asset.
+   A URL whose `?v=` equals the digest names its content, so it is kept for
+   good (BOU-391). `private`: a CDN that ignores the query string would
+   otherwise pin one version under every `v`.
 
    Nothing is held in memory whole. A file is hashed by streaming it, leaving
    ring's own body to be streamed out in turn. Hashing a jar entry consumes the
@@ -797,32 +794,42 @@
   (some->> (:query-string request) (re-find #"(?:^|&)v=([0-9a-f]{32})(?:&|$)") second))
 
 (defn- asset-version
-  "The digest of the asset at `path` under public/, or nil when there is none
-   or it cannot be read: the link is then left as it was. A jar entry's digest
-   is the one the static handler keeps; a file is hashed per page, since a
-   developer edits it under the running server."
+  "The digest the static handler would send as the ETag of `path`, or nil when
+   it serves nothing there: the link is then left as it was. Looked up as that
+   handler looks it up, under the same key. A file is keyed by its mtime and
+   length too, so a page does not rehash it; a stale guess costs only the
+   long lifetime, since the handler compares `v` with the bytes it serves."
   [path]
   (try
-    (or (get @packaged-digests path)
-        (when-let [url (io/resource (str "public" path))]
-          (let [d (with-open [in (io/input-stream url)] (digest-stream in))]
-            (cond->> d (= "jar" (.getProtocol url)) (remember-digest! path)))))
+    (let [k (codec/url-decode path)]
+      (or (get @packaged-digests k)
+          (let [body (:body (resource-request {:request-method :get :uri path} "public"))]
+            (cond
+              (instance? java.io.File body)
+              (let [fk [k (.lastModified ^java.io.File body) (.length ^java.io.File body)]]
+                (or (get @packaged-digests fk)
+                    (remember-digest! fk (with-open [in (io/input-stream ^java.io.File body)] (digest-stream in)))))
+
+              (instance? java.io.InputStream body)
+              (remember-digest! k (with-open [^java.io.InputStream in body] (digest-stream in)))))))
     (catch Exception _ nil)))
 
 (def ^:private asset-ref
-  "A local asset in an href or src attribute, without a query or fragment."
-  #"(\s(?:href|src)=\")(/[^\"?#]+\.(?:css|js|png|svg|ico|webp|woff2?))\"")
+  "A local asset in a <link> or <script> tag, without a query or fragment.
+   Only those two: an asset in a body's own HTML, which a user may have
+   written and will save again, keeps its URL."
+  #"(<(?:link|script)\b[^>]*?\s(?:href|src)=\")(/(?!/)[^\"?#]+\.(?:css|js|png|svg|ico|webp))\"")
 
 (defn- wrap-asset-versions
-  "Add `?v=<digest>` to each local asset an HTML page links, so a changed
-   asset is a new URL and `cache-headers` may let the browser keep it for good
-   (BOU-391). Done here, on the rendered page, so every layout gets it and
-   core stays pure."
+  "Add `?v=<digest>` to the stylesheets, scripts and icons an HTML page links,
+   so a changed asset is a new URL and `cache-headers` may let the browser
+   keep it for good (BOU-391). Done here, on the rendered page, so every
+   layout gets it and core stays pure."
   [handler]
   (fn [request]
     (let [response (handler request)]
       (if (and (string? (:body response))
-               (some-> (get-in response [:headers "Content-Type"]) (str/includes? "text/html")))
+               (some-> (ring-response/get-header response "Content-Type") (str/includes? "text/html")))
         (update response :body str/replace asset-ref
                 (fn [[_ attr path]]
                   (str attr path (some->> (asset-version path) (str "?v=")) "\"")))
