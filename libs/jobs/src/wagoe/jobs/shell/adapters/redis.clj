@@ -319,7 +319,16 @@
              vec))))
 
   (process-scheduled-jobs! [this]
-    (process-scheduled-jobs-internal! this)))
+    (process-scheduled-jobs-internal! this))
+
+  ;; Reclaim goes by the worker's heartbeat key (60s TTL), which the worker
+  ;; loop cannot refresh while a handler runs.
+  ports/ILeasedJobQueue
+
+  (renew-interval-ms [_] 20000)
+
+  (renew-lease! [this _queue-name worker-id _job-id]
+    (boolean (heartbeat-worker! this worker-id))))
 
 ;; =============================================================================
 ;; Scheduled Job Processor

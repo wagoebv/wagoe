@@ -108,7 +108,8 @@ a sender). The app refs `:wagoe/email` and threads it into
 
 ```clojure
 :wagoe/email       {:provider :smtp :host "smtp.example.com" :port 587
-                       :username "..." :password "..."}
+                    :username "..." :password "..." :tls? true
+                    :from "no-reply@example.com"}
 ;; or {:provider :logging} in dev
 :wagoe/email-queue {:sender (ig/ref :wagoe/email) :max-retries 3}
 ```
