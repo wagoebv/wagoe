@@ -34,15 +34,19 @@
    Mapbox returns coordinates as [lng, lat] (GeoJSON — longitude first)."
   [feature]
   (let [[lng lat] (get-in feature [:geometry :coordinates])
-        context   (:context feature)]
-    {:lat               lat
-     :lng               lng
-     :formatted-address (:place_name feature)
-     :postcode          (extract-context-field context "postcode")
-     :city              (extract-context-field context "place")
-     :country           (extract-context-field context "country")
-     :provider          :mapbox
-     :cached?           false}))
+        context   (:context feature)
+        address?  (some #{"address"} (:place_type feature))]
+    (merge {:lat               lat
+            :lng               lng
+            :formatted-address (:place_name feature)
+            :postcode          (extract-context-field context "postcode")
+            :city              (extract-context-field context "place")
+            :country           (extract-context-field context "country")
+            :provider          :mapbox
+            :cached?           false}
+           ;; An address feature's text is its street and its address the number.
+           (when address?
+             (support/street-fields (:text feature) (:address feature) nil)))))
 
 ;; =============================================================================
 ;; Adapter record
@@ -54,10 +58,7 @@
   MapboxAdapter
 
   (geocode [this query]
-    (let [{:keys [address postcode city country]} query
-          q (str/join ", "
-                      (remove nil? [address postcode city
-                                    (or country "Netherlands")]))]
+    (let [q (support/query-text query)]
       (when (not (str/blank? q))
         (support/enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
         (log/debug "Mapbox geocode request" {:q q})
