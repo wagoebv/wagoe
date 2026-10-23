@@ -752,10 +752,11 @@
    store\". With a validator the ask is a 304 carrying no body, so the bytes
    travel once.
 
-   Deliberately not `max-age`/`immutable`: these filenames carry no content
-   hash. `app.css` changes meaning under a fixed name, so any lifetime is a
-   window in which a shipped fix cannot reach a browser that already holds the
-   old one. Nor size-and-mtime, which the ticket first proposed — a rebuild
+   Not `max-age`/`immutable` by path: `app.css` changes meaning under a fixed
+   name, so any lifetime is a window in which a shipped fix cannot reach a
+   browser that already holds the old one. Only a URL whose `?v=` equals the
+   digest, as `wagoe.ui-style/asset-url` writes it, names its content and is
+   kept for good (BOU-391); any other `v` gets `no-cache`. Nor size-and-mtime, which the ticket first proposed — a rebuild
    producing a same-length file in the same second reuses the validator and the
    304 path keeps serving the old asset.
 
@@ -763,12 +764,8 @@
    ring's own body to be streamed out in turn. Hashing a jar entry consumes the
    stream, so `reopen` repeats the lookup that produced this response — rather
    than rebuilding a path, which would mean re-deriving ring's decoding and
-   traversal rules.
-
-   The exception is a URL that names its content: `?v=` equal to the digest,
-   as `wagoe.ui-style/asset-url` writes it. A change makes a new URL, so this
-   one may be kept for good (BOU-391). A stale or made-up `v` gets `no-cache`."
-  [response path reopen & [version]]
+   traversal rules."
+  [response path reopen version]
   (let [body    (:body response)
         headers (fn [r d]
                   (-> r
@@ -792,6 +789,11 @@
             (-> response (assoc :body fresh) (headers d)))))
 
       :else (assoc-in response [:headers "Cache-Control"] "no-cache"))))
+
+(defn- query-version
+  "The `v` a versioned asset URL carries, when it has the shape of a digest."
+  [request]
+  (some->> (:query-string request) (re-find #"(?:^|&)v=([0-9a-f]{32})(?:&|$)") second))
 
 (defn- without-header
   "Drop a header from a request or response map, whatever casing it was written
@@ -849,8 +851,7 @@
                             (catch Exception _ nil))]
             (some-> (lookup)
                     (typed (or path (:uri request)))
-                    (cache-headers path lookup
-                                   (some->> (:query-string request) (re-find #"(?:^|&)v=([0-9a-f]{32})(?:&|$)") second))
+                    (cache-headers path lookup (query-version request))
                     ;; The digest decides, so If-Modified-Since gets no vote.
                     ;; Ring resolves a 304 from whichever validators the request
                     ;; carries, and for If-Modified-Since alone that is mtime —

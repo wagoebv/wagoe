@@ -1043,7 +1043,8 @@
         resp     (#'reitit/cache-headers
                   {:status 200 :headers {} :body (counting-stream "console.log(1)" closed)}
                   "/bou389/packaged.js"
-                  (fn [] {:status 200 :headers {} :body reopened}))]
+                  (fn [] {:status 200 :headers {} :body reopened})
+                  nil)]
     (is @closed "the stream that was hashed should be closed")
     (is (some? (get-in resp [:headers "ETag"])) "and it should still have produced a digest")
     (is (identical? reopened (:body resp))
@@ -1056,7 +1057,7 @@
   (reset! @#'reitit/packaged-digests {})
   (let [reopens (atom 0)
         fetch   #(#'reitit/cache-headers (packaged "console.log(1)") "/bou389/same.js"
-                                         (fn [] (swap! reopens inc) (packaged "console.log(1)")))
+                                         (fn [] (swap! reopens inc) (packaged "console.log(1)")) nil)
         first-etag (get-in (fetch) [:headers "ETag"])
         after-first @reopens
         second-etag (get-in (fetch) [:headers "ETag"])]
@@ -1080,7 +1081,7 @@
   (reset! @#'reitit/packaged-digests {})
   (dotimes [i (+ 50 @#'reitit/max-cached-digests)]
     (#'reitit/cache-headers (packaged "x") (str "/js/" i "-" (random-uuid) ".js")
-                            (fn [] (packaged "x"))))
+                            (fn [] (packaged "x")) nil))
   (is (<= (count @@#'reitit/packaged-digests) @#'reitit/max-cached-digests)
       "the cache must stay bounded whatever paths are thrown at it"))
 

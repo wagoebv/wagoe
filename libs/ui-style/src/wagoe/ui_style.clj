@@ -82,8 +82,9 @@
   (lookup js-bundles k pilot-js))
 
 (defn- digest
-  "The validator the static handler sends as ETag: SHA-256 of the bytes,
-   truncated to 16, in hex. The two must agree, or no URL is ever immutable."
+  "A copy of `digest-stream` in wagoe.platform.shell.http.reitit-router, the
+   ETag the static handler compares `v` with. Neither library depends on the
+   other; test/wagoe/asset_url_test.clj fails when the two drift."
   [url]
   (with-open [in (io/input-stream url)]
     (let [md  (MessageDigest/getInstance "SHA-256")
@@ -95,17 +96,25 @@
             (recur))))
       (->> (.digest md) (take 16) (map #(format "%02x" (bit-and % 0xff))) (apply str)))))
 
-(defonce ^:private packaged-digests (atom {}))
+(defonce ^:private digests
+  ;; path -> [stamp digest]. A jar entry cannot change while the process runs,
+  ;; so its stamp is :jar; a file a developer edits is rehashed when it is saved.
+  (atom {}))
+
+(defn- stamp [^java.net.URL url]
+  (if (= "file" (.getProtocol url)) (.lastModified (io/file url)) :jar))
 
 (defn asset-url
   "`path` with `?v=<digest>` when it names a resource under public/, so a
    changed asset is a new URL and the old one may be cached for good (BOU-391).
-   Anything else is returned as it is. A jar entry cannot change while the
-   process runs, so its digest is kept; a file a developer edits is hashed again."
+   Anything else is returned as it is."
   [path]
-  (if-let [url (and (string? path) (.startsWith ^String path "/") (io/resource (str "public" path)))]
-    (str path "?v=" (if (= "jar" (.getProtocol url))
-                      (or (get @packaged-digests path)
-                          (let [d (digest url)] (swap! packaged-digests assoc path d) d))
-                      (digest url)))
-    path))
+  (let [[cached-stamp cached] (get @digests path)]
+    (if (= :jar cached-stamp)
+      (str path "?v=" cached)
+      (if-let [url (and (string? path) (.startsWith ^String path "/") (io/resource (str "public" path)))]
+        (let [s (stamp url)]
+          (str path "?v=" (if (= s cached-stamp)
+                            cached
+                            (let [d (digest url)] (swap! digests assoc path [s d]) d))))
+        path))))
