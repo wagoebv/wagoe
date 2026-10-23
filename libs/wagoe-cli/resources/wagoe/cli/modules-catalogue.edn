@@ -111,10 +111,12 @@
    :version             "1.0.1"
    :category            :optional
    :tier                :stable
-   :dev-config-snippet  "  :wagoe.external/smtp\n  {:host #or [#env SMTP_HOST \"localhost\"] :port 1025 :tls? false :from \"no-reply@localhost\"}\n"
-   :config-snippet      "  :wagoe.external/smtp\n  {:host     #env SMTP_HOST\n   :port     #or [#long #or [#env SMTP_PORT 587] 587]\n   :username #env SMTP_USERNAME\n   :password #env SMTP_PASSWORD\n   :tls?     true\n   :from     #env SMTP_FROM}\n"
+   ;; :wagoe/email reads only its own key; under :wagoe.external/smtp the app
+   ;; logged its mail (BOU-822). Same settings as `bb setup --email smtp`.
+   :dev-config-snippet  "  :wagoe/email\n  {:provider :smtp\n   :host     #or [#env SMTP_HOST \"localhost\"]\n   :port     #or [#long #or [#env SMTP_PORT 1025] 1025]\n   :tls?     false\n   :from     #or [#env SMTP_FROM \"no-reply@localhost\"]}\n"
+   :config-snippet      "  :wagoe/email\n  {:provider :smtp\n   :host     #env SMTP_HOST\n   :port     #or [#long #or [#env SMTP_PORT 587] 587]\n   :username #env SMTP_USERNAME\n   :password #env SMTP_PASSWORD\n   :tls?     true\n   :from     #env SMTP_FROM}\n"
    :prod-env-vars       ["SMTP_HOST" "SMTP_PORT" "SMTP_USERNAME" "SMTP_PASSWORD" "SMTP_FROM"]
-   :test-config-snippet "  :wagoe.external/smtp\n  {:host \"localhost\" :port 1025 :tls? false :from \"test@localhost\"}\n"
+   :test-config-snippet "  :wagoe/email\n  {:provider :logging}\n"
    ;; Runs whatever config says: the platform's always-on-modules (BOU-573).
    :always-on           :wagoe/email
    :add-command         "wagoe add email"

@@ -438,8 +438,7 @@
               existing-ver (:mvn/version existing)
               ;; A module is "installed" when its dep is present AND its config key is
               ;; in every profile it belongs in. Requiring dep-present? prevents false
-              ;; positives when two modules share a config key (e.g. email and external
-              ;; both use :wagoe.external/smtp).
+              ;; positives when two modules share a config key.
               wired?       (installed? dir module dep-present?)]
           (cond
             ;; A core module's version moves with the rest of Wagoe, and

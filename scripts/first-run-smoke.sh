@@ -128,7 +128,7 @@ echo "     package manager: $PKG"
 pkg_install curl ca-certificates
 
 # ── 1. bare image: prerequisites must be reported, not delegated ────────────
-echo "[1/11] prerequisite detection on a bare image"
+echo "[1/12] prerequisite detection on a bare image"
 set +e
 PREREQ_OUT="$(bash /repo/scripts/install.sh 2>&1)"
 PREREQ_RC=$?
@@ -143,7 +143,7 @@ grep -qi -- "$EXPECT_HINT" <<<"$PREREQ_OUT" \
 ok "names the missing tools and the $PKG command to install them"
 
 # ── 2. install ──────────────────────────────────────────────────────────────
-echo "[2/11] install.sh"
+echo "[2/12] install.sh"
 pkg_install git unzip zip which zsh fish
 if [ "$PKG" = pacman ]; then
   # install.sh:122 installs the JVM with a plain `pacman -S`, and pacman cannot
@@ -204,7 +204,7 @@ echo "export PATH=/root/.smoke-bin:\$PATH" >>/root/.bashrc
 # released: use the `wagoe` on PATH, which install.sh built from the latest
 #           published tag. That wrapper is the whole point of this mode — it
 #           runs the templates in that tag, which is where BOU-402 lived.
-echo "[3/11] wagoe new my-app  (target: $TARGET)"
+echo "[3/12] wagoe new my-app  (target: $TARGET)"
 #
 # A hyphenated name on purpose: it is the name in every doc and post, and
 # `wagoe new my-app` once wrote my_app.* namespaces that failed lint (BOU-602).
@@ -256,7 +256,7 @@ fi
 # namespaces clj-kondo warns on: 1.0.0 was red before anyone wrote a line
 # (BOU-602). With .env loaded the documented way: the config doctor in it
 # requires JWT_SECRET.
-echo "[4/11] bb check on a fresh project"
+echo "[4/12] bb check on a fresh project"
 set +e
 bash -ic "cd /root/my-app && source .env && bb check --ci" >/tmp/check-fresh.log 2>&1
 CHECK_RC=$?
@@ -275,7 +275,7 @@ ok "gates pass on the generated project"
 # (BOU-601). So: run the block the page renders, read from the page, in each
 # shell we claim. env -i, because this shell sourced nothing yet but a leaked
 # variable would make the test pass without the fix.
-echo "[5/11] documented first run in bash, zsh and fish"
+echo "[5/12] documented first run in bash, zsh and fish"
 QS=/repo/docs/modules/getting-started/pages/quickstart.adoc
 FLOW=$(sed -n "/^\/\/ tag::first-run\[\]/,/^\/\/ end::first-run\[\]/p" "$QS" \
          | sed -n "/^----$/,/^----$/p" | grep -v "^----$" || true)
@@ -336,7 +336,7 @@ if [ -n "${SMOKE_AI:-}" ]; then
 fi
 
 # ── 6. quickstart ───────────────────────────────────────────────────────────
-echo "[6/11] bb quickstart"
+echo "[6/12] bb quickstart"
 set -a; . ./.env 2>/dev/null || true; set +a
 # The scaffolder is injected via -Sdeps at a hardcoded version rather than read
 # from deps.edn, so the :local/root rewrite above cannot reach it. Without this
@@ -359,7 +359,7 @@ ok "completed without clobbering the config"
 # ── 7. the scaffolded migration must actually apply ─────────────────────────
 # `bb quickstart` reports 8/8 Done even when zero migrations run, which is how
 # BOU-256 stayed hidden: the sample module had no table.
-echo "[7/11] scaffolded migration applied"
+echo "[7/12] scaffolded migration applied"
 if ls migrations/*.sql >/dev/null 2>&1; then
   STATUS="$(bash -ic "bb migrate status" 2>&1 || true)"
   APPLIED="$(grep -oE "Applied migrations: [0-9]+" <<<"$STATUS" | grep -oE "[0-9]+" | tail -1)"
@@ -377,7 +377,7 @@ fi
 # in it. The combination was the gap, and it hid untagged deftests, an
 # `(is true)`, 36 lint warnings, a protocol method declared twice, and a service
 # calling a repository method that did not exist (BOU-267).
-echo "[8/11] bb check on the scaffolded module"
+echo "[8/12] bb check on the scaffolded module"
 # --ci is load-bearing. Without it `bb check` prints its ✗ lines and still exits
 # 0 — it only calls System/exit on failure when :ci is set (check.clj). The
 # first version of this step omitted it and was therefore a gate that could
@@ -411,7 +411,7 @@ ok "gates pass, and the skipped framework-only checks are named"
 # user CLI call run-cli! directly with a well-formed vector, which is precisely
 # the step the alias got wrong. Assert on the outcome, not the exit code.
 # (No apostrophes below: this whole body is a single-quoted docker argument.)
-echo "[9/11] bb create-admin"
+echo "[9/12] bb create-admin"
 ADMIN_PW="Str0ng-Dev-Pass-x9"
 set +e
 printf "%s\n%s\n" "$ADMIN_PW" "$ADMIN_PW" \
@@ -434,7 +434,7 @@ grep -q "Admin user created successfully" /tmp/admin.log \
 ok "admin user created"
 
 # ── 10. does it actually serve? ──────────────────────────────────────────────
-echo "[10/11] app serves HTTP"
+echo "[10/12] app serves HTTP"
 bash -ic "cd /root/my-app && set -a && . ./.env && set +a && clojure -M:repl" >/tmp/repl.log 2>&1 &
 for _ in $(seq 1 90); do (echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null && break; sleep 2; done
 (echo > /dev/tcp/127.0.0.1/7888) 2>/dev/null || { log_excerpt /tmp/repl.log 25; fail "nREPL never came up"; }
@@ -612,7 +612,7 @@ ok "a malformed request answers 400 with a WGE code"
 #
 # No apostrophes or single quotes below: this whole script body is one
 # single-quoted string handed to docker, and either would terminate it.
-echo "[11/11] bb repl gives a prompt"
+echo "[11/12] bb repl gives a prompt"
 printf "(+ 1 2)\n:repl/quit\n" \
   | bash -ic "cd /root/my-app && set -a && . ./.env && set +a && bb repl --port 7999" \
     >/tmp/replprompt.log 2>&1 || true
@@ -634,6 +634,71 @@ grep -q "user=> 3" /tmp/replprompt.log \
   || { log_excerpt /tmp/replprompt.log 20
        fail "bb repl showed a prompt but did not evaluate (+ 1 2)"; }
 ok "prompt evaluates, and --port reached nREPL"
+
+# ── 12. do the AI commands work against a provider? ─────────────────────────
+# AI commands were tested only up to the shell-out (BOU-405). The stub answers
+# with a project and payment provider the description does not name, so the
+# summary shows them only if the reply was parsed. Skipped with SMOKE_AI: a
+# provider in config.edn outranks the env var.
+if [ -z "${SMOKE_AI:-}" ]; then
+  echo "[12/12] bb scaffold ai and bb setup ai against a stub provider"
+  cat >/tmp/ai-stub.clj <<"STUB"
+(ns ai-stub
+  (:require [cheshire.core :as json]
+            [org.httpkit.server :as server]))
+
+(def answer
+  {:module-name "product"
+   :entities    [{:name "Product" :fields [{:name "name" :type "string"}
+                                           {:name "price" :type "decimal"}]}]
+   :project-name "stub-shop"
+   :database     "sqlite"
+   :payment      "mollie"})
+
+(server/run-server
+ (fn [{:keys [uri]}]
+   ;; Any other path is the 404 a real endpoint gives a malformed URL.
+   (if (= uri "/v1/chat/completions")
+     {:status  200
+      :headers {"Content-Type" "application/json"}
+      :body    (json/generate-string
+                {:choices [{:message {:content (json/generate-string answer)}
+                            :finish_reason "stop"}]
+                 :usage   {:total_tokens 42}})}
+     {:status 404 :body (str "no route " uri)}))
+ {:port 8123})
+@(promise)
+STUB
+  bash -ic "bb /tmp/ai-stub.clj" >/tmp/ai-stub.log 2>&1 &
+  for _ in $(seq 1 30); do (echo > /dev/tcp/127.0.0.1/8123) 2>/dev/null && break; sleep 1; done
+  (echo > /dev/tcp/127.0.0.1/8123) 2>/dev/null || { log_excerpt /tmp/ai-stub.log 20; fail "the stub provider never came up"; }
+  export OPENAI_BASE_URL=http://127.0.0.1:8123
+  # Same -Sdeps injection as the scaffolder in step 6.
+  if [ "$TARGET" = worktree ]; then
+    export WAGOE_AI_ROOT=/work/libs/ai
+  fi
+
+  bash -ic "cd /root/my-app && bb scaffold ai \"product module with name, price\" --yes" \
+    </dev/null >/tmp/scaffold-ai.log 2>&1 \
+    || { log_excerpt /tmp/scaffold-ai.log 25; fail "bb scaffold ai exited non-zero"; }
+  [ -d /root/my-app/src/my_app/product ] \
+    || { log_excerpt /tmp/scaffold-ai.log 25
+         echo "product sources found: $(cd /root/my-app && find src -path "*/product/*" -name "*.clj" -print -quit)"
+         fail "bb scaffold ai wrote no module under the project namespace, src/my_app/product (BOU-401)"; }
+  ok "bb scaffold ai wrote src/my_app/product"
+
+  # "n" at the confirmation: the summary is the assertion, and the config the
+  # steps above verified stays as it is.
+  printf "n\n" | bash -ic "cd /root/my-app && bb setup ai \"PostgreSQL with Stripe\"" \
+    >/tmp/setup-ai-stub.log 2>&1 \
+    || { log_excerpt /tmp/setup-ai-stub.log 30; fail "bb setup ai exited non-zero"; }
+  grep -q "stub-shop" /tmp/setup-ai-stub.log && grep -q "mollie" /tmp/setup-ai-stub.log \
+    || { log_excerpt /tmp/setup-ai-stub.log 30
+         fail "bb setup ai did not show the provider answer: parsed and dropped, or never asked (BOU-401)"; }
+  ok "bb setup ai summarised the provider answer"
+else
+  echo "[12/12] skipped: SMOKE_AI=${SMOKE_AI} puts a provider in config.edn, which outranks the stub"
+fi
 
 echo
 if [ "$TARGET" = released ]; then
