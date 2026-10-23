@@ -317,7 +317,7 @@ Example subscriber that starts a workflow: see "Lifecycle Events" in
 |------------|---------|----------|
 | **Hiccup** | HTML generation | `libs/{library}/src/wagoe/{library}/core/ui.clj` |
 | **HTMX** | Dynamic interactions | Inline attributes in Hiccup |
-| **daisyUI / Tailwind** | CSS system | `libs/ui-style/resources/tailwind/admin-pilot.css` |
+| **daisyUI / Tailwind** | CSS system | `libs/ui-style/resources/tailwind/admin.css` |
 | **Lucide Icons** | Icon system | `libs/shared-ui/src/wagoe/shared/ui/core/icons.clj` |
 
 ### UI Architecture Principles
@@ -423,13 +423,21 @@ libs/{module}/src/wagoe/{module}/core/
 **Location**: `libs/ui-style/resources/public/css/`
 
 ```
-css/
+public/css/
 ├── wagoe-tokens.css     # stable token contract (Wagoe defaults)
 ├── app.css              # component styles (uses tokens only)
-├── admin.css            # admin interface styles (uses tokens only)
-├── daisy-admin.css      # compiled daisyUI/Tailwind, from resources/tailwind/admin-pilot.css
-└── wagoe-admin.css      # wagoe.org tokens and admin display roles (ADR-040)
+├── daisy-admin.css      # compiled: the :pilot bundle's daisyUI/Tailwind
+└── wagoe-admin.css      # compiled: the whole :admin-pilot bundle, one file
+tailwind/
+├── pilot.css            # entry for daisy-admin.css
+├── pilot-rules.css      # daisy styling of the shared class contract
+├── admin.css            # entry for wagoe-admin.css: imports the rest in cascade order
+└── admin/
+    ├── legacy.css       # the admin styles that predate wagoe-admin.css
+    └── wagoe-admin.css  # wagoe.org tokens and admin display roles (ADR-040)
 ```
+
+Edit the sources, then `npm run build:css`; the compiled files are committed.
 
 daisyUI/Tailwind on `wagoe-tokens.css` is the one CSS system. Use central
 bundle keys from `wagoe.ui-style`:
@@ -437,7 +445,7 @@ bundle keys from `wagoe.ui-style`:
 - `:admin-pilot` — admin CRUD pages
 
 **CSS Organisation Rules**:
-1. Component CSS (`app.css`, `admin.css`) must only reference token variables — never hardcode values
+1. Component CSS (`app.css`, `tailwind/admin/*.css`) must only reference token variables — never hardcode values
 2. All token variables are defined in `wagoe-tokens.css`; a theme file overrides them
 3. Dark mode is handled via `[data-theme="dark"]` and `@media (prefers-color-scheme: dark)` in the token file — no duplicate declarations in component CSS
 
@@ -464,7 +472,7 @@ bundle keys from `wagoe.ui-style`:
 `wagoe-tokens.css` is the **token contract** — every variable component CSS can
 reference, with neutral Wagoe navy/green defaults. Self-contained (no imports,
 works offline and in JAR deployments). daisyUI's theme colours
-(`--color-base-*`, `--color-primary`) come from `daisy-admin.css`.
+(`--color-base-*`, `--color-primary`) come from daisyUI; the admin's are set in `tailwind/admin/wagoe-admin.css`.
 
 **Reference** — tokens available for use in component CSS:
 
