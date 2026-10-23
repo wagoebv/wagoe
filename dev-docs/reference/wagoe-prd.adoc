@@ -754,9 +754,9 @@ The module-centric architecture uses dependency injection to wire concrete adapt
                                 (:database config))
                     :mock (user-test/make-mock-user-repository))
 
-        user-notifications (case (get-in config [:notifications :type])
+        user-notifications (case (get-in config [:wagoe/email :provider])
                             :smtp (user-adapters/make-smtp-notification-service
-                                  (:smtp config))
+                                  (:wagoe/email config))
                             :mock (user-test/make-mock-notification-service))
 
         system-services (make-system-services config)
@@ -2070,31 +2070,7 @@ config/
                                                             :production 60
                                                             :test nil}}}
 
-              :notifications {:email {:enabled? true
-                                     :smtp {:host #profile {:development "localhost"
-                                                           :staging #env "SMTP_HOST"
-                                                           :production #env "SMTP_HOST"
-                                                           :test "localhost"}
-                                           :port #profile {:development 1025  ; MailHog
-                                                         :staging #long #env "SMTP_PORT"
-                                                         :production #long #env "SMTP_PORT"
-                                                         :test 1025}
-                                           :username #profile {:development nil
-                                                             :staging #env "SMTP_USERNAME"
-                                                             :production #env "SMTP_USERNAME"
-                                                             :test nil}
-                                           :password #profile {:development nil
-                                                             :staging #env "SMTP_PASSWORD"
-                                                             :production #env "SMTP_PASSWORD"
-                                                             :test nil}
-                                           :tls? #profile {:development false
-                                                         :staging true
-                                                         :production true
-                                                         :test false}}
-                                     :from-address #profile {:development "dev@wagoe.localhost"
-                                                            :staging "noreply@staging.wagoe.example.com"
-                                                            :production "noreply@wagoe.example.com"
-                                                            :test "test@wagoe.test"}
+              :notifications {:email {:enabled? true  ; sent through :wagoe/email, below
                                      :templates {:welcome {:subject "Welcome to Wagoe!"
                                                           :template-path "templates/email/welcome.html"}
                                                 :password-reset {:subject "Password Reset Request"
@@ -2136,6 +2112,23 @@ config/
                                                                      :staging 90
                                                                      :production 365
                                                                      :test 1}}}}}
+----
+
+*Email Configuration* (`:active` in `resources/conf/prod/config.edn`):
+
+The user module sends mail through the email module's sender, configured under `:wagoe/email`. Without `:provider :smtp`
+it uses the logging sender and sends nothing.
+
+[source,highlightjs,highlight]
+----
+:wagoe/email
+{:provider :smtp
+ :host     #env SMTP_HOST
+ :port     #or [#long #or [#env SMTP_PORT 587] 587]
+ :username #env SMTP_USERNAME
+ :password #env SMTP_PASSWORD
+ :tls?     true
+ :from     #env SMTP_FROM}
 ----
 
 *Storage Module Configuration* (`config/modules/storage.edn`):
