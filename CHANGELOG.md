@@ -208,6 +208,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **The admin loads one stylesheet** (BOU-808): `:admin-pilot` is `/css/wagoe-admin.css`, built by `npm run build:css`,
+  with focus rings and shadows on the tokens. Load the bundle rather than listing the old CSS files.
 - **Groups, roles, permissions and workflow instances are searchable, sortable admin lists** (BOU-807); roles and a
   user's rights group by module, audit badges and IPs read quieter. Nothing to change.
 - **Admin dashboard tiles line up**: at most four a row, counts on one line, other pages as tiles too. 25 more Lucide
@@ -293,6 +295,16 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The parent banner on a child record's admin page shows values as the list does** (BOU-390): a date formatted, a
+  relation by its title, not its UUID. Nothing to change.
+- **The `csrf-session` cookie carries `Secure` under `:wagoe/settings :secure-cookies? true`** (BOU-819), as the session
+  cookies do. Nothing to change; `wrap-csrf` callers can pass `:secure-cookies?`.
+- **`wagoe add email` writes `:wagoe/email {:provider :smtp …}`** (BOU-822); its `:wagoe.external/smtp` left the app
+  logging mail. Move those settings to `:wagoe/email` with `:provider :smtp`.
+- **`bb setup --email smtp` writes `:wagoe/email {:provider :smtp …}`** (BOU-818); its `:wagoe.external/smtp` left the app
+  logging mail instead of sending it. Re-run setup, or move those settings to `:wagoe/email` with `:provider :smtp`.
+- **A missing config profile lists the profiles that exist** (BOU-820), `acc` and any other under `resources/conf/`, not a
+  fixed dev, test, prod. Nothing to change.
 - **After an admin reset, a user in an app whose `:mfa-required?` hook requires MFA sets it up again at sign-in**
   (BOU-815), within 72 hours (`:auth :mfa-reset-enrolment-hours`). Anyone else without MFA is still refused.
 - **Tenant, search and workflow show a signed-in user they refuse the 403 page** (BOU-815), not the login form; so

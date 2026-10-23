@@ -127,14 +127,18 @@
 (defn- web-route? [uri]
   (str/starts-with? (or uri "") "/web"))
 
+(defn- pre-session-cookie-value
+  "The pre-session cookie's attributes: Secure follows `:secure-cookies?`, true when
+   unset, as the user module's auth cookies do (BOU-819)."
+  [id {:keys [secure-cookies?] :or {secure-cookies? true}}]
+  {:value id :http-only true :secure (boolean secure-cookies?) :path "/" :same-site :strict})
+
 (defn- attach-pre-session-cookie
-  "On :leave, set the pre-session cookie when :enter minted one. Marked Secure only
-   in non-dev is left to the platform's cookie policy; we mirror the session cookie's
-   SameSite=Strict, HttpOnly, root path."
+  "On :leave, set the pre-session cookie when :enter minted one."
   [ctx]
   (if-let [id (::pre-session-id ctx)]
     (update-in ctx [:response :cookies] assoc pre-session-cookie
-               {:value id :http-only true :path "/" :same-site :strict})
+               (pre-session-cookie-value id (get-in ctx [:system :csrf])))
     ctx))
 
 (defn- csrf-403
@@ -719,8 +723,9 @@
 
    Opt-in: a falsy/absent `:enabled?` or a blank `:secret` makes it a pass-through.
 
-   Config: {:enabled? bool :secret <signing-key> :exempt-paths [\"/...\"]}."
-  [handler {:keys [enabled? secret exempt-paths] :or {enabled? false}}]
+   Config: {:enabled? bool :secret <signing-key> :exempt-paths [\"/...\"]
+            :secure-cookies? bool}."
+  [handler {:keys [enabled? secret exempt-paths] :or {enabled? false} :as csrf-config}]
   ;; Disabled or secretless — no validation, no issuance; decided once at wrap
   ;; time (config is fixed here), so disabled deployments pay zero per-request cost.
   (if-not (and enabled? secret)
@@ -763,7 +768,7 @@
             (if pre-cookie
               resp
               (assoc-in resp [:cookies pre-session-cookie]
-                        {:value id :http-only true :path "/" :same-site :strict})))
+                        (pre-session-cookie-value id csrf-config))))
 
           :else (handler request))))))
 ;; ==============================================================================

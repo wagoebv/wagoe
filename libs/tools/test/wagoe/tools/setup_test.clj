@@ -144,7 +144,7 @@
       (is (str/includes? config ":provider :stripe"))
       (is (str/includes? config ":wagoe/cache"))
       (is (str/includes? config ":provider    :redis"))
-      (is (str/includes? config ":wagoe.external/smtp"))
+      (is (str/includes? config ":wagoe/email"))
       (is (str/includes? config ":wagoe/admin"))))
 
   (testing "uses mocks and no-ops for test"
@@ -382,7 +382,7 @@
    [:cache :memory]        "com.wagoe/wagoe-cache"
    ;; still accepted, so a script that passes the old spelling keeps working
    [:cache :in-memory]     "com.wagoe/wagoe-cache"
-   [:email :smtp]          "com.wagoe/wagoe-external"})
+   [:email :smtp]          "com.wagoe/wagoe-email"})
 
 (deftest ^:unit setup-choices-resolve-in-a-generated-project-test
   (testing "every value bb setup accepts has its dependency in top-level :deps"
@@ -556,8 +556,33 @@
   (let [active (:active (read-config (setup/build-config full-spec "prod")))]
     (is (env-ref? (get-in active [:wagoe/payment-provider :api-key])))
     (is (env-ref? (get-in active [:wagoe/cache :password])))
-    (is (env-ref? (get-in active [:wagoe.external/smtp :password])))
-    (is (true? (get-in active [:wagoe.external/smtp :tls?])))))
+    (is (env-ref? (get-in active [:wagoe/email :password])))
+    (is (true? (get-in active [:wagoe/email :tls?])))))
+
+(defn- resolve-config
+  "Generated config text read the way Aero would, with `env` as the
+   environment."
+  [text env]
+  (edn/read-string
+   {:readers {'env  #(get env (str %))
+              'or   #(some identity %)
+              'long #(cond-> % (string? %) parse-long)}
+    :default  (fn [_ v] v)}
+   text))
+
+(deftest ^:unit prod-profile-sends-mail-over-smtp
+  ;; :wagoe/email reads only its own key and logs without one, so smtp under
+  ;; :wagoe.external/smtp left a prod app logging its mail (BOU-818).
+  (let [env    {"SMTP_HOST" "smtp.example.com" "SMTP_USERNAME" "mailer"
+                "SMTP_PASSWORD" "s3cret" "SMTP_FROM" "app@example.com"}
+        active (:active (resolve-config (setup/build-config full-spec "prod") env))]
+    (is (= {:provider :smtp :host "smtp.example.com" :port 587 :username "mailer"
+            :password "s3cret" :tls? true :from "app@example.com"}
+           (:wagoe/email active)))
+    (is (not (contains? active :wagoe.external/smtp))))
+  (testing "--email none leaves the sender alone"
+    (is (not (contains? (:active (resolve-config (setup/build-config (assoc full-spec :email :none) "prod") {}))
+                        :wagoe/email)))))
 
 (deftest ^:unit setup-writes-a-prod-config
   (let [dir (fs/create-temp-dir)]
@@ -1036,6 +1061,18 @@
         (is (nil? exit) out)
         (is (= :redis (get-in (conf dir "prod") [:active :wagoe/cache :provider])) "carried over from dev")
         (is (str/includes? (summary-line out "Cache:") "keep (setup never removes one)") out)))))
+
+(deftest ^:unit a-prod-made-from-dev-keeps-its-smtp-sender
+  (with-project
+    (fn [dir]
+      (spit (conf-file dir "dev")
+            (config-edn/insert-into (slurp (conf-file dir "dev")) ":active"
+                                    "\n   :wagoe/email {:provider :smtp :host \"localhost\" :port 1025}"))
+      (let [[exit out] (run-setup dir "" "--prod" "true")
+            email      (get-in (conf dir "prod") [:active :wagoe/email])]
+        (is (nil? exit) out)
+        (is (= :smtp (:provider email)) "dev's :wagoe/email is read as the smtp answer")
+        (is (env-ref? (:host email)))))))
 
 (deftest ^:unit a-comment-after-the-key-survives-a-replace
   (with-project

@@ -135,6 +135,8 @@
   --text-muted:     #64748b;
   --text-faint:     #94a3b8;
   --text-inverse:   #f8fafc;
+  --text-on-accent: #ffffff;   /* text on a solid primary/success/error fill, both themes */
+  --qr-code-bg:     #ffffff;   /* scanners need a light ground, both themes */
   --text-secondary: var(--text-muted);   /* app.css alias */
 
   /* ============================================================================

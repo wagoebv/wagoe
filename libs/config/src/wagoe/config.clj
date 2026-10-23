@@ -156,6 +156,26 @@
                        {:type :configuration-error :missing-includes (vec missing) :config (str resource)})))
      config)))
 
+(defn- available-profiles
+  "Each profile with a conf/<profile>/config.edn on the classpath, sorted. A jar
+   is seen only when it has a conf/ directory entry, as tools.build writes."
+  []
+  (->> (enumeration-seq (.getResources (.getContextClassLoader (Thread/currentThread)) "conf"))
+       (mapcat (fn [^java.net.URL url]
+                 (case (.getProtocol url)
+                   "file" (for [^java.io.File d (.listFiles (io/file url))
+                                :when (.isFile (io/file d "config.edn"))]
+                            (.getName d))
+                   "jar"  (let [conn (doto ^java.net.JarURLConnection (.openConnection url)
+                                       (.setUseCaches false))]
+                            (with-open [jar (.getJarFile conn)]
+                              (into [] (keep #(second (re-matches #"conf/([^/]+)/config\.edn"
+                                                                  (.getName ^java.util.jar.JarEntry %))))
+                                    (enumeration-seq (.entries jar)))))
+                   nil)))
+       (into (sorted-set))
+       (mapv keyword)))
+
 (defn load-config
   "Load configuration from resources/conf/dev/config.edn using Aero.
 
@@ -182,7 +202,7 @@
        (throw (ex-info "Configuration file not found"
                        {:profile profile
                         :path config-path
-                        :available-profiles [:dev :test :prod]}))))))
+                        :available-profiles (available-profiles)}))))))
 
 ;; =============================================================================
 ;; Configuration Helpers
