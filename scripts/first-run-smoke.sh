@@ -656,16 +656,20 @@ if [ -z "${SMOKE_AI:-}" ]; then
    :payment      "mollie"})
 
 (server/run-server
- (fn [_] {:status  200
-          :headers {"Content-Type" "application/json"}
-          :body    (json/generate-string
-                    {:choices [{:message {:content (json/generate-string answer)}
-                                :finish_reason "stop"}]
-                     :usage   {:total_tokens 42}})})
+ (fn [{:keys [uri]}]
+   ;; Any other path is the 404 a real endpoint gives a malformed URL.
+   (if (= uri "/v1/chat/completions")
+     {:status  200
+      :headers {"Content-Type" "application/json"}
+      :body    (json/generate-string
+                {:choices [{:message {:content (json/generate-string answer)}
+                            :finish_reason "stop"}]
+                 :usage   {:total_tokens 42}})}
+     {:status 404 :body (str "no route " uri)}))
  {:port 8123})
 @(promise)
 STUB
-  bb /tmp/ai-stub.clj >/tmp/ai-stub.log 2>&1 &
+  bash -ic "bb /tmp/ai-stub.clj" >/tmp/ai-stub.log 2>&1 &
   for _ in $(seq 1 30); do (echo > /dev/tcp/127.0.0.1/8123) 2>/dev/null && break; sleep 1; done
   (echo > /dev/tcp/127.0.0.1/8123) 2>/dev/null || { log_excerpt /tmp/ai-stub.log 20; fail "the stub provider never came up"; }
   export OPENAI_BASE_URL=http://127.0.0.1:8123
@@ -677,22 +681,23 @@ STUB
   bash -ic "cd /root/my-app && bb scaffold ai \"product module with name, price\" --yes" \
     </dev/null >/tmp/scaffold-ai.log 2>&1 \
     || { log_excerpt /tmp/scaffold-ai.log 25; fail "bb scaffold ai exited non-zero"; }
-  PRODUCT_SRC="$(cd /root/my-app && find src -path "*/product/*" -name "*.clj" | head -1)"
-  [ -n "$PRODUCT_SRC" ] \
-    || { log_excerpt /tmp/scaffold-ai.log 25; fail "bb scaffold ai wrote no product module"; }
-  case "$PRODUCT_SRC" in
-    src/wagoe/*) fail "bb scaffold ai wrote the module under wagoe.*, not the project namespace (BOU-401)" ;;
-  esac
-  ok "bb scaffold ai wrote $PRODUCT_SRC"
+  [ -d /root/my-app/src/my_app/product ] \
+    || { log_excerpt /tmp/scaffold-ai.log 25
+         echo "product sources found: $(cd /root/my-app && find src -path "*/product/*" -name "*.clj" -print -quit)"
+         fail "bb scaffold ai wrote no module under the project namespace, src/my_app/product (BOU-401)"; }
+  ok "bb scaffold ai wrote src/my_app/product"
 
   # "n" at the confirmation: the summary is the assertion, and the config the
   # steps above verified stays as it is.
   printf "n\n" | bash -ic "cd /root/my-app && bb setup ai \"PostgreSQL with Stripe\"" \
-    >/tmp/setup-ai-stub.log 2>&1 || true
+    >/tmp/setup-ai-stub.log 2>&1 \
+    || { log_excerpt /tmp/setup-ai-stub.log 30; fail "bb setup ai exited non-zero"; }
   grep -q "stub-shop" /tmp/setup-ai-stub.log && grep -q "mollie" /tmp/setup-ai-stub.log \
     || { log_excerpt /tmp/setup-ai-stub.log 30
          fail "bb setup ai did not show the provider answer: parsed and dropped, or never asked (BOU-401)"; }
   ok "bb setup ai summarised the provider answer"
+else
+  echo "[12/12] skipped: SMOKE_AI=${SMOKE_AI} puts a provider in config.edn, which outranks the stub"
 fi
 
 echo
