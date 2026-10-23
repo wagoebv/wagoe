@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Asset URLs carry a digest, `?v=…`, and are cached for good** (BOU-391): `wagoe.ui-style/asset-url`, used by the
+  shared layout. A changed asset is a new URL; link your own assets through `asset-url` to get the same.
 - **`:wagoe/user :profile-layout`, the profile and MFA pages in the app's own page** (BOU-817), as `:login-layout`.
   Link `/css/profile.css` there; unset, nothing changes.
 - **`wagoe.shared.ui.core.user-menu/user-menu`, the admin's user menu for any layout** (BOU-816), showing `:avatar-url`

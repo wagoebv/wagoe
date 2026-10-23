@@ -937,6 +937,15 @@
     (testing "and carry a validator, so revalidating costs no body"
       (is (some? (get-in resp [:headers "ETag"]))))))
 
+(deftest ^:contract a-url-naming-its-content-is-cached-for-good
+  ;; BOU-391: `?v=` equal to the digest names these bytes, so a change is a new
+  ;; URL. Any other `v` must not freeze whatever the path serves today.
+  (let [digest  (str/replace (get-in (static-asset-response) [:headers "ETag"]) "\"" "")
+        cc      #(get-in (static-asset-response {:query-string %}) [:headers "Cache-Control"])]
+    (is (= "public, max-age=31536000, immutable" (cc (str "v=" digest))))
+    (is (= "no-cache" (cc (str "v=" (apply str (repeat 32 "0"))))))
+    (is (= "no-cache" (cc "v=stale")))))
+
 (deftest ^:contract a-matching-validator-answers-304-without-a-body
   (let [etag (get-in (static-asset-response) [:headers "ETag"])
         resp (static-asset-response {:headers {"if-none-match" etag}})]

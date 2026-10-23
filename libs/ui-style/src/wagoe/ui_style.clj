@@ -2,7 +2,9 @@
   "Shared app-wide UI asset bundles.
 
    Keep CSS/JS asset ordering centralized here so modules can reuse the same
-   rendering contract without hardcoding per-page lists.")
+   rendering contract without hardcoding per-page lists."
+  (:require [clojure.java.io :as io])
+  (:import [java.security MessageDigest]))
 
 (def pilot-css
   "The default stack: daisyUI/Tailwind on wagoe-tokens."
@@ -78,3 +80,32 @@
    An unknown key warns once and gets `:pilot`."
   [k]
   (lookup js-bundles k pilot-js))
+
+(defn- digest
+  "The validator the static handler sends as ETag: SHA-256 of the bytes,
+   truncated to 16, in hex. The two must agree, or no URL is ever immutable."
+  [url]
+  (with-open [in (io/input-stream url)]
+    (let [md  (MessageDigest/getInstance "SHA-256")
+          buf (byte-array 8192)]
+      (loop []
+        (let [n (.read in buf)]
+          (when (pos? n)
+            (.update md buf 0 n)
+            (recur))))
+      (->> (.digest md) (take 16) (map #(format "%02x" (bit-and % 0xff))) (apply str)))))
+
+(defonce ^:private packaged-digests (atom {}))
+
+(defn asset-url
+  "`path` with `?v=<digest>` when it names a resource under public/, so a
+   changed asset is a new URL and the old one may be cached for good (BOU-391).
+   Anything else is returned as it is. A jar entry cannot change while the
+   process runs, so its digest is kept; a file a developer edits is hashed again."
+  [path]
+  (if-let [url (and (string? path) (.startsWith ^String path "/") (io/resource (str "public" path)))]
+    (str path "?v=" (if (= "jar" (.getProtocol url))
+                      (or (get @packaged-digests path)
+                          (let [d (digest url)] (swap! packaged-digests assoc path d) d))
+                      (digest url)))
+    path))

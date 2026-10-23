@@ -763,28 +763,35 @@
    ring's own body to be streamed out in turn. Hashing a jar entry consumes the
    stream, so `reopen` repeats the lookup that produced this response — rather
    than rebuilding a path, which would mean re-deriving ring's decoding and
-   traversal rules."
-  [response path reopen]
+   traversal rules.
+
+   The exception is a URL that names its content: `?v=` equal to the digest,
+   as `wagoe.ui-style/asset-url` writes it. A change makes a new URL, so this
+   one may be kept for good (BOU-391). A stale or made-up `v` gets `no-cache`."
+  [response path reopen & [version]]
   (let [body    (:body response)
-        with-cc (assoc-in response [:headers "Cache-Control"] "no-cache")
-        etag    (fn [r d] (assoc-in r [:headers "ETag"] (str "\"" d "\"")))]
+        headers (fn [r d]
+                  (-> r
+                      (assoc-in [:headers "Cache-Control"]
+                                (if (= version d) "public, max-age=31536000, immutable" "no-cache"))
+                      (assoc-in [:headers "ETag"] (str "\"" d "\""))))]
     (cond
       (instance? java.io.File body)
-      (etag with-cc (with-open [in (io/input-stream ^java.io.File body)]
-                      (digest-stream in)))
+      (headers response (with-open [in (io/input-stream ^java.io.File body)]
+                          (digest-stream in)))
 
       (instance? java.io.InputStream body)
       (if-let [cached (and path (get @packaged-digests path))]
         ;; Nothing to read: ring's stream is the body, and the writer closes it.
-        (etag with-cc cached)
+        (headers response cached)
         (let [d (with-open [^java.io.InputStream in body] (digest-stream in))]
           ;; No path means no key to remember it under — hash it again next time
           ;; rather than let unrelated resources share an entry.
           (when path (remember-digest! path d))
           (when-let [fresh (:body (reopen))]
-            (-> with-cc (assoc :body fresh) (etag d)))))
+            (-> response (assoc :body fresh) (headers d)))))
 
-      :else with-cc)))
+      :else (assoc-in response [:headers "Cache-Control"] "no-cache"))))
 
 (defn- without-header
   "Drop a header from a request or response map, whatever casing it was written
@@ -842,7 +849,8 @@
                             (catch Exception _ nil))]
             (some-> (lookup)
                     (typed (or path (:uri request)))
-                    (cache-headers path lookup)
+                    (cache-headers path lookup
+                                   (some->> (:query-string request) (re-find #"(?:^|&)v=([0-9a-f]{32})(?:&|$)") second))
                     ;; The digest decides, so If-Modified-Since gets no vote.
                     ;; Ring resolves a 304 from whichever validators the request
                     ;; carries, and for If-Modified-Since alone that is mtime —

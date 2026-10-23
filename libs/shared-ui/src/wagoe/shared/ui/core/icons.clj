@@ -9,7 +9,8 @@
      (icon :users {:size 20 :class \"text-primary\"})
      (icon :chevron-right {:stroke-width 2.5})
      
-   Available icons can be listed with (available-icons)")
+   Available icons can be listed with (available-icons)"
+  (:require [wagoe.ui-style :as ui-style]))
 
 (def ^:private default-attrs
   "Default SVG attributes for all icons."
@@ -590,8 +591,8 @@
    (let [{:keys [size class variant]
           :or {size 32 variant :full}} opts
          suffix (if (= variant :icon) "-icon" "")
-         light-src (str "/assets/wagoe-light-512" suffix ".png")
-         dark-src (str "/assets/wagoe-dark-512" suffix ".png")
+         light-src (ui-style/asset-url (str "/assets/wagoe-light-512" suffix ".png"))
+         dark-src (ui-style/asset-url (str "/assets/wagoe-dark-512" suffix ".png"))
          img-style (str "height: " size "px; width: auto;")]
      [:span.brand-logo
       {:class class}

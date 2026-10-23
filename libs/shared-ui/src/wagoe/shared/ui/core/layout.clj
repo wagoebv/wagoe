@@ -127,15 +127,15 @@
       ;; until it did. The PNG links are what modern browsers actually use;
       ;; they follow the theme, which the .ico cannot.
       [:link {:rel "icon" :sizes "any" :href "/favicon.ico"}]
-      [:link {:rel "icon" :type "image/png" :href "/assets/wagoe-light-512-icon.png"
+      [:link {:rel "icon" :type "image/png" :href (ui-style/asset-url "/assets/wagoe-light-512-icon.png")
               :media "(prefers-color-scheme: light)"}]
-      [:link {:rel "icon" :type "image/png" :href "/assets/wagoe-dark-512-icon.png"
+      [:link {:rel "icon" :type "image/png" :href (ui-style/asset-url "/assets/wagoe-dark-512-icon.png")
               :media "(prefers-color-scheme: dark)"}]
-      [:link {:rel "apple-touch-icon" :href "/assets/wagoe-light-512.png"}]
-      [:script {:src "/js/init.js"}]
+      [:link {:rel "apple-touch-icon" :href (ui-style/asset-url "/assets/wagoe-light-512.png")}]
+      [:script {:src (ui-style/asset-url "/js/init.js")}]
       extra-head
       (for [css-file css]
-        [:link {:rel "stylesheet" :href css-file}])]
+        [:link {:rel "stylesheet" :href (ui-style/asset-url css-file)}])]
      [:body body-attrs
       (when-not skip-header
         [:header.site-header
@@ -146,7 +146,7 @@
       (toast/toast-region)
       (toast/flash-toasts flash)
       (for [js-file js]
-        [:script {:src js-file :defer true}])]]))
+        [:script {:src (ui-style/asset-url js-file) :defer true}])]]))
 
 (defn pilot-page-layout
   "Page layout using shared daisyUI pilot styling."
@@ -186,7 +186,7 @@
     [:meta {:name "viewport" :content "width=device-width, initial-scale=1.0"}]
     [:title status " - " title]
     (for [css-file pilot-css]
-      [:link {:rel "stylesheet" :href css-file}])]
+      [:link {:rel "stylesheet" :href (ui-style/asset-url css-file)}])]
    [:body.wagoe-default
     [:div.error-page
      [:h1 title]

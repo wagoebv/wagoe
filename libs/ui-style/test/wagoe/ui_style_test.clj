@@ -45,3 +45,13 @@
     (is (not (re-find #"\.data-table t[hd]:(first|last)-child" css)))
     (doseq [sel ["th.checkbox-header" "td.checkbox-cell" "th.actions-header" "td.actions-cell"]]
       (is (str/includes? css (str "table.data-table " sel)) sel))))
+
+(deftest ^:unit asset-url-names-the-content
+  (testing "a shipped asset carries a digest of its bytes"
+    (is (re-matches #"/js/forms\.js\?v=[0-9a-f]{32}" (sut/asset-url "/js/forms.js"))))
+  (testing "the same bytes give the same URL"
+    (is (= (sut/asset-url "/js/forms.js") (sut/asset-url "/js/forms.js"))))
+  (testing "anything not under public/ is left alone"
+    (is (= "/css/no-such.css" (sut/asset-url "/css/no-such.css")))
+    (is (= "https://cdn.example/x.js" (sut/asset-url "https://cdn.example/x.js")))
+    (is (nil? (sut/asset-url nil)))))
