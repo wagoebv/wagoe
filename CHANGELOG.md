@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`:wagoe/user :profile-layout`, the profile and MFA pages in the app's own page** (BOU-817), as `:login-layout`.
+  Link `/css/profile.css` there; unset, nothing changes.
 - **`wagoe.shared.ui.core.user-menu/user-menu`, the admin's user menu for any layout** (BOU-816), showing `:avatar-url`
   when set. Link `/css/user-menu.css` outside the admin; nothing to change in it.
 - **A child record's page and its parent's filtered list lead back to the parent**: breadcrumbs Admin / parent list /

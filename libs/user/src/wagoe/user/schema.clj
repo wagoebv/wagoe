@@ -527,6 +527,8 @@
   [:map
    [:login-redirect {:optional true} LoginRedirect]
    [:login-layout {:optional true} LoginLayout]
+   ;; The page around /web/profile/**, as LoginLayout.
+   [:profile-layout {:optional true} LoginLayout]
    [:dashboard {:optional true} Dashboard]
    [:home {:optional true} LocalPath]
    [:landing {:optional true} Landing]

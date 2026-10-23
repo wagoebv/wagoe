@@ -508,3 +508,10 @@
   ;; opts: :page (:login, :mfa, :oidc-mfa, :oidc-continue, :register,
   ;; :mfa-enrolment), :request,
   ;; :user, :flash, :return-to, :logo-url. Returns Hiccup for the full page.
+
+(defprotocol IProfileLayout
+  (profile-page [this title body opts]))
+  ;; The whole page around the profile and its MFA pages, under /web/profile.
+  ;; opts: :user, :flash, :request. Returns Hiccup for the full page, with
+  ;; htmx and the CSRF meta tag the cards' requests need, and
+  ;; /css/profile.css or the app's own styles.

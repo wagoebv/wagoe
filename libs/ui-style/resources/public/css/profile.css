@@ -1,0 +1,124 @@
+/* The profile pages (wagoe.user.core.profile-ui) in an app's own layout,
+   through :wagoe/user :profile-layout. The admin styles them with app.css and
+   does not load this. Everything is under .profile-page; set the
+   --profile-* properties to match the app. Each falls back to Wagoe's token,
+   then a value of its own. */
+.profile-page {
+  --pf-accent: var(--profile-accent, var(--color-primary, #01689b));
+  --pf-accent-fg: var(--profile-accent-fg, #fff);
+  --pf-danger: var(--profile-danger, var(--status-error, #d52b1e));
+  --pf-border: var(--profile-border, var(--border-default, #cad6dc));
+  --pf-surface: var(--profile-surface, var(--bg-primary, #fff));
+  --pf-muted: var(--profile-muted, var(--text-muted, #535353));
+  --pf-radius: var(--profile-radius, 4px);
+  color: var(--profile-text, var(--text-primary, #154273));
+}
+.profile-page .profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.profile-page .profile-card,
+.profile-page .mfa-card {
+  background: var(--pf-surface);
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius);
+  padding: 16px 20px;
+}
+.profile-page .card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.profile-page .card-header h2,
+.profile-page h2 { margin: 0; font-size: 1.25rem; }
+.profile-page .info-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--pf-border);
+}
+.profile-page .info-row:last-child { border-bottom: 0; }
+.profile-page .info-row label { font-weight: 600; }
+.profile-page .text-muted { color: var(--pf-muted); }
+.profile-page .text-success { color: var(--profile-success, var(--status-success, #39870c)); }
+
+/* Forms: wagoe's form-field, and its buttons */
+.profile-page form { display: grid; gap: 12px; margin: 0; }
+.profile-page .form-field { display: grid; gap: 4px; }
+.profile-page .form-field label { font-weight: 600; }
+.profile-page .form-field input,
+.profile-page .form-field select {
+  width: 100%;
+  max-width: 28rem;
+  padding: 6px 8px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius);
+  font: inherit;
+}
+.profile-page .field-errors .error { display: block; color: var(--pf-danger); font-size: 0.9em; }
+.profile-page .form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.profile-page .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+  padding: 6px 14px;
+  border: 1px solid var(--pf-accent);
+  border-radius: var(--pf-radius);
+  background: var(--pf-surface);
+  color: var(--pf-accent);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+/* Classed as well, to win over an app's own .button of the same weight */
+.profile-page .button.secondary { background: var(--pf-surface); color: var(--pf-accent); }
+.profile-page .button.primary { background: var(--pf-accent); color: var(--pf-accent-fg); }
+.profile-page .button.danger { border-color: var(--pf-danger); background: var(--pf-danger); color: #fff; }
+.profile-page .button.small { padding: 2px 8px; font-size: 0.9em; }
+
+/* Messages and badges */
+.profile-page .alert { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-left: 4px solid; }
+.profile-page .alert-success { border-color: var(--status-success, #39870c); background: var(--status-success-bg, #e1eddb); }
+.profile-page .alert-warning { border-color: var(--status-warning, #ffb612); background: var(--status-warning-bg, #fff4dc); }
+/* The badges are also .badge, which an app may style otherwise */
+.profile-page .user-status-badge,
+.profile-page .user-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--profile-badge-bg, #e5f0f9);
+  font-size: 0.85em;
+}
+
+/* MFA: setup steps, QR code, backup codes */
+.profile-page .mfa-setup-steps { display: grid; gap: 16px; }
+.profile-page .mfa-step { display: grid; gap: 8px; }
+.profile-page .qr-code-container img { width: 200px; height: 200px; }
+.profile-page .secret-code,
+.profile-page .backup-code-item {
+  font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+  word-break: break-all;
+}
+.profile-page .backup-codes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 16px;
+  padding: 12px;
+  border: 1px solid var(--pf-border);
+  border-radius: var(--pf-radius);
+}
+.profile-page .backup-codes-actions,
+.profile-page .backup-codes-confirm { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+@media (max-width: 480px) {
+  .profile-page .backup-codes-grid { grid-template-columns: 1fr; }
+}

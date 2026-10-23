@@ -1398,6 +1398,14 @@
 ;; Profile Page Handlers
 ;; =============================================================================
 
+(defn- profile-opts
+  "Page options every full profile page takes: the app's `:profile-layout`,
+   with the request it may want to read."
+  [config request]
+  (let [app-layout (get-in config [:active :wagoe/user :profile-layout])]
+    (cond-> {:user (:user request) :flash (:flash request)}
+      app-layout (assoc :profile-layout app-layout :request (without-secrets request)))))
+
 (defn profile-page-handler
   "Handler for the profile page (GET /web/profile).
    
@@ -1410,7 +1418,7 @@
      
    Returns:
      Ring handler function"
-  [user-service mfa-service _config]
+  [user-service mfa-service config]
   (fn [request]
     (try
       (let [current-user (:user request)
@@ -1423,8 +1431,7 @@
             user (user-ports/get-user-by-id user-service user-id)
             ;; Get MFA status
             mfa-status (mfa/get-mfa-status mfa-service user-id)
-            page-opts {:user current-user
-                       :flash (:flash request)}]
+            page-opts (profile-opts config request)]
         (if user
           (cond
             ;; HTMX fragment requests from profile cards (e.g. Cancel in edit form)
@@ -1697,11 +1704,10 @@
      
     Returns:
      Ring handler function"
-  [_mfa-service _config]
+  [_mfa-service config]
   (fn [request]
     (try
-      (let [page-opts {:user (:user request)
-                       :flash (:flash request)}]
+      (let [page-opts (profile-opts config request)]
         (html-response request (profile-ui/mfa-setup-page page-opts)))
       (catch Exception e
         (server-error-page request e "Error in mfa-setup-page-handler")))))
@@ -1798,13 +1804,12 @@
      
     Returns:
      Ring handler function"
-  [_mfa-service _config]
+  [_mfa-service config]
   (fn [request]
     (try
       (let [flash (:flash request)
             backup-codes (:mfa-backup-codes flash)
-            page-opts {:user (:user request)
-                       :flash flash}]
+            page-opts (profile-opts config request)]
         (if backup-codes
           (html-response request
                          (profile-ui/mfa-backup-codes-display backup-codes true page-opts))
@@ -1824,11 +1829,10 @@
 
     Returns:
      Ring handler function"
-  [_mfa-service _config]
+  [_mfa-service config]
   (fn [request]
     (try
-      (let [page-opts {:user (:user request)
-                       :flash (:flash request)}]
+      (let [page-opts (profile-opts config request)]
         (html-response request (profile-ui/mfa-disable-confirm-page {} page-opts)))
       (catch Exception e
         (server-error-page request e "Error in mfa-disable-page-handler")))))
@@ -1852,7 +1856,7 @@
 
    Returns:
      Ring handler function"
-  [mfa-service _config]
+  [mfa-service config]
   (fn [request]
     (try
       (let [current-user (:user request)
@@ -1866,7 +1870,7 @@
               (assoc :flash {:success "Two-factor authentication has been disabled"}))
           (let [[status errors] (mfa-disable-refusal result)]
             (html-response request
-                           (profile-ui/mfa-disable-confirm-page errors {:user current-user})
+                           (profile-ui/mfa-disable-confirm-page errors (profile-opts config request))
                            status))))
       (catch Exception e
         (server-error request e "Error in mfa-disable-handler")))))

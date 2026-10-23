@@ -1,6 +1,6 @@
 (ns wagoe.user.shell.hooks
   "The sign-in hooks, `:mfa-required?`, `:login-redirect` and `:login-layout`,
-   and `:group-membership`, which the group service reads.
+   `:profile-layout`, and `:group-membership`, which the group service reads.
    Each is set in `:wagoe/user` config or contributed by an application
    module's `:auth` part, which can be a ref to a component — config can only
    name a var."
@@ -11,6 +11,7 @@
   {:mfa-required?  [ports/IMfaPolicy ports/mfa-required? "IMfaPolicy"]
    :login-redirect [ports/ILoginRedirect ports/login-path "ILoginRedirect"]
    :login-layout   [ports/ILoginLayout ports/login-page "ILoginLayout"]
+   :profile-layout [ports/IProfileLayout ports/profile-page "IProfileLayout"]
    :group-membership [ports/IGroupMembership ports/group-names "IGroupMembership"]})
 
 (def ^:private hook-keys (apply sorted-set (keys protocols)))
