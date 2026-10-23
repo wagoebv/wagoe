@@ -13,7 +13,6 @@
    [wagoe.shared.ui.core.htmx :as htmx]
    [wagoe.user.core.ui :as user-ui]
    [wagoe.user.ports :as user-ports]
-   [clojure.tools.logging :as log]
    [ring.util.response :as ring-response])
   (:import [java.time Instant]))
 
@@ -30,16 +29,6 @@
 ;; =============================================================================
 ;; Admin Home Handler
 ;; =============================================================================
-
-(defn- isolated
-  "`(f)`, or nil when it throws: logged, and the dashboard shows the part as
-   missing instead of failing. In a savepoint, so a failed query in a tenant
-   request's transaction does not abort the parts after it on PostgreSQL."
-  [part f]
-  (try (db/in-savepoint (db/current-transaction) f)
-       (catch Exception e
-         (log/warn e "admin dashboard query failed" {:part part})
-         nil)))
 
 (def ^:private parallel-counts
   "How many entities the dashboard counts at once: each takes a pool connection."
@@ -58,10 +47,10 @@
 (defn- entity-stats
   "{:count n :summary [..]} for `entity`, each part nil when its query fails."
   [admin-service entity-configs entity]
-  {:count   (isolated [entity :count] #(ports/count-entities admin-service entity {}))
+  {:count   (support/isolated [entity :count] #(ports/count-entities admin-service entity {}))
    :summary (when (and (seq (:summary (get entity-configs entity)))
                        (satisfies? ports/IListOverview admin-service))
-              (:summary (isolated [entity :summary] #(ports/list-overview admin-service entity {:overview/summary-only? true} []))))})
+              (:summary (support/isolated [entity :summary] #(ports/list-overview admin-service entity {:overview/summary-only? true} []))))})
 
 (defn- recent-activity
   "The last audit entries, when `groups` (the user's sidebar) has the audit
@@ -69,7 +58,7 @@
   [user-service groups]
   (when-let [trail (and user-service
                         (some #(when (= user-ui/audit-url (:href %)) %) (mapcat :items groups)))]
-    (if-let [result (isolated :activity #(user-ports/list-audit-logs user-service
+    (if-let [result (support/isolated :activity #(user-ports/list-audit-logs user-service
                                                                      {:limit 10 :sort-by :created-at
                                                                       :sort-direction :desc :count? false}))]
       {:href (:href trail) :entries (:audit-logs result)}

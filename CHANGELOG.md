@@ -297,6 +297,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **The email README's production config is the shape `:wagoe/email` reads** (BOU-824): flat keys and `:provider
   :smtp`. A config copied from it logged mail instead of sending it; move its `:smtp` keys up and add `:provider :smtp`.
+- **The parent banner on a child record's admin page shows values as the list does** (BOU-390): a date formatted, a
+  relation by its title, not its UUID. Nothing to change.
 - **The `csrf-session` cookie carries `Secure` under `:wagoe/settings :secure-cookies? true`** (BOU-819), as the session
   cookies do. Nothing to change; `wrap-csrf` callers can pass `:secure-cookies?`.
 - **`wagoe add email` writes `:wagoe/email {:provider :smtp …}`** (BOU-822); its `:wagoe.external/smtp` left the app

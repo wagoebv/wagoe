@@ -662,20 +662,23 @@
    Shown at the top of a child entity edit page (e.g. order-item → order).
 
    Args:
-     ctx: {:config {:label \"Order\" :fields [:order-number :status ...]}
-           :record  parent-record-map}"
-  [{:keys [config record]}]
-  (let [label  (:label config)
-        fields (:fields config [])]
+     ctx: {:config        {:label \"Order\" :fields [:order-number :status ...]}
+           :record        parent-record-map
+           :entity-config the parent's config, for each value's role
+           :display       zone, patterns and the record's `:overview` (ADR-040)}"
+  [{:keys [record entity-config display] banner :config}]
+  (let [ctx {:entity-config entity-config :display display}]
     [:div.parent-context-banner
-     [:span.parent-context-label label]
+     [:span.parent-context-label (:label banner)]
      [:div.parent-context-fields
-      (for [f fields]
-        (when-let [v (get record f)]
-          [:div.parent-context-field
-           [:span.parent-context-field-label
-            (-> (name f) (str/replace #"-" " ") text/capitalize)]
-           [:span.parent-context-field-value (str v)]]))]]))
+      (for [{:keys [field config role label relation] :as column} (cells/columns entity-config (:fields banner []))
+            :let  [v (get record field)]
+            ;; Left out as before: false would render as an sr-only "No"
+            :when (not (or (nil? v) (false? v) (and (string? v) (str/blank? v))))]
+        [:div.parent-context-field
+         [:span.parent-context-field-label label]
+         [:span {:class (str "parent-context-field-value " (:class column))}
+          (cells/cell field record (assoc ctx :role role :field-config config :relation relation))]])]]))
 
 (defn- new-child-url
   "The \"New <child>\" link of an editable has-many, or nil when the child's

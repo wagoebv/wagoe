@@ -1184,6 +1184,32 @@
                                               sample-related-records))]
       (is (str/includes? html "ABC-1")))))
 
+(deftest ^:unit parent-context-banner-test
+  ;; The banner printed (str v): an instant with microseconds, a relation as
+  ;; its UUID (BOU-390).
+  (let [client "00000000-0000-0000-0000-0000000000c1"
+        ctx    {:config        {:label "Order" :fields [:client-id :created-at :missing :paid? :reference]}
+                :record        {:client-id  client
+                                :created-at (Instant/parse "2026-08-27T06:12:50.459979Z")
+                                :paid?      false
+                                :reference  ""}
+                :entity-config {:fields        {:client-id  {:type :uuid :label "Client"}
+                                                :created-at {:type :instant}
+                                                :missing    {:type :string}
+                                                :paid?      {:type :boolean}
+                                                :reference  {:type :string}}
+                                :relationships {:belongs-to [{:field :client-id :entity :clients}]}}
+                :display       {:overview {:titles {:client-id {client "Veldhuis"}}}}}
+        html   (str (ui/parent-context-banner ctx))]
+    (testing "values render as the list renders them"
+      (is (str/includes? html "Veldhuis"))
+      (is (str/includes? html "c-relation"))
+      (is (not (str/includes? html "2026-08-27T06:12:50.459979Z"))))
+    (testing "labels come from the field config"
+      (is (str/includes? html "\"Client\"")))
+    (testing "a field the record lacks, false or blank is left out"
+      (is (= 2 (count (re-seq #"parent-context-field-label" html)))))))
+
 (def ^:private order-id "4b1c2d3e-0000-4000-8000-000000000001")
 
 (def ^:private editable-relationship
