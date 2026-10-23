@@ -665,21 +665,18 @@
      ctx: {:config        {:label \"Order\" :fields [:order-number :status ...]}
            :record        parent-record-map
            :entity-config the parent's config, for each value's role
-           :overview      relation titles of the record (ADR-040)}
-     display: Optional display options (zone/date patterns)"
-  [{:keys [config record entity-config overview]} & [display]]
-  (let [display (assoc display :overview overview)]
+           :display       zone, patterns and the record's `:overview` (ADR-040)}"
+  [{:keys [record entity-config display] banner :config}]
+  (let [ctx {:entity-config entity-config :display display}]
     [:div.parent-context-banner
-     [:span.parent-context-label (:label config)]
+     [:span.parent-context-label (:label banner)]
      [:div.parent-context-fields
-      (for [{:keys [field label role relation] field-config :config :as column}
-            (cells/columns entity-config (:fields config []))
+      (for [{:keys [field config role label relation] :as column} (cells/columns entity-config (:fields banner []))
             :when (some? (get record field))]
         [:div.parent-context-field
          [:span.parent-context-field-label label]
          [:span {:class (str "parent-context-field-value " (:class column))}
-          (cells/cell field record {:role role :field-config field-config :entity-config entity-config
-                                    :relation relation :display display})]])]]))
+          (cells/cell field record (assoc ctx :role role :field-config config :relation relation))]])]]))
 
 (defn- new-child-url
   "The \"New <child>\" link of an editable has-many, or nil when the child's
@@ -917,7 +914,7 @@
      (when (and is-edit? (seq (:detail-tabs entity-config)))
        (detail-tabs entity-name entity-config (get record pk)))
      (when-let [ctx (:parent-context opts)]
-       (parent-context-banner ctx (:display opts)))
+       (parent-context-banner ctx))
      (error-summary entity-config errors)
      (entity-form entity-name entity-config record errors permissions list-url (:display opts) (:prefill opts)
                   (:nested opts) (:links opts))

@@ -1195,7 +1195,7 @@
                                                 :created-at {:type :instant}
                                                 :missing    {:type :string}}
                                 :relationships {:belongs-to [{:field :client-id :entity :clients}]}}
-                :overview      {:titles {:client-id {client "Veldhuis"}}}}
+                :display       {:overview {:titles {:client-id {client "Veldhuis"}}}}}
         html   (str (ui/parent-context-banner ctx))]
     (testing "values render as the list renders them"
       (is (str/includes? html "Veldhuis"))
