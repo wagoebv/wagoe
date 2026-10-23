@@ -77,6 +77,8 @@
   text-decoration: none;
   cursor: pointer;
 }
+/* Classed as well, to win over an app's own .button of the same weight */
+.profile-page .button.secondary { background: var(--pf-surface); color: var(--pf-accent); }
 .profile-page .button.primary { background: var(--pf-accent); color: var(--pf-accent-fg); }
 .profile-page .button.danger { border-color: var(--pf-danger); background: var(--pf-danger); color: #fff; }
 .profile-page .button.small { padding: 2px 8px; font-size: 0.9em; }
@@ -85,9 +87,13 @@
 .profile-page .alert { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-left: 4px solid; }
 .profile-page .alert-success { border-color: var(--status-success, #39870c); background: var(--status-success-bg, #e1eddb); }
 .profile-page .alert-warning { border-color: var(--status-warning, #ffb612); background: var(--status-warning-bg, #fff4dc); }
+/* The badges are also .badge, which an app may style otherwise */
 .profile-page .user-status-badge,
 .profile-page .user-role-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
   padding: 1px 8px;
   border-radius: 999px;
   background: var(--profile-badge-bg, #e5f0f9);
