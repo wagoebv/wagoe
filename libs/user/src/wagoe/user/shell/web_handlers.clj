@@ -1236,7 +1236,7 @@
       (let [user-id (get-in request [:path-params :id])
             uuid (UUID/fromString user-id)
             keep-current? (= "true" (get-in request [:form-params "keep-current"]))]
-        (user-ports/logout-user-everywhere user-service uuid
+        (user-ports/revoke-sessions-except user-service uuid
                                            (when keep-current? (get-in request [:session :id])))
         (redirect-with-toast request (str "/web/users/" user-id "/sessions") :success :user/toast-sessions-revoked))
       (catch IllegalArgumentException _

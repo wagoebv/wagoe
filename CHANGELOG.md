@@ -176,7 +176,7 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Sign in with OpenID Connect** (BOU-447): authorization code with PKCE, a "Sign in with X" button per provider.
   Configure under `:wagoe/user {:oidc …}`; linking by email is opt-in and never reaches an admin.
 - **Live htmx updates over server-sent events** (BOU-464): `sse/sse-handler` streams `sse/push-fragment!` to `sse-swap`
-  elements; the htmx `sse` extension ships in every bundle. Custom `IRealtimeService`s need `connect-identified`.
+  elements; the htmx `sse` extension ships in every bundle. Custom realtime services implement `IIdentifiedConnections`.
 - **`com.wagoe/wagoe-test`, a test kit for apps** (BOU-469): `with-test-system`, a Ring client with session + CSRF,
   test tenants, `run-pending-jobs!`, `drain-events!`, `drain-realtime!`. Add it to `:test`; see `libs/test/README.md`.
 - **`wagoe upgrade`** (BOU-470) rewrites deprecated config values, keys and names, keeping formatting.
@@ -187,8 +187,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Switch with `bb setup --database mysql`; tenancy needs PostgreSQL.
 - **`bb check:vulns`** (BOU-451): known vulnerabilities in every `deps.edn`, aliases included, from GitHub's advisory
   database. Runs weekly and on PRs that change a `deps.edn`; coverage now runs on every push to main.
-- **`DBAdapter` answers `engine`, `capabilities`, `column-type` and `like`** (BOU-450, ADR-039). Ask these instead of
-  parsing the product name or reading a nil dialect as PostgreSQL.
+- **Database adapters answer `engine`, `capabilities`, `column-type` and `like`** (BOU-450, ADR-039), via `EngineInfo` and
+  `LikeMatcher`. Ask these instead of parsing the product name or reading a nil dialect as PostgreSQL.
 - **`db/drop-index-if-exists!`, `db/add-column-if-not-exists!`, `db/add-columns-if-not-exist!` and `db/drop-column-if-exists!`**
   (BOU-607, BOU-616): safe to run twice on every engine; a column already there costs a read, no lock.
 - **`db/engine-of`** (BOU-450): which engine a datasource speaks, for code that holds no db-context.
@@ -212,6 +212,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Methods 1.1 adds to a stable port are their own protocols** (BOU-829), so an app's own repository or service keeps
+  working; one lacking a protocol Wagoe calls stops the boot with `WGE-107`, naming it.
 - **The admin loads one stylesheet** (BOU-808): `:admin-pilot` is `/css/wagoe-admin.css`, built by `npm run build:css`,
   with focus rings and shadows on the tokens. Load the bundle rather than listing the old CSS files.
 - **Groups, roles, permissions and workflow instances are searchable, sortable admin lists** (BOU-807); roles and a
@@ -368,7 +370,7 @@ for what is public API, what is internal, and how deprecations are announced.
   need `push/read`. Grant it to whoever reads push stats before switching to `:enforce`.
 - **A check that throws under `:report` logged an ERROR on every request** (BOU-786); now once a minute per route.
 - **Wrong current passwords on change-password did not count towards the lockout, and parallel attempts exceeded it**
-  (BOU-785). Custom `IUserRepository`s implement `claim-login-attempts` and `release-login-attempt` instead of `increment-failed-login-count`.
+  (BOU-785). Custom `IUserRepository`s implement `ILoginAttempts` instead of `increment-failed-login-count`.
 - **Flash messages were never shown** (BOU-783): a response's `:flash` now reaches the next request, in a `wagoe-flash`
   cookie. Group changes and the welcome after registration show their toast; nothing to do.
 - **Saving a user's detail form deactivated them, Reactivate did nothing, and the users table added a history entry on
@@ -513,9 +515,9 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Static assets had no Content-Type** (BOU-710). They now carry one from the extension, plus
   `X-Content-Type-Options: nosniff`.
 - **Security: two parallel logins could spend one MFA backup code** (BOU-708). Spending is a conditional write; the
-  loser counts as a wrong code. Custom repositories add `consume-backup-code`.
+  loser counts as a wrong code. Custom repositories implement `IBackupCodes`.
 - **Security: revoking all of a user's sessions wrote no audit entry** (BOU-708). It writes one `:session-revoked`;
-  custom `IUserService` implementations add the 3-arity `logout-user-everywhere`.
+  custom `IUserService` implementations add `IUserSessionRevocation`.
 - **Geocoding never returned a result** (BOU-709): the OSM, Google and Mapbox adapters read string keys from keywordized
   JSON. Set `:user-agent` with a contact when using OpenStreetMap.
 - **Security: an `unknown` X-Forwarded-For hop resolved to the trusted proxy** (BOU-695). The client IP is now nil;
@@ -529,7 +531,7 @@ for what is public API, what is internal, and how deprecations are announced.
 - **Security: session tokens were stored in plaintext, so a read of `user_sessions` was a login** (BOU-696). Only their
   SHA-256 is stored; boot or `migrate up` hashes existing rows in place. Upgrade every replica at once; a rollback signs everyone out.
 - **Security: parallel wrong passwords counted as one, so lockout came late** (BOU-696). The count is incremented in the
-  database. Custom repositories add `increment-failed-login-count` and `invalidate-user-session`.
+  database. Custom session repositories implement `IUserSessionInvalidation`.
 - **Security: wrong MFA codes at password login did not count towards lockout** (BOU-698). TOTP and backup codes now
   share the failed-login counter on the form, the API and OIDC. No action needed.
 - **Security: a revoked session was audited as the user's own logout** (BOU-698). It is `:session-revoked`, with the
@@ -572,7 +574,7 @@ for what is public API, what is internal, and how deprecations are announced.
 - **A session request wrote `last_accessed_at` twice, and a database error during sign-in lookup answered 401** (BOU-666).
   The access time is now written at most once a minute; a lookup failure is a 500.
 - **Two admins demoting each other at once could leave none; an admin bulk delete of users could stop halfway** (BOU-673).
-  A custom `IEntityWriter` renames `delete-record!` to `delete-records!`; a custom `IUserRepository` adds `with-admins-locked`.
+  A custom `IEntityWriter` renames `delete-record!` to `delete-records!`; a custom `IUserRepository` implements `IAdminLock`.
 - **`_` and `%` in admin, user, tenant and audience filters and `build-where` strings matched any character** (BOU-684).
   A `build-where` value meant as a pattern is now literal; call `(like adapter :email :starts-with q)` instead.
 - **A push token re-registered by another user kept notifying the first; broadcasts skipped devices** (BOU-683).

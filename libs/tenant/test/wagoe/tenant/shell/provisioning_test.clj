@@ -30,9 +30,6 @@
   []
   (reify protocols/DBAdapter
     (dialect [_] :postgresql)
-    (now-ms-sql [_] nil)
-    (key-columns [_ _ _ _] nil)
-    (unique-keys [_ _ _] nil)
     (jdbc-driver [_] "org.postgresql.Driver")
     (jdbc-url [_ _] "jdbc:postgresql://localhost:5432/test")
     (pool-defaults [_] {})
@@ -42,9 +39,15 @@
     (db->boolean [_ _] true)
     (table-exists? [_ _ _] false)
     (get-table-info [_ _ _] [])
+    protocols/KeyIntrospection
+    (key-columns [_ _ _ _] nil)
+    (unique-keys [_ _ _] nil)
+    protocols/EngineInfo
+    (now-ms-sql [_] nil)
     (engine [_] :postgresql)
     (capabilities [_] #{:schemas})
     (column-type [_ _] nil)
+    protocols/LikeMatcher
     (like [_ _ _] nil)))
 
 (defn with-h2-database
@@ -98,9 +101,6 @@
   (testing "rejects non-PostgreSQL database"
     (let [mock-adapter (reify protocols/DBAdapter
                          (dialect [_] :sqlite)
-                         (now-ms-sql [_] nil)
-                         (key-columns [_ _ _ _] nil)
-                         (unique-keys [_ _ _] nil)
                          (jdbc-driver [_] "org.sqlite.JDBC")
                          (jdbc-url [_ _] "jdbc:sqlite::memory:")
                          (pool-defaults [_] {})
@@ -110,9 +110,15 @@
                          (db->boolean [_ _] false)
                          (table-exists? [_ _ _] false)
                          (get-table-info [_ _ _] [])
+                         protocols/KeyIntrospection
+                         (key-columns [_ _ _ _] nil)
+                         (unique-keys [_ _ _] nil)
+                         protocols/EngineInfo
+                         (now-ms-sql [_] nil)
                          (engine [_] :sqlite)
                          (capabilities [_] #{})
                          (column-type [_ _] nil)
+                         protocols/LikeMatcher
                          (like [_ _ _] nil))
           ctx {:adapter mock-adapter
                :datasource nil}
@@ -124,9 +130,6 @@
   (testing "validates ex-info has correct type"
     (let [mock-adapter (reify protocols/DBAdapter
                          (dialect [_] :mysql)
-                         (now-ms-sql [_] nil)
-                         (key-columns [_ _ _ _] nil)
-                         (unique-keys [_ _ _] nil)
                          (jdbc-driver [_] "com.mysql.cj.jdbc.Driver")
                          (jdbc-url [_ _] "jdbc:mysql://localhost:3306/test")
                          (pool-defaults [_] {})
@@ -136,9 +139,15 @@
                          (db->boolean [_ _] false)
                          (table-exists? [_ _ _] false)
                          (get-table-info [_ _ _] [])
+                         protocols/KeyIntrospection
+                         (key-columns [_ _ _ _] nil)
+                         (unique-keys [_ _ _] nil)
+                         protocols/EngineInfo
+                         (now-ms-sql [_] nil)
                          (engine [_] :mysql)
                          (capabilities [_] #{})
                          (column-type [_ _] nil)
+                         protocols/LikeMatcher
                          (like [_ _ _] nil))
           ctx {:adapter mock-adapter
                :datasource nil}
@@ -326,9 +335,6 @@
   (testing "rejects non-PostgreSQL contexts"
     (let [ctx {:adapter (reify protocols/DBAdapter
                           (dialect [_] :sqlite)
-                          (now-ms-sql [_] nil)
-                          (key-columns [_ _ _ _] nil)
-                          (unique-keys [_ _ _] nil)
                           (jdbc-driver [_] "org.sqlite.JDBC")
                           (jdbc-url [_ _] nil)
                           (pool-defaults [_] {})
@@ -338,9 +344,15 @@
                           (db->boolean [_ value] value)
                           (table-exists? [_ _ _] false)
                           (get-table-info [_ _ _] [])
+                          protocols/KeyIntrospection
+                          (key-columns [_ _ _ _] nil)
+                          (unique-keys [_ _ _] nil)
+                          protocols/EngineInfo
+                          (now-ms-sql [_] nil)
                           (engine [_] :sqlite)
                           (capabilities [_] #{})
                           (column-type [_ _] nil)
+                          protocols/LikeMatcher
                           (like [_ _ _] nil))
                :datasource ::ds
                :database-type :sqlite}]

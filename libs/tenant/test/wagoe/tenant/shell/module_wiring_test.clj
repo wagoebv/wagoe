@@ -1,5 +1,6 @@
 (ns wagoe.tenant.shell.module-wiring-test
-  (:require [wagoe.tenant.shell.module-wiring]
+  (:require [wagoe.tenant.ports :as ports]
+            [wagoe.tenant.shell.module-wiring]
             [wagoe.tenant.shell.http]
             [wagoe.tenant.shell.membership-http]
             [wagoe.tenant.shell.persistence]
@@ -22,7 +23,7 @@
         error-reporter ::error-reporter
         metrics ::metrics
         tenant-repo ::tenant-repo
-        membership-repo ::membership-repo
+        membership-repo (reify ports/ITenantMembershipDeletion (delete-membership [_ _] nil))
         invite-repo ::invite-repo
         tenant-service ::tenant-service
         membership-service ::membership-service

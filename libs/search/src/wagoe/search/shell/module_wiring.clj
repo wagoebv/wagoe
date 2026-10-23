@@ -17,6 +17,7 @@
      by the HTTP handler."
   (:require [integrant.core :as ig]
             [wagoe.search.core.index :as index]
+            [wagoe.search.ports :as ports]
             [wagoe.search.shell.persistence :as persistence]
             [wagoe.search.shell.service :as service]
             [wagoe.search.shell.http :as search-http]
@@ -50,6 +51,9 @@
 (defmethod ig/init-key :wagoe/search-routes
   [_ {:keys [search-service]}]
   (log/info "Initializing search routes")
+  (when-not (satisfies? ports/ISearchDefinitions (:engine search-service))
+    (throw (ex-info "WGE-107: the search engine does not implement ISearchDefinitions"
+                    {:type :configuration-error :wagoe/error-code "WGE-107" :missing ['index-definition]})))
   {:api    (search-http/search-routes (:engine search-service))
    :web    (search-http/search-web-routes (:engine search-service))
    :static []

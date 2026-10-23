@@ -846,88 +846,6 @@
          user-entity))
      {:db-ctx ctx}))
 
-  (claim-login-attempts [_ user-id n lockout]
-    (persistence-interceptors/execute-persistence-operation
-     :claim-login-attempts
-     {:user-id user-id :n n :lockout lockout}
-     (fn [{:keys [params]}]
-       ;; The UPDATE is the lockout check: it matches only an unlocked row, and
-       ;; locks it until commit, so a parallel claim waits and then sees this
-       ;; one. No RETURNING: MySQL has none. lockout_until is assigned first:
-       ;; MySQL evaluates SET left to right, so later terms see earlier writes.
-       (let [id   (type-conversion/uuid->string (:user-id params))
-             next [:+ [:coalesce :failed_login_count 0] (:n params)]
-             {:keys [max-attempts until now]} (:lockout params)]
-         (db/with-transaction [tx ctx]
-           (let [claimed? (pos? (db/execute-update!
-                                 tx {:update :auth_users
-                                     :set    (array-map
-                                              :lockout_until      [:case [:>= next max-attempts]
-                                                                   until
-                                                                   :else :lockout_until]
-                                              :failed_login_count next
-                                              :updated_at         (java.time.Instant/now))
-                                     :where  [:and [:= :id id]
-                                              [:or [:= :lockout_until nil] [:<= :lockout_until now]]]}))
-                 row      (db/execute-one! tx {:select [:failed_login_count :lockout_until]
-                                               :from   [:auth_users]
-                                               :where  [:= :id id]})]
-             (when row
-               (if claimed?
-                 {:claimed? true :failed-login-count (:failed-login-count row)}
-                 {:claimed? false
-                  :lockout-until (type-conversion/string->instant (:lockout-until row))}))))))
-     {:db-ctx ctx}))
-
-  (release-login-attempt [_ user-id unlock?]
-    (persistence-interceptors/execute-persistence-operation
-     :release-login-attempt
-     {:user-id user-id :unlock? unlock?}
-     (fn [{:keys [params]}]
-       (db/execute-update!
-        ctx {:update :auth_users
-             :set    (cond-> {:failed_login_count [:case [:> [:coalesce :failed_login_count 0] 0]
-                                                   [:+ :failed_login_count -1]
-                                                   :else 0]
-                              :updated_at         (java.time.Instant/now)}
-                       (:unlock? params) (assoc :lockout_until nil))
-             :where  [:= :id (type-conversion/uuid->string (:user-id params))]})
-       nil)
-     {:db-ctx ctx}))
-
-  (consume-backup-code [_ user code-hash]
-    (persistence-interceptors/execute-persistence-operation
-     :consume-backup-code
-     {:user-id (:id user)}
-     (fn [_]
-       ;; Compare-and-set on the JSON both columns hold, written by the same
-       ;; generate-string, so the update matches only if neither has changed.
-       (let [{:keys [mfa-backup-codes mfa-backup-codes-used]} user
-             json cheshire.core/generate-string]
-         (pos? (db/execute-update!
-                ctx {:update :auth_users
-                     :set    {:mfa_backup_codes_used (json (conj (vec mfa-backup-codes-used) code-hash))
-                              :updated_at            (java.time.Instant/now)}
-                     :where  [:and
-                              [:= :id (type-conversion/uuid->string (:id user))]
-                              [:= :mfa_backup_codes (json mfa-backup-codes)]
-                              (if (seq mfa-backup-codes-used)
-                                [:= :mfa_backup_codes_used (json mfa-backup-codes-used)]
-                                [:or [:is :mfa_backup_codes_used nil] [:= :mfa_backup_codes_used "[]"]])]}))))
-     {:db-ctx ctx}))
-
-  (with-admins-locked [_ f]
-    ;; A no-op write rather than SELECT … FOR UPDATE: it locks the rows on
-    ;; PostgreSQL, MySQL and H2 alike, and takes SQLite's write lock. A second
-    ;; caller waits here, holding nothing, then counts what the first
-    ;; committed. One table and no subquery: a subquery's shared locks
-    ;; deadlocked two callers on MySQL. A write in `f` that opens its own
-    ;; transaction joins this one rather than committing it early.
-    (binding [jdbc-tx/*nested-tx* :ignore]
-      (db/with-transaction [tx ctx]
-        (db/execute-update! tx {:update :users :set {:role :role} :where [:= :role "admin"]})
-        (f))))
-
   (soft-delete-user [_ user-id]
     (persistence-interceptors/execute-persistence-operation
      :soft-delete-user
@@ -981,7 +899,92 @@
 
              ;; Return true if we deleted at least the auth record
              (> auth-affected 0)))))
-     {:db-ctx ctx})))
+     {:db-ctx ctx}))
+
+  ports/ILoginAttempts
+  (claim-login-attempts [_ user-id n lockout]
+    (persistence-interceptors/execute-persistence-operation
+     :claim-login-attempts
+     {:user-id user-id :n n :lockout lockout}
+     (fn [{:keys [params]}]
+       ;; The UPDATE is the lockout check: it matches only an unlocked row, and
+       ;; locks it until commit, so a parallel claim waits and then sees this
+       ;; one. No RETURNING: MySQL has none. lockout_until is assigned first:
+       ;; MySQL evaluates SET left to right, so later terms see earlier writes.
+       (let [id   (type-conversion/uuid->string (:user-id params))
+             next [:+ [:coalesce :failed_login_count 0] (:n params)]
+             {:keys [max-attempts until now]} (:lockout params)]
+         (db/with-transaction [tx ctx]
+           (let [claimed? (pos? (db/execute-update!
+                                 tx {:update :auth_users
+                                     :set    (array-map
+                                              :lockout_until      [:case [:>= next max-attempts]
+                                                                   until
+                                                                   :else :lockout_until]
+                                              :failed_login_count next
+                                              :updated_at         (java.time.Instant/now))
+                                     :where  [:and [:= :id id]
+                                              [:or [:= :lockout_until nil] [:<= :lockout_until now]]]}))
+                 row      (db/execute-one! tx {:select [:failed_login_count :lockout_until]
+                                               :from   [:auth_users]
+                                               :where  [:= :id id]})]
+             (when row
+               (if claimed?
+                 {:claimed? true :failed-login-count (:failed-login-count row)}
+                 {:claimed? false
+                  :lockout-until (type-conversion/string->instant (:lockout-until row))}))))))
+     {:db-ctx ctx}))
+
+  (release-login-attempt [_ user-id unlock?]
+    (persistence-interceptors/execute-persistence-operation
+     :release-login-attempt
+     {:user-id user-id :unlock? unlock?}
+     (fn [{:keys [params]}]
+       (db/execute-update!
+        ctx {:update :auth_users
+             :set    (cond-> {:failed_login_count [:case [:> [:coalesce :failed_login_count 0] 0]
+                                                   [:+ :failed_login_count -1]
+                                                   :else 0]
+                              :updated_at         (java.time.Instant/now)}
+                       (:unlock? params) (assoc :lockout_until nil))
+             :where  [:= :id (type-conversion/uuid->string (:user-id params))]})
+       nil)
+     {:db-ctx ctx}))
+
+  ports/IBackupCodes
+  (consume-backup-code [_ user code-hash]
+    (persistence-interceptors/execute-persistence-operation
+     :consume-backup-code
+     {:user-id (:id user)}
+     (fn [_]
+       ;; Compare-and-set on the JSON both columns hold, written by the same
+       ;; generate-string, so the update matches only if neither has changed.
+       (let [{:keys [mfa-backup-codes mfa-backup-codes-used]} user
+             json cheshire.core/generate-string]
+         (pos? (db/execute-update!
+                ctx {:update :auth_users
+                     :set    {:mfa_backup_codes_used (json (conj (vec mfa-backup-codes-used) code-hash))
+                              :updated_at            (java.time.Instant/now)}
+                     :where  [:and
+                              [:= :id (type-conversion/uuid->string (:id user))]
+                              [:= :mfa_backup_codes (json mfa-backup-codes)]
+                              (if (seq mfa-backup-codes-used)
+                                [:= :mfa_backup_codes_used (json mfa-backup-codes-used)]
+                                [:or [:is :mfa_backup_codes_used nil] [:= :mfa_backup_codes_used "[]"]])]}))))
+     {:db-ctx ctx}))
+
+  ports/IAdminLock
+  (with-admins-locked [_ f]
+    ;; A no-op write rather than SELECT … FOR UPDATE: it locks the rows on
+    ;; PostgreSQL, MySQL and H2 alike, and takes SQLite's write lock. A second
+    ;; caller waits here, holding nothing, then counts what the first
+    ;; committed. One table and no subquery: a subquery's shared locks
+    ;; deadlocked two callers on MySQL. A write in `f` that opens its own
+    ;; transaction joins this one rather than committing it early.
+    (binding [jdbc-tx/*nested-tx* :ignore]
+      (db/with-transaction [tx ctx]
+        (db/execute-update! tx {:update :users :set {:role :role} :where [:= :role "admin"]})
+        (f)))))
 
 ;; =============================================================================
 ;; Session Repository Implementation
@@ -1063,19 +1066,6 @@
          (> affected-rows 0)))
      {:db-ctx ctx}))
 
-  (invalidate-user-session [_ user-id session-id]
-    (persistence-interceptors/execute-persistence-operation
-     :invalidate-user-session
-     {:user-id user-id :session-id session-id}
-     (fn [{:keys [params]}]
-       (pos? (db/execute-update! ctx {:update :user_sessions
-                                      :set    {:revoked_at (java.time.Instant/now)}
-                                      :where  [:and
-                                               [:= :id (type-conversion/uuid->string (:session-id params))]
-                                               [:= :user_id (type-conversion/uuid->string (:user-id params))]
-                                               [:is :revoked_at nil]]})))
-     {:db-ctx ctx}))
-
   (invalidate-all-user-sessions [_ user-id]
     (persistence-interceptors/execute-persistence-operation
      :invalidate-all-user-sessions
@@ -1135,6 +1125,20 @@
                     :where [:< :expires_at
                             (:cutoff params)]}]
          (db/execute-update! ctx query)))
+     {:db-ctx ctx}))
+
+  ports/IUserSessionInvalidation
+  (invalidate-user-session [_ user-id session-id]
+    (persistence-interceptors/execute-persistence-operation
+     :invalidate-user-session
+     {:user-id user-id :session-id session-id}
+     (fn [{:keys [params]}]
+       (pos? (db/execute-update! ctx {:update :user_sessions
+                                      :set    {:revoked_at (java.time.Instant/now)}
+                                      :where  [:and
+                                               [:= :id (type-conversion/uuid->string (:session-id params))]
+                                               [:= :user_id (type-conversion/uuid->string (:user-id params))]
+                                               [:is :revoked_at nil]]})))
      {:db-ctx ctx})))
 
 ;; =============================================================================
@@ -1247,6 +1251,7 @@
          (map db->audit-log-entity results)))
      {:db-ctx ctx}))
 
+  ports/IUserAuditRetention
   (delete-audit-logs-before [_ cutoff]
     (persistence-interceptors/execute-persistence-operation
      :delete-audit-logs-before

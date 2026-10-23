@@ -100,7 +100,7 @@
             admin   (create-user! users)
             [kept & _] (mapv #(:session (login service user %)) (repeat 3 password))
             revoke! #(service/with-audit-context {:actor-id (:id admin) :actor-email (:email admin)}
-                       (fn [] (ports/logout-user-everywhere service (:id user) %)))
+                       (fn [] (ports/revoke-sessions-except service (:id user) %)))
             entries #(->> (:audit-logs (ports/find-audit-logs audit {:limit 50}))
                           (filter (comp #{:session-revoked} :action)))]
         (is (= 2 (revoke! (:id kept))))

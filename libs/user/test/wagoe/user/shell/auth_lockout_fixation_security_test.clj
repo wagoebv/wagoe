@@ -45,6 +45,7 @@
                          (update-user [_ entity]
                            (swap! state merge entity)
                            @state)
+                         ports/ILoginAttempts
                          (claim-login-attempts [_ _ n lockout]
                            (let [[old new] (swap-vals! state mem/claim-attempts n lockout)]
                              (mem/claim-result old new lockout)))
@@ -132,6 +133,7 @@
                                (update-user [_ entity]
                                  (swap! writes conj entity)
                                  (ports/update-user repo entity))
+                               ports/ILoginAttempts
                                (claim-login-attempts [_ id n lockout]
                                  (ports/claim-login-attempts repo id n lockout))
                                (release-login-attempt [_ id unlock?]
