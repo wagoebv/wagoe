@@ -144,7 +144,7 @@ CREATE TABLE geo_cache (
   lat               NUMERIC(10, 7) NOT NULL,
   lng               NUMERIC(10, 7) NOT NULL,
   formatted_address TEXT,
-  street            TEXT,  -- these three: 20261023100000-geo-cache-street
+  street            TEXT,  -- these three: 20261023100001-geo-cache-street
   house_number      TEXT,
   house_number_addition TEXT,
   postcode          TEXT,
