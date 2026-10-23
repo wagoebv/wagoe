@@ -100,3 +100,19 @@
                    m (re-seq #"wagoe\.devtools\." (slurp (fs/file f)))]
                m)]
     (is (= 1 (count uses)))))
+
+(deftest ^:unit first-run-smoke-runs-for-what-only-it-tests
+  (testing "the installer, CLI, tools and quickstart page run it"
+    (doseq [p ["scripts/install.sh" "libs/wagoe-cli/src/wagoe/cli/new.clj" "libs/tools/bb.edn"
+               "docs/modules/getting-started/pages/quickstart.adoc" ".github/workflows/ci.yml"]]
+      (is (sut/first-run? ["libs/geo/src/x.clj" p]) p)))
+  (testing "a library change does not"
+    (is (not (sut/first-run? ["libs/admin/src/x.clj" "libs/geo/test/x_test.clj"]))))
+  (testing "an empty diff does"
+    (is (sut/first-run? []))))
+
+(deftest ^:unit first-run-paths-exist
+  (doseq [p ["scripts/install.sh" "scripts/first-run-smoke.sh" "libs/wagoe-cli" "libs/tools"
+             "libs/ai" "libs/scaffolder"
+             "docs/modules/getting-started/pages/quickstart.adoc" ".github/workflows/ci.yml"]]
+    (is (fs/exists? (fs/path root p)) (str p " moved; update first-run-paths"))))

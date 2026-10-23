@@ -1,8 +1,8 @@
 (ns wagoe.tools.ci-changes
   "Which CI jobs a pull request needs. `bb ci:changes <base-ref>` writes to
    $GITHUB_OUTPUT: `code`, false when only docs no code test reads changed
-   (BOU-615); `libs`, the libraries whose tests run; `skip-jobs`, the jobs
-   gated on `libs` that therefore do not."
+   (BOU-615); `libs`, the libraries whose tests run; `first-run`, whether
+   First-Run Smoke does; `skip-jobs`, the jobs that therefore do not."
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
             [clj-yaml.core :as yaml]
@@ -26,6 +26,22 @@
    not docs-only: run everything rather than guess."
   [paths]
   (boolean (and (seq paths) (every? docs-only-path? paths))))
+
+(def first-run-paths
+  "What First-Run Smoke tests that no other job does: the installer, the CLI
+   and tools a new project uses, the quickstart page it runs verbatim, and
+   the AI commands and scaffolder from a generated project (BOU-405).
+   Booting a generated app is covered by Example Smoke and MySQL Smoke."
+  [#"^scripts/(install|first-run-smoke)\.sh$"
+   #"^libs/(wagoe-cli|tools|ai|scaffolder)/"
+   #"^docs/modules/getting-started/"
+   #"^\.github/workflows/ci\.yml$"])
+
+(defn first-run?
+  "Whether a PR changing `paths` needs First-Run Smoke. An empty diff does."
+  [paths]
+  (boolean (or (empty? paths)
+               (some (fn [p] (some #(re-find % p) first-run-paths)) paths))))
 
 (def false-edges
   "Uses that do not load the other library in a test run. Each one cut here
@@ -140,10 +156,14 @@
         run   (cond (nil? paths) libs
                     code?        (libs-to-test graph paths)
                     :else        #{})
+        smoke? (or (nil? paths) (first-run? paths))
         gated (gated-jobs (slurp ".github/workflows/ci.yml") libs)
+        skip  (cond-> (keep (fn [[job lib]] (when-not (run lib) job)) gated)
+                (not smoke?) (conj "first-run-smoke"))
         lines [(str "code=" code?)
                (str "libs=" (str/join " " (sort run)))
-               (str "skip-jobs=" (str/join " " (sort (keep (fn [[job lib]] (when-not (run lib) job)) gated))))]]
+               (str "first-run=" smoke?)
+               (str "skip-jobs=" (str/join " " (sort skip)))]]
     (run! println lines)
     (when-let [out (System/getenv "GITHUB_OUTPUT")]
       (spit out (str (str/join "\n" lines) "\n") :append true))))
