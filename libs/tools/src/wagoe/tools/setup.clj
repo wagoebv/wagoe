@@ -371,25 +371,29 @@
            "   :min-idle    1}\n"))))
 
 (defn- email-template [provider env]
+  ;; :wagoe/email, the sender the app's mail goes through. It reads only its
+  ;; own key, so :wagoe.external/smtp left it logging in prod (BOU-818).
   (case provider
     :none ""
     :smtp
     (cond
       (= env "test") ""
       (prod? env)
-      (str "  :wagoe.external/smtp\n"
-           "  {:host     #env SMTP_HOST\n"
+      (str "  :wagoe/email\n"
+           "  {:provider :smtp\n"
+           "   :host     #env SMTP_HOST\n"
            "   :port     #or [#long #or [#env SMTP_PORT 587] 587]\n"
            "   :username #env SMTP_USERNAME\n"
            "   :password #env SMTP_PASSWORD\n"
            "   :tls?     true\n"
            "   :from     #env SMTP_FROM}\n")
       :else
-      (str "  :wagoe.external/smtp\n"
-           "  {:host #or [#env SMTP_HOST \"localhost\"]\n"
-           "   :port #or [#long #or [#env SMTP_PORT 1025] 1025]\n"
-           "   :tls? false\n"
-           "   :from #or [#env SMTP_FROM \"no-reply@localhost\"]}\n"))))
+      (str "  :wagoe/email\n"
+           "  {:provider :smtp\n"
+           "   :host     #or [#env SMTP_HOST \"localhost\"]\n"
+           "   :port     #or [#long #or [#env SMTP_PORT 1025] 1025]\n"
+           "   :tls?     false\n"
+           "   :from     #or [#env SMTP_FROM \"no-reply@localhost\"]}\n"))))
 
 (def ^:private admin-users-entity
   "The `:users` entity config the admin `#include` points at.
@@ -545,7 +549,7 @@
   {":wagoe/ai-service"       :ai-provider
    ":wagoe/payment-provider" :payment
    ":wagoe/cache"            :cache
-   ":wagoe.external/smtp"    :email})
+   ":wagoe/email"            :email})
 
 (def defaults
   "What an unanswered question means in a project setup creates. In a project
@@ -597,7 +601,7 @@
      :ai-provider (provider :wagoe/ai-service)
      :payment     (provider :wagoe/payment-provider)
      :cache       (provider :wagoe/cache)
-     :email       (if (contains? active :wagoe.external/smtp) :smtp :none)
+     :email       (if (= :smtp (get-in active [:wagoe/email :provider])) :smtp :none)
      :admin-ui    (if (contains? active :wagoe/admin) :yes :no)}))
 
 (defn- project-name
@@ -759,7 +763,7 @@
 
 (defn- provider-of
   "The provider an existing entry configures: its :provider, or `present` for
-   a key that has none (smtp)."
+   a key that has none."
   [text e present]
   (let [[v] (read-edn (subs text (:value e) (:end e)))
         p   (if (map? v) (:provider v) present)]
