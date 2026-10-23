@@ -672,7 +672,9 @@
      [:span.parent-context-label (:label banner)]
      [:div.parent-context-fields
       (for [{:keys [field config role label relation] :as column} (cells/columns entity-config (:fields banner []))
-            :when (some? (get record field))]
+            :let  [v (get record field)]
+            ;; Left out as before: false would render as an sr-only "No"
+            :when (not (or (nil? v) (false? v) (and (string? v) (str/blank? v))))]
         [:div.parent-context-field
          [:span.parent-context-field-label label]
          [:span {:class (str "parent-context-field-value " (:class column))}

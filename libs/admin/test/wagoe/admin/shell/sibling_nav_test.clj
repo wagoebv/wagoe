@@ -69,6 +69,11 @@
   (is (str/includes? (page 2) (str "/web/admin/sn-items/" (item-id 1))))
   (is (str/includes? (page 2) (str "/web/admin/sn-items/" (item-id 3)))))
 
+(deftest ^:contract the-banner-renders-the-parent-through-its-cells
+  ;; BOU-390: the shell hands the banner the parent's config, so each value
+  ;; renders in its role rather than as (str v).
+  (is (re-find #"parent-context-field-value c-\w+\">[^<]*Order" (page 1))))
+
 (deftest ^:contract sibling-nav-reads-a-bounded-window
   (with-redefs [support/sibling-cap 2]
     (testing "within the window: the count says there are more"
