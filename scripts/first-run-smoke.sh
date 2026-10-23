@@ -636,13 +636,10 @@ grep -q "user=> 3" /tmp/replprompt.log \
 ok "prompt evaluates, and --port reached nREPL"
 
 # ── 12. do the AI commands work against a provider? ─────────────────────────
-# Every AI command was tested only up to where it shells out, so BOU-401 hid
-# three more defects behind it, each found by hand against a throwaway stub
-# (BOU-405). This is that stub: it answers every request with one canned spec
-# that both commands can read, so it needs no key, no network and no bill.
-# The answer names a project and a payment provider the description does not,
-# so the summary can only show them if the reply was parsed.
-# Skipped when SMOKE_AI is set: a provider in config.edn outranks the env var.
+# AI commands were tested only up to the shell-out (BOU-405). The stub answers
+# with a project and payment provider the description does not name, so the
+# summary shows them only if the reply was parsed. Skipped with SMOKE_AI: a
+# provider in config.edn outranks the env var.
 if [ -z "${SMOKE_AI:-}" ]; then
   echo "[12/12] bb scaffold ai and bb setup ai against a stub provider"
   cat >/tmp/ai-stub.clj <<"STUB"
@@ -669,15 +666,10 @@ if [ -z "${SMOKE_AI:-}" ]; then
 @(promise)
 STUB
   bb /tmp/ai-stub.clj >/tmp/ai-stub.log 2>&1 &
-  STUB_PID=$!
-  for _ in $(seq 1 30); do
-    (echo > /dev/tcp/127.0.0.1/8123) 2>/dev/null && break
-    sleep 1
-  done
+  for _ in $(seq 1 30); do (echo > /dev/tcp/127.0.0.1/8123) 2>/dev/null && break; sleep 1; done
   (echo > /dev/tcp/127.0.0.1/8123) 2>/dev/null || { log_excerpt /tmp/ai-stub.log 20; fail "the stub provider never came up"; }
   export OPENAI_BASE_URL=http://127.0.0.1:8123
-  # Injected via -Sdeps like the scaffolder, so the :local/root rewrite cannot
-  # reach it either.
+  # Same -Sdeps injection as the scaffolder in step 6.
   if [ "$TARGET" = worktree ]; then
     export WAGOE_AI_ROOT=/work/libs/ai
   fi
@@ -701,7 +693,6 @@ STUB
     || { log_excerpt /tmp/setup-ai-stub.log 30
          fail "bb setup ai did not show the provider answer: parsed and dropped, or never asked (BOU-401)"; }
   ok "bb setup ai summarised the provider answer"
-  kill "$STUB_PID" 2>/dev/null || true
 fi
 
 echo
