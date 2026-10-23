@@ -113,5 +113,6 @@
 
 (deftest ^:unit first-run-paths-exist
   (doseq [p ["scripts/install.sh" "scripts/first-run-smoke.sh" "libs/wagoe-cli" "libs/tools"
+             "libs/ai" "libs/scaffolder"
              "docs/modules/getting-started/pages/quickstart.adoc" ".github/workflows/ci.yml"]]
     (is (fs/exists? (fs/path root p)) (str p " moved; update first-run-paths"))))

@@ -29,10 +29,11 @@
 
 (def first-run-paths
   "What First-Run Smoke tests that no other job does: the installer, the CLI
-   and tools a new project uses, and the quickstart page it runs verbatim.
+   and tools a new project uses, the quickstart page it runs verbatim, and
+   the AI commands and scaffolder from a generated project (BOU-405).
    Booting a generated app is covered by Example Smoke and MySQL Smoke."
   [#"^scripts/(install|first-run-smoke)\.sh$"
-   #"^libs/(wagoe-cli|tools)/"
+   #"^libs/(wagoe-cli|tools|ai|scaffolder)/"
    #"^docs/modules/getting-started/"
    #"^\.github/workflows/ci\.yml$"])
 
