@@ -161,7 +161,8 @@
         config-with-email (cond-> (landing/with-hooks (or config {}) hooks)
                             email-sender
                             (assoc :email-sender email-sender
-                                   :welcome-email-from (get-in config [:active :wagoe.external/smtp :from])
+                                   :welcome-email-from (or (get-in config [:active :wagoe/email :from])
+                                                           (get-in config [:active :wagoe.external/smtp :from]))
                                    :app-name (get-in config [:active :wagoe/settings :name])))
         routes (user-routes-fn user-service mfa-service config-with-email)]
     (log/info "User module routes initialized successfully"

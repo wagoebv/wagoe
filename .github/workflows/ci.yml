@@ -140,12 +140,15 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Build admin CSS bundle
-        run: npm run build:css:admin
+      - name: Build CSS bundles
+        run: npm run build:css
 
       - name: Verify generated UI assets
         run: |
+          # The compiled CSS is committed; it must be what the sources build
+          git diff --exit-code -- libs/ui-style/resources/public/css
           test -f libs/ui-style/resources/public/css/daisy-admin.css
+          test -f libs/ui-style/resources/public/css/wagoe-admin.css
           test -f libs/ui-style/resources/public/js/theme.js
           test -f libs/ui-style/resources/public/js/htmx.min.js
 

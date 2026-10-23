@@ -31,7 +31,7 @@ Bundle vars — each a vector of `/`-rooted asset paths, in load order:
 | Var | Bundle | Contents (load order) |
 |-----|--------|-----------------------|
 | `pilot-css` | `:pilot` | wagoe-tokens → app → daisy-admin |
-| `admin-pilot-css` | `:admin-pilot` | fonts → wagoe-tokens → admin → app → daisy-admin → wagoe-admin |
+| `admin-pilot-css` | `:admin-pilot` | wagoe-admin (one file, built from `resources/tailwind/admin.css`) |
 | `pilot-js` | `:pilot` | theme → components → alpine → htmx → htmx-ext-sse → forms |
 | `admin-pilot-js` | `:admin-pilot` | theme → components → admin-ux → alpine → htmx → htmx-ext-sse → forms → keyboard |
 
@@ -55,20 +55,22 @@ Recommended bundle per page type:
 
 daisyUI/Tailwind on `wagoe-tokens.css` is the one CSS system. Pages on the
 default layout carry `body.wagoe-default`, which gives bare headings, lists,
-tables and buttons a base style (`resources/tailwind/admin-pilot.css`).
+tables and buttons a base style (`resources/tailwind/pilot-rules.css`).
 
 ## Assets shipped (`resources/public/`)
 
-- **CSS** (`css/`): `wagoe-tokens.css` (design tokens), `app.css`, `admin.css`,
-  `daisy-admin.css` (Tailwind/daisyUI compiled output), `wagoe-admin.css`
-  (wagoe.org tokens and the admin display-role styles, ADR-040) and `fonts.css`.
+- **CSS** (`css/`): `wagoe-tokens.css` (design tokens), `app.css`, `fonts.css`,
+  and two compiled files: `daisy-admin.css` (`:pilot`'s daisyUI/Tailwind) and
+  `wagoe-admin.css` (all of `:admin-pilot`).
 - **JS** (`js/`): `theme.js`, `components.js`, `admin-ux.js`, `forms.js`,
   `keyboard.js`, `init.js`, plus vendored `alpine.min.js`, `htmx.min.js` and
   `htmx-ext-sse.min.js` (htmx's `sse` extension, 2.2.4; must load after htmx).
 - **Fonts** (`fonts/`): DM Sans, Inter, Space Grotesk + JetBrains Mono woff2.
 - **Assets** (`assets/`): Wagoe light/dark logo + icon PNGs.
-- **Tailwind source** (`resources/tailwind/admin-pilot.css`): input compiled to
-  `css/daisy-admin.css`.
+- **Tailwind sources** (`resources/tailwind/`): `pilot.css` builds
+  `css/daisy-admin.css`; `admin.css` builds `css/wagoe-admin.css` from
+  `admin/legacy.css`, `pilot-rules.css` and `admin/wagoe-admin.css` (the
+  wagoe.org tokens and display-role styles, ADR-040). `npm run build:css`.
 
 Paths in the bundle vectors are root-relative (`/css/...`, `/js/...`). The
 platform serves them from the classpath via Ring `wrap-resource "public"`

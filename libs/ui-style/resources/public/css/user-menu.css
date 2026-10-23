@@ -32,7 +32,7 @@
   background: var(--user-menu-panel-bg, var(--color-base-100, #fff));
   border: 1px solid var(--color-base-300, #e3e7e5);
   border-radius: var(--radius-box, 6px);
-  box-shadow: 0 8px 24px rgba(15, 28, 24, 0.12);
+  box-shadow: var(--wg-shadow-float, 0 8px 24px rgba(15, 28, 24, 0.12));
   text-align: left;
 }
 .user-menu-who {
