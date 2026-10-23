@@ -393,7 +393,9 @@ layout.
 from a module. `opts`: `:user`, `:flash`, `:request`. The page must load htmx
 and carry the CSRF meta tag, as the cards post through htmx; link
 `/css/profile.css` (scoped to `.profile-page`, `--profile-*` properties) or
-style the cards yourself. Unset, they stay in the admin shell.
+style the cards yourself; each card is also `.profile-card--<name>` (`info`,
+`preferences`, `password`, `mfa`, `sessions`, `data`), to hide one. Unset, they
+stay in the admin shell.
 
 ## Session Pruning
 
