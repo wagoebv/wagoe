@@ -317,26 +317,6 @@
         (is (contains? (active-keys-of out) :wagoe/metrics))
         (is (not (re-find #"[^\r]\n" out)) "no bare LF")))))
 
-(deftest ^:integration email-writes-smtp-to-test-config-test
-  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-email-" (System/currentTimeMillis))]
-    (try
-      (make-wagoe-project! tmp)
-      (testing "wagoe add email patches test/config.edn with :wagoe.external/smtp"
-        (add/patch-config! tmp "resources/conf/test/config.edn"
-                           "  :wagoe.external/smtp\n  {:host \"localhost\" :port 1025 :tls? false :from \"test@localhost\"}\n")
-        (let [content (slurp (io/file tmp "resources/conf/test/config.edn"))]
-          (is (str/includes? content ":wagoe.external/smtp"))))
-
-      (testing "does not inject SMTP into test config if already present"
-        (let [before (slurp (io/file tmp "resources/conf/test/config.edn"))]
-          (add/patch-config! tmp "resources/conf/test/config.edn"
-                             "  :wagoe.external/smtp\n  {:host \"localhost\" :port 1025 :tls? false :from \"test@localhost\"}\n")
-          (let [after (slurp (io/file tmp "resources/conf/test/config.edn"))]
-            (is (= (count (re-seq #":wagoe.external/smtp" before))
-                   (count (re-seq #":wagoe.external/smtp" after)))))))
-      (finally
-        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
-
 (defn- agents-block [dir block]
   (second (re-find (re-pattern (str "(?s)<!-- " block " -->(.*?)<!-- /" block " -->"))
                    (slurp (io/file dir "AGENTS.md")))))
@@ -411,6 +391,37 @@
       (is (= :memory (get-in (active-of tmp "dev") [:wagoe/events :provider])))
       (is (= :memory (get-in (active-of tmp "test") [:wagoe/events :provider])))
       (is (= :redis (get-in (active-of tmp "prod") [:wagoe/events :provider])))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(defn- resolve-active
+  "Profile `env`'s :active map read the way Aero would, with `vars` as the
+   environment."
+  [dir env vars]
+  (:active (clojure.edn/read-string
+            {:readers {'env  #(get vars (str %))
+                       'or   #(some identity %)
+                       'long #(cond-> % (string? %) parse-long)}
+             :default  (fn [_ v] v)}
+            (slurp (io/file dir "resources/conf" env "config.edn")))))
+
+(deftest ^:integration email-configures-the-smtp-sender
+  ;; :wagoe/email reads only its own key and logs without one, so smtp under
+  ;; :wagoe.external/smtp left the app logging its mail (BOU-822).
+  (let [tmp  (with-profiles! "email")
+        vars {"SMTP_HOST" "smtp.example.com" "SMTP_USERNAME" "mailer"
+              "SMTP_PASSWORD" "s3cret" "SMTP_FROM" "app@example.com"}]
+    (try
+      (add/patch-configs! tmp (cat/find-module "email"))
+      (is (= {:provider :smtp :host "smtp.example.com" :port 587 :username "mailer"
+              :password "s3cret" :tls? true :from "app@example.com"}
+             (:wagoe/email (resolve-active tmp "prod" vars))))
+      (is (= {:provider :smtp :host "localhost" :port 1025 :tls? false :from "no-reply@localhost"}
+             (:wagoe/email (resolve-active tmp "dev" {}))))
+      (is (= {:provider :logging} (:wagoe/email (active-of tmp "test"))))
+      (doseq [env ["dev" "test" "prod"]]
+        (is (not (contains? (active-of tmp env) :wagoe.external/smtp)) env))
+      (is (add/installed? tmp (cat/find-module "email") true))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
