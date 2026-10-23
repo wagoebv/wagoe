@@ -19,6 +19,7 @@
    [wagoe.i18n.shell.middleware :as i18n-middleware]
    [wagoe.i18n.shell.render :as i18n]
    [wagoe.platform.core.http.problem-details :as problem-details]
+   [wagoe.platform.database :as db]
    [wagoe.shared.ui.core.combobox :as combobox]
    [wagoe.shared.ui.core.htmx :as htmx]
    [wagoe.shared.ui.core.table :as table-ui]
@@ -552,6 +553,16 @@
      :date-time-format (:date-time-format config)
      :date-format      (:date-format config)}))
 
+(defn isolated
+  "`(f)`, or nil when it throws: logged, and the page shows the part as missing
+   instead of failing. In a savepoint, so a failed query in a tenant request's
+   transaction does not abort the parts after it on PostgreSQL."
+  [part f]
+  (try (db/in-savepoint (db/current-transaction) f)
+       (catch Exception e
+         (log/warn e "admin page part failed" {:part part})
+         nil)))
+
 (defn overview
   "What the cells of `records` need (ADR-040), or nil when the service does
    not provide it."
@@ -1057,6 +1068,7 @@
         ; cell by field type rather than printing the stored value (BOU-382).
         primary-key     (:primary-key entity-config :id)
         record-id       (str (get record primary-key))
+        display         (display-options config request)
         has-many-rels   (get entity-config :has-many [])
         parent-url      (str "/web/admin/" (name entity-name) "/" record-id)
         ; One page of children; one row more tells whether there are others.
@@ -1096,7 +1108,13 @@
                            (when-let [parent-rec (ports/get-entity admin-service
                                                                    (:entity parent-ref)
                                                                    (:id parent-ref))]
-                             {:config ctx-cfg :record parent-rec})))
+                             {:config        ctx-cfg
+                              :record        parent-rec
+                              :entity-config (get entity-configs (:entity parent-ref))
+                              :display       (assoc display :overview
+                                                    (isolated [(:entity parent-ref) :overview]
+                                                              #(overview admin-service (:entity parent-ref)
+                                                                         {:overview/fields (:fields ctx-cfg)} [parent-rec])))})))
 
         ; Sibling navigation — prev/next within the parent's has-many list
         sibling-nav (when (and parent-ref (:parent-context entity-config)
@@ -1132,7 +1150,7 @@
                                                 (catch Exception e
                                                   (log/warn e "admin list navigation failed" {:entity entity-name})
                                                   nil)))
-                      :display         (display-options config request)
+                      :display         display
                       :field-options   (foreign-key-options admin-service config entity-configs entity-name record)
                       :links           (link-fields admin-service config entity-configs entity-name
                                                     (get record primary-key) (:admin/links record))
