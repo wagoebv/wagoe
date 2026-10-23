@@ -295,8 +295,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The parent banner on a child record's admin page shows values as the list does** (BOU-390): a date formatted, a
+  relation by its title, not its UUID. Nothing to change.
 - **The `csrf-session` cookie carries `Secure` under `:wagoe/settings :secure-cookies? true`** (BOU-819), as the session
   cookies do. Nothing to change; `wrap-csrf` callers can pass `:secure-cookies?`.
+- **`wagoe add email` writes `:wagoe/email {:provider :smtp …}`** (BOU-822); its `:wagoe.external/smtp` left the app
+  logging mail. Move those settings to `:wagoe/email` with `:provider :smtp`.
 - **`bb setup --email smtp` writes `:wagoe/email {:provider :smtp …}`** (BOU-818); its `:wagoe.external/smtp` left the app
   logging mail instead of sending it. Re-run setup, or move those settings to `:wagoe/email` with `:provider :smtp`.
 - **A missing config profile lists the profiles that exist** (BOU-820), `acc` and any other under `resources/conf/`, not a
