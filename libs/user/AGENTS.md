@@ -385,6 +385,16 @@ a `ports/ILoginLayout`. Unset, the pages render as before
 (`core.ui/auth-page`). The "Create Account" link lives in `login-form`, not the
 layout.
 
+## Profile Page Layout
+
+`:wagoe/user {:profile-layout my.app.web/profile-layout}` does the same for
+`/web/profile` and its MFA setup, backup-code and disable pages: a
+`(fn [title body opts])`, or `:auth {:profile-layout …}` / `ports/IProfileLayout`
+from a module. `opts`: `:user`, `:flash`, `:request`. The page must load htmx
+and carry the CSRF meta tag, as the cards post through htmx; link
+`/css/profile.css` (scoped to `.profile-page`, `--profile-*` properties) or
+style the cards yourself. Unset, they stay in the admin shell.
+
 ## Session Pruning
 
 An expired session is invisible to every read — `find-session-by-token` and

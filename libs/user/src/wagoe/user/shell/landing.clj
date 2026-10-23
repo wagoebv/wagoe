@@ -48,11 +48,14 @@
       (:login-layout s)
       (update-in [:active :wagoe/user :login-layout] (partial hooks/as-fn :login-layout))
 
+      (:profile-layout s)
+      (update-in [:active :wagoe/user :profile-layout] (partial hooks/as-fn :profile-layout))
+
       (map? (:dashboard s))
       (update-in [:active :wagoe/user :dashboard :handler] #(resolve-fn :dashboard %)))))
 
 (defn with-hooks
-  "`config` with the `:login-redirect` and `:login-layout` the auth hooks
+  "`config` with the `:login-redirect`, `:login-layout` and `:profile-layout` the auth hooks
    settled on, which may be a module's rather than the one config set."
   [config hooks]
   (reduce (fn [config k]

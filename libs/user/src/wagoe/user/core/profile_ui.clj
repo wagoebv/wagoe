@@ -15,10 +15,13 @@
          password-section-fragment)
 
 (defn- page-layout
-  "`content` in the admin shell, `title` in the topbar."
+  "`content` in the admin shell, `title` in the topbar; or, when opts carry
+   the app's `:profile-layout`, handed to it."
   [title content opts]
-  (shell/shell-page title [:div.profile-page.profile-shell content]
-                    (assoc opts :page-title title)))
+  (if-let [app-layout (:profile-layout opts)]
+    (app-layout title [:div.profile-page content] (dissoc opts :profile-layout))
+    (shell/shell-page title [:div.profile-page.profile-shell content]
+                      (assoc opts :page-title title))))
 
 ;; =============================================================================
 ;; Helper Functions
