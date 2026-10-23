@@ -147,6 +147,7 @@ bb check:fcis                                      # FC/IS enforcement: core/ mu
 bb check:placeholder-tests                         # Detect (is true) placeholder assertions in tests
 bb check:deps                                      # Dependency direction + cycles + undeclared third-party deps
 bb check:ports                                     # Hexagonal: modules must define ports.clj; shell/web must not bypass protocols
+bb check:ports-diff                                # A stable library's protocols gained, lost or moved no method since the last release (Convention 5)
 bb check:poms                                      # Published POMs must carry inter-Wagoe deps (build-shared rewrite + pom-basis)
 bb check:roadmap                                   # One roadmap, and it may not plan what scaling.adoc marks shipped
 bb check:vulns                                     # Known vulnerabilities in every deps.edn, aliases included (needs GITHUB_TOKEN; weekly in CI)
@@ -418,6 +419,49 @@ them. This applies to what you write next. **The CHANGELOG is the exception:**
 it is read start to finish by people deciding whether to upgrade, so entries
 are trimmed in place when they are found over the limit (BOU-371).
 
+### 5. A Stable Port Only Grows by New Protocols
+
+A protocol in a stable library's `ports` is public API (see
+[Stability](docs/modules/ROOT/pages/stability.adoc)). Callers use it, and
+applications implement it with their own `defrecord` or `reify`. Changing it
+breaks one of the two, and an implementer breaks at runtime: the record
+compiles, and the first call the framework makes to what it lacks throws.
+`wagoe list modules` shows which libraries are stable.
+
+In a 1.x release, in a stable library:
+
+- **A new capability is a new protocol.** Never a new method on an existing
+  one, and never a new arity on an existing method: both break implementers.
+- **Check it once, where the component starts.** `satisfies?` in `init-key`,
+  then either take the old path, or refuse to boot with a `WGE-` error that
+  names what is missing when no old path is safe (a lockout, a lock), and add
+  the code to `libs/devtools/resources/wagoe/devtools/error_catalog.edn` so
+  `bb guide error` explains it. Not per call, and never a runtime
+  `AbstractMethodError`.
+- **Nothing is removed, renamed or moved.** Not a protocol, a method or an
+  arity. Deprecate it (`^:deprecated` and `### Deprecated`) and keep it until 2.0.
+- **A break that cannot wait** (a security fix) is named in backticks under
+  `[Unreleased]` `### Breaking`, method by method, and recorded as an exception
+  on the stability page. That is a decision for the release, not for the PR:
+  ask before writing one.
+
+```clojure
+;; ports.clj — beside IUserRepository, not inside it
+(defprotocol ILoginAttempts
+  (claim-login-attempts [this user-id n lockout]))
+
+;; shell — decided once, when the component starts
+(defmethod ig/init-key :wagoe/user-service [_ {:keys [user-repository] :as opts}]
+  (when-not (satisfies? ports/ILoginAttempts user-repository)
+    (throw (ex-info "WGE-NNN: the user repository does not implement ILoginAttempts"
+                    {:type :config-error :missing ['claim-login-attempts]})))
+  (service/create opts))
+```
+
+Incubating libraries may change their ports in a minor; say so under
+`### Changed`. `bb check:ports-diff` holds all of this against the last final
+release tag and fails CI on a stable change nobody named.
+
 ---
 
 ## Common Workflows
@@ -457,7 +501,8 @@ If you cannot use the scaffolder (rare edge cases), follow this checklist:
 1. **Define schema** in `libs/{library}/src/wagoe/{library}/schema.clj`
 2. **Write core logic** in `libs/{library}/src/wagoe/{library}/core/{domain}.clj` (pure functions)
 3. **Write unit tests** in `libs/{library}/test/wagoe/{library}/core/{domain}_test.clj`
-4. **Define port** in `libs/{library}/src/wagoe/{library}/ports.clj` (protocol)
+4. **Define port** in `libs/{library}/src/wagoe/{library}/ports.clj` (protocol). In a stable library a new
+   capability is a new protocol, never a method added to an existing one (Convention 5)
 5. **Implement in service** in `libs/{library}/src/wagoe/{library}/shell/service.clj`
 6. **Add HTTP endpoint** in `libs/{library}/src/wagoe/{library}/shell/http.clj`
 
@@ -1011,6 +1056,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 | **Placeholder tests** | `bb check:placeholder-tests` | Read with edamame, per runtime feature set: `(is true)`-style shapes (alias-qualified too), a deftest or `testing` block with no assertion at all (helpers like `check-snapshot!` count via a named list; for a `testing`, so does a helper in the file that asserts, directly or through another, and an `assert-*`/`expect-*` call into another namespace), and identical-argument `(= x x)` tautologies. Escape hatch: `^:wagoe/allow-placeholder` on the deftest name, on one `testing`, or on one assertion for a deliberate sentinel | Yes |
 | **Dependency direction** | `bb check:deps` | Core independence violations, circular deps between libraries, third-party namespaces required but not declared (so the published POM would omit them), requires no artifact mapping covers, unparseable `deps.edn` | Yes (cycles/core/new undeclared/unmapped); warn (allowlisted) |
 | **Ports / hexagonal** | `bb check:ports` | Modules missing `ports.clj`; a shell namespace requiring *any* of another module's `shell.*` namespaces (composition roots exempt); web/HTTP requiring `shell.persistence` directly; an allowlist prefix that no longer exempts anything | Yes |
+| **Stable ports vs release** | `bb check:ports-diff` | A protocol in a stable library's `ports`/`protocols` namespace that, since the last final release tag, lost or moved a method or arity (callers break) or gained one (implementers break), with no backticked name under `[Unreleased]` `### Breaking`. Incubating and tooling libraries are reported, not failed; a major version skips it. Pass a ref or set `PORTS_BASE` to compare with another | Yes |
 | **POM dep completeness** | `bb check:poms` | Published POMs dropping inter-Wagoe deps: `build_shared` losing the `:local/root`→mvn rewrite, a publishable `build.clj` bypassing `pom-basis`, or a referenced wagoe dep that is not itself publishable | Yes |
 | **Branch protection** | `bb check:branch-protection` | Branch protection requires one context, `All Tests Passed`. Fails when a job can run without that summary depending on it (so it could fail without blocking a merge), or when the summary is renamed out from under the required context. Reads `ci.yml` only — no API, no token | Yes |
 | **Documented library counts** | `bb check:doc-counts` | Prose disagreeing with `wagoe.tools.deploy/all-libs`: a documented library/artifact count that is not the real number, or a document calling a published library unpublished | Yes |
@@ -1023,7 +1069,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 
 **`check:doc-counts` escape hatch:** add an entry to `.wagoe/check-doc-counts.edn`. Every entry must carry a `:why` — the gate throws on one without it. Prefer the alternatives first: a historical document (changelog, ADR, delivered talk) belongs in `excluded-paths`, and a number that is not a library count (`HTTP 200 for each library`) belongs in `gap-disqualifiers`, so the same shape never needs allowlisting twice.
 
-**Scripts location:** `libs/tools/src/wagoe/tools/check_{fcis,tests,deps,ports,poms,doc_counts,branch_protection}.clj`
+**Scripts location:** `libs/tools/src/wagoe/tools/check_{fcis,tests,deps,ports,ports_diff,poms,doc_counts,branch_protection}.clj`
 **Security tests:** `libs/platform/test/wagoe/platform/shell/security_test.clj` (tagged `^:security ^:unit`)
 **Handler test helpers:** `test/support/handler_test_helpers.clj` (Ring request builders, response assertions)
 **ADRs:** `dev-docs/adr/ADR-021-fcis-boundary-rules.adoc`, `ADR-022-error-handling-conventions.adoc`
