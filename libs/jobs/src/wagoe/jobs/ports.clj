@@ -361,6 +361,18 @@
   [q]
   (satisfies? ITransactionalJobQueue q))
 
+(defprotocol ILeasedJobQueue
+  "Optional capability: a queue whose claim on a dequeued job expires. The
+   worker renews it while the handler runs, so a live job is never reclaimed
+   and run a second time (BOU-823)."
+
+  (renew-interval-ms [this]
+    "How often a running job's claim must be renewed, in milliseconds.")
+
+  (renew-lease! [this queue-name worker-id job-id]
+    "Extend `worker-id`'s claim on `job-id`. False when the worker no longer
+     holds it."))
+
 ;; =============================================================================
 ;; Idempotency keys and recurring jobs
 ;; =============================================================================

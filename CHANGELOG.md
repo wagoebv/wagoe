@@ -295,6 +295,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A DB-queue job running past its lease no longer runs twice** (BOU-823): the worker renews the lease while
+  the handler runs. Nothing to change; `:lease-ms` now only bounds how fast a crashed worker's job is retried.
 - **The `csrf-session` cookie carries `Secure` under `:wagoe/settings :secure-cookies? true`** (BOU-819), as the session
   cookies do. Nothing to change; `wrap-csrf` callers can pass `:secure-cookies?`.
 - **`wagoe add email` writes `:wagoe/email {:provider :smtp …}`** (BOU-822); its `:wagoe.external/smtp` left the app

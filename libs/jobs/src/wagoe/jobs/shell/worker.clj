@@ -229,6 +229,28 @@
         (swap! (:failed-count worker-state) inc)
         nil))))
 
+(defn- start-lease-renewal!
+  "Renew the claim on `job-id` until the returned fn is called, so a job that
+   outlives the queue's lease is not reclaimed and run twice (BOU-823)."
+  [queue worker-state job-id]
+  (if-not (satisfies? ports/ILeasedJobQueue queue)
+    (constantly nil)
+    (let [interval (ports/renew-interval-ms queue)
+          stop     (promise)
+          renew!   #(try
+                      (when-not (ports/renew-lease! queue (:queue-name worker-state)
+                                                    (:id worker-state) job-id)
+                        (log/warn "Job lease lost while running" {:job-id job-id}))
+                      (catch Exception e
+                        (log/warn e "Job lease renewal failed" {:job-id job-id})))]
+      (doto (Thread. ^Runnable #(while (= ::renew (deref stop interval ::renew)) (renew!))
+                     (str "job-lease-" job-id))
+        (.setDaemon true)
+        (.start))
+      ;; Not joined: a renewal after the ack matches no claim, and a hung
+      ;; database must not hold up the worker.
+      #(deliver stop true))))
+
 (defn- process-single-job!
   "Process a single job from queue.
 
@@ -269,52 +291,54 @@
           run-job!
           (fn []
             (reset! (:current-job worker-state) job)
-            (try
-              ;; Resolve the handler BEFORE marking the job running, so a missing
-              ;; handler can be re-routed without leaving the job stuck in :running.
-              (if-let [handler-fn (ports/get-handler registry job-type)]
-                (do
-                  (log/info "Processing job" {:job-id job-id :job-type job-type})
-                  (ports/update-job-status! store job-id :running nil)
-                  (let [result (run-handler config handler-fn job)]
-                    (if (:success? result)
-                      (do
-                        (ports/update-job-status! store job-id :completed (:result result))
-                        (swap! (:processed-count worker-state) inc)
-                        (log/info "Job completed successfully" {:job-id job-id}))
-                      (do
-                        (fail! (:error result))
-                        (log/warn "Job failed" {:job-id job-id :error (dissoc (:error result) :stacktrace)})))))
+            (let [stop-renewal! (start-lease-renewal! queue worker-state job-id)]
+              (try
+                ;; Resolve the handler BEFORE marking the job running, so a missing
+                ;; handler can be re-routed without leaving the job stuck in :running.
+                (if-let [handler-fn (ports/get-handler registry job-type)]
+                  (do
+                    (log/info "Processing job" {:job-id job-id :job-type job-type})
+                    (ports/update-job-status! store job-id :running nil)
+                    (let [result (run-handler config handler-fn job)]
+                      (if (:success? result)
+                        (do
+                          (ports/update-job-status! store job-id :completed (:result result))
+                          (swap! (:processed-count worker-state) inc)
+                          (log/info "Job completed successfully" {:job-id job-id}))
+                        (do
+                          (fail! (:error result))
+                          (log/warn "Job failed" {:job-id job-id :error (dissoc (:error result) :stacktrace)})))))
 
-                ;; No handler on this instance — re-enqueue (bounded), never silent DLQ.
-                (reset! requeue
-                        (handle-missing-handler! config store registry worker-state job)))
+                  ;; No handler on this instance — re-enqueue (bounded), never silent DLQ.
+                  (reset! requeue
+                          (handle-missing-handler! config store registry worker-state job)))
 
-              (catch Exception e
-                ;; Unexpected error during processing
-                (fail! (failure e))
-                (log/error e "Unexpected error processing job" {:job-id job-id}))
+                (catch Exception e
+                  ;; Unexpected error during processing
+                  (fail! (failure e))
+                  (log/error e "Unexpected error processing job" {:job-id job-id}))
 
-              (finally
-                ;; The replacement goes back on the queue BEFORE the claim is
-                ;; released. Acking first opened a window in which the job was
-                ;; neither queued nor in flight, so a process that died there
-                ;; lost the retry outright — no reclaim could find it, on any
-                ;; backend (BOU-418 review). This order can only duplicate, and
-                ;; duplication is what at-least-once means.
-                (when-let [j @requeue]
-                  (ports/enqueue-job! queue (:queue-name worker-state) j)
-                  (log/info "Job re-queued" {:job-id      (:id j)
-                                             :job-type    (:job-type j)
-                                             :retry-count (:retry-count j)
-                                             :execute-at  (:execute-at j)}))
-                ;; Ack removes the job from this worker's in-flight processing list.
-                ;; By here the job is completed, re-enqueued for retry, or dead-lettered
-                ;; — no longer in flight. A crash BEFORE this point leaves it in the
-                ;; processing list for reclaim-abandoned-jobs! to re-run (at-least-once).
-                (ports/ack-job! queue (:queue-name worker-state) (:id worker-state) job-id)
-                (reset! (:current-job worker-state) nil)
-                (reset! (:last-heartbeat worker-state) (Instant/now)))))]
+                (finally
+                  (stop-renewal!)
+                  ;; The replacement goes back on the queue BEFORE the claim is
+                  ;; released. Acking first opened a window in which the job was
+                  ;; neither queued nor in flight, so a process that died there
+                  ;; lost the retry outright — no reclaim could find it, on any
+                  ;; backend (BOU-418 review). This order can only duplicate, and
+                  ;; duplication is what at-least-once means.
+                  (when-let [j @requeue]
+                    (ports/enqueue-job! queue (:queue-name worker-state) j)
+                    (log/info "Job re-queued" {:job-id      (:id j)
+                                               :job-type    (:job-type j)
+                                               :retry-count (:retry-count j)
+                                               :execute-at  (:execute-at j)}))
+                  ;; Ack removes the job from this worker's in-flight processing list.
+                  ;; By here the job is completed, re-enqueued for retry, or dead-lettered
+                  ;; — no longer in flight. A crash BEFORE this point leaves it in the
+                  ;; processing list for reclaim-abandoned-jobs! to re-run (at-least-once).
+                  (ports/ack-job! queue (:queue-name worker-state) (:id worker-state) job-id)
+                  (reset! (:current-job worker-state) nil)
+                  (reset! (:last-heartbeat worker-state) (Instant/now))))))]
       ;; Emit a span per job execution when a tracer is configured (no-op safe).
       (if tracer
         (tracing-ports/with-span* tracer (str "job " job-type)

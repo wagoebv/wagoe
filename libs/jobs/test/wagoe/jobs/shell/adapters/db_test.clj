@@ -7,6 +7,7 @@
             [wagoe.jobs.ports :as ports]
             [wagoe.jobs.shell.adapters.db :as db]
             [wagoe.jobs.shell.adapters.in-memory :as mem]
+            [wagoe.jobs.shell.worker :as worker]
             [wagoe.jobs.shell.adapters.codec-test :refer [legacy-json]]
             [support.test-db :as test-db])
   (:import [java.sql Timestamp]
@@ -87,6 +88,29 @@
       (ports/enqueue-job! q :default job)
       (ports/dequeue-job! q :default "worker-live")
       (is (zero? (:reclaimed (ports/reclaim-abandoned-jobs! q :default)))))))
+
+;; BOU-823: the lease was fixed, so a job outliving it was reclaimed and run
+;; again by a second worker while the first still ran it.
+(deftest ^:integration a-running-job-renews-its-lease
+  (test-db/with-db "jobs_lease"
+    (fn [{:keys [datasource]}]
+      (db/create-jobs-table! datasource)
+      (let [q        (db/create-db-job-queue datasource :lease-ms 150)
+            store    (db/create-db-job-store datasource)
+            registry (worker/create-job-registry)
+            started  (promise)
+            runs     (atom 0)]
+        (ports/register-handler! registry :send-email
+                                 (fn [_] (swap! runs inc) (deliver started true)
+                                   (Thread/sleep 600) {:success? true}))
+        (ports/enqueue-job! q :default (mk-job))
+        (let [ran (future (worker/run-pending! {} q store registry))]
+          (is (deref started 5000 false))
+          (Thread/sleep 400) ; well past the 150ms lease
+          (is (zero? (:reclaimed (ports/reclaim-abandoned-jobs! q :default))))
+          (is (nil? (ports/dequeue-job! q :default "worker-b")) "a second worker gets nothing")
+          (is (= 1 (deref ran 5000 :timeout)))
+          (is (= 1 @runs)))))))
 
 (deftest ^:integration scheduled-jobs-become-ready-when-due
   (let [q    (fresh-queue)
