@@ -69,7 +69,7 @@ tables and buttons a base style (`resources/tailwind/pilot-rules.css`).
 - **Assets** (`assets/`): Wagoe light/dark logo + icon PNGs.
 - **Tailwind sources** (`resources/tailwind/`): `pilot.css` builds
   `css/daisy-admin.css`; `admin.css` builds `css/wagoe-admin.css` from
-  `admin/legacy.css`, `pilot-rules.css` and `admin/wagoe-admin.css` (the
+  `pilot-rules.css` and `admin/wagoe-admin.css` (the admin's base styles, the
   wagoe.org tokens and display-role styles, ADR-040). `npm run build:css`.
 
 Paths in the bundle vectors are root-relative (`/css/...`, `/js/...`). The

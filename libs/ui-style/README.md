@@ -43,7 +43,7 @@ Contains:
 - Tailwind entries in `resources/tailwind/`, compiled into `resources/public/css/`:
   - `pilot.css` → `daisy-admin.css`, the `:pilot` bundle's daisyUI/Tailwind layer
   - `admin.css` → `wagoe-admin.css`, the `:admin-pilot` bundle's one stylesheet:
-    fonts, tokens, `admin/legacy.css`, `app.css`, `pilot-rules.css` and
+    fonts, tokens, `app.css`, `pilot-rules.css`, `user-menu.css` and
     `admin/wagoe-admin.css`, in that cascade order
 - Shared CSS tokens/components:
   - `resources/public/css/wagoe-tokens.css`
