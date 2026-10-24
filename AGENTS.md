@@ -454,7 +454,7 @@ In a 1.x release, in a stable library:
 (defmethod ig/init-key :wagoe/user-service [_ {:keys [user-repository] :as opts}]
   (when-not (satisfies? ports/ILoginAttempts user-repository)
     (throw (ex-info "WGE-NNN: the user repository does not implement ILoginAttempts"
-                    {:type :config-error :missing ['claim-login-attempts]})))
+                    {:type :configuration-error :missing ['claim-login-attempts]})))
   (service/create opts))
 ```
 
