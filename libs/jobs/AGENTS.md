@@ -211,7 +211,10 @@ docs: `docs/modules/libraries/pages/jobs.adoc`. What to keep true when editing:
 - **Staleness** (`:expect-success`): the scheduler's lease holder runs
   `outcomes/check-stale!` every `:watch-ms` (60 s). It claims the same key, so a
   type both failing and stale is reported once per interval. A type with no
-  record or no success yet is never stale.
+  record or no success yet is never stale, nor is one without a handler in the
+  registry (BOU-835).
+- **A report that throws releases its claim** (BOU-835), is logged, and the
+  watch goes on to the next type; the next failure or pass reports again.
 - **Nothing in it fails a job.** Each step is caught and logged.
 - **The worker catches `Throwable`** (BOU-834): an `AssertionError` or
   `ExceptionInInitializerError` is a failed run. `worker/fatal?` errors (OOM,

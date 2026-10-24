@@ -207,7 +207,9 @@ that throws is logged; the job's own result stands. A handler that throws an
 `:expect-success` names job types that must succeed within so many hours. The
 scheduler checks every minute and reports a late one to the error tracker,
 through the same throttle as its failures. A type that never ran, or never
-succeeded, is not late: its failures are reported already.
+succeeded, is not late: its failures are reported already. Nor is a type this
+node has no handler for, such as one switched off by config. A report the
+tracker refuses is logged and tried again on the next check.
 
 To list only the job types this node has handlers for:
 

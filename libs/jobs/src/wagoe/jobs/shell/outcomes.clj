@@ -33,6 +33,21 @@
       (log/warn e "Could not claim a job report, reporting anyway" {:job-type job-type})
       true)))
 
+(defn- report-throttled!
+  "Call `report!` when `job-type`'s report is due. A report that throws is
+   logged and gives its claim back, so the next one tries again instead of
+   waiting out the interval. True when it went out."
+  [idempotency job-type every-ms report!]
+  (when (report-due? idempotency job-type every-ms)
+    (try (report!)
+         true
+         (catch Exception e
+           (log/error e "Could not report a job" {:job-type job-type})
+           (try (ports/release-key! idempotency report-scope (tag job-type))
+                (catch Exception e
+                  (log/warn e "Could not release a job report's claim" {:job-type job-type})))
+           false))))
+
 (defn- emit-metrics!
   "A run counter by outcome, a duration histogram in seconds, and the epoch
    second of the last success, each tagged with the job type."
@@ -87,8 +102,8 @@
         (safely "report" job-type
                 (if (= :failure (:outcome o))
                   (do (swap! failing conj job-type)
-                      (when (report-due? idempotency job-type every-ms)
-                        (report-failure! error-reporter o)))
+                      (report-throttled! idempotency job-type every-ms
+                                         #(report-failure! error-reporter o)))
                   (when (contains? @failing job-type)
                     (swap! failing disj job-type)
                     (ports/release-key! idempotency report-scope (tag job-type))))))
@@ -106,22 +121,26 @@
                                    :last-error             (:last-error record)}}
                           {:job-type (tag job-type)}))
 
-(defn check-stale!
-  "Report each job type in `expect-success`, {job-type hours}, whose last
-   success on `store` is older than its hours at `now`, through the same
-   throttle as failures. A type that has no record or never succeeded is not
-   stale: its failures are reported already. Returns the types reported."
-  [{:keys [store idempotency error-reporter expect-success report-failures-every-ms]} ^Instant now]
-  (let [every-ms (or report-failures-every-ms default-report-failures-every-ms)]
-    (into []
-          (keep (fn [{:keys [job-type] :as record}]
-                  (when (report-due? idempotency job-type every-ms)
-                    (report-stale! error-reporter record)
-                    job-type)))
-          (outcome/stale (ports/job-outcomes store) expect-success now))))
-
 (defn registered-outcomes
   "`store`'s `job-outcomes` for the job types `registry` has a handler for, so
    a type that was renamed or removed drops out."
   [store registry]
   (select-keys (ports/job-outcomes store) (ports/list-handlers registry)))
+
+(defn check-stale!
+  "Report each job type in `expect-success`, {job-type hours}, whose last
+   success on `store` is older than its hours at `now`, through the same
+   throttle as failures. A type that has no record or never succeeded is not
+   stale: its failures are reported already. Given `registry`, only types it
+   has a handler for are checked, so a type switched off here is not reported
+   every day. A report that fails does not stop the others. Returns the types
+   reported."
+  [{:keys [store registry idempotency error-reporter expect-success report-failures-every-ms]} ^Instant now]
+  (let [every-ms (or report-failures-every-ms default-report-failures-every-ms)
+        records  (if registry (registered-outcomes store registry) (ports/job-outcomes store))]
+    (into []
+          (keep (fn [{:keys [job-type] :as record}]
+                  (when (report-throttled! idempotency job-type every-ms
+                                           #(report-stale! error-reporter record))
+                    job-type)))
+          (outcome/stale records expect-success now))))
