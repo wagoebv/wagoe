@@ -12,7 +12,9 @@
   "Create a new job from input.
 
    Args:
-     job-input - Map with :job-type, :args, and optional fields
+     job-input - Map with :job-type, :args, and optional fields. A
+                 `:unique-key` string makes the queue refuse this job while
+                 another with that key is pending or running.
      job-id - UUID for the job (provided by caller)
      now - Current timestamp (provided by caller)
 
@@ -31,7 +33,9 @@
            :updated-at now
            :metadata (or (:metadata job-input) {})}
     (:execute-at job-input)
-    (assoc :execute-at (:execute-at job-input))))
+    (assoc :execute-at (:execute-at job-input))
+    (:unique-key job-input)
+    (assoc :unique-key (:unique-key job-input))))
 
 (defn schedule-job
   "Create a scheduled job for future execution.

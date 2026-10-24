@@ -1,10 +1,15 @@
 (ns wagoe.jobs.shell.outcomes
   "Where the worker reports how each run ended (BOU-832): the store's record,
    metrics, the error tracker and the application's own hook. Each is
-   optional, and none can fail a job."
+   optional, and none can fail a job.
+
+   Failure and staleness reports share one throttle per job type, a claim in
+   the idempotency store, so nodes sharing that store report once between
+   them (BOU-834)."
   (:require [clojure.tools.logging :as log]
             [wagoe.jobs.core.outcome :as outcome]
             [wagoe.jobs.ports :as ports]
+            [wagoe.jobs.shell.adapters.in-memory :as mem]
             [wagoe.observability.errors.ports :as errors]
             [wagoe.observability.metrics.ports :as metrics])
   (:import [java.time Instant]))
@@ -13,7 +18,20 @@
   "While a job type keeps failing, the error tracker hears of it this often."
   (* 60 60 1000))
 
+(def ^:private report-scope "wagoe.jobs/report")
+
 (defn- tag [job-type] (str (symbol job-type)))
+
+(defn- report-due?
+  "Claim `job-type`'s report for `every-ms`. True when no report for it went
+   out within that time on any node sharing `idempotency`. A store that cannot
+   answer lets the report through: better twice than not at all."
+  [idempotency job-type every-ms]
+  (try
+    (ports/claim-key! idempotency report-scope (tag job-type) every-ms)
+    (catch Exception e
+      (log/warn e "Could not claim a job report, reporting anyway" {:job-type job-type})
+      true)))
 
 (defn- emit-metrics!
   "A run counter by outcome, a duration histogram in seconds, and the epoch
@@ -47,11 +65,19 @@
    implements `IJobOutcomes`, emits it to `metrics`, sends a failure to
    `error-reporter` (the first after a success, then one per
    `report-failures-every-ms`), and calls `on-outcome`. Every key is optional;
-   the fn never throws."
-  [{:keys [store metrics error-reporter on-outcome report-failures-every-ms]}]
-  (let [record?  (satisfies? ports/IJobOutcomes store)
-        every-ms (or report-failures-every-ms default-report-failures-every-ms)
-        failing  (atom {})]
+   the fn never throws.
+
+   `idempotency` (`IIdempotencyStore`) holds the throttle; give every node the
+   same one and a failing type is reported once between them. Without it the
+   throttle is this reporter's own."
+  [{:keys [store metrics error-reporter on-outcome report-failures-every-ms idempotency]}]
+  (let [record?     (satisfies? ports/IJobOutcomes store)
+        every-ms    (or report-failures-every-ms default-report-failures-every-ms)
+        idempotency (or idempotency (mem/create-in-memory-idempotency-store))
+        ;; Types this reporter saw fail since it saw them succeed. A success
+        ;; frees the claim only for these, sparing a write per successful run,
+        ;; so a success seen only on another node does not cut the interval short.
+        failing     (atom #{})]
     (fn [{:keys [job-type] :as o}]
       (when record?
         (safely "record" job-type (ports/record-outcome! store o)))
@@ -59,9 +85,43 @@
         (safely "emit metrics for" job-type (emit-metrics! metrics o)))
       (when error-reporter
         (safely "report" job-type
-                ;; One decision across the pool's workers.
-                (when (:report? (get (swap! failing update job-type outcome/throttle o every-ms) job-type))
-                  (report-failure! error-reporter o))))
+                (if (= :failure (:outcome o))
+                  (do (swap! failing conj job-type)
+                      (when (report-due? idempotency job-type every-ms)
+                        (report-failure! error-reporter o)))
+                  (when (contains? @failing job-type)
+                    (swap! failing disj job-type)
+                    (ports/release-key! idempotency report-scope (tag job-type))))))
       (when on-outcome
         (safely "hand on" job-type (on-outcome o)))
       nil)))
+
+(defn- report-stale! [reporter {:keys [job-type expected-within-hours] :as record}]
+  (errors/capture-message reporter
+                          (str "Job " (tag job-type) " has not succeeded within " expected-within-hours "h")
+                          :error
+                          {:extra {:last-succeeded-at      (str (:last-succeeded-at record))
+                                   :last-outcome           (some-> (:last-outcome record) name)
+                                   :failures-since-success (:failures-since-success record)
+                                   :last-error             (:last-error record)}}
+                          {:job-type (tag job-type)}))
+
+(defn check-stale!
+  "Report each job type in `expect-success`, {job-type hours}, whose last
+   success on `store` is older than its hours at `now`, through the same
+   throttle as failures. A type that has no record or never succeeded is not
+   stale: its failures are reported already. Returns the types reported."
+  [{:keys [store idempotency error-reporter expect-success report-failures-every-ms]} ^Instant now]
+  (let [every-ms (or report-failures-every-ms default-report-failures-every-ms)]
+    (into []
+          (keep (fn [{:keys [job-type] :as record}]
+                  (when (report-due? idempotency job-type every-ms)
+                    (report-stale! error-reporter record)
+                    job-type)))
+          (outcome/stale (ports/job-outcomes store) expect-success now))))
+
+(defn registered-outcomes
+  "`store`'s `job-outcomes` for the job types `registry` has a handler for, so
+   a type that was renamed or removed drops out."
+  [store registry]
+  (select-keys (ports/job-outcomes store) (ports/list-handlers registry)))

@@ -42,7 +42,12 @@
       (is (= :default (:queue job)))
       (is (= :normal (:priority job)))
       (is (= {} (:args job)))
-      (is (= {} (:metadata job)))))
+      (is (= {} (:metadata job)))
+      (is (not (contains? job :unique-key)))))
+
+  (testing "carries a unique key"
+    (is (= "geo/refresh" (:unique-key (job/create-job (assoc base-input :unique-key "geo/refresh")
+                                                      test-id test-now)))))
 
   (testing "respects custom priority and max-retries"
     (let [job (job/create-job (assoc base-input :priority :high :max-retries 5)

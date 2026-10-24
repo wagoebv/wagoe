@@ -1,6 +1,6 @@
 (ns wagoe.jobs.core.outcome
-  "How a job run ended, each job type's record of its runs, and when a failure
-   goes to the error tracker (BOU-832)."
+  "How a job run ended, each job type's record of its runs (BOU-832), and
+   which job types are overdue a success (BOU-834)."
   (:require [wagoe.jobs.core.job :as job])
   (:import [java.time Instant]))
 
@@ -48,17 +48,14 @@
           (assoc :last-failed-at finished-at :last-error (error-message o))
           (update :failures-since-success inc)))))
 
-(defn throttle
-  "A job type's error-tracker state after `outcome`. `:report?` says whether
-   this failure goes to the tracker: the first after a success, and then one
-   per `every-ms` while it keeps failing."
-  [state {:keys [outcome ^Instant finished-at]} every-ms]
-  (if (= :success outcome)
-    {:failing? false}
-    (let [^Instant last (:reported-at state)
-          due?          (or (not (:failing? state))
-                            (nil? last)
-                            (>= (- (.toEpochMilli finished-at) (.toEpochMilli last)) every-ms))]
-      {:failing?    true
-       :reported-at (if due? finished-at last)
-       :report?     due?})))
+(defn stale
+  "The records among `records` (job type -> record) that `expect-success`
+   ({job-type hours}) says should have succeeded since `now` minus their
+   hours, each with `:expected-within-hours`. A type without a record or
+   without a success yet is not stale: when it first ran is not kept."
+  [records expect-success ^Instant now]
+  (for [[job-type hours] expect-success
+        :let [record (get records job-type)
+              ^Instant last (:last-succeeded-at record)]
+        :when (and last (.isBefore last (.minusMillis now (long (* hours 60 60 1000)))))]
+    (assoc record :expected-within-hours hours)))

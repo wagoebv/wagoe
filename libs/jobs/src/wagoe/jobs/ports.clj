@@ -24,10 +24,13 @@
 
     Args:
       queue-name - Queue name (e.g., :default, :critical, :low-priority)
-      job - Job map with {:job-type :job-id :args :metadata}
+      job - Job map with {:job-type :job-id :args :metadata}, and optionally
+            :unique-key
 
     Returns:
-      Job ID (UUID)")
+      Job ID (UUID), or nil when the job's :unique-key is held by another job
+      still pending or running. The key is freed when that job is acked
+      without being put back (done, or failed for good); a retry keeps it.")
 
   (schedule-job! [this queue-name job execute-at]
     "Schedule a job for future execution.
@@ -38,7 +41,7 @@
       execute-at - Instant when job should execute
 
     Returns:
-      Job ID (UUID)")
+      Job ID (UUID), or nil as for enqueue-job!")
 
   (dequeue-job! [this queue-name worker-id]
     "Reliably dequeue the next job from queue for a worker.
@@ -347,7 +350,7 @@
       job        - Job map
 
     Returns:
-      Job ID (UUID)
+      Job ID (UUID), or nil as for enqueue-job!
 
     Throws:
       ex-info {:type :validation-error} when `tx` is not an open transaction —
