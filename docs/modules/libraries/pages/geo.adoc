@@ -91,6 +91,13 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
 (geo/geocode! service {:postcode "1012 JS" :house-number 1 :house-number-addition "A"})
 ;=> {:street "Dam" :house-number "1" :house-number-addition "A" :city "Amsterdam" :lat ... :lng ...}
 
+;; Only the named providers, for this call; cached separately
+(geo/geocode! service {:postcode "1012 JS" :house-number 1} {:only #{:pdok}})
+
+;; The same through the component's port, without requiring the shell namespace
+(require '[wagoe.geo.ports :as geo-ports])
+(geo-ports/lookup service {:postcode "1012 JS" :house-number 1} {:only #{:pdok}})
+
 ;; Reverse geocode
 (geo/reverse-geocode! service {:lat 52.3747 :lon 4.8844})
 ;=> {:formatted-address "Prinsengracht 263, 1016 GV Amsterdam"}
@@ -100,11 +107,14 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
 ;=> 0.84  ; kilometres
 ----
 
-== Rate limiting
+== Rate limiting and timeouts
 
 * OpenStreetMap (Nominatim): 1 request/second enforced
-* Google / Mapbox: 100 ms between requests
-* Do not share an adapter instance across threads
+* Google / Mapbox / PDOK: 100 ms between requests
+* One adapter per provider, shared across threads: the limit is per instance.
+  A waiter holds no slot, so a cancelled lookup delays no one.
+* `:timeout-ms` (default 3000) bounds each call's connect and read; a timeout
+  is a miss, logged as an ERROR, and the chain moves on.
 
 == DB migration
 

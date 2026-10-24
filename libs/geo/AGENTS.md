@@ -19,7 +19,7 @@
 | Namespace | Layer | Responsibility |
 |-----------|-------|----------------|
 | `wagoe.geo.schema` | shared | Malli schemas: `GeoPoint`, `AddressQuery`, `GeoResult`, `GeoConfig` |
-| `wagoe.geo.ports` | shared | `GeoProviderProtocol`, `GeoCacheProtocol` |
+| `wagoe.geo.ports` | shared | `GeoProviderProtocol`, `GeoCacheProtocol`, `GeoServiceProtocol` |
 | `wagoe.geo.core.math` | core | `haversine-distance`, `bearing` |
 | `wagoe.geo.core.address` | core | `normalize-query`, `query-hash` (SHA-256) |
 | `wagoe.geo.shell.adapters.osm` | shell | Nominatim adapter (`NominatimAdapter`) |
@@ -28,7 +28,7 @@
 | `wagoe.geo.shell.adapters.pdok` | shell | PDOK Locatieserver adapter (`PdokAdapter`) |
 | `wagoe.geo.shell.adapters.support` | shell | Shared rate limiter and response check |
 | `wagoe.geo.shell.cache` | shell | `DbGeoCache` — next.jdbc-backed cache |
-| `wagoe.geo.shell.service` | shell | Public API: `geocode!`, `reverse-geocode!`, `distance` |
+| `wagoe.geo.shell.service` | shell | Public API: `geocode!`, `reverse-geocode!`, `distance`; `GeoService` |
 | `wagoe.geo.shell.module-wiring` | shell | Integrant `:wagoe/geo-service` |
 
 ---
@@ -77,7 +77,8 @@ Require the wiring namespace in your system config loader:
 ## 4. Public API
 
 ```clojure
-(require '[wagoe.geo.shell.service :as geo])
+(require '[wagoe.geo.shell.service :as geo]
+         '[wagoe.geo.ports :as geo-ports])
 
 ;; Forward geocoding (cache-first)
 (geo/geocode! geo-service {:postcode "1012 JS" :city "Amsterdam"})
@@ -91,6 +92,12 @@ Require the wiring namespace in your system config loader:
 ;; Second call returns from cache
 (geo/geocode! geo-service {:postcode "1012 JS" :city "Amsterdam"})
 ;; => {:lat 52.374 :lng 4.890 ... :provider :openstreetmap :cached? true}
+
+;; Only the named providers for this call; cached under that restriction.
+;; :wagoe/geo-service is a GeoService, so ports/lookup does the same without
+;; requiring this namespace.
+(geo/geocode! geo-service {:postcode "1012 JS" :house-number 1} {:only #{:pdok}})
+(geo-ports/lookup geo-service {:postcode "1012 JS" :house-number 1} {:only #{:pdok}})
 
 ;; Reverse geocoding (no caching)
 (geo/reverse-geocode! geo-service {:lat 52.374 :lng 4.890})
@@ -182,7 +189,7 @@ The SHA-256 cache key is computed from the **normalised** query (lowercased, tri
 When a provider throws an exception, the adapter returns `nil` and logs an error. A response without numeric coordinates logs a WARN naming the provider. The service layer treats this as a miss and continues to the next provider. Do not rely on exceptions propagating from `geocode!`.
 
 ### 8. Thread safety of rate-limit atoms
-`support/enforce-rate-limit!` reserves each request a slot on the adapter's `last-request-ms` atom, so concurrent requests are spaced as well as sequential ones. Against the public Nominatim server the interval never drops below 1000 ms, whatever `:rate-limit` says.
+`support/enforce-rate-limit!` lets a request through only when it claims the adapter's `last-request-ms` atom, so concurrent requests are spaced as well as sequential ones. A waiter claims nothing while it sleeps: a lookup cancelled or interrupted there (`future-cancel`) delays no one, but waiters are not served in arrival order. Against the public Nominatim server the interval never drops below 1000 ms, whatever `:rate-limit` says.
 
 ### 9. Multi-instance deployments
 **Rate limiting is per-JVM instance, not distributed.** In multi-instance deployments (Kubernetes, ECS), each pod independently enforces rate limits. This may exceed provider rate limits.
@@ -200,6 +207,9 @@ For single-instance deployments and development, the current atom-based approach
 `AddressQuery` takes `:house-number` (int or string) and `:house-number-addition` beside `:postcode`; both are part of the cache key. PDOK filters on a valid postcode and the number, so the match is exact. `"12a"` as house number reads as 12 with addition `a`. An addition matches whatever its case or separators (`"a 2"` finds `1A-2`); one that does not exist is no result, not the plain number. Without an addition the plain number wins. A query for a country other than the Netherlands is a miss, so a fallback chain moves on.
 
 `GeoResult` carries `:street`, `:house-number` and `:house-number-addition` as strings when the provider gives them. PDOK fills all three (the addition when the address has one); Nominatim, Google and Mapbox (address features) fill street and number.
+
+### 11. Timeouts
+Every adapter sets clj-http's `:connection-timeout` and `:socket-timeout` to `:timeout-ms` (default 3000; `:timeout-ms` on `:wagoe/geo-service` sets all). A timeout is a miss logged as an ERROR, like any failed request. `future-cancel` does not interrupt a blocked socket read, so wrap a lookup in a `future` only for a shorter wait than this, never instead of it.
 
 ---
 

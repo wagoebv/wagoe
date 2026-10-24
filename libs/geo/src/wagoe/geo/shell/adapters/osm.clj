@@ -45,7 +45,7 @@
 ;; Adapter record
 ;; =============================================================================
 
-(defrecord NominatimAdapter [base-url last-request-ms min-interval-ms user-agent])
+(defrecord NominatimAdapter [base-url last-request-ms min-interval-ms user-agent timeout-ms])
 
 (extend-protocol ports/GeoProviderProtocol
   NominatimAdapter
@@ -64,7 +64,9 @@
                                     :headers          {"User-Agent" (:user-agent this)}
                                     :as               :json
                                     :coerce           :always
-                                    :throw-exceptions false})
+                                    :throw-exceptions false
+                                    :connection-timeout (:timeout-ms this)
+                                    :socket-timeout     (:timeout-ms this)})
                 status   (:status response)
                 results  (:body response)]
             (if (= 200 status)
@@ -88,7 +90,9 @@
                                 :headers          {"User-Agent" (:user-agent this)}
                                 :as               :json
                                 :coerce           :always
-                                :throw-exceptions false})
+                                :throw-exceptions false
+                                :connection-timeout (:timeout-ms this)
+                                :socket-timeout     (:timeout-ms this)})
             status   (:status response)
             body     (:body response)]
         (if (= 200 status)
@@ -113,12 +117,14 @@
      :user-agent       - App name and contact (OSM policy; WARN and a shared default when absent)
      :base-url         - Override base URL (default: https://nominatim.openstreetmap.org)
      :min-interval-ms  - Minimum ms between requests (default and floor on the public server: 1000)
+     :timeout-ms       - Connect and read timeout in ms; a timeout is a miss (default: 3000)
 
    Returns:
      NominatimAdapter implementing GeoProviderProtocol"
-  [{:keys [user-agent base-url min-interval-ms]
+  [{:keys [user-agent base-url min-interval-ms timeout-ms]
     :or   {base-url         default-base-url
-           min-interval-ms  default-min-interval-ms}}]
+           min-interval-ms  default-min-interval-ms
+           timeout-ms       support/default-timeout-ms}}]
   ;; The public server's policy: 1 req/s and a User-Agent naming the app. A self-hosted one sets its own.
   (let [public?  (= "nominatim.openstreetmap.org" (some-> (URI. base-url) .getHost text/lower-case))
         interval (if public? (max min-interval-ms default-min-interval-ms) min-interval-ms)]
@@ -127,4 +133,4 @@
                 {:requested-ms min-interval-ms :using-ms interval}))
     (when (and public? (not user-agent))
       (log/warn "Geo: no :user-agent for OpenStreetMap. Nominatim's usage policy wants one naming your app and a contact; a shared default risks being blocked."))
-    (->NominatimAdapter base-url (atom 0) interval (or user-agent default-user-agent))))
+    (->NominatimAdapter base-url (atom 0) interval (or user-agent default-user-agent) timeout-ms)))

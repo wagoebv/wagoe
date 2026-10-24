@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Geo `geocode!` and `reverse-geocode!` take `{:only #{:pdok}}`** (BOU-833): the named providers only, cached per
+  restriction. `:wagoe/geo-service` also answers `ports/lookup` and `ports/reverse-lookup`.
 - **The jobs worker reports every run's outcome** (BOU-832): `IJobOutcomes` on the store, `jobs.*` metrics, throttled
   error reports and an `:on-outcome` hook. Drop per-handler wrappers; see the jobs docs for the config.
 - **Geo `:provider :pdok`: street, city and point from postcode + house number, no key** (BOU-830). `AddressQuery`
@@ -307,6 +309,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Geo providers time out after 3 s, and a cancelled lookup no longer holds a rate-limit slot** (BOU-833). A timeout
+  is a miss; set `:timeout-ms` on `:wagoe/geo-service` to change it.
 - **A DB-queue job running past its lease no longer runs twice** (BOU-823): the worker renews the lease while
   the handler runs. Nothing to change; `:lease-ms` now only bounds how fast a crashed worker's job is retried.
 - **The email README's production config is the shape `:wagoe/email` reads** (BOU-824): flat keys and `:provider

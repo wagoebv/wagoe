@@ -61,6 +61,7 @@
    [:provider   [:or :keyword [:vector :keyword]]]  ; single or fallback chain
    [:cache-ttl  {:optional true} :int]              ; cache TTL in seconds
    [:rate-limit {:optional true} :int]              ; requests per second
+   [:timeout-ms {:optional true} :int]              ; connect and read timeout per call
    [:api-key    {:optional true} [:maybe :string]]  ; nil for OSM
    [:db         {:optional true} :any]])             ; next.jdbc datasource
 
