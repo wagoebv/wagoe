@@ -313,6 +313,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`:expect-success` skips job types without a handler, and a failed report no longer holds the throttle** (BOU-835).
+  A report the tracker refuses is logged and retried on the next failure or check. Nothing to change.
 - **A job handler throwing an `Error` (`AssertionError`, `ExceptionInInitializerError`) is a failed run** (BOU-834)
   instead of killing the worker thread unrecorded. Nothing to change.
 - **Geo providers time out after 3 s, and a cancelled lookup no longer holds a rate-limit slot** (BOU-833). A timeout

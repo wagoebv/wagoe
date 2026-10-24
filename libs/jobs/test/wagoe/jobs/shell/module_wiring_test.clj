@@ -4,6 +4,7 @@
    blocks does not mean remembering which one wanted which word (BOU-436)."
   (:require [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
+            [wagoe.jobs.ports :as ports]
             [wagoe.jobs.shell.adapters.in-memory :as mem]
             [wagoe.jobs.shell.module-wiring :as wiring]
             [wagoe.platform.ports.privacy :as privacy]))
@@ -85,6 +86,15 @@
     (let [s (ig/init-key :wagoe/job-scheduler {:runtime runtime :expect-success {:nightly-report 26}})]
       (try (is (fn? (:watch s)))
            (finally (ig/halt-key! :wagoe/job-scheduler s))))
+    (testing "the watch checks only job types with a handler"
+      (let [now (java.time.Instant/now)
+            s   (ig/init-key :wagoe/job-scheduler {:runtime        runtime
+                                                   :registry       (ig/init-key :wagoe/job-registry {:handler-maps []})
+                                                   :expect-success {:nightly-report 26}})]
+        (ports/record-outcome! (:store runtime) {:job-type :nightly-report :outcome :success :started-at now
+                                                 :finished-at now :duration-ms 1})
+        (try (is (= [] ((:watch s) (.plus now (java.time.Duration/ofHours 27)))))
+             (finally (ig/halt-key! :wagoe/job-scheduler s)))))
     (testing "hours that are not a positive number fail the boot"
       (doseq [bad [{:nightly-report 0} {:nightly-report "26"} [:nightly-report 26] 26]]
         (let [e (try (ig/init-key :wagoe/job-scheduler {:runtime runtime :expect-success bad})

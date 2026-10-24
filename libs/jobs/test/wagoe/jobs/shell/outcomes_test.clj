@@ -131,8 +131,8 @@
                                                                  {:success? true}))))
              ;; Two nodes, each with its own reporter, one store.
              node     #(hash-map :report-outcome (outcomes/reporter {:store          store
-                                                                    :error-reporter (recording-reporter reports)
-                                                                    :idempotency    idempotency}))
+                                                                     :error-reporter (recording-reporter reports)
+                                                                     :idempotency    idempotency}))
              [a b]    [(node) (node)]
              run!     (fn [cfg] (enqueue! queue :sync) (worker/run-pending! cfg queue store registry))]
          (run! a)
@@ -176,7 +176,7 @@
          (testing "a failure within that interval shares the throttle"
            (reset! fail? true)
            (worker/run-pending! {:report-outcome (outcomes/reporter (assoc opts :error-reporter
-                                                                            (recording-reporter reports)))}
+                                                                           (recording-reporter reports)))}
                                 (doto queue (enqueue! :sync)) store registry)
            (is (= 1 (count @reports)))))))))
 
@@ -189,6 +189,67 @@
       (ports/record-outcome! store {:job-type t :outcome :success :started-at now
                                     :finished-at now :duration-ms 1}))
     (is (= [:kept] (keys (outcomes/registered-outcomes store registry))))))
+
+(defn- succeeded! [store job-type ^java.time.Instant at]
+  (ports/record-outcome! store {:job-type job-type :outcome :success :started-at at
+                                :finished-at at :duration-ms 1}))
+
+(defn- flaky-reporter
+  "Throws on the first report for a job type, records the rest."
+  [reports]
+  (let [failed (atom #{})]
+    (reify errors/IErrorReporter
+      (capture-exception [_ _e] nil)
+      (capture-event [_ _event] nil)
+      (capture-message [_ message _level _context tags]
+        (if (contains? @failed tags)
+          (swap! reports conj message)
+          (do (swap! failed conj tags)
+              (throw (ex-info "tracker down" {:type :internal-error}))))))))
+
+(deftest ^:unit the-watch-skips-job-types-without-a-handler
+  (let [store    (mem/create-in-memory-job-store)
+        reports  (atom [])
+        registry (doto (worker/create-job-registry)
+                   (ports/register-handler! :kept (fn [_] {:success? true})))
+        now      (java.time.Instant/now)
+        later    (.plus now (java.time.Duration/ofHours 2))]
+    (doseq [t [:kept :switched-off]]
+      (succeeded! store t now))
+    (is (= [:kept] (outcomes/check-stale! {:store          store
+                                           :registry       registry
+                                           :idempotency    (mem/create-in-memory-idempotency-store)
+                                           :error-reporter (recording-reporter reports)
+                                           :expect-success {:kept 1 :switched-off 1}}
+                                          later)))
+    (is (= 1 (count @reports)))))
+
+(deftest ^:unit a-stale-report-that-fails-gives-its-claim-back
+  (with-silent-logging
+    (let [store   (mem/create-in-memory-job-store)
+          reports (atom [])
+          now     (java.time.Instant/now)
+          later   (.plus now (java.time.Duration/ofHours 2))
+          opts    {:store          store
+                   :idempotency    (mem/create-in-memory-idempotency-store)
+                   :error-reporter (flaky-reporter reports)
+                   :expect-success {:a 1 :b 1}}]
+      (doseq [t [:a :b]]
+        (succeeded! store t now))
+      (is (= [] (outcomes/check-stale! opts later)) "both reports failed, neither stopped the other")
+      (is (= #{:a :b} (set (outcomes/check-stale! opts later))) "the next pass reports them")
+      (is (= 2 (count @reports))))))
+
+(deftest ^:unit a-failure-report-that-fails-gives-its-claim-back
+  (with-silent-logging
+    (let [reports (atom [])
+          report! (outcomes/reporter {:error-reporter (flaky-reporter reports)})
+          now     (java.time.Instant/now)
+          failure {:job-type :sync :job-id (random-uuid) :outcome :failure :attempt 1
+                   :started-at now :finished-at now :duration-ms 1 :error {:message "down"}}]
+      (report! failure)
+      (report! failure)
+      (is (= ["Job sync failed"] @reports) "the second failure is reported, not held off"))))
 
 (deftest ^:integration a-unique-job-holds-its-key-through-its-retries
   (with-silent-logging

@@ -264,6 +264,7 @@
              report-failures-every-ms]}]
   (let [watch (when (seq (expect-success! expect-success))
                 (let [opts {:store                    (:store runtime)
+                            :registry                 registry
                             :idempotency              (:idempotency runtime)
                             :error-reporter           error-reporter
                             :expect-success           expect-success
