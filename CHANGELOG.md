@@ -222,8 +222,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
-- **Admin CSS without `!important` fights** (BOU-821): 6 left, each against an inline style or for reduced motion;
-  ~490 overridden declarations removed. No visible change.
+- **Admin CSS without `!important` fights or `legacy.css`** (BOU-821): 6 `!important` left; `tailwind/admin/legacy.css`
+  is part of `admin/wagoe-admin.css` now. No visible change.
 - **Methods 1.1 adds to a stable port are their own protocols** (BOU-829), so an app's own repository or service keeps
   working; one lacking a protocol Wagoe calls stops the boot with `WGE-107`, naming it.
 - **The admin loads one stylesheet** (BOU-808): `:admin-pilot` is `/css/wagoe-admin.css`, built by `npm run build:css`,
