@@ -4,7 +4,8 @@
   This namespace owns all Integrant init/halt methods for user-specific
   components so that shared system wiring does not depend directly on
   user shell namespaces."
-  (:require [wagoe.user.shell.persistence :as user-persistence]
+  (:require [wagoe.user.ports :as ports]
+            [wagoe.user.shell.persistence :as user-persistence]
             [wagoe.user.shell.auth-persistence :as auth-persistence]
             [wagoe.user.shell.service :as user-service]
             [wagoe.user.shell.auth :as user-auth]
@@ -21,6 +22,16 @@
             [wagoe.user.shell.web-handlers :as web-handlers]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
+
+(defn- require-protocols!
+  "Refuses to boot when `component` lacks a protocol added after 1.0, rather
+   than fail on the first call to it (Convention 5). `required` maps each
+   protocol's name to [protocol methods]."
+  [what component required]
+  (doseq [[proto-name [proto methods]] required]
+    (when-not (satisfies? proto component)
+      (throw (ex-info (str "WGE-107: the " what " does not implement " proto-name)
+                      {:type :configuration-error :wagoe/error-code "WGE-107" :missing methods})))))
 
 ;; =============================================================================
 ;; User Repository
@@ -96,6 +107,8 @@
 (defmethod ig/init-key :wagoe/mfa-service
   [_ {:keys [user-repository mfa-config] :as opts}]
   (log/info "Initializing MFA service")
+  (require-protocols! "user repository" user-repository
+                      {"IBackupCodes" [ports/IBackupCodes ['consume-backup-code]]})
   (let [service (user-mfa/create-mfa-service user-repository mfa-config opts)]
     (log/info "MFA service initialized")
     service))
@@ -115,6 +128,8 @@
 (defmethod ig/init-key :wagoe/auth-service
   [_ {:keys [user-repository session-repository mfa-service auth-config hooks]}]
   (log/info "Initializing authentication service")
+  (require-protocols! "user repository" user-repository
+                      {"ILoginAttempts" [ports/ILoginAttempts ['claim-login-attempts 'release-login-attempt]]})
   ;; Fail fast: a missing or too-short JWT_SECRET aborts boot here rather than
   ;; surfacing on the first authentication request.
   (user-auth/validate-jwt-secret!)
@@ -136,6 +151,11 @@
   [_ {:keys [user-repository session-repository audit-repository validation-config auth-service
              metrics-emitter]}]
   (log/info "Initializing user service")
+  (require-protocols! "user repository" user-repository
+                      {"ILoginAttempts" [ports/ILoginAttempts ['claim-login-attempts 'release-login-attempt]]
+                       "IAdminLock"     [ports/IAdminLock ['with-admins-locked]]})
+  (require-protocols! "session repository" session-repository
+                      {"IUserSessionInvalidation" [ports/IUserSessionInvalidation ['invalidate-user-session]]})
   ;; The emitter rides on the service because the user handlers build their
   ;; interceptor :system from it; without it op metrics never fire.
   (let [service (-> (user-service/create-user-service
@@ -156,6 +176,9 @@
   [_ {:keys [user-service mfa-service config email-sender hooks]}]
   (log/info "Initializing user module routes"
             {:email-sender? (some? email-sender)})
+  (require-protocols! "user service" user-service
+                      {"IUserDeletion"          [ports/IUserDeletion ['delete-user 'delete-users]]
+                       "IUserSessionRevocation" [ports/IUserSessionRevocation ['revoke-user-session 'revoke-sessions-except]]})
   (require 'wagoe.user.shell.http)
   (let [user-routes-fn (ns-resolve 'wagoe.user.shell.http 'user-routes)
         config-with-email (cond-> (landing/with-hooks (or config {}) hooks)
@@ -305,6 +328,8 @@
 
 (defmethod ig/init-key :wagoe/user-audit-retention
   [_ {:keys [audit-repository]}]
+  (require-protocols! "audit repository" audit-repository
+                      {"IUserAuditRetention" [ports/IUserAuditRetention ['delete-audit-logs-before]]})
   (data-export/->AuditLogRetention audit-repository))
 
 (defmethod ig/init-key :wagoe/user-export-routes

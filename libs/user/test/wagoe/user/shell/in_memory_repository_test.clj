@@ -73,23 +73,6 @@
     (let [user (assoc user-entity :updated-at (Instant/now))]
       (get (swap! state update (:id user) merge user) (:id user))))
 
-  (claim-login-attempts [_ user-id n lockout]
-    (when (get @state user-id)
-      (let [[old new] (swap-vals! state update user-id claim-attempts n lockout)]
-        (claim-result (get old user-id) (get new user-id) lockout))))
-
-  (release-login-attempt [_ user-id unlock?]
-    (when (get @state user-id)
-      (swap! state update user-id release-attempt unlock?))
-    nil)
-
-  (consume-backup-code [_ user code-hash]
-    (let [seen #(select-keys % [:mfa-backup-codes :mfa-backup-codes-used])
-          ok?  #(= (seen user) (seen (get % (:id user))))
-          [old _] (swap-vals! state #(cond-> %
-                                       (ok? %) (update-in [(:id user) :mfa-backup-codes-used] (fnil conj []) code-hash)))]
-      (ok? old)))
-
   (soft-delete-user [_ user-id]
     (boolean (when (get @state user-id)
                (swap! state assoc-in [user-id :deleted-at] (Instant/now))
@@ -100,6 +83,26 @@
                (swap! state dissoc user-id)
                true)))
 
+  ports/ILoginAttempts
+  (claim-login-attempts [_ user-id n lockout]
+    (when (get @state user-id)
+      (let [[old new] (swap-vals! state update user-id claim-attempts n lockout)]
+        (claim-result (get old user-id) (get new user-id) lockout))))
+
+  (release-login-attempt [_ user-id unlock?]
+    (when (get @state user-id)
+      (swap! state update user-id release-attempt unlock?))
+    nil)
+
+  ports/IBackupCodes
+  (consume-backup-code [_ user code-hash]
+    (let [seen #(select-keys % [:mfa-backup-codes :mfa-backup-codes-used])
+          ok?  #(= (seen user) (seen (get % (:id user))))
+          [old _] (swap-vals! state #(cond-> %
+                                       (ok? %) (update-in [(:id user) :mfa-backup-codes-used] (fnil conj []) code-hash)))]
+      (ok? old)))
+
+  ports/IAdminLock
   (with-admins-locked [_ f] (f)))
 
 (def mfa-secret "The TOTP secret of `mfa-user`." "JBSWY3DPEHPK3PXP")
@@ -156,12 +159,6 @@
                (swap! state assoc-in [(:id session) :revoked-at] (Instant/now))
                true)))
 
-  (invalidate-user-session [_ user-id session-id]
-    (let [s (get @state session-id)]
-      (boolean (when (and s (= user-id (:user-id s)) (nil? (:revoked-at s)))
-                 (swap! state assoc-in [session-id :revoked-at] (Instant/now))
-                 true))))
-
   (invalidate-all-user-sessions [_ user-id]
     (let [live (filter #(and (= user-id (:user-id %)) (nil? (:revoked-at %)))
                        (vals @state))]
@@ -174,7 +171,14 @@
                         (vals @state))]
       (doseq [session stale]
         (swap! state dissoc (:id session)))
-      (count stale))))
+      (count stale)))
+
+  ports/IUserSessionInvalidation
+  (invalidate-user-session [_ user-id session-id]
+    (let [s (get @state session-id)]
+      (boolean (when (and s (= user-id (:user-id s)) (nil? (:revoked-at s)))
+                 (swap! state assoc-in [session-id :revoked-at] (Instant/now))
+                 true)))))
 
 (defrecord MemoryAuditRepository [state]
   ports/IUserAuditRepository
@@ -198,6 +202,7 @@
          (take (or limit 50))
          vec))
 
+  ports/IUserAuditRetention
   (delete-audit-logs-before [_ cutoff]
     (let [[before after] (swap-vals! state (fn [es] (into [] (remove #(.isBefore ^Instant (:created-at %) cutoff)) es)))]
       (- (count before) (count after)))))

@@ -134,6 +134,14 @@
     :scope :monorepo
     :label "Changelog covers source and deprecations"
     :cmd   ["bb" "check:changelog"]}
+   ;; Eight stable protocols gained twenty methods between 1.0.1 and the 1.1
+   ;; branch with no breaking entry; callers kept working, so nothing noticed,
+   ;; and an application's own defrecord would have failed at runtime.
+   ;; :monorepo because it compares against the framework's release tags.
+   {:id    :ports-diff
+    :scope :monorepo
+    :label "Stable ports match the last release"
+    :cmd   ["bb" "check:ports-diff"]}
    ;; "30 independently publishable libraries" was documented and never
    ;; checked. The CI matrix job compiles each library against its own
    ;; deps.edn; this catches what a compile cannot see, which turned out to be

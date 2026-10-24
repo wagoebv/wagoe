@@ -703,17 +703,6 @@
                :audit-repository audit-repository
                :auth-service auth-service}}))
 
-  (delete-user [this user-id]
-    (service-interceptors/execute-service-operation
-     :delete-user
-     {:user-id user-id}
-     (fn [{:keys [params]}]
-       (boolean (seq (delete-users! this [(:user-id params)] false))))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :audit-repository audit-repository
-               :auth-service auth-service}}))
-
   (permanently-delete-user [this user-id]
     (service-interceptors/execute-service-operation
      :permanently-delete-user
@@ -725,42 +714,8 @@
                :audit-repository audit-repository
                :auth-service auth-service}}))
 
-  (delete-users [this user-ids {:keys [permanent?]}]
-    (service-interceptors/execute-service-operation
-     :delete-users
-     {:user-ids user-ids}
-     (fn [{:keys [params]}]
-       (mapv :id (delete-users! this (:user-ids params) permanent?)))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :audit-repository audit-repository
-               :auth-service auth-service}}))
-
   (logout-user-everywhere [this user-id]
-    (.logout-user-everywhere this user-id nil))
-
-  (logout-user-everywhere [_ user-id keep-session-id]
-    (service-interceptors/execute-service-operation
-     :logout-user-everywhere
-     {:user-id user-id :keep-session-id keep-session-id}
-     (fn [{:keys [params]}]
-       (let [{:keys [user-id keep-session-id]} params
-             ;; An admin's own session is not the target's to keep.
-             ids  (when keep-session-id (map :id (.find-sessions-by-user session-repository user-id)))
-             kept (some #{keep-session-id} ids)
-             n    (if kept
-                    (count (filterv #(.invalidate-user-session session-repository user-id %)
-                                    (remove #{kept} ids)))
-                    (.invalidate-all-user-sessions session-repository user-id))]
-         ;; One entry for them all, with the actor (BOU-708).
-         (when-let [user (and (pos? n) (.find-user-by-id user-repository user-id))]
-           (audit-quietly! audit-repository
-                           (partial audit-core/sessions-revoked-audit-entry n kept)
-                           user-id (:email user)))
-         n))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :auth-service auth-service}}))
+    (.revoke-sessions-except this user-id nil))
 
   (get-user-sessions [_ user-id]
     (service-interceptors/execute-service-operation
@@ -771,24 +726,6 @@
              sessions (.find-sessions-by-user session-repository user-id)]
          ;; Return sessions (no sensitive data to filter)
          sessions))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :auth-service auth-service}}))
-
-  (revoke-user-session [_ user-id session-id]
-    (service-interceptors/execute-service-operation
-     :revoke-user-session
-     {:user-id user-id :session-id session-id}
-     (fn [{:keys [params]}]
-       (let [{:keys [user-id session-id]} params]
-         (if (.invalidate-user-session session-repository user-id session-id)
-           ;; The actor and their IP, not the revoked device's (BOU-698).
-           (do (when-let [user (.find-user-by-id user-repository user-id)]
-                 (audit-quietly! audit-repository
-                                 (partial audit-core/session-revoked-audit-entry session-id)
-                                 user-id (:email user)))
-               {:invalidated true})
-           {:invalidated false})))
      {:system {:user-repository user-repository
                :session-repository session-repository
                :auth-service auth-service}}))
@@ -921,7 +858,72 @@
                                                  :id user-id :mfa-reset-at (current-timestamp)))
             (audit-quietly! audit-repository audit-core/mfa-reset-audit-entry user-id (:email user))
             true)
-        false))))
+        false)))
+
+  ports/IUserDeletion
+  (delete-user [this user-id]
+    (service-interceptors/execute-service-operation
+     :delete-user
+     {:user-id user-id}
+     (fn [{:keys [params]}]
+       (boolean (seq (delete-users! this [(:user-id params)] false))))
+     {:system {:user-repository user-repository
+               :session-repository session-repository
+               :audit-repository audit-repository
+               :auth-service auth-service}}))
+
+  (delete-users [this user-ids {:keys [permanent?]}]
+    (service-interceptors/execute-service-operation
+     :delete-users
+     {:user-ids user-ids}
+     (fn [{:keys [params]}]
+       (mapv :id (delete-users! this (:user-ids params) permanent?)))
+     {:system {:user-repository user-repository
+               :session-repository session-repository
+               :audit-repository audit-repository
+               :auth-service auth-service}}))
+
+  ports/IUserSessionRevocation
+  (revoke-sessions-except [_ user-id keep-session-id]
+    (service-interceptors/execute-service-operation
+     :logout-user-everywhere
+     {:user-id user-id :keep-session-id keep-session-id}
+     (fn [{:keys [params]}]
+       (let [{:keys [user-id keep-session-id]} params
+             ;; An admin's own session is not the target's to keep.
+             ids  (when keep-session-id (map :id (.find-sessions-by-user session-repository user-id)))
+             kept (some #{keep-session-id} ids)
+             n    (if kept
+                    (count (filterv #(.invalidate-user-session session-repository user-id %)
+                                    (remove #{kept} ids)))
+                    (.invalidate-all-user-sessions session-repository user-id))]
+         ;; One entry for them all, with the actor (BOU-708).
+         (when-let [user (and (pos? n) (.find-user-by-id user-repository user-id))]
+           (audit-quietly! audit-repository
+                           (partial audit-core/sessions-revoked-audit-entry n kept)
+                           user-id (:email user)))
+         n))
+     {:system {:user-repository user-repository
+               :session-repository session-repository
+               :auth-service auth-service}}))
+
+  (revoke-user-session [_ user-id session-id]
+    (service-interceptors/execute-service-operation
+     :revoke-user-session
+     {:user-id user-id :session-id session-id}
+     (fn [{:keys [params]}]
+       (let [{:keys [user-id session-id]} params]
+         (if (.invalidate-user-session session-repository user-id session-id)
+           ;; The actor and their IP, not the revoked device's (BOU-698).
+           (do (when-let [user (.find-user-by-id user-repository user-id)]
+                 (audit-quietly! audit-repository
+                                 (partial audit-core/session-revoked-audit-entry session-id)
+                                 user-id (:email user)))
+               {:invalidated true})
+           {:invalidated false})))
+     {:system {:user-repository user-repository
+               :session-repository session-repository
+               :auth-service auth-service}})))
 
 ;; =============================================================================
 ;; Factory Functions

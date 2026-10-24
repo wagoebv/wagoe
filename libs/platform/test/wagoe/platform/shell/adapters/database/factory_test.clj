@@ -8,9 +8,6 @@
   [dialect jdbc-driver]
   (reify protocols/DBAdapter
     (dialect [_] dialect)
-    (now-ms-sql [_] nil)
-    (key-columns [_ _ _ _] nil)
-    (unique-keys [_ _ _] nil)
     (jdbc-driver [_] jdbc-driver)
     (jdbc-url [_ _] nil)
     (pool-defaults [_] {})
@@ -20,9 +17,15 @@
     (db->boolean [_ value] value)
     (table-exists? [_ _ _] false)
     (get-table-info [_ _ _] [])
+    protocols/KeyIntrospection
+    (key-columns [_ _ _ _] nil)
+    (unique-keys [_ _ _] nil)
+    protocols/EngineInfo
+    (now-ms-sql [_] nil)
     (engine [_] nil)
     (capabilities [_] #{})
     (column-type [_ _] nil)
+    protocols/LikeMatcher
     (like [_ _ _] nil)))
 
 (deftest ^:unit create-adapter-and-context-delegate-to-core

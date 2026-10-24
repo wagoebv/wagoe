@@ -12,11 +12,12 @@
   (find-session-by-token [_ _] session)
   (find-sessions-by-user [_ _] [])
   (invalidate-session [_ _] true)
-  (invalidate-user-session [_ _ _] true)
   (invalidate-all-user-sessions [_ _] 0)
   (update-session [_ _] nil)
   (find-all-sessions [_] [])
-  (delete-sessions-expired-before [_ _] 0))
+  (delete-sessions-expired-before [_ _] 0)
+  ports/IUserSessionInvalidation
+  (invalidate-user-session [_ _ _] true))
 
 (defrecord UserRepoStub [state]
   ports/IUserRepository
@@ -36,9 +37,12 @@
     user-entity)
   (soft-delete-user [_ _user-id] true)
   (hard-delete-user [_ _user-id] true)
+  ports/ILoginAttempts
   (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
   (release-login-attempt [_ _ _] nil)
+  ports/IBackupCodes
   (consume-backup-code [_ _ _] false)
+  ports/IAdminLock
   (with-admins-locked [_ f] (f)))
 
 (defrecord AuditRepoStub []
@@ -46,6 +50,7 @@
   (create-audit-log [_ audit-entity] audit-entity)
   (find-audit-logs [_ _options] {:audit-logs [] :total-count 0})
   (find-audit-logs-by-user [_ _user-id _options] [])
+  ports/IUserAuditRetention
   (delete-audit-logs-before [_ _cutoff] 0))
 
 (defrecord AuditRepoCapture [entries]
@@ -55,6 +60,7 @@
     audit-entity)
   (find-audit-logs [_ _options] {:audit-logs [] :total-count 0})
   (find-audit-logs-by-user [_ _user-id _options] [])
+  ports/IUserAuditRetention
   (delete-audit-logs-before [_ _cutoff] 0))
 
 (deftest ^:unit validate-session-survives-nil-update-test
@@ -314,9 +320,12 @@
                    (throw (org.postgresql.util.PSQLException.
                            "update or delete on table \"users\" violates foreign key constraint \"fk_tenant_memberships_user\" on table \"tenant_memberships\""
                            org.postgresql.util.PSQLState/FOREIGN_KEY_VIOLATION)))
+                 ports/ILoginAttempts
                  (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
                  (release-login-attempt [_ _ _] nil)
+                 ports/IBackupCodes
                  (consume-backup-code [_ _ _] false)
+                 ports/IAdminLock
                  (with-admins-locked [_ f] (f)))
           service (sut/->UserService repo nil nil {} nil)]
       (try
@@ -360,9 +369,12 @@
                  (update-user [_ user-entity] user-entity)
                  (soft-delete-user [_ _user-id] true)
                  (hard-delete-user [_ _user-id] true)
+                 ports/ILoginAttempts
                  (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
                  (release-login-attempt [_ _ _] nil)
+                 ports/IBackupCodes
                  (consume-backup-code [_ _ _] false)
+                 ports/IAdminLock
                  (with-admins-locked [_ f] (f)))
           service (sut/->UserService repo nil nil {} nil)]
       (is (= (dissoc user :password-hash)
@@ -390,9 +402,12 @@
                      (update-user [_ user-entity] user-entity)
                      (soft-delete-user [_ _user-id] true)
                      (hard-delete-user [_ _user-id] true)
+                     ports/ILoginAttempts
                      (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
                      (release-login-attempt [_ _ _] nil)
+                     ports/IBackupCodes
                      (consume-backup-code [_ _ _] false)
+                     ports/IAdminLock
                      (with-admins-locked [_ f] (f)))
                    (->SessionRepoStub session)
                    (->AuditRepoCapture audit-entries)
@@ -459,9 +474,12 @@
                      (update-user [_ user-entity] user-entity)
                      (soft-delete-user [_ id] (= id user-id))
                      (hard-delete-user [_ _user-id] true)
+                     ports/ILoginAttempts
                      (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
                      (release-login-attempt [_ _ _] nil)
+                     ports/IBackupCodes
                      (consume-backup-code [_ _ _] false)
+                     ports/IAdminLock
                      (with-admins-locked [_ f] (f)))
                    ;; Deactivation ends the user's sessions (BOU-665).
                    (->SessionRepoStub nil)

@@ -38,6 +38,18 @@
   ;; entity leaves the rest as stored. Sets :updated-at.
   ;; Returns the stored entity; throws {:type :user-not-found} when absent.
 
+  (soft-delete-user [this user-id])
+  ;; Sets :deleted-at, hiding the user from every other query. Returns boolean.
+
+  (hard-delete-user [this user-id]))
+  ;; Irreversible: removes the row and cascades. For GDPR erasure.
+  ;; Returns boolean; throws a foreign-key error when references remain.
+
+;; IUserRepository, IUserSessionRepository, IUserAuditRepository and
+;; IUserService are stable, so what they gained after 1.0 is a protocol of its
+;; own; the user service checks for each when it starts (Convention 5).
+
+(defprotocol ILoginAttempts
   (claim-login-attempts [this user-id n lockout])
   ;; lockout {:max-attempts m :until inst :now inst}. Unless the account is
   ;; locked at :now, adds n to :failed-login-count, setting :lockout-until to
@@ -47,24 +59,19 @@
   ;; :failed-login-count c}, {:claimed? false :lockout-until inst}, or nil when
   ;; absent.
 
-  (release-login-attempt [this user-id unlock?])
+  (release-login-attempt [this user-id unlock?]))
   ;; Takes back one claimed attempt, never below zero; with unlock?, clears
   ;; :lockout-until too. For an attempt whose password was right but which is
   ;; not yet a sign-in. Returns nil.
 
-  (consume-backup-code [this user code-hash])
+(defprotocol IBackupCodes
+  (consume-backup-code [this user code-hash]))
   ;; Adds code-hash, one of `user`'s :mfa-backup-codes, to its
   ;; :mfa-backup-codes-used, only while both are still as `user` holds them:
   ;; two logins spending one code cannot both succeed (BOU-708). Returns
   ;; boolean; false when either changed since `user` was read.
 
-  (soft-delete-user [this user-id])
-  ;; Sets :deleted-at, hiding the user from every other query. Returns boolean.
-
-  (hard-delete-user [this user-id])
-  ;; Irreversible: removes the row and cascades. For GDPR erasure.
-  ;; Returns boolean; throws a foreign-key error when references remain.
-
+(defprotocol IAdminLock
   (with-admins-locked [this f]))
   ;; Calls (f) in one transaction that first locks the admins' rows, so
   ;; a last-admin guard and the write it allows cannot interleave with another
@@ -97,10 +104,6 @@
   (invalidate-session [this session-token])
   ;; Sets :revoked-at. Idempotent. Returns boolean.
 
-  (invalidate-user-session [this user-id session-id])
-  ;; Sets :revoked-at on the session with that id, when it belongs to the user
-  ;; and is not yet revoked. Returns boolean.
-
   (invalidate-all-user-sessions [this user-id])
   ;; Revokes every active session for the user. Returns the count revoked.
 
@@ -108,6 +111,11 @@
   ;; Removes every session whose expiry is before `cutoff`, revoked or not.
   ;; Expiry hides a session from the reads above; this is what takes the row
   ;; out of the table, which nothing did until BOU-429. Returns the count.
+
+(defprotocol IUserSessionInvalidation
+  (invalidate-user-session [this user-id session-id]))
+  ;; Sets :revoked-at on the session with that id, when it belongs to the user
+  ;; and is not yet revoked. Returns boolean.
 
 (defprotocol IUserAuditRepository
   "Audit-log persistence. Entries are immutable once written."
@@ -123,10 +131,11 @@
   ;; Returns {:audit-logs [...] :total-count n}. :after-id with :sort-by :id
   ;; pages by key instead of offset; :count? false skips the total.
 
-  (find-audit-logs-by-user [this user-id options])
+  (find-audit-logs-by-user [this user-id options]))
   ;; Entries where the user is the target. options: {:limit :offset :sort-by
   ;; :sort-direction}. Returns a seq of entries.
 
+(defprotocol IUserAuditRetention
   (delete-audit-logs-before [this cutoff]))
   ;; Removes every entry created before `cutoff`, an Instant: the audit-log
   ;; retention policy. Returns the count.
@@ -307,21 +316,10 @@
   ;; and can be reactivated (BOU-681). Returns boolean. Throws :conflict for
   ;; your own or the last admin's account.
 
-  (delete-user [this user-id])
-  ;; Soft delete: sets :deleted-at, hiding the user from lists and reads, and
-  ;; ends their sessions. Returns boolean. Throws :conflict for your own or the
-  ;; last admin's account.
-
   (permanently-delete-user [this user-id])
   ;; Irreversible erasure. Returns boolean.
   ;; Throws :user-not-found, :hard-deletion-not-allowed (another record still references the user),
   ;; and :conflict for your own or the last admin's account.
-
-  (delete-users [this user-ids opts])
-  ;; opts {:permanent? bool}. Deletes every user, as delete-user or
-  ;; permanently-delete-user would, or none: the admin guard judges the whole
-  ;; set first (BOU-673). Returns the ids deleted; unknown ids are skipped.
-  ;; Throws :conflict and :hard-deletion-not-allowed.
 
   (authenticate-user [this user-credentials])
   ;; user-credentials: {:email :password :ip-address :user-agent :mfa-code
@@ -348,16 +346,12 @@
   ;; Returns {:invalidated true :session-id …}, or {:invalidated false} when the
   ;; token is unknown.
 
-  (logout-user-everywhere [this user-id] [this user-id keep-session-id])
-  ;; Revokes the user's sessions, except keep-session-id when given, and
-  ;; audits one :session-revoked for them all. Returns the count revoked.
+  (logout-user-everywhere [this user-id])
+  ;; Revokes the user's sessions and audits one :session-revoked for them all.
+  ;; Returns the count revoked.
 
   (get-user-sessions [this user-id])
   ;; Returns the user's active sessions, newest first.
-
-  (revoke-user-session [this user-id session-id])
-  ;; Revokes one of the user's sessions, named by id, and audits a logout.
-  ;; Returns {:invalidated boolean}; false when the user holds no such live session.
 
   (list-audit-logs [this options])
   ;; options as IUserAuditRepository/find-audit-logs.
@@ -372,6 +366,27 @@
   ;; password counts towards the sign-in lockout.
   ;; Throws :user-not-found, :account-locked (with :retry-after),
   ;; :invalid-current-password, :password-policy-violation.
+
+(defprotocol IUserDeletion
+  (delete-user [this user-id])
+  ;; Soft delete: sets :deleted-at, hiding the user from lists and reads, and
+  ;; ends their sessions. Returns boolean. Throws :conflict for your own or the
+  ;; last admin's account.
+
+  (delete-users [this user-ids opts]))
+  ;; opts {:permanent? bool}. Deletes every user, as delete-user or
+  ;; permanently-delete-user would, or none: the admin guard judges the whole
+  ;; set first (BOU-673). Returns the ids deleted; unknown ids are skipped.
+  ;; Throws :conflict and :hard-deletion-not-allowed.
+
+(defprotocol IUserSessionRevocation
+  (revoke-user-session [this user-id session-id])
+  ;; Revokes one of the user's sessions, named by id, and audits a logout.
+  ;; Returns {:invalidated boolean}; false when the user holds no such live session.
+
+  (revoke-sessions-except [this user-id keep-session-id]))
+  ;; As logout-user-everywhere, keeping keep-session-id when it is one of the
+  ;; user's live sessions; nil keeps none. Returns the count revoked.
 
 (defprotocol IUserAccountRecovery
   "What an admin does for a user who cannot sign in. Each change is audited

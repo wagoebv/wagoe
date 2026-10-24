@@ -201,8 +201,13 @@
 
      Example:
        (get-table-info sqlite-adapter ds :users)
-       ;; => [{:name \"id\" :type \"TEXT\" :not-null true :primary-key true} ...]")
+       ;; => [{:name \"id\" :type \"TEXT\" :not-null true :primary-key true} ...]"))
 
+;; DBAdapter is stable, so what an adapter gained after 1.0 is a protocol of its
+;; own; the database checks for each when it starts (Convention 5).
+
+(defprotocol KeyIntrospection
+  "The keys of a table, for naming the columns a refused write hit."
   (key-columns [this datasource table-name key-name]
     "The columns of key `key-name` on `table-name`, in key order, or nil where
      the driver's refusal names them itself. MySQL's names only the key
@@ -216,8 +221,10 @@
 
      Example:
        (unique-keys h2-adapter ds :product_tags)
-       ;; => [[\"product_id\" \"tag_id\"]]")
+       ;; => [[\"product_id\" \"tag_id\"]]"))
 
+(defprotocol EngineInfo
+  "Which database an adapter speaks, and what it honours (ADR-039)."
   (engine [this]
     "Which database this is: :postgresql, :mysql, :sqlite or :h2. Never nil.
      Ask this, not `dialect`, not the driver and not the product name (ADR-039).")
@@ -237,8 +244,10 @@
 
      Example:
        (column-type mysql-adapter :uuid)        ;; => \"CHAR(36)\"
-       (column-type mysql-adapter [:string 50]) ;; => \"VARCHAR(50)\"")
+       (column-type mysql-adapter [:string 50]) ;; => \"VARCHAR(50)\""))
 
+(defprotocol LikeMatcher
+  "Case-insensitive LIKE that matches user input literally (BOU-684)."
   (like [this field pattern] [this field mode value]
     "A HoneySQL condition matching `field` against `value` literally, where
      `mode` puts it (see `like-pattern`), regardless of case, on every engine.
