@@ -1,5 +1,6 @@
 (ns wagoe.tenant.shell.module-wiring
-  (:require [wagoe.tenant.shell.audit-persistence :as audit-persistence]
+  (:require [wagoe.tenant.ports :as ports]
+            [wagoe.tenant.shell.audit-persistence :as audit-persistence]
             [wagoe.tenant.shell.data-export :as data-export]
             [wagoe.tenant.shell.invite-persistence :as invite-persistence]
             [wagoe.tenant.shell.invite-service :as invite-service]
@@ -153,6 +154,9 @@
 (defmethod ig/init-key :wagoe/membership-service
   [_ {:keys [repository logger metrics-emitter error-reporter]}]
   (log/info "Initializing membership service")
+  (when-not (satisfies? ports/ITenantMembershipDeletion repository)
+    (throw (ex-info "WGE-107: the membership repository does not implement ITenantMembershipDeletion"
+                    {:type :configuration-error :wagoe/error-code "WGE-107" :missing ['delete-membership]})))
   (let [service (membership-service/create-membership-service
                  repository
                  logger

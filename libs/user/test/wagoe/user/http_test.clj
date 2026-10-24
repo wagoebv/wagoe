@@ -105,17 +105,6 @@
     (boolean (when (get @state user-id)
                (swap! state assoc-in [user-id :active] false))))
 
-  (delete-user [_ user-id]
-    (let [existing (get @state user-id)]
-      (if existing
-        (do
-          (swap! state update user-id
-                 #(assoc % :deleted-at (Instant/now) :active false))
-          true)
-        (throw (ex-info "User not found"
-                        {:type :user-not-found
-                         :user-id user-id})))))
-
   (permanently-delete-user [_ user-id]
     (if (get @state user-id)
       (do
@@ -124,9 +113,6 @@
       (throw (ex-info "User not found"
                       {:type :user-not-found
                        :user-id user-id}))))
-
-  (delete-users [_ user-ids _opts]
-    (filterv #(when (get @state %) (swap! state dissoc %)) user-ids))
 
   (authenticate-user [_ session-data]
     (let [session-id (UUID/randomUUID)
@@ -166,8 +152,6 @@
         (swap! state assoc-in [:sessions token :revoked-at] (Instant/now)))
       count))
 
-  (revoke-user-session [_ _ _] {:invalidated false})
-
   (get-user-sessions [_ user-id]
     (let [sessions (get-in @state [:sessions])
           now (Instant/now)]
@@ -186,7 +170,28 @@
     [])
 
   (change-password [_ _user-id _current-password _new-password]
-    true))
+    true)
+
+  ports/IUserDeletion
+  (delete-user [_ user-id]
+    (let [existing (get @state user-id)]
+      (if existing
+        (do
+          (swap! state update user-id
+                 #(assoc % :deleted-at (Instant/now) :active false))
+          true)
+        (throw (ex-info "User not found"
+                        {:type :user-not-found
+                         :user-id user-id})))))
+
+  (delete-users [_ user-ids _opts]
+    (filterv #(when (get @state %) (swap! state dissoc %)) user-ids))
+
+  ports/IUserSessionRevocation
+  (revoke-user-session [_ _ _] {:invalidated false})
+
+  (revoke-sessions-except [this user-id _keep-session-id]
+    (.logout-user-everywhere this user-id)))
 
 (defn create-mock-service
   []
@@ -537,9 +542,12 @@
                   (update-user [_ _] nil)
                   (soft-delete-user [_ _] nil)
                   (hard-delete-user [_ _] nil)
+                  wagoe.user.ports/ILoginAttempts
                   (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
                   (release-login-attempt [_ _ _] nil)
+                  wagoe.user.ports/IBackupCodes
                   (consume-backup-code [_ _ _] false)
+                  wagoe.user.ports/IAdminLock
                   (with-admins-locked [_ f] (f)))
         svc     (mfa/create-mfa-service repo {})
         request {:user {:id (UUID/randomUUID)}

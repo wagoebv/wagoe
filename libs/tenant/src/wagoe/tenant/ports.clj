@@ -43,8 +43,11 @@
   (find-memberships-by-user           [this user-id])
   (create-membership                  [this membership-entity])
   (update-membership                  [this membership-entity])
-  (delete-membership                  [this membership-id])
   (membership-exists?                 [this user-id tenant-id]))
+
+(defprotocol ITenantMembershipDeletion
+  "Its own protocol, as ITenantMembershipRepository is stable."
+  (delete-membership [this membership-id]))
 
 (defprotocol ITenantMembershipService
   (invite-user           [this tenant-id user-id role])

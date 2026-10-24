@@ -31,6 +31,7 @@
             [wagoe.tools.check-fcis :as check-fcis]
             [wagoe.tools.check-hygiene :as check-hygiene]
             [wagoe.tools.check-changelog :as check-changelog]
+            [wagoe.tools.check-ports-diff :as check-ports-diff]
             [wagoe.tools.check-doc-counts :as check-doc-counts]
             [wagoe.tools.check-versions :as check-versions]
             [wagoe.tools.check-isolation :as check-isolation]
@@ -788,7 +789,7 @@
   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
     :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary
     :doc-counts :branch-protection :versions :changelog :isolation
-    :error-shape :jdk :roadmap})
+    :error-shape :jdk :roadmap :ports-diff})
 
 ;; =============================================================================
 ;; check:roadmap
@@ -1037,6 +1038,33 @@
         "the scan is not looking at the tree")
     (is (empty? (check-error-shape/unexplained-findings)))
     (is (empty? (check-error-shape/stale-exemptions)))))
+
+;; =============================================================================
+;; check:ports-diff
+;; =============================================================================
+
+(deftest ^:unit ports-diff-gate-fires-test
+  ;; The shape it exists for: between 1.0.1 and the 1.1 branch IUserRepository
+  ;; gained claim-login-attempts, the changelog filed it under ### Fixed, and an
+  ;; application's own defrecord of the protocol would have failed on login.
+  (let [base   (check-ports-diff/protocols-in
+                "libs/user/src/wagoe/user/ports.clj"
+                "(ns wagoe.user.ports) (defprotocol IUserRepository (find-user-by-id [this id]))")
+        head   (check-ports-diff/protocols-in
+                "libs/user/src/wagoe/user/ports.clj"
+                (str "(ns wagoe.user.ports) (defprotocol IUserRepository (find-user-by-id [this id])"
+                     " (claim-login-attempts [this user-id n lockout]))"))
+        tiers  (check-ports-diff/tiers {:modules [{:name "user" :tier :stable}]})
+        all    (check-ports-diff/changes base head)]
+    (testing "a stable protocol that gained a method, named nowhere, fails"
+      (is (= ["claim-login-attempts"]
+             (map :method (:failing (check-ports-diff/verdict all tiers "" "1.0.1" "1.1.0"))))))
+
+    (testing "naming it under [Unreleased] ### Breaking satisfies it"
+      (is (empty? (:failing (check-ports-diff/verdict all tiers "- `claim-login-attempts`" "1.0.1" "1.1.0")))))
+
+    (testing "and an unchanged protocol is not reported"
+      (is (empty? (check-ports-diff/changes base base))))))
 
 ;; =============================================================================
 ;; check:changelog

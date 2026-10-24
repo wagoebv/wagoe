@@ -125,9 +125,6 @@
      Returns:
        Vector of SearchResult maps")
 
-  (index-definition [this index-id]
-    "The SearchDefinition this engine holds for `index-id`, or nil.")
-
   (list-indices [this]
     "List all registered search indices with document counts.
 
@@ -143,3 +140,8 @@
 
      Returns:
        {:indexed integer}"))
+
+(defprotocol ISearchDefinitions
+  "Its own protocol, as ISearchEngine is stable."
+  (index-definition [this index-id]
+    "The SearchDefinition this engine holds for `index-id`, or nil."))

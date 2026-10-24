@@ -114,17 +114,6 @@
     (boolean (when (get @state user-id)
                (swap! state assoc-in [user-id :active] false))))
 
-  (delete-user [_ user-id]
-    (let [existing (get @state user-id)]
-      (if existing
-        (do
-          (swap! state update user-id
-                 #(assoc % :deleted-at (Instant/now) :active false))
-          true)
-        (throw (ex-info "User not found"
-                        {:type :user-not-found
-                         :user-id user-id})))))
-
   (permanently-delete-user [_ user-id]
     (if (get @state user-id)
       (do
@@ -190,7 +179,19 @@
     [])
 
   (change-password [_ _user-id _current-password _new-password]
-    true))
+    true)
+
+  ports/IUserDeletion
+  (delete-user [_ user-id]
+    (let [existing (get @state user-id)]
+      (if existing
+        (do
+          (swap! state update user-id
+                 #(assoc % :deleted-at (Instant/now) :active false))
+          true)
+        (throw (ex-info "User not found"
+                        {:type :user-not-found
+                         :user-id user-id}))))))
 
 (defn create-mock-service
   "Create a mock user service with initial state."
@@ -946,7 +947,8 @@
         others  [(UUID/randomUUID) (UUID/randomUUID)]
         revoked (atom [])
         svc     (reify ports/IUserService
-                  (logout-user-everywhere [_ user-id keep-session-id]
+                  ports/IUserSessionRevocation
+                  (revoke-sessions-except [_ user-id keep-session-id]
                     (swap! revoked conj [user-id keep-session-id])
                     2)
                   (revoke-user-session [_ user-id session-id]

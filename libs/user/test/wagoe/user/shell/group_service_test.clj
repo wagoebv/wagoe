@@ -262,6 +262,7 @@
                      (create-audit-log [_ _] (throw (ex-info "audit down" {:type :internal-error})))
                      (find-audit-logs [_ _] [])
                      (find-audit-logs-by-user [_ _ _] [])
+                     ports/IUserAuditRetention
                      (delete-audit-logs-before [_ _] 0))
             repo   (group-persistence/create-group-repository ctx)
             svc    (sut/create-group-service repo users broken (sut/prepare-settings nil))]

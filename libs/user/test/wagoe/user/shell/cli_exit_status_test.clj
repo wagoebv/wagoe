@@ -19,6 +19,7 @@
     (list-users [_ _] {:users [user] :total-count 1})
     (get-user-by-id [_ _] user)
     (update-user-profile [_ entity] (swap! updates conj entity) (merge user entity))
+    ports/IUserDeletion
     (delete-user [_ _] *deleted?*)))
 
 (defn- run [& args]

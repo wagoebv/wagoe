@@ -59,10 +59,15 @@
       (hard-delete-user [_ _user-id]
         true)
 
+      ports/ILoginAttempts
       (claim-login-attempts [_ _ _ _] {:claimed? true :failed-login-count 0})
+
       (release-login-attempt [_ _ _] nil)
 
+      ports/IBackupCodes
       (consume-backup-code [_ _ _] false)
+
+      ports/IAdminLock
       (with-admins-locked [_ f] (f)))))
 
 ;; =============================================================================

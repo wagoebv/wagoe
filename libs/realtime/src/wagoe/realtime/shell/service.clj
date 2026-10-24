@@ -129,6 +129,7 @@
   (publish-to-topic [_this topic message]
     (ports/publish bus (bus/topic-envelope topic (stamp message))))
 
+  ports/IIdentifiedConnections
   (connect-identified [this connection identity topics]
     (when (and (seq topics) (nil? pubsub-manager))
       (throw (ex-info "Topic subscriptions need a pub/sub manager"
