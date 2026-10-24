@@ -76,3 +76,17 @@
     (let [e (try (ig/init-key :wagoe/job-workers {:workers {:count 0} :on-outcome 'no.such/hook})
                  (catch clojure.lang.ExceptionInfo e e))]
       (is (= :configuration-error (:type (ex-data e)))))))
+
+(deftest ^:unit expect-success-gives-the-scheduler-a-watch
+  (let [runtime (ig/init-key :wagoe/jobs-runtime {:provider :memory})]
+    (is (= {:nightly-report 26}
+           (get-in (wiring/ig-config {:expect-success {:nightly-report 26}} {:enabled #{:wagoe/jobs}})
+                   [:components :wagoe/job-scheduler :expect-success])))
+    (let [s (ig/init-key :wagoe/job-scheduler {:runtime runtime :expect-success {:nightly-report 26}})]
+      (try (is (fn? (:watch s)))
+           (finally (ig/halt-key! :wagoe/job-scheduler s))))
+    (testing "hours that are not a positive number fail the boot"
+      (doseq [bad [{:nightly-report 0} {:nightly-report "26"} [:nightly-report 26] 26]]
+        (let [e (try (ig/init-key :wagoe/job-scheduler {:runtime runtime :expect-success bad})
+                     (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :validation-error (:type (ex-data e))) (pr-str bad)))))))

@@ -174,6 +174,48 @@
           true)))))
 
 ;; =============================================================================
+;; Unique keys (BOU-834)
+;; =============================================================================
+;;
+;; `jobs:unique:<key>` names the job holding a key; the hash `jobs:unique-held`
+;; maps a holder back to its key, so an ack, which knows only the job id, can
+;; tell whether it has one to free.
+
+(def ^:private ^String unique-held-key "jobs:unique-held")
+
+(defn- unique-key-key [k] (str "jobs:unique:" k))
+
+(def ^:private claim-unique-script
+  "Hold the key for the job, unless another job holds it."
+  "local holder = redis.call('GET', KEYS[1])
+   if holder and holder ~= ARGV[1] then return 0 end
+   redis.call('SET', KEYS[1], ARGV[1])
+   redis.call('HSET', KEYS[2], ARGV[1], ARGV[2])
+   return 1")
+
+(def ^:private release-unique-script
+  "Free the job's key, unless it is scheduled or queued again (a retry). KEYS
+   are the key, the held hash, the scheduled set and the queue's lists."
+  "if redis.call('ZSCORE', KEYS[3], ARGV[1]) then return 0 end
+   for i = 4, #KEYS do
+     if redis.call('LPOS', KEYS[i], ARGV[1]) then return 0 end
+   end
+   if redis.call('GET', KEYS[1]) == ARGV[1] then redis.call('DEL', KEYS[1]) end
+   redis.call('HDEL', KEYS[2], ARGV[1])
+   return 1")
+
+(defn- release-unique-key!
+  "Free the key `job-id` holds, if any. With `queue-name`, only once the job is
+   neither scheduled nor queued there again."
+  [^Jedis redis job-id queue-name]
+  (when-let [k (.hget redis unique-held-key (str job-id))]
+    (.eval redis ^String release-unique-script
+           ^java.util.List (into [(unique-key-key k) unique-held-key (scheduled-key)]
+                                 (when queue-name
+                                   (map #(priority-key (queue-key queue-name) %) priorities)))
+           ^java.util.List [(str job-id)])))
+
+;; =============================================================================
 ;; Job Queue Implementation
 ;; =============================================================================
 
@@ -189,26 +231,34 @@
         (let [job-id (:id job)
               job-key (job-key job-id)
               queue-key (queue-key queue-name)
-              serialized (codec/encode-job job)]
+              serialized (codec/encode-job job)
+              unique (some-> (:unique-key job) str)]
 
-          ;; Store job data
-          (.set redis job-key serialized)
+          (if (and unique
+                   (zero? (long (.eval redis ^String claim-unique-script
+                                       ^java.util.List [(unique-key-key unique) unique-held-key]
+                                       ^java.util.List [(str job-id) unique]))))
+            (do (log/info "Job refused: its unique key is held" {:job-id job-id :unique-key unique})
+                nil)
+            (do
+              ;; Store job data
+              (.set redis job-key serialized)
 
-          ;; Add to appropriate queue based on priority and execute-at
-          (if (:execute-at job)
-            ;; Scheduled job: add to sorted set with execute-at as score
-            (.zadd redis (scheduled-key)
-                   (double (.toEpochMilli (:execute-at job)))
-                   (str job-id))
+              ;; Add to appropriate queue based on priority and execute-at
+              (if (:execute-at job)
+                ;; Scheduled job: add to sorted set with execute-at as score
+                (.zadd redis (scheduled-key)
+                       (double (.toEpochMilli (:execute-at job)))
+                       (str job-id))
 
-            ;; Immediate job: add to priority queue. LPUSH for every priority,
-            ;; because dequeue is RPOPLPUSH — RPUSH on :low made it the one
-            ;; priority that ran newest-first.
-            (.lpush redis (priority-key queue-key (:priority job :normal))
-                    (into-array String [(str job-id)])))
+                ;; Immediate job: add to priority queue. LPUSH for every priority,
+                ;; because dequeue is RPOPLPUSH — RPUSH on :low made it the one
+                ;; priority that ran newest-first.
+                (.lpush redis (priority-key queue-key (:priority job :normal))
+                        (into-array String [(str job-id)])))
 
-          (log/info "Enqueued job" {:job-id job-id :queue queue-name :priority (:priority job)})
-          job-id))))
+              (log/info "Enqueued job" {:job-id job-id :queue queue-name :priority (:priority job)})
+              job-id))))))
 
   (schedule-job! [this queue-name job execute-at]
     (let [scheduled-job (assoc job :execute-at execute-at)]
@@ -234,7 +284,10 @@
   (ack-job! [_ queue-name worker-id job-id]
     (with-redis pool
       (fn [^Jedis redis]
-        (.lrem redis (processing-key queue-name worker-id) 0 (str job-id))
+        ;; Only an ack that released a claim frees the key: a late one, after
+        ;; another worker reclaimed the job, must not.
+        (when (pos? (.lrem redis (processing-key queue-name worker-id) 0 (str job-id)))
+          (release-unique-key! redis job-id queue-name))
         true)))
 
   (reclaim-abandoned-jobs! [_ queue-name]
@@ -295,6 +348,7 @@
           (doseq [queue-name (ports/list-queues (->RedisJobQueue pool))
                   priority   priorities]
             (.lrem redis (priority-key (queue-key queue-name) priority) 0 (str job-id)))
+          (release-unique-key! redis job-id nil)
           (pos? result)))))
 
   (queue-size [_ queue-name]

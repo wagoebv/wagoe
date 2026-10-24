@@ -543,3 +543,36 @@
     (testing "a job scheduled for later stays queued"
       (is (zero? (worker/run-pending! {} queue store *registry*))))))
 
+
+(deftest ^:unit an-error-past-exception-is-a-failure-and-the-worker-lives-on
+  ;; The worker caught Exception: an AssertionError recorded nothing, reported
+  ;; nothing and ended the worker thread (BOU-834).
+  (with-silent-logging
+    (let [{:keys [queue store]} *system*
+          outcomes (atom [])
+          ran      (atom [])]
+      (ports/register-handler! *registry* :asserts (fn [_] (assert false "no") {:success? true}))
+      (ports/register-handler! *registry* :static-init
+                               (fn [_] (throw (ExceptionInInitializerError. "static init"))))
+      (ports/register-handler! *registry* :fine (fn [_] (swap! ran conj :fine) {:success? true}))
+      (doseq [t [:asserts :static-init :fine]]
+        (ports/enqueue-job! queue :default (create-test-job {:job-type t :max-retries 1})))
+      (let [w (worker/create-worker {:queue-name :default :poll-interval-ms 25
+                                     :on-outcome #(swap! outcomes conj %)}
+                                    queue store *registry*)]
+        (try
+          (is (wait-for #(seq @ran) 5000) "the worker died before the next job")
+          (is (= [[:asserts :failure "java.lang.AssertionError"]
+                  [:static-init :failure "java.lang.ExceptionInInitializerError"]
+                  [:fine :success nil]]
+                 (map (juxt :job-type :outcome (comp :exception-class :error)) @outcomes)))
+          (is (= :failed (:status (first (ports/find-jobs store {:job-type :asserts})))))
+          (finally (ports/stop-worker! w (:id (:state w)))))))))
+
+(deftest ^:unit only-errors-the-jvm-may-not-survive-are-fatal
+  (is (worker/fatal? (OutOfMemoryError.)))
+  (is (worker/fatal? (InternalError.)))
+  (is (not (worker/fatal? (StackOverflowError.))))
+  (is (not (worker/fatal? (AssertionError.))))
+  (is (not (worker/fatal? (ExceptionInInitializerError.))))
+  (is (not (worker/fatal? (ex-info "x" {})))))

@@ -274,3 +274,36 @@
           (is (= #uuid "7f8c1f0e-3b5a-4c1e-9a52-1d2f0c9b8e11" (:id job)))
           (is (= :send-email (:job-type job)))
           (is (= {:to "a@b.c" :kind "receipt"} (:args job))))))))
+
+(deftest ^:integration a-refused-job-leaves-the-callers-transaction-usable
+  ;; PostgreSQL refuses every statement of a transaction after a failed one, so
+  ;; the refused INSERT runs in a savepoint (BOU-834).
+  (test-db/with-db "jobs_unique_tx"
+    (fn [{:keys [datasource]}]
+      (db/create-jobs-table! datasource)
+      (let [q     (db/create-db-job-queue datasource)
+            held  (assoc (mk-job) :unique-key "nightly")
+            later (assoc (mk-job) :unique-key "nightly")
+            free  (assoc (mk-job) :unique-key "other")]
+        (ports/enqueue-job! q :default held)
+        (jdbc/with-transaction [tx datasource]
+          (is (nil? (ports/enqueue-in-tx! q tx :default later)))
+          (is (= (:id free) (ports/enqueue-in-tx! q tx :default free))))
+        (is (= 2 (ports/queue-size q :default)) "the transaction committed what it was given")
+        (is (nil? (ports/enqueue-job! q :default later)) "and the outside path refuses too")))))
+
+(deftest ^:integration a-queue-table-from-before-unique-keys-gains-the-column
+  (let [ds (jdbc/get-datasource {:dbtype "h2:mem"
+                                 :dbname (str "jobs_old_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")})]
+    ;; job_queue as BOU-418 created it.
+    (jdbc/execute! ds ["CREATE TABLE job_queue (
+                          id UUID PRIMARY KEY, queue VARCHAR(255) NOT NULL,
+                          priority_rank INT NOT NULL DEFAULT 2,
+                          status VARCHAR(20) NOT NULL DEFAULT 'ready', execute_at TIMESTAMP NULL,
+                          locked_by VARCHAR(255), locked_at TIMESTAMP NULL,
+                          payload VARCHAR(1000000) NOT NULL, created_at TIMESTAMP NOT NULL)"])
+    (db/create-jobs-table! ds)
+    (let [q (db/create-db-job-queue ds)
+          a (assoc (mk-job) :unique-key "k")]
+      (is (= (:id a) (ports/enqueue-job! q :default a)))
+      (is (nil? (ports/enqueue-job! q :default (assoc (mk-job) :unique-key "k")))))))

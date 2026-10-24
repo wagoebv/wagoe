@@ -23,7 +23,8 @@
 (def defaults
   {:tick-ms  5000
    :lease-ms 30000
-   :zone     "UTC"})
+   :zone     "UTC"
+   :watch-ms 60000})
 
 (def default-key-ttl-ms
   "How long a claimed idempotency key holds by default: a week."
@@ -40,14 +41,16 @@
 (defn enqueue-once!
   "Enqueue `job` on `queue-name` unless (its job type, `key`) was claimed in
    `idempotency` within `:ttl-ms`. Returns the job id, or nil for a duplicate.
-   A failed enqueue releases the claim, so a retry can succeed; a process that
-   dies between claim and enqueue loses the job (at most once)."
+   A failed or refused enqueue (a held `:unique-key`) releases the claim, so a
+   retry can succeed; a process that dies between claim and enqueue loses the
+   job (at most once)."
   [queue idempotency queue-name job key & [{:keys [ttl-ms] :or {ttl-ms default-key-ttl-ms}}]]
   (let [scope (type-name (:job-type job))
         key   (str key)]
     (when (ports/claim-key! idempotency scope key ttl-ms)
       (try
-        (ports/enqueue-job! queue queue-name job)
+        (or (ports/enqueue-job! queue queue-name job)
+            (do (ports/release-key! idempotency scope key) nil))
         (catch Throwable t
           ;; A failing release must not hide why the enqueue failed.
           (try (ports/release-key! idempotency scope key)
@@ -66,14 +69,17 @@
   "A scheduler enqueueing on `queue`, coordinating through `state`
    (`IRecurringState`) and `idempotency` (`IIdempotencyStore`). With
    `registry` (`IJobRegistry`), a scheduled job type it has no handler for is
-   logged as a warning. `opts` as `defaults`; `:zone` is the default for
-   schedules that name none."
-  [{:keys [queue state idempotency registry]} & [opts]]
+   logged as a warning. With `watch`, (fn [now]), the lease holder calls it
+   every `:watch-ms` (the staleness watch). `opts` as `defaults`; `:zone` is
+   the default for schedules that name none."
+  [{:keys [queue state idempotency registry watch]} & [opts]]
   (let [opts (merge defaults opts)]
     {:queue       queue
      :state       state
      :idempotency idempotency
      :registry    registry
+     :watch       watch
+     :watched-at  (atom nil)
      :checked     (atom #{})
      :opts        (assoc opts :zone (zone-of (:zone opts)))
      :owner       (str (random-uuid))
@@ -156,12 +162,22 @@
           (catch Exception e
             (log/error e "Recurring job handler check failed")))))))
 
+(defn- watch!
+  "Call the scheduler's watch when `:watch-ms` has passed since the last call."
+  [{:keys [watch watched-at opts]} ^Instant now]
+  (when (and watch (or (nil? @watched-at)
+                       (<= (:watch-ms opts) (- (.toEpochMilli now) (.toEpochMilli ^Instant @watched-at)))))
+    (reset! watched-at now)
+    (try (watch now)
+         (catch Exception e
+           (log/error e "Job watch failed")))))
+
 (defn tick!
   "One ticker pass at `now`. Does nothing unless this scheduler holds the
    lease. Returns the job types it enqueued."
-  [{:keys [state schedules owner opts held? next-due] :as scheduler} ^Instant now]
+  [{:keys [state schedules owner opts held? next-due watch] :as scheduler} ^Instant now]
   (let [entries @schedules]
-    (if-not (and (seq entries) (ports/acquire-lease! state owner (:lease-ms opts)))
+    (if-not (and (or (seq entries) watch) (ports/acquire-lease! state owner (:lease-ms opts)))
       (do (reset! held? false) [])
       (let [_     (when-not @held?
                     ;; Newly the holder: another may have fired ticks meanwhile.
@@ -177,6 +193,7 @@
                                     (log/error e "Recurring job tick failed" {:job-type job-type})
                                     nil))))
                         entries)]
+        (watch! scheduler now)
         (purge-hourly! scheduler)
         fired))))
 

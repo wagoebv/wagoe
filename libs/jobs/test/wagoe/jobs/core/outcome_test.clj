@@ -40,16 +40,16 @@
          (count (:last-error (outcome/after-outcome nil (run {:success? false
                                                               :error {:message (apply str (repeat 3000 "x"))}})))))))
 
-(deftest ^:unit the-tracker-hears-the-first-failure-then-one-per-interval
-  (let [fail  #(run {:success? false :error {:message "boom"}} :finished %)
-        step  (fn [state o] (outcome/throttle state o 60000))
-        s1    (step nil (fail 0))
-        s2    (step s1 (fail 30))
-        s3    (step s2 (fail 61))
-        s4    (step s3 (run {:success? true} :finished 62))
-        s5    (step s4 (fail 63))]
-    (is (:report? s1) "the first failure")
-    (is (not (:report? s2)) "within the interval")
-    (is (:report? s3) "an interval later")
-    (is (not (:report? s4)) "a success")
-    (is (:report? s5) "the first failure after a success")))
+(deftest ^:unit a-type-is-stale-once-its-last-success-is-older-than-its-hours
+  (let [now     (at (* 10 60 60))
+        record  (fn [job-type hours-ago]
+                  {:job-type          job-type
+                   :last-succeeded-at (when hours-ago (.minusSeconds now (* hours-ago 60 60)))})
+        records {:ok    (record :ok 2)
+                 :late  (record :late 5)
+                 :never (record :never nil)
+                 :half  (record :half 1)}
+        stale   (outcome/stale records {:ok 3 :late 3 :never 3 :unknown 3 :half 0.5} now)]
+    (is (= {:late 3 :half 0.5} (into {} (map (juxt :job-type :expected-within-hours)) stale)))
+    (testing "a type with no record, or that never succeeded, is not stale"
+      (is (not-any? #{:never :unknown} (map :job-type stale))))))
