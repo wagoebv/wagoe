@@ -109,18 +109,21 @@ body .main-content {
   filter: none;
 }
 
+/* app.css's dark variants named too, so source order wins rather than !important */
 .button.secondary,
-.icon-button.secondary {
-  background-color: transparent !important;
-  border-color: var(--color-base-300) !important;
-  color: var(--color-base-content) !important;
+.icon-button.secondary,
+[data-theme="dark"] .button.secondary {
+  background-color: transparent;
+  border-color: var(--color-base-300);
+  color: var(--color-base-content);
 }
 
 .button.secondary:hover:not(:disabled),
-.icon-button.secondary:hover:not(:disabled) {
-  background-color: color-mix(in oklab, var(--color-base-100) 60%, var(--color-primary) 40%) !important;
-  border-color: color-mix(in oklab, var(--color-base-300) 55%, var(--color-primary) 45%) !important;
-  color: var(--text-on-accent) !important;
+.icon-button.secondary:hover:not(:disabled),
+[data-theme="dark"] .button.secondary:hover:not(:disabled) {
+  background-color: color-mix(in oklab, var(--color-base-100) 60%, var(--color-primary) 40%);
+  border-color: color-mix(in oklab, var(--color-base-300) 55%, var(--color-primary) 45%);
+  color: var(--text-on-accent);
   filter: none;
 }
 
@@ -181,12 +184,6 @@ body .main-content {
   border-color: var(--color-base-300);
   color: var(--color-base-content);
   filter: none;
-}
-
-[data-theme="dark"] .audit-detail-trigger:hover {
-  background-color: color-mix(in oklab, var(--color-base-100) 45%, var(--color-info) 55%);
-  border-color: color-mix(in oklab, var(--color-base-300) 40%, var(--color-info) 60%);
-  color: var(--text-on-accent);
 }
 
 .alert {
@@ -322,28 +319,6 @@ input[type="number"] {
   @apply min-w-40;
 }
 
-/* Shell */
-
-.admin-shell {
-  @apply min-h-screen;
-}
-
-.admin-content {
-  @apply px-0;
-}
-
-.admin-sidebar {
-  @apply border-r border-base-300 bg-base-100 shadow-sm;
-}
-
-.admin-sidebar-header {
-  @apply bg-base-100/95 backdrop-blur;
-}
-
-.admin-sidebar-nav h3 {
-  @apply text-xs font-semibold uppercase tracking-widest text-base-content/50;
-}
-
 .entity-list a,
 .admin-sidebar-footer a {
   @apply rounded-lg text-base-content/70 transition-colors;
@@ -358,10 +333,6 @@ input[type="number"] {
   @apply bg-primary text-primary-content;
 }
 
-.admin-topbar {
-  @apply border-b border-base-300 bg-base-100/90 shadow-sm backdrop-blur;
-}
-
 [data-theme="dark"] .admin-sidebar,
 [data-theme="dark"] .admin-topbar,
 [data-theme="dark"] .card,
@@ -371,12 +342,6 @@ input[type="number"] {
 [data-theme="dark"] .audit-table-card,
 [data-theme="dark"] .audit-filters-card {
   border-color: var(--color-base-300);
-}
-
-/* List page */
-
-.entity-list-page {
-  @apply max-w-none mx-0;
 }
 
 .entity-list-hero {
@@ -424,100 +389,6 @@ input[type="number"] {
   @apply badge badge-primary;
 }
 
-#filter-table-container {
-  @apply mt-2 rounded-none border-0 bg-transparent shadow-none;
-}
-
-.admin-content .data-table {
-  @apply w-full;
-}
-
-.admin-content .table-wrapper {
-  @apply rounded-none border-x-0 border-t border-b border-base-300 bg-transparent shadow-none;
-}
-
-.entity-list-page .entity-list-hero,
-.entity-list-page .table-toolbar-container,
-.entity-list-page #filter-table-container,
-.entity-list-page .page-header {
-  @apply mx-0;
-}
-
-.admin-content .data-table thead th {
-  @apply border-b border-base-300/70 bg-transparent text-[11px] font-medium normal-case tracking-normal text-base-content/65;
-  box-shadow: none;
-}
-
-.admin-content .data-table tbody tr {
-  @apply border-b border-base-300/35;
-}
-
-.admin-content .data-table tbody tr:hover {
-  @apply bg-base-200/35;
-}
-
-.admin-content .data-table td {
-  @apply text-sm;
-}
-
-.admin-content .data-table col.col-select {
-  width: 48px;
-}
-
-.admin-content .data-table col.col-actions {
-  width: 80px;
-}
-
-/* Neutralize legacy zebra striping for a cleaner grid look */
-.admin-content .data-table tbody tr:nth-child(even),
-.admin-content .data-table tbody tr:nth-child(even) td:nth-child(2) {
-  background: transparent;
-}
-
-.admin-content .data-table th.sortable-header::before {
-  display: none;
-}
-
-.admin-content .data-table th.sortable-header {
-  @apply px-3;
-  white-space: nowrap;
-}
-
-.admin-content .data-table th.sortable-header .sort-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 0.2rem;
-  vertical-align: middle;
-}
-
-.admin-content .data-table th.sortable-header.sort-dir-desc .sort-icon {
-  transform: none;
-}
-
-.admin-content .data-table th.sortable-header::after {
-  content: none;
-}
-
-.admin-content .data-table th.sortable-header.sortable-header--active::after {
-  content: none;
-}
-
-.admin-content .data-table th.sortable-header.sort-dir-asc::after {
-  content: none;
-}
-
-.admin-content .data-table th.sortable-header.sort-dir-desc::after {
-  content: none;
-}
-
-/* Remove legacy sticky-column seam next to the Name header/cells */
-.admin-content .data-table th:nth-child(2),
-.admin-content .data-table td:nth-child(2) {
-  box-shadow: none;
-  border-right: 0;
-}
-
 /* Detail + forms */
 
 .page-header {
@@ -546,12 +417,6 @@ input[type="number"] {
 
 .form-meta-label {
   @apply text-sm text-base-content/70;
-}
-
-.admin-content .form-meta {
-  display: flex;
-  justify-content: flex-start;
-  text-align: left;
 }
 
 .form-fields {
@@ -644,37 +509,6 @@ input[type="number"] {
 
 .error-actions {
   @apply mt-4 flex gap-2;
-}
-
-/* Dashboard cards */
-
-.admin-home-hero {
-  @apply rounded-box border border-base-300 bg-base-100 shadow-sm;
-}
-
-.admin-home-hero-inner {
-  @apply p-5 md:p-6;
-}
-
-.admin-home-kicker {
-  @apply badge badge-outline mb-2;
-}
-
-.admin-home h1 {
-  @apply text-2xl font-bold md:text-3xl;
-}
-
-.admin-home p {
-  @apply mt-1 text-sm text-base-content/70;
-}
-
-/* A dashboard section per sidebar group */
-.admin-home-section {
-  @apply space-y-3 pt-2;
-}
-
-.admin-home-section-title {
-  @apply flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-base-content/70;
 }
 
 .entity-grid {
@@ -1210,168 +1044,8 @@ input[type="number"] {
   @apply flex items-center gap-2;
 }
 
-.audit-layout {
-  @apply mx-0 grid grid-cols-1 gap-0;
-}
-
-.audit-page {
-  @apply mx-0 max-w-none;
-}
-
-.audit-page > .page-header {
-  @apply rounded-none border-0 bg-transparent px-6 py-0 shadow-none;
-}
-
-.audit-page > .page-header h1 {
-  @apply text-2xl font-bold md:text-3xl;
-}
-
-.audit-page > .page-header p {
-  @apply mt-1 text-sm leading-normal text-base-content/70;
-}
-
 .filters-sidebar {
   @apply mb-2 lg:static;
-}
-
-.audit-filters-card {
-  @apply mt-2 rounded-none border-x-0 border-t border-b border-base-300 bg-transparent px-6 py-2 shadow-none;
-}
-
-.audit-filters-card .audit-filters-form {
-  @apply grid grid-cols-1 gap-3;
-}
-
-.audit-filters-card .audit-filters-form .filter-group {
-  @apply space-y-1;
-}
-
-.audit-filters-card .audit-filters-form label {
-  @apply block text-xs font-medium uppercase tracking-wide text-base-content/65;
-}
-
-.audit-filters-card .audit-filters-form input,
-.audit-filters-card .audit-filters-form select {
-  @apply w-full rounded-md border border-base-300 bg-base-100 px-3 py-2;
-}
-
-.audit-filters-card .form-actions {
-  @apply mt-1 flex items-center gap-2;
-  flex-direction: row;
-  flex-wrap: nowrap;
-}
-
-.audit-filters-card .form-actions .button,
-.audit-filters-card .form-actions a.button,
-.audit-filters-card .form-actions button {
-  width: auto;
-  min-width: 8rem;
-  display: inline-flex;
-  justify-content: center;
-}
-
-.audit-filters-card .form-actions .button.secondary,
-.audit-filters-card .form-actions button.secondary {
-  background-color: transparent;
-  border: 1px solid var(--color-base-300);
-  color: var(--color-base-content);
-}
-
-[data-theme="dark"] .audit-filters-card .form-actions .button.secondary,
-[data-theme="dark"] .audit-filters-card .form-actions button.secondary {
-  background-color: transparent;
-  border-color: var(--color-base-300);
-  color: var(--color-base-content);
-}
-
-[data-theme="dark"] .audit-filters-card .form-actions .button.secondary:hover,
-[data-theme="dark"] .audit-filters-card .form-actions button.secondary:hover {
-  background-color: color-mix(in oklab, var(--color-base-100) 55%, var(--color-primary) 45%);
-  border-color: color-mix(in oklab, var(--color-base-300) 50%, var(--color-primary) 50%);
-  color: var(--text-on-accent);
-}
-
-.audit-table-card {
-  @apply rounded-none border-0 bg-transparent p-0 shadow-none;
-}
-
-.audit-table-card #audit-table-container .table-wrapper {
-  @apply rounded-none border-x-0 border-t-0 border-b border-base-300 bg-transparent;
-}
-
-.audit-content {
-  @apply mt-3;
-}
-
-.audit-table-card #audit-table {
-  @apply table-fixed;
-}
-
-.audit-table-card #audit-table thead th {
-  background-color: color-mix(in oklab, var(--color-base-100) 82%, var(--color-primary) 18%);
-}
-
-.audit-table-card #audit-table th:first-child,
-.audit-table-card #audit-table td:first-child {
-  @apply font-mono text-sm;
-  width: 24ch;
-  min-width: 24ch;
-  white-space: nowrap;
-}
-
-.audit-table-card #audit-table td {
-  @apply align-top;
-}
-
-.audit-table-card #audit-table th.sortable-header {
-  display: table-cell;
-  white-space: nowrap;
-  padding-right: 0.75rem;
-}
-
-.audit-table-card #audit-table th.sortable-header::after {
-  content: none;
-}
-
-.audit-table-card #audit-table th.sortable-header .sort-label {
-  display: inline-flex;
-  align-items: center;
-  vertical-align: middle;
-}
-
-.audit-table-card #audit-table th.sortable-header .sort-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 0.15rem;
-  vertical-align: middle;
-}
-
-.audit-table-card #audit-table th:nth-child(2),
-.audit-table-card #audit-table td:nth-child(2) {
-  position: static;
-  left: auto;
-  box-shadow: none;
-}
-
-.audit-detail-modal h3 {
-  @apply text-lg font-semibold;
-}
-
-.audit-detail-grid {
-  @apply mt-4 space-y-2;
-}
-
-.audit-detail-row {
-  @apply grid grid-cols-1 gap-1 rounded-md border border-base-300 bg-base-200 p-2 sm:grid-cols-[120px,1fr] sm:items-start;
-}
-
-.audit-detail-label {
-  @apply text-xs font-semibold uppercase tracking-wide text-base-content/65;
-}
-
-.audit-detail-value {
-  @apply break-words text-sm text-base-content;
 }
 
 .current-session {
@@ -1380,220 +1054,6 @@ input[type="number"] {
 
 .badge.current {
   @apply badge badge-primary ml-2;
-}
-
-.audit-action-badge,
-.audit-result-badge {
-  @apply justify-center whitespace-nowrap border-0 text-center font-medium;
-}
-
-.audit-action-badge {
-  min-width: var(--badge-width-audit-action);
-}
-
-.audit-result-badge {
-  min-width: var(--badge-width-audit-result);
-}
-
-/* Audit action badges: stronger readability in light theme */
-.audit-action-badge.ui-badge-success {
-  background-color: color-mix(in oklab, var(--color-success) 22%, white 78%);
-  color: color-mix(in oklab, var(--color-success) 62%, black 38%);
-}
-
-.audit-action-badge.ui-badge-info {
-  background-color: color-mix(in oklab, var(--color-info) 20%, white 80%);
-  color: color-mix(in oklab, var(--color-info) 62%, black 38%);
-}
-
-.audit-action-badge.ui-badge-warning {
-  background-color: color-mix(in oklab, var(--color-warning) 28%, white 72%);
-  color: color-mix(in oklab, var(--color-warning) 70%, black 30%);
-}
-
-.audit-action-badge.ui-badge-danger {
-  background-color: color-mix(in oklab, var(--color-error) 22%, white 78%);
-  color: color-mix(in oklab, var(--color-error) 62%, black 38%);
-}
-
-.audit-action-badge.ui-badge-neutral {
-  background-color: color-mix(in oklab, var(--color-base-300) 72%, white 28%);
-  color: color-mix(in oklab, var(--color-base-content) 80%, black 20%);
-}
-
-.audit-result-badge.ui-badge-success {
-  background-color: color-mix(in oklab, var(--color-success) 85%, black 15%);
-  color: var(--text-on-accent);
-}
-
-.audit-result-badge.ui-badge-danger {
-  background-color: color-mix(in oklab, var(--color-error) 80%, black 20%);
-  color: var(--text-on-accent);
-}
-
-[data-theme="dark"] .audit-result-badge.ui-badge-success {
-  background-color: color-mix(in oklab, var(--color-success) 70%, black 30%);
-  color: var(--text-on-accent);
-}
-
-[data-theme="dark"] .audit-action-badge.ui-badge-success {
-  background-color: color-mix(in oklab, var(--color-success) 70%, black 30%);
-  color: var(--text-on-accent);
-}
-
-[data-theme="dark"] .audit-action-badge.ui-badge-info {
-  background-color: color-mix(in oklab, var(--color-info) 68%, black 32%);
-  color: var(--text-on-accent);
-}
-
-[data-theme="dark"] .audit-action-badge.ui-badge-warning {
-  background-color: color-mix(in oklab, var(--color-warning) 70%, black 30%);
-  color: var(--text-on-accent);
-}
-
-[data-theme="dark"] .audit-action-badge.ui-badge-danger {
-  background-color: color-mix(in oklab, var(--color-error) 65%, black 35%);
-  color: var(--text-on-accent);
-}
-
-[data-theme="dark"] .audit-action-badge.ui-badge-neutral {
-  background-color: color-mix(in oklab, var(--color-base-300) 65%, black 35%);
-  color: var(--color-base-content);
-}
-
-[data-theme="dark"] .audit-result-badge.ui-badge-danger {
-  background-color: color-mix(in oklab, var(--color-error) 65%, black 35%);
-  color: var(--text-on-accent);
-}
-
-/* Admin table boolean badges (Yes/No) */
-.admin-bool-badge {
-  @apply justify-center whitespace-nowrap border-0 text-center font-medium;
-  min-width: var(--badge-width-boolean);
-}
-
-.admin-bool-badge-true {
-  background-color: color-mix(in oklab, var(--color-success) 20%, white 80%);
-  color: color-mix(in oklab, var(--color-success) 55%, black 45%);
-}
-
-.admin-bool-badge-false {
-  background-color: color-mix(in oklab, var(--color-base-300) 70%, white 30%);
-  color: color-mix(in oklab, var(--color-base-content) 75%, black 25%);
-}
-
-[data-theme="dark"] .admin-bool-badge-true {
-  background-color: color-mix(in oklab, var(--color-success) 70%, black 30%);
-  color: var(--text-on-accent);
-}
-
-[data-theme="dark"] .admin-bool-badge-false {
-  background-color: color-mix(in oklab, var(--color-base-300) 65%, black 35%);
-  color: var(--color-base-content);
-}
-
-.entity-detail-page .page-header {
-  @apply rounded-none border-0 bg-transparent px-6 py-0 shadow-none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-.entity-detail-page {
-  @apply mx-0 max-w-none;
-}
-
-.entity-detail-page .form-card {
-  @apply rounded-none border-x-0 border-t-0 border-b border-base-300 bg-base-100 shadow-none;
-}
-
-.entity-detail-page .form-card-body {
-  @apply px-6 py-4;
-}
-
-.entity-detail-page .form-meta {
-  display: flex;
-  justify-content: flex-start;
-  margin-bottom: 0.5rem;
-}
-
-.entity-detail-page .form-section,
-.entity-detail-page .form-field-group {
-  @apply rounded-none border-x-0 border-t-0 border-b border-base-300 bg-base-100 px-0 py-4;
-  border-bottom-color: color-mix(in oklab, var(--color-base-300) 55%, transparent);
-}
-
-/* Admin detail forms: swap container/field contrast to match Profile & Security */
-.entity-detail-page .form-card .form-control,
-.entity-detail-page .form-card input[type="text"],
-.entity-detail-page .form-card input[type="email"],
-.entity-detail-page .form-card input[type="password"],
-.entity-detail-page .form-card input[type="search"],
-.entity-detail-page .form-card input[type="number"],
-.entity-detail-page .form-card select,
-.entity-detail-page .form-card textarea {
-  background-color: var(--color-base-200);
-  border-color: color-mix(in oklab, var(--color-base-300) 82%, transparent);
-  color: var(--color-base-content);
-}
-
-.entity-detail-page .form-card .form-control:focus,
-.entity-detail-page .form-card input[type="text"]:focus,
-.entity-detail-page .form-card input[type="email"]:focus,
-.entity-detail-page .form-card input[type="password"]:focus,
-.entity-detail-page .form-card input[type="search"]:focus,
-.entity-detail-page .form-card input[type="number"]:focus,
-.entity-detail-page .form-card select:focus,
-.entity-detail-page .form-card textarea:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-primary) 26%, transparent);
-}
-
-.entity-detail-page .form-section + .form-section,
-.entity-detail-page .form-section-optional {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
-}
-
-.entity-detail-page .page-title {
-  @apply mt-0 text-left;
-  align-self: flex-start;
-  text-align: left;
-}
-
-.entity-detail-page .page-header-row {
-  @apply items-center;
-}
-
-.entity-detail-page .form-actions .button.secondary,
-.entity-detail-page .form-actions a.button.secondary {
-  background-color: transparent !important;
-  border-color: var(--color-base-300) !important;
-  color: var(--color-base-content) !important;
-}
-
-[data-theme="dark"] .entity-detail-page .form-actions .button.secondary:hover,
-[data-theme="dark"] .entity-detail-page .form-actions a.button.secondary:hover {
-  background-color: color-mix(in oklab, var(--color-base-100) 55%, var(--color-primary) 45%) !important;
-  border-color: color-mix(in oklab, var(--color-base-300) 50%, var(--color-primary) 50%) !important;
-  color: var(--text-on-accent) !important;
-  filter: none;
-}
-
-.entity-detail-page .page-header-actions .button.secondary,
-.entity-detail-page .page-header-actions a.button.secondary {
-  background-color: transparent !important;
-  border-color: var(--color-base-300) !important;
-  color: var(--color-base-content) !important;
-}
-
-[data-theme="dark"] .entity-detail-page .page-header-actions .button.secondary:hover,
-[data-theme="dark"] .entity-detail-page .page-header-actions a.button.secondary:hover {
-  background-color: color-mix(in oklab, var(--color-base-100) 55%, var(--color-primary) 45%) !important;
-  border-color: color-mix(in oklab, var(--color-base-300) 50%, var(--color-primary) 50%) !important;
-  color: var(--text-on-accent) !important;
-  filter: none;
 }
 
 .page-header-row {
