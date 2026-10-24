@@ -23,6 +23,9 @@
     lat               NUMERIC(10, 7) NOT NULL,
     lng               NUMERIC(10, 7) NOT NULL,
     formatted_address TEXT,
+    street            TEXT,
+    house_number      TEXT,
+    house_number_addition TEXT,
     postcode          TEXT,
     city              TEXT,
     country           TEXT,
@@ -86,6 +89,18 @@
       (is (= "Amsterdam" (:city hit)))
       (is (= :openstreetmap (:provider hit)))
       (is (true? (:cached? hit)))))
+
+  (testing "street and house number come back"
+    (ports/cache-store! *cache* "pdok-hash"
+                        (assoc test-result :street "Dam" :house-number "1"
+                               :house-number-addition "A-2" :provider :pdok))
+    (is (= {:street "Dam" :house-number "1" :house-number-addition "A-2" :provider :pdok}
+           (select-keys (ports/cache-lookup *cache* "pdok-hash")
+                        [:street :house-number :house-number-addition :provider]))))
+
+  (testing "a result without them has no such keys"
+    (is (not-any? (ports/cache-lookup *cache* test-hash)
+                  [:street :house-number :house-number-addition])))
 
   (testing "different hash returns nil"
     (is (nil? (ports/cache-lookup *cache* "different-hash")))))

@@ -32,15 +32,18 @@
   [item]
   (let [{:keys [lat lng]} (get-in item [:geometry :location])
         components        (:address_components item)]
-    {:lat               lat
-     :lng               lng
-     :formatted-address (:formatted_address item)
-     :postcode          (extract-component components "postal_code")
-     :city              (or (extract-component components "locality")
-                            (extract-component components "administrative_area_level_2"))
-     :country           (extract-component components "country")
-     :provider          :google
-     :cached?           false}))
+    (merge {:lat               lat
+            :lng               lng
+            :formatted-address (:formatted_address item)
+            :postcode          (extract-component components "postal_code")
+            :city              (or (extract-component components "locality")
+                                   (extract-component components "administrative_area_level_2"))
+            :country           (extract-component components "country")
+            :provider          :google
+            :cached?           false}
+           (support/street-fields (extract-component components "route")
+                                  (extract-component components "street_number")
+                                  nil))))
 
 ;; Google answers 200 even for a rejected key; the reason is in the body.
 (defn- first-result [body]
@@ -59,10 +62,7 @@
   GoogleAdapter
 
   (geocode [this query]
-    (let [{:keys [address postcode city country]} query
-          q (str/join ", "
-                      (remove nil? [address postcode city
-                                    (or country "Netherlands")]))]
+    (let [q (support/query-text query)]
       (when (not (str/blank? q))
         (support/enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
         (log/debug "Google geocode request" {:q q})

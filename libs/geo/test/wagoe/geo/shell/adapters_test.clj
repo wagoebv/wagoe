@@ -5,12 +5,16 @@
             [wagoe.geo.shell.adapters.google :as google]
             [wagoe.geo.shell.adapters.mapbox :as mapbox]
             [wagoe.geo.shell.adapters.osm :as osm]
+            [wagoe.geo.shell.adapters.pdok :as pdok]
             [wagoe.geo.shell.adapters.support :as support]
+            [wagoe.geo.shell.service :as service]
             [cheshire.core :as json]
             [clj-http.core]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [clojure.tools.logging.test :as log-test])
-  (:import [java.io ByteArrayInputStream]))
+  (:import [java.io ByteArrayInputStream]
+           [java.net URLDecoder]))
 
 (defn- json-response [body]
   {:status  200
@@ -25,25 +29,42 @@
       (f))
     @requests))
 
+(defn- params
+  "The request's query string as a map; a repeated key's values in a vector."
+  [request]
+  (reduce (fn [m pair]
+            (let [[k v] (map #(URLDecoder/decode ^String % "UTF-8") (str/split pair #"=" 2))]
+              (if (= k "fq")
+                (update m k (fnil conj []) v)
+                (assoc m k v))))
+          {}
+          (str/split (:query-string request) #"&")))
+
 ;; Trimmed from live responses.
 (def ^:private nominatim-item
   {"place_id"     12345
    "lat"          "52.3730796"
    "lon"          "4.8924534"
    "display_name" "Dam, Amsterdam, Noord-Holland, Nederland, 1012 JS, Nederland"
-   "address"      {"road" "Dam" "city" "Amsterdam" "postcode" "1012 JS" "country" "Nederland"}})
+   "address"      {"road" "Dam" "house_number" "1" "city" "Amsterdam" "postcode" "1012 JS"
+                   "country" "Nederland"}})
 
 (def ^:private google-body
   {"status"  "OK"
    "results" [{"formatted_address"  "Damrak 1, 1012 LG Amsterdam, Netherlands"
                "geometry"           {"location" {"lat" 52.3765 "lng" 4.8975}}
-               "address_components" [{"long_name" "1012 LG" "types" ["postal_code"]}
+               "address_components" [{"long_name" "1" "types" ["street_number"]}
+                                     {"long_name" "Damrak" "types" ["route"]}
+                                     {"long_name" "1012 LG" "types" ["postal_code"]}
                                      {"long_name" "Amsterdam" "types" ["locality" "political"]}
                                      {"long_name" "Netherlands" "types" ["country" "political"]}]}]})
 
 (def ^:private mapbox-body
   {"type"     "FeatureCollection"
-   "features" [{"place_name" "Damrak 1, 1012 LG Amsterdam, Netherlands"
+   "features" [{"place_type" ["address"]
+                "text"       "Damrak"
+                "address"    "1"
+                "place_name" "Damrak 1, 1012 LG Amsterdam, Netherlands"
                 "geometry"   {"type" "Point" "coordinates" [4.8975 52.3765]}
                 "context"    [{"id" "postcode.1" "text" "1012 LG"}
                               {"id" "place.2" "text" "Amsterdam"}
@@ -51,6 +72,7 @@
 
 (def ^:private damrak
   {:lat 52.3765 :lng 4.8975 :formatted-address "Damrak 1, 1012 LG Amsterdam, Netherlands"
+   :street "Damrak" :house-number "1"
    :postcode "1012 LG" :city "Amsterdam" :country "Netherlands"})
 
 (defn- osm-adapter []
@@ -62,6 +84,7 @@
   (let [requests (with-response (json-response [nominatim-item])
                    #(is (= {:lat 52.3730796 :lng 4.8924534
                             :formatted-address "Dam, Amsterdam, Noord-Holland, Nederland, 1012 JS, Nederland"
+                            :street "Dam" :house-number "1"
                             :postcode "1012 JS" :city "Amsterdam" :country "Nederland"
                             :provider :openstreetmap :cached? false}
                            (ports/geocode (osm-adapter) {:postcode "1012 JS" :city "Amsterdam"}))))]
@@ -114,6 +137,117 @@
       (let [requests (with-response (json-response mapbox-body)
                        #(is (= "Amsterdam" (:city (ports/reverse-geocode adapter {:lat 52.3765 :lng 4.8975})))))]
         (is (not (re-find #"limit=" (str (:query-string (first requests))))))))))
+
+(deftest ^:integration house-number-in-free-text-test
+  (let [requests (with-response (json-response [nominatim-item])
+                   #(ports/geocode (osm-adapter) {:address "Dam" :house-number 1
+                                                  :house-number-addition "A" :postcode "1012 JS"}))]
+    (is (= "Dam 1 A, 1012 JS, Netherlands" (get (params (first requests)) "q")))))
+
+;; =============================================================================
+;; PDOK
+;; =============================================================================
+
+;; Trimmed from live responses to fl=<the adapter's fields>.
+(defn- pdok-doc [huisnummer & {:as more}]
+  (merge {"weergavenaam"   (str "Dam " huisnummer ", 1012JS Amsterdam")
+          "straatnaam"     "Dam"
+          "huisnummer"     huisnummer
+          "postcode"       "1012JS"
+          "woonplaatsnaam" "Amsterdam"
+          "centroide_ll"   "POINT(4.8937175 52.37329259)"}
+         more))
+
+(defn- pdok-body [& docs]
+  {"response" {"numFound" (count docs) "start" 0 "docs" (vec docs)}})
+
+(defn- pdok-adapter []
+  (pdok/create-pdok-adapter {:base-url "http://pdok.test" :min-interval-ms 0}))
+
+(deftest ^:integration pdok-postcode-and-house-number-test
+  (let [requests (with-response (json-response (pdok-body (pdok-doc 1)))
+                   #(is (= {:lat 52.37329259 :lng 4.8937175
+                            :formatted-address "Dam 1, 1012JS Amsterdam"
+                            :street "Dam" :house-number "1"
+                            :postcode "1012JS" :city "Amsterdam" :country "Netherlands"
+                            :provider :pdok :cached? false}
+                           (ports/geocode (pdok-adapter) {:postcode "1012 js" :house-number 1}))))
+        request  (first requests)]
+    (is (= "http://pdok.test/free" (str (name (:scheme request)) "://" (:server-name request) (:uri request))))
+    (is (= ["type:adres" "postcode:1012JS" "huisnummer:1"] (get (params request) "fq")))
+    (is (nil? (get (params request) "q")))))
+
+(deftest ^:integration pdok-addition-test
+  (let [docs [(pdok-doc 1 "huisletter" "A") (pdok-doc 1) (pdok-doc 1 "huisletter" "A" "huisnummertoevoeging" "2")]
+        geocode (fn [query]
+                  (let [result (atom nil)]
+                    (with-response (json-response (apply pdok-body docs))
+                      #(reset! result (ports/geocode (pdok-adapter) query)))
+                    @result))]
+    (testing "no addition asked: the plain number"
+      (is (nil? (:house-number-addition (geocode {:postcode "1012JS" :house-number "1"})))))
+    (testing "the addition asked, however it is written"
+      (is (= "A-2" (:house-number-addition (geocode {:postcode "1012JS" :house-number 1
+                                                     :house-number-addition "a 2"}))))
+      (is (= "A" (:house-number-addition (geocode {:postcode "1012JS" :house-number "1a"})))))
+    (testing "an addition that does not exist is no match"
+      (is (nil? (geocode {:postcode "1012JS" :house-number 1 :house-number-addition "Z"}))))))
+
+(deftest ^:integration pdok-free-text-test
+  (let [requests (with-response (json-response (pdok-body (pdok-doc 1)))
+                   #(is (= "Dam" (:street (ports/geocode (pdok-adapter) {:address "Dam 1" :city "Amsterdam"})))))]
+    (is (= {"q" "Dam 1 Amsterdam" "fq" ["type:adres"] "rows" "1"}
+           (dissoc (params (first requests)) "fl")))))
+
+(deftest ^:integration pdok-misses-test
+  (testing "another country is not asked"
+    (is (empty? (with-response (json-response (pdok-body))
+                  #(is (nil? (ports/geocode (pdok-adapter) {:city "London" :country "United Kingdom"}))))))
+    (is (= 1 (count (with-response (json-response (pdok-body))
+                      #(ports/geocode (pdok-adapter) {:city "Utrecht" :country "Nederland"}))))))
+  (testing "no address found"
+    (with-response (json-response (pdok-body))
+      #(is (nil? (ports/geocode (pdok-adapter) {:postcode "9999ZZ" :house-number 1})))))
+  (testing "a non-200 is a WARN and nil"
+    (log-test/with-log
+      (with-response {:status 500 :headers {} :body (ByteArrayInputStream. (.getBytes "{}"))}
+        #(is (nil? (ports/geocode (pdok-adapter) {:postcode "1012JS" :house-number 1}))))
+      (is (log-test/logged? 'wagoe.geo.shell.adapters.pdok :warn #"non-200"))))
+  (testing "a failed request is an ERROR and nil"
+    (log-test/with-log
+      (with-redefs [clj-http.core/request (fn [_] (throw (java.net.SocketTimeoutException. "Read timed out")))]
+        (is (nil? (ports/geocode (pdok-adapter) {:postcode "1012JS" :house-number 1}))))
+      (is (log-test/logged? 'wagoe.geo.shell.adapters.pdok :error java.net.SocketTimeoutException
+                            #"request failed"))))
+  (testing "a doc without a point is a malformed response"
+    (log-test/with-log
+      (with-response (json-response (pdok-body (dissoc (pdok-doc 1) "centroide_ll")))
+        #(is (nil? (ports/geocode (pdok-adapter) {:postcode "1012JS" :house-number 1}))))
+      (is (log-test/logged? 'wagoe.geo.shell.adapters.support :warn #"malformed response.*:pdok")))))
+
+(deftest ^:integration pdok-reverse-geocode-test
+  (let [requests (with-response (json-response (pdok-body (pdok-doc 1)))
+                   #(is (= "Dam" (:street (ports/reverse-geocode (pdok-adapter) {:lat 52.3733 :lng 4.8937})))))
+        request  (first requests)]
+    (is (= "/reverse" (:uri request)))
+    (is (= {"lat" "52.3733" "lon" "4.8937" "type" "adres" "rows" "1"}
+           (dissoc (params request) "fl")))))
+
+(defrecord ^:private AtomCache [store]
+  ports/GeoCacheProtocol
+  (cache-lookup [_ h] (get @store h))
+  (cache-store! [_ h result] (swap! store assoc h (assoc result :cached? true)) nil))
+
+(deftest ^:integration pdok-cached-per-house-number-test
+  (let [svc      {:providers [(pdok-adapter)] :cache (->AtomCache (atom {}))}
+        requests (with-response (json-response (pdok-body (pdok-doc 1)))
+                   (fn []
+                     (is (false? (:cached? (service/geocode! svc {:postcode "1012JS" :house-number 1}))))
+                     (is (= {:street "Dam" :house-number "1" :cached? true}
+                            (select-keys (service/geocode! svc {:postcode "1012JS" :house-number 1})
+                                         [:street :house-number :cached?])))
+                     (service/geocode! svc {:postcode "1012JS" :house-number 2})))]
+    (is (= 2 (count requests)) "number 1 once, then number 2")))
 
 (deftest ^:unit rate-limit-test
   (testing "the public Nominatim server is never asked more than once a second"

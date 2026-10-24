@@ -38,6 +38,10 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
 | shell
 | Mapbox adapter (requires `WAG_GEO_API_KEY`)
 
+| `wagoe.geo.shell.adapters.pdok`
+| shell
+| PDOK Locatieserver adapter: Dutch addresses, no API key
+
 | `wagoe.geo.shell.cache`
 | shell
 | `DbGeoCache` — next.jdbc-backed, `geo_cache` table
@@ -58,6 +62,12 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
  :cache-ttl  86400   ; 24 hours
  :db         #ig/ref :wagoe/db}
 
+;; PDOK: street, city and point from postcode + house number (no API key)
+:wagoe/geo-service
+{:provider  :pdok
+ :cache-ttl 86400
+ :db        #ig/ref :wagoe/db}
+
 ;; Fallback chain: OSM first, then Google
 :wagoe/geo-service
 {:provider   :openstreetmap
@@ -76,6 +86,10 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
 ;; Geocode an address
 (geo/geocode! service {:address "Prinsengracht 263, Amsterdam"})
 ;=> {:lat 52.3747 :lon 4.8844 :formatted-address "Prinsengracht 263, Amsterdam"}
+
+;; Postcode + house number (PDOK)
+(geo/geocode! service {:postcode "1012 JS" :house-number 1 :house-number-addition "A"})
+;=> {:street "Dam" :house-number "1" :house-number-addition "A" :city "Amsterdam" :lat ... :lng ...}
 
 ;; Reverse geocode
 (geo/reverse-geocode! service {:lat 52.3747 :lon 4.8844})

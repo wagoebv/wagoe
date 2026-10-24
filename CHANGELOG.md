@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Geo `:provider :pdok`: street, city and point from postcode + house number, no key** (BOU-830). `AddressQuery`
+  takes `:house-number`/`:house-number-addition`; results carry `:street`. Run `migrate up` for the cache columns.
 - **`bb check:ports-diff` compares every protocol in a stable library's ports with the last final release**: a method
   or arity gained, lost or moved fails CI unless `[Unreleased]` `### Breaking` names it in backticks. Nothing to change.
 - **An HTML page's `<link>` and `<script>` assets carry `?v=<digest>`, and browsers keep those for good** (BOU-391).
@@ -212,6 +214,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Admin CSS without `!important` fights** (BOU-821): 6 left, each against an inline style or for reduced motion;
+  ~490 overridden declarations removed. No visible change.
 - **Methods 1.1 adds to a stable port are their own protocols** (BOU-829), so an app's own repository or service keeps
   working; one lacking a protocol Wagoe calls stops the boot with `WGE-107`, naming it.
 - **The admin loads one stylesheet** (BOU-808): `:admin-pilot` is `/css/wagoe-admin.css`, built by `npm run build:css`,
