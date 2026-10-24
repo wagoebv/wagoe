@@ -167,7 +167,11 @@
     Example:
       (publish-to-topic service \"order:123\"
         {:type \"order-updated\"
-         :payload {:status \"shipped\"}})")
+         :payload {:status \"shipped\"}})"))
+
+(defprotocol IIdentifiedConnections
+  "Connections whose user the caller authenticated, such as server-sent events
+   riding the web session. Its own protocol, as IRealtimeService is stable."
 
   (connect-identified [this connection identity topics]
     "Register a connection whose user the caller has already authenticated,

@@ -51,6 +51,12 @@ Add to `resources/conf/{env}/config.edn` and require `wagoe.geo.shell.module-wir
  :cache-ttl  86400
  :db         #ig/ref :wagoe/db}
 
+;; PDOK Locatieserver (Dutch addresses, free, no key)
+:wagoe/geo-service
+{:provider  :pdok
+ :cache-ttl 86400
+ :db        #ig/ref :wagoe/db}
+
 ;; Google Maps
 :wagoe/geo-service
 {:provider  :google
@@ -78,6 +84,11 @@ Add to `resources/conf/{env}/config.edn` and require `wagoe.geo.shell.module-wir
 (geo/geocode! service {:address "Damrak 1" :city "Amsterdam"})
 (geo/geocode! service {:postcode "1012 JS"})
 
+;; Postcode + house number → street, city and point (PDOK fills :street and :house-number)
+(geo/geocode! service {:postcode "1012 JS" :house-number 1 :house-number-addition "A"})
+;; => {:street "Dam" :house-number "1" :house-number-addition "A" :postcode "1012JS"
+;;     :city "Amsterdam" :lat 52.37 :lng 4.89 :provider :pdok :cached? false ...}
+
 ;; Reverse geocode coordinates → address
 (geo/reverse-geocode! service {:lat 52.374 :lng 4.890})
 
@@ -101,6 +112,9 @@ CREATE TABLE geo_cache (
   lat               NUMERIC(10, 7) NOT NULL,
   lng               NUMERIC(10, 7) NOT NULL,
   formatted_address TEXT,
+  street            TEXT,  -- these three: 20261023100001-geo-cache-street
+  house_number      TEXT,
+  house_number_addition TEXT,
   postcode          TEXT,
   city              TEXT,
   country           TEXT,
@@ -118,6 +132,7 @@ CREATE TABLE geo_cache (
 | OpenStreetMap Nominatim | `:openstreetmap` | None | 1 req/sec | Must set `:user-agent` |
 | Google Maps Geocoding API | `:google` | Required | 50 req/sec | Returns structured address components |
 | Mapbox Geocoding API | `:mapbox` | Required | 10 req/sec | Returns GeoJSON (lng, lat order) |
+| PDOK Locatieserver | `:pdok` | None | 100 ms | Netherlands only; exact on postcode + house number |
 
 ---
 

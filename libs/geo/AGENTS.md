@@ -4,7 +4,7 @@
 
 `wagoe-geo` provides a multi-provider geocoding abstraction for any Wagoe-based application that needs address-to-coordinate conversion or distance calculations. It eliminates ~50–100 lines of per-project boilerplate by offering:
 
-- **Multi-provider geocoding**: OpenStreetMap (Nominatim), Google Maps, Mapbox
+- **Multi-provider geocoding**: OpenStreetMap (Nominatim), Google Maps, Mapbox, PDOK Locatieserver
 - **Automatic fallback chain**: try providers in order; first non-nil result wins
 - **DB-backed caching**: `geo_cache` table with configurable TTL (default 24 h)
 - **Per-provider rate limiting**: OSM enforced at 1 req/sec; Google/Mapbox at 100 ms
@@ -25,6 +25,7 @@
 | `wagoe.geo.shell.adapters.osm` | shell | Nominatim adapter (`NominatimAdapter`) |
 | `wagoe.geo.shell.adapters.google` | shell | Google Maps adapter (`GoogleAdapter`) |
 | `wagoe.geo.shell.adapters.mapbox` | shell | Mapbox adapter (`MapboxAdapter`) |
+| `wagoe.geo.shell.adapters.pdok` | shell | PDOK Locatieserver adapter (`PdokAdapter`) |
 | `wagoe.geo.shell.adapters.support` | shell | Shared rate limiter and response check |
 | `wagoe.geo.shell.cache` | shell | `DbGeoCache` — next.jdbc-backed cache |
 | `wagoe.geo.shell.service` | shell | Public API: `geocode!`, `reverse-geocode!`, `distance` |
@@ -43,6 +44,12 @@ Add to your `resources/conf/{env}/config.edn`:
  :user-agent "MyApp/1.0 (contact@example.com)"
  :cache-ttl  86400
  :db         #ig/ref :wagoe/db}
+
+;; PDOK Locatieserver (Dutch addresses from postcode + house number, no key)
+:wagoe/geo-service
+{:provider  :pdok
+ :cache-ttl 86400
+ :db        #ig/ref :wagoe/db}
 
 ;; Google Maps with DB cache
 :wagoe/geo-service
@@ -75,6 +82,11 @@ Require the wiring namespace in your system config loader:
 ;; Forward geocoding (cache-first)
 (geo/geocode! geo-service {:postcode "1012 JS" :city "Amsterdam"})
 ;; => {:lat 52.374 :lng 4.890 :formatted-address "..." :provider :openstreetmap :cached? false}
+
+;; Postcode + house number (PDOK): street, city and point in one call
+(geo/geocode! geo-service {:postcode "1012 JS" :house-number 1})
+;; => {:street "Dam" :house-number "1" :postcode "1012JS" :city "Amsterdam"
+;;     :lat 52.373 :lng 4.894 :provider :pdok :cached? false ...}
 
 ;; Second call returns from cache
 (geo/geocode! geo-service {:postcode "1012 JS" :city "Amsterdam"})
@@ -132,6 +144,9 @@ CREATE TABLE geo_cache (
   lat               NUMERIC(10, 7) NOT NULL,
   lng               NUMERIC(10, 7) NOT NULL,
   formatted_address TEXT,
+  street            TEXT,  -- these three: 20261023100001-geo-cache-street
+  house_number      TEXT,
+  house_number_addition TEXT,
   postcode          TEXT,
   city              TEXT,
   country           TEXT,
@@ -180,6 +195,11 @@ When a provider throws an exception, the adapter returns `nil` and logs an error
 - Run geo service as singleton deployment (scale-to-1, use pod anti-affinity for HA)
 
 For single-instance deployments and development, the current atom-based approach is correct and efficient.
+
+### 10. PDOK: house numbers and additions
+`AddressQuery` takes `:house-number` (int or string) and `:house-number-addition` beside `:postcode`; both are part of the cache key. PDOK filters on a valid postcode and the number, so the match is exact. `"12a"` as house number reads as 12 with addition `a`. An addition matches whatever its case or separators (`"a 2"` finds `1A-2`); one that does not exist is no result, not the plain number. Without an addition the plain number wins. A query for a country other than the Netherlands is a miss, so a fallback chain moves on.
+
+`GeoResult` carries `:street`, `:house-number` and `:house-number-addition` as strings when the provider gives them. PDOK fills all three (the addition when the address has one); Nominatim, Google and Mapbox (address features) fill street and number.
 
 ---
 

@@ -31,14 +31,15 @@
   "Parse a Nominatim result into a GeoResult. clj-http's `:as :json` keywordizes
    keys; Nominatim sends lat/lon as strings."
   [{:keys [lat lon display_name address]}]
-  {:lat               (parse-coord lat)
-   :lng               (parse-coord lon)
-   :formatted-address display_name
-   :postcode          (:postcode address)
-   :city              (or (:city address) (:town address) (:village address))
-   :country           (:country address)
-   :provider          :openstreetmap
-   :cached?           false})
+  (merge {:lat               (parse-coord lat)
+          :lng               (parse-coord lon)
+          :formatted-address display_name
+          :postcode          (:postcode address)
+          :city              (or (:city address) (:town address) (:village address))
+          :country           (:country address)
+          :provider          :openstreetmap
+          :cached?           false}
+         (support/street-fields (:road address) (:house_number address) nil)))
 
 ;; =============================================================================
 ;; Adapter record
@@ -50,10 +51,7 @@
   NominatimAdapter
 
   (geocode [this query]
-    (let [{:keys [address postcode city country]} query
-          q (str/join ", "
-                      (remove nil? [address postcode city
-                                    (or country "Netherlands")]))]
+    (let [q (support/query-text query)]
       (when (not (str/blank? q))
         (support/enforce-rate-limit! (:last-request-ms this) (:min-interval-ms this))
         (log/debug "OSM geocode request" {:q q})

@@ -63,12 +63,13 @@
     (suggest [_ index-id _ _]
       (swap! calls conj [:suggest index-id])
       [])
-    (index-definition [_ index-id] (get definitions index-id))
     (list-indices [_]
       (mapv (fn [[id d]] {:id id :entity-type (:entity-type d) :language :english
                           :fields [] :doc-count 0})
             definitions))
-    (reindex! [_ _ _] nil)))
+    (reindex! [_ _ _] nil)
+    ports/ISearchDefinitions
+    (index-definition [_ index-id] (get definitions index-id))))
 
 (defn- served
   ([calls] (served calls {:products {:id :products :entity-type :product :api? true}}))

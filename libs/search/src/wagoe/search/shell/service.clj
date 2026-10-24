@@ -95,9 +95,6 @@
         []
         (ports/suggest-documents store index-id entity-type sanitized opts))))
 
-  (index-definition [_ index-id]
-    (lookup definitions index-id))
-
   (list-indices [_]
     (let [index-ids (distinct (concat (keys definitions) (registry/list-searches)))]
       (mapv (fn [index-id]
@@ -118,7 +115,11 @@
       (doseq [[entity-id field-values] documents]
         (ports/index-document! this index-id entity-id field-values {})
         (swap! indexed inc))
-      {:indexed @indexed})))
+      {:indexed @indexed}))
+
+  ports/ISearchDefinitions
+  (index-definition [_ index-id]
+    (lookup definitions index-id)))
 
 (defn create-search-service
   "Create a SearchService.

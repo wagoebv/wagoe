@@ -253,6 +253,10 @@ jobs:
           CHANGELOG_BASE: origin/${{ github.base_ref || github.event.repository.default_branch }}
         run: bb check:changelog
 
+      - name: Check stable ports against the last release
+        if: ${{ !cancelled() }}
+        run: bb check:ports-diff
+
       - name: Check documented library counts and publishing claims
         if: ${{ !cancelled() }}
         run: bb check:doc-counts

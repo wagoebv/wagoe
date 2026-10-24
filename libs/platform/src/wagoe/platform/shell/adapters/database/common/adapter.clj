@@ -174,12 +174,14 @@
   (get-table-info [_ datasource table-name]
     ((:table-info spec) datasource table-name))
 
+  protocols/KeyIntrospection
   (key-columns [_ datasource table-name key-name]
     (when-let [f (:key-columns spec)] (f datasource table-name key-name)))
 
   (unique-keys [_ datasource table-name]
     ((:unique-keys spec introspection/jdbc-unique-keys) datasource table-name))
 
+  protocols/EngineInfo
   (engine [_] (:engine spec))
 
   (now-ms-sql [_] (:now-ms-sql spec))
@@ -196,6 +198,7 @@
           (throw (ex-info (str "No column type for " (pr-str logical))
                           {:type :validation-error :logical logical})))))
 
+  protocols/LikeMatcher
   (like [_ field pattern] (like-ignoring-case (:string-match spec) field pattern))
   (like [_ field mode value] (case-insensitive-like (:string-match spec) field mode value))
 
