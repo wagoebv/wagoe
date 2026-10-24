@@ -10,7 +10,9 @@
         :redis    {:host \"localhost\" :port 6379}
         :workers  {:count 1 :queue-name :default :virtual-threads? false}
         :recurring {:nightly-report {:cron \"0 2 * * *\" :zone \"Europe/Amsterdam\"}}
-        :scheduler {:tick-ms 5000 :lease-ms 30000 :zone \"UTC\"}}
+        :scheduler {:tick-ms 5000 :lease-ms 30000 :zone \"UTC\"}
+        :on-outcome my.app.jobs/on-outcome   ; optional, (fn [outcome])
+        :report-failures-every-ms 3600000}   ; error-tracker throttle
 
    :wagoe/jobs-runtime
      Queue, store and stats from one adapter, so the three share a backend.
@@ -39,6 +41,8 @@
      The worker pool. `:count 0` builds none — that is a web node in the
      web/worker split; the default of 1 is a single process that both enqueues
      and runs, which is what an application without a deployment topology has.
+     Each run's outcome goes to the store's `IJobOutcomes`, `:wagoe/metrics`,
+     `:wagoe/error-reporting` and `:on-outcome` (`wagoe.jobs.shell.outcomes`).
 
    :wagoe/job-tenant-runner
      With the tenant module on: what runs a job that carries a tenant in that
@@ -57,6 +61,7 @@
             [wagoe.jobs.shell.adapters.db :as db]
             [wagoe.jobs.shell.adapters.in-memory :as mem]
             [wagoe.jobs.shell.adapters.redis :as redis]
+            [wagoe.jobs.shell.outcomes :as outcomes]
             [wagoe.jobs.shell.recurring :as recurring]
             [wagoe.jobs.shell.tenant-context :as tenant-context]
             [wagoe.tenant.shell.provisioning :as provisioning]
@@ -197,9 +202,26 @@
 
 (defmethod ig/halt-key! :wagoe/job-tenant-runner [_ _] nil)
 
+(defn- resolve-hook
+  "`:on-outcome` as config.edn names it, a symbol, resolved to its fn."
+  [hook]
+  (if (symbol? hook)
+    (or (some-> (try (requiring-resolve hook) (catch Exception _ nil)) deref)
+        (throw (ex-info (str ":wagoe/jobs :on-outcome names " hook ", which resolves to nothing")
+                        {:type :configuration-error :symbol hook})))
+    hook))
+
 (defmethod ig/init-key :wagoe/job-workers
-  [_ {:keys [queue store registry workers tenant-runner]}]
+  [_ {:keys [queue store registry workers tenant-runner metrics error-reporter
+             on-outcome report-failures-every-ms]}]
   (let [count*  (:count workers 1)
+        ;; One reporter for every pool: the error-tracker throttle is per job
+        ;; type, whichever queue it runs on.
+        report  (outcomes/reporter {:store                    store
+                                    :metrics                  metrics
+                                    :error-reporter           error-reporter
+                                    :on-outcome               (resolve-hook on-outcome)
+                                    :report-failures-every-ms report-failures-every-ms})
         ;; One pool per queue. A worker polls a single queue, so a module that
         ;; enqueues elsewhere is only served if a pool names that queue — push
         ;; enqueued on :push while the only pool polled :default, and every
@@ -211,7 +233,8 @@
       (into []
             (mapcat (fn [q]
                       (worker/create-worker-pool
-                       (merge workers {:queue-name q :worker-count count* :tenant-runner tenant-runner})
+                       (merge workers {:queue-name q :worker-count count* :tenant-runner tenant-runner
+                                       :report-outcome report})
                        queue store registry)))
             queues)
       (do (log/info "Jobs: no workers started (:count 0) — this node enqueues only")
@@ -266,10 +289,14 @@
                              :recurring (:recurring settings)
                              :scheduler (:scheduler settings)}
        :wagoe/job-registry {:handler-maps []}
-       :wagoe/job-workers  {:queue    (ig/ref :wagoe/job-queue)
-                            :store    (ig/ref :wagoe/job-store)
-                            :registry (ig/ref :wagoe/job-registry)
-                            :workers  (:workers settings)}
+       :wagoe/job-workers  {:queue          (ig/ref :wagoe/job-queue)
+                            :store          (ig/ref :wagoe/job-store)
+                            :registry       (ig/ref :wagoe/job-registry)
+                            :workers        (:workers settings)
+                            :metrics        (ig/ref :wagoe/metrics)
+                            :error-reporter (ig/ref :wagoe/error-reporting)
+                            :on-outcome     (:on-outcome settings)
+                            :report-failures-every-ms (:report-failures-every-ms settings)}
        :wagoe/job-dead-letter-retention {:store (ig/ref :wagoe/job-store)}}
       :retention {:jobs/dead-letter (ig/ref :wagoe/job-dead-letter-retention)}}
       tenancy?

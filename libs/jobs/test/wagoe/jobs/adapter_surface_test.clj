@@ -513,6 +513,35 @@
        (is (= [(:id a)] (map :id (ports/find-jobs s {:status :running})))
            (str label ": :status"))))))
 
+(deftest ^:integration a-job-types-outcomes-are-kept-alike
+  (each-store
+   (fn [s label]
+     (let [t      (Instant/parse "2026-10-24T10:00:00Z")
+           run    (fn [outcome secs & {:as more}]
+                    (merge {:job-id (random-uuid) :job-type :reports/generate :queue :default
+                            :attempt 1 :outcome outcome :started-at (.plusSeconds t secs)
+                            :finished-at (.plusSeconds t (inc secs)) :duration-ms 1000}
+                           more))]
+       (is (nil? (ports/job-outcome s :reports/generate)) (str label ": before the first run"))
+       (ports/record-outcome! s (run :success 0))
+       (ports/record-outcome! s (run :failure 10 :error {:message "boom"}))
+       (ports/record-outcome! s (run :failure 20 :error {:message "again"}))
+       (is (= {:job-type               :reports/generate
+               :last-outcome           :failure
+               :last-started-at        (.plusSeconds t 20)
+               :last-duration-ms       1000
+               :last-succeeded-at      (.plusSeconds t 1)
+               :last-failed-at         (.plusSeconds t 21)
+               :last-error             "again"
+               :failures-since-success 2}
+              (ports/job-outcome s :reports/generate))
+           (str label ": after a success and two failures"))
+       (ports/record-outcome! s (run :success 30))
+       (is (zero? (:failures-since-success (ports/job-outcome s :reports/generate)))
+           (str label ": a success resets the count"))
+       (is (= #{:reports/generate} (set (keys (ports/job-outcomes s))))
+           (str label ": job-outcomes"))))))
+
 ;; =============================================================================
 ;; Queue and store together — where the backends disagreed
 ;; =============================================================================

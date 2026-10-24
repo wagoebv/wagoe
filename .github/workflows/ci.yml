@@ -1078,13 +1078,13 @@ jobs:
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
           WAGOE_TEST_DB: mysql
-        run: clojure -M:test:test/pg :jobs --focus wagoe.jobs.shell.adapters.db-test
+        run: clojure -M:test:test/pg :jobs --focus wagoe.jobs.shell.adapters.db-test --focus wagoe.jobs.shell.outcomes-test
 
       - name: Run the jobs DB queue on PostgreSQL
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
           WAGOE_TEST_DB: pg
-        run: clojure -M:test:test/pg :jobs --focus wagoe.jobs.shell.adapters.db-test
+        run: clojure -M:test:test/pg :jobs --focus wagoe.jobs.shell.adapters.db-test --focus wagoe.jobs.shell.outcomes-test
 
       - name: Run webhooks on PostgreSQL
         env:

@@ -373,6 +373,23 @@
     "Extend `worker-id`'s claim on `job-id`. False when the worker no longer
      holds it."))
 
+(defprotocol IJobOutcomes
+  "Optional capability of a job store: how each job type last fared, so an
+   application can tell a job that stopped succeeding without keeping a table
+   of its own (BOU-832). The worker records every run when its store has it."
+
+  (record-outcome! [this outcome]
+    "Fold one run's outcome (see `wagoe.jobs.core.outcome/run-outcome`) into
+     its job type's record. One write, no read.")
+
+  (job-outcome [this job-type]
+    "`job-type`'s record, or nil before its first run:
+     {:job-type :last-outcome :last-started-at :last-duration-ms
+      :last-succeeded-at :last-failed-at :last-error :failures-since-success}")
+
+  (job-outcomes [this]
+    "Every job type's record, by job type."))
+
 ;; =============================================================================
 ;; Idempotency keys and recurring jobs
 ;; =============================================================================

@@ -10,7 +10,9 @@
    - Job handler registry
    - Comprehensive error handling"
   (:require [wagoe.jobs.core.job :as job]
+            [wagoe.jobs.core.outcome :as outcome]
             [wagoe.jobs.ports :as ports]
+            [wagoe.jobs.shell.outcomes :as outcomes]
             [wagoe.jobs.shell.adapters.redis :as redis-adapter]
             [wagoe.observability.core.sql-redaction :as redaction]
             ;; Loaded for its effect: `log/error e` below is written redacted.
@@ -251,6 +253,16 @@
       ;; database must not hold up the worker.
       #(deliver stop true))))
 
+(defn- with-reporter
+  "`config` with `:report-outcome`, the fn each run's outcome goes to, built
+   from its `:metrics`, `:error-reporter`, `:on-outcome` and
+   `:report-failures-every-ms` unless it has one. Built once per pool, so the
+   pool's workers share one error-tracker throttle."
+  [config store]
+  (cond-> config
+    (not (:report-outcome config))
+    (assoc :report-outcome (outcomes/reporter (assoc config :store store)))))
+
 (defn- process-single-job!
   "Process a single job from queue.
 
@@ -299,7 +311,12 @@
                   (do
                     (log/info "Processing job" {:job-id job-id :job-type job-type})
                     (ports/update-job-status! store job-id :running nil)
-                    (let [result (run-handler config handler-fn job)]
+                    (let [started (Instant/now)
+                          t0      (System/nanoTime)
+                          result  (run-handler config handler-fn job)]
+                      (when-let [report! (:report-outcome config)]
+                        (report! (outcome/run-outcome job result started (Instant/now)
+                                                      (quot (- (System/nanoTime) t0) 1000000))))
                       (if (:success? result)
                         (do
                           (ports/update-job-status! store job-id :completed (:result result))
@@ -372,7 +389,8 @@
    a race (BOU-469). A retry or a scheduled job lands in the future, so this
    ends."
   [config queue store registry]
-  (let [state (create-worker-state :default)]
+  (let [state  (create-worker-state :default)
+        config (with-reporter config store)]
     (loop [n 0]
       ;; Every round: a job may enqueue one with an :execute-at already due,
       ;; which lands in the scheduled set rather than on a queue.
@@ -519,6 +537,10 @@
               :tenant-runner - (fn [tenant-id f]) that calls f in the tenant's
                                schema; a job with :metadata :tenant-id fails
                                without one
+              :metrics, :error-reporter - where each run's outcome goes
+                               (optional, see `wagoe.jobs.shell.outcomes`)
+              :on-outcome - (fn [outcome]) called after each run (optional)
+              :report-failures-every-ms - error-tracker throttle (default 1h)
      queue - IJobQueue implementation
      store - IJobStore implementation
      registry - IJobRegistry implementation
@@ -526,7 +548,8 @@
    Returns:
      Worker implementing IJobWorker"
   [config queue store registry]
-  (let [queue-name (or (:queue-name config) :default)
+  (let [config (with-reporter config store)
+        queue-name (or (:queue-name config) :default)
         worker-state (create-worker-state queue-name)
         worker (->Worker worker-state nil queue store registry config)
         loop-fn #(worker-loop config queue store registry worker-state)
@@ -566,7 +589,8 @@
    Returns:
      Vector of Worker instances"
   [config queue store registry]
-  (let [worker-count (or (:worker-count config) 4)]
+  (let [worker-count (or (:worker-count config) 4)
+        config       (with-reporter config store)]
     (log/info "Creating worker pool" {:worker-count worker-count :queue-name (:queue-name config)})
     (vec (repeatedly worker-count #(create-worker config queue store registry)))))
 

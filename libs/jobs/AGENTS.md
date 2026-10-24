@@ -12,7 +12,9 @@ Background job processing with priority queues, scheduled execution, automatic r
 |-----------|---------|
 | `wagoe.jobs.core.job` | Pure functions: job creation, state transitions, retry logic |
 | `wagoe.jobs.core.cron` | Pure cron parsing, `next-run`, `latest-run`, `due-tick` |
-| `wagoe.jobs.ports` | Protocols: IJobQueue, IJobStore, IJobStats, IJobWorker, IJobRegistry |
+| `wagoe.jobs.ports` | Protocols: IJobQueue, IJobStore, IJobStats, IJobOutcomes, IJobWorker, IJobRegistry |
+| `wagoe.jobs.core.outcome` | Pure: a run's outcome, a job type's record, the error-tracker throttle |
+| `wagoe.jobs.shell.outcomes` | Where outcomes go: store, `:wagoe/metrics`, `:wagoe/error-reporting`, `:on-outcome` |
 | `wagoe.jobs.schema` | Malli schemas: job states, priorities, retry config |
 | `wagoe.jobs.shell.adapters.in-memory` | In-memory adapter (atoms, for dev/test) |
 | `wagoe.jobs.shell.adapters.redis` | Redis adapter (sorted sets, lists, hashes) |
@@ -34,7 +36,9 @@ Enabling `:wagoe/jobs` builds the runtime. Nothing else to assemble.
                         :queues [:default]     ; one pool per queue
                         :virtual-threads? false}  ; true: each worker loop on a virtual thread
              :recurring {:nightly-report {:cron "0 2 * * *" :zone "Europe/Amsterdam"}}
-             :scheduler {:tick-ms 5000 :lease-ms 30000 :zone "UTC"}}
+             :scheduler {:tick-ms 5000 :lease-ms 30000 :zone "UTC"}
+             :on-outcome my.app.jobs/on-outcome     ; optional (fn [outcome])
+             :report-failures-every-ms 3600000}     ; error-tracker throttle
 ```
 
 `:redis` is one Redis server, not Redis Cluster:
@@ -186,6 +190,23 @@ docs: `docs/modules/libraries/pages/jobs.adoc`. What to keep true when editing:
 - **A scheduled type with no handler is warned about** once, by the lease
   holder, naming the known types. Not a boot failure: handlers may be registered
   after boot (`register-handler!`), or live only on worker nodes.
+
+## Job outcomes
+
+`process-single-job!` reports every handler run in one place
+(`shell/outcomes.clj`, BOU-832): the store's `IJobOutcomes` record, metrics
+(`jobs.runs`, `jobs.run.duration`, `jobs.last-success`), the error tracker and
+`:on-outcome`. User docs: `docs/modules/libraries/pages/jobs.adoc`.
+
+- **One write per run, no read, no lock.** The DB record is an `UPDATE` whose
+  `failures_since_success` goes up or to 0 in the statement (`INSERT` only on a
+  type's first run); Redis is one script. Keep it that way: this is the hot path.
+- **The throttle is in process**, a `swap!` per reporter, so a store read is not
+  needed to decide. The wiring builds one reporter for all pools; `run-pending!`
+  builds one per call unless given `:report-outcome`.
+- **Nothing in it fails a job.** Each step is caught and logged.
+- `IJobOutcomes` is its own protocol (Convention 5); the reporter checks
+  `satisfies?` once. Table `job_outcomes` is a boot table, times in epoch ms.
 
 ## Job Handler Signature
 

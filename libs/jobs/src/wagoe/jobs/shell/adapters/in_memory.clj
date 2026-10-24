@@ -21,6 +21,7 @@
    - stats: Map of queue-name -> statistics"
   (:require [wagoe.jobs.ports :as ports]
             [wagoe.jobs.core.job :as job]
+            [wagoe.jobs.core.outcome :as outcome]
             [clojure.tools.logging :as log])
   (:import [java.time Instant]))
 
@@ -36,19 +37,22 @@
             stats])       ; atom: queue-name -> {:processed :failed :succeeded :durations}
 
 (defn- create-state
-  "Create initial state atoms."
+  "Create initial state atoms. `:outcomes`, job-type -> its record
+   (`IJobOutcomes`), rides along outside the record's fields so its
+   constructor keeps its arity."
   []
-  (->InMemoryState
-   (atom {})                    ; jobs
-   (atom {})                    ; queues
-   (atom (sorted-set-by         ; scheduled (sorted by execute-at)
-          (fn [a b]
-            (let [time-cmp (compare (:execute-at a) (:execute-at b))]
-              (if (zero? time-cmp)
-                (compare (:job-id a) (:job-id b))
-                time-cmp)))))
-   (atom [])                    ; failed
-   (atom {})))                  ; stats
+  (assoc (->InMemoryState
+          (atom {})                    ; jobs
+          (atom {})                    ; queues
+          (atom (sorted-set-by         ; scheduled (sorted by execute-at)
+                 (fn [a b]
+                   (let [time-cmp (compare (:execute-at a) (:execute-at b))]
+                     (if (zero? time-cmp)
+                       (compare (:job-id a) (:job-id b))
+                       time-cmp)))))
+          (atom [])                    ; failed
+          (atom {}))                   ; stats
+         :outcomes (atom {})))
 
 ;; =============================================================================
 ;; Queue Operations
@@ -351,6 +355,16 @@
         retry-job))))
 
 (extend-type InMemoryJobStore
+  ports/IJobOutcomes
+  (record-outcome! [{:keys [state]} o]
+    (swap! (:outcomes state) update (:job-type o) outcome/after-outcome o)
+    nil)
+  (job-outcome [{:keys [state]} job-type]
+    (get @(:outcomes state) job-type))
+  (job-outcomes [{:keys [state]}]
+    @(:outcomes state)))
+
+(extend-type InMemoryJobStore
   ports/IDeadLetterRetention
   (purge-dead-letters-before! [{:keys [state]} cutoff]
     (let [jobs @(:jobs state)
@@ -478,7 +492,8 @@
                                     (compare (:job-id a) (:job-id b))
                                     time-cmp)))))
   (reset! (:failed state) [])
-  (reset! (:stats state) {}))
+  (reset! (:stats state) {})
+  (reset! (:outcomes state) {}))
 
 (defn get-all-jobs
   "Get all jobs in state. Useful for testing.
