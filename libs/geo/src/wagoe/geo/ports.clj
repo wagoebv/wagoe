@@ -14,13 +14,15 @@
    Implementations live in shell/adapters/:
    - NominatimAdapter (OpenStreetMap, free, rate-limited to 1 req/sec)
    - GoogleAdapter    (Google Maps Geocoding API, requires API key)
-   - MapboxAdapter    (Mapbox Geocoding API, requires access token)"
+   - MapboxAdapter    (Mapbox Geocoding API, requires access token)
+   - PdokAdapter      (PDOK Locatieserver, Dutch addresses, no key)"
 
   (geocode [this query]
     "Forward geocode an address query to coordinates.
 
      Args:
-       query - AddressQuery map with optional :address :postcode :city :country
+       query - AddressQuery map with optional :address :postcode :house-number
+               :house-number-addition :city :country
 
      Returns:
        GeoResult map on success, nil on no results or error.")

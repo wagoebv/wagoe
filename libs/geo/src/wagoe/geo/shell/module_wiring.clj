@@ -8,6 +8,10 @@
      {:provider  :openstreetmap
       :user-agent \"MyApp/1.0 (contact@example.com)\"}
 
+   Example (Dutch addresses from postcode + house number, no key):
+     :wagoe/geo-service
+     {:provider :pdok}
+
    Example (Google with DB cache):
      :wagoe/geo-service
      {:provider   :google
@@ -24,6 +28,7 @@
   (:require [wagoe.geo.shell.adapters.osm :as osm]
             [wagoe.geo.shell.adapters.google :as google]
             [wagoe.geo.shell.adapters.mapbox :as mapbox]
+            [wagoe.geo.shell.adapters.pdok :as pdok]
             [wagoe.geo.shell.cache :as cache]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
@@ -50,6 +55,11 @@
       :mapbox
       (mapbox/create-mapbox-adapter
        (cond-> {:api-key api-key}
+         min-ms (assoc :min-interval-ms min-ms)))
+
+      :pdok
+      (pdok/create-pdok-adapter
+       (cond-> {}
          min-ms (assoc :min-interval-ms min-ms)))
 
       (throw (ex-info "Unknown geo provider" {:type :unknown-provider :provider provider-kw})))))

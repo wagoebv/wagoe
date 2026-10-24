@@ -20,12 +20,15 @@
 
 (def AddressQuery
   "Address lookup query. At least one field should be provided.
-   :country defaults to \"Netherlands\" when not supplied."
+   :country defaults to \"Netherlands\" when not supplied.
+   :house-number and :house-number-addition go with :postcode (PDOK)."
   [:map
-   [:address  {:optional true} :string]
-   [:postcode {:optional true} :string]
-   [:city     {:optional true} :string]
-   [:country  {:optional true} :string]])
+   [:address               {:optional true} :string]
+   [:postcode              {:optional true} :string]
+   [:house-number          {:optional true} [:or :int :string]]
+   [:house-number-addition {:optional true} :string]
+   [:city                  {:optional true} :string]
+   [:country               {:optional true} :string]])
 
 ;; =============================================================================
 ;; GeoResult — output from geocode! / reverse-geocode!
@@ -39,6 +42,9 @@
    [:lat               :double]
    [:lng               :double]
    [:formatted-address {:optional true} :string]
+   [:street            {:optional true} :string]
+   [:house-number      {:optional true} :string]
+   [:house-number-addition {:optional true} :string]
    [:postcode          {:optional true} :string]
    [:city              {:optional true} :string]
    [:country           {:optional true} :string]

@@ -7,6 +7,7 @@
 
    TTL is enforced at lookup time by comparing `created_at` to `NOW() - cache-ttl`."
   (:require [wagoe.geo.ports :as ports]
+            [wagoe.geo.shell.adapters.support :as support]
             [clojure.tools.logging :as log]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
@@ -27,14 +28,16 @@
   "Convert a geo_cache DB row (unqualified lowercase keys) to a GeoResult map."
   [row]
   (when row
-    {:lat               (double (:lat row))
-     :lng               (double (:lng row))
-     :formatted-address (:formatted_address row)
-     :postcode          (:postcode row)
-     :city              (:city row)
-     :country           (:country row)
-     :provider          (keyword (:provider row))
-     :cached?           true}))
+    (merge {:lat               (double (:lat row))
+            :lng               (double (:lng row))
+            :formatted-address (:formatted_address row)
+            :postcode          (:postcode row)
+            :city              (:city row)
+            :country           (:country row)
+            :provider          (keyword (:provider row))
+            :cached?           true}
+           (support/street-fields (:street row) (:house_number row)
+                                  (:house_number_addition row)))))
 
 ;; =============================================================================
 ;; DbGeoCache record
@@ -73,6 +76,9 @@
                     :lat               (:lat result)
                     :lng               (:lng result)
                     :formatted_address (:formatted-address result)
+                    :street            (:street result)
+                    :house_number      (:house-number result)
+                    :house_number_addition (:house-number-addition result)
                     :postcode          (:postcode result)
                     :city              (:city result)
                     :country           (:country result)

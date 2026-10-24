@@ -1,6 +1,7 @@
 (ns wagoe.geo.shell.adapters.support
   "Rate limiting and response parsing shared by the provider adapters."
-  (:require [clojure.tools.logging :as log]))
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]))
 
 (defn enforce-rate-limit!
   "Block until `min-interval-ms` have passed since the previous request, and
@@ -31,3 +32,21 @@
 
         :else
         (log/warn "Geo provider returned a malformed response" data)))))
+
+(defn street-fields
+  "The GeoResult's :street, :house-number and :house-number-addition, leaving
+   out what the provider did not give."
+  [street house-number addition]
+  (into {}
+        (remove (comp str/blank? val))
+        {:street                street
+         :house-number          (some-> house-number str)
+         :house-number-addition addition}))
+
+(defn query-text
+  "An AddressQuery as one free-text line: \"Damrak 1 A, 1012 LG, Amsterdam, Netherlands\".
+   The house number follows the address."
+  [{:keys [address postcode house-number house-number-addition city country]}]
+  (let [street (not-empty (str/join " " (remove str/blank? [address (some-> house-number str)
+                                                             house-number-addition])))]
+    (str/join ", " (remove nil? [street postcode city (or country "Netherlands")]))))

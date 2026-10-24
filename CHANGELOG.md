@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Geo `:provider :pdok`: street, city and point from postcode + house number, no key** (BOU-830). `AddressQuery`
+  takes `:house-number`/`:house-number-addition`; results carry `:street`. Run `migrate up` for the cache columns.
 - **`bb check:ports-diff` compares every protocol in a stable library's ports with the last final release**: a method
   or arity gained, lost or moved fails CI unless `[Unreleased]` `### Breaking` names it in backticks. Nothing to change.
 - **An HTML page's `<link>` and `<script>` assets carry `?v=<digest>`, and browsers keep those for good** (BOU-391).
