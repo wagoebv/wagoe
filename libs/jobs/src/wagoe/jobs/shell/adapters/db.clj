@@ -39,6 +39,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [wagoe.jobs.core.job :as job]
+            [wagoe.jobs.core.outcome :as outcome]
             [wagoe.jobs.shell.adapters.codec :as codec]
             [wagoe.jobs.ports :as ports])
   (:import [java.sql Timestamp]
@@ -91,7 +92,19 @@
                         updated_at   %s NOT NULL,
                         payload      %s NOT NULL)" id ts payload)])
   (db/create-index-if-not-exists! ctx "ix_job_store_filters" :job_store [:status :job_type :queue])
-  (db/create-index-if-not-exists! ctx "ix_job_store_dead_letter" :job_store [:dead_letter :updated_at]))
+  (db/create-index-if-not-exists! ctx "ix_job_store_dead_letter" :job_store [:dead_letter :updated_at])
+  ;; IJobOutcomes: one row per job type. Times are epoch millis, as in
+  ;; job_recurring, so no driver turns them into a local date-time.
+  (execute! (:datasource ctx)
+            [(format "CREATE TABLE IF NOT EXISTS job_outcomes (
+                        job_type               VARCHAR(255) PRIMARY KEY,
+                        last_outcome           VARCHAR(20) NOT NULL,
+                        last_started_ms        BIGINT NOT NULL,
+                        last_duration_ms       BIGINT NOT NULL,
+                        last_succeeded_ms      BIGINT NULL,
+                        last_failed_ms         BIGINT NULL,
+                        last_error             VARCHAR(%d) NULL,
+                        failures_since_success BIGINT NOT NULL)" outcome/max-error-length)]))
 
 (defn create-job-store-table!
   "Create the `job_store` table + its indexes if absent, on H2, PostgreSQL or
@@ -551,3 +564,64 @@
    `create-recurring-tables!` first."
   [ds]
   (->DbRecurringState ds (lease/create-lease ds :job_ticker_lease "ticker")))
+
+;; =============================================================================
+;; Job outcomes (IJobOutcomes)
+;; =============================================================================
+
+(defn- job-type-key [job-type] (str (symbol job-type)))
+
+(defn- epoch-ms [^Instant t] (some-> t .toEpochMilli))
+
+(defn- update-outcome!
+  "One UPDATE: the failure count goes up or back to 0 in the statement itself,
+   so concurrent workers need no lock or read. The number of rows it changed."
+  [ds {:keys [job-type outcome started-at finished-at duration-ms] :as o}]
+  (::jdbc/update-count
+   (execute-one!
+    ds
+    (if (= :success outcome)
+      ["UPDATE job_outcomes SET last_outcome = 'success', last_started_ms = ?, last_duration_ms = ?,
+          last_succeeded_ms = ?, failures_since_success = 0
+          WHERE job_type = ?"
+       (epoch-ms started-at) duration-ms (epoch-ms finished-at) (job-type-key job-type)]
+      ["UPDATE job_outcomes SET last_outcome = 'failure', last_started_ms = ?, last_duration_ms = ?,
+          last_failed_ms = ?, last_error = ?, failures_since_success = failures_since_success + 1
+          WHERE job_type = ?"
+       (epoch-ms started-at) duration-ms (epoch-ms finished-at) (outcome/error-message o)
+       (job-type-key job-type)]))))
+
+(defn- ->outcome-record [row]
+  (let [at #(some-> % long Instant/ofEpochMilli)]
+    {:job-type               (keyword (:job_type row))
+     :last-outcome           (keyword (:last_outcome row))
+     :last-started-at        (at (:last_started_ms row))
+     :last-duration-ms       (long (:last_duration_ms row))
+     :last-succeeded-at      (at (:last_succeeded_ms row))
+     :last-failed-at         (at (:last_failed_ms row))
+     :last-error             (:last_error row)
+     :failures-since-success (long (:failures_since_success row))}))
+
+(extend-type DbJobStore
+  ports/IJobOutcomes
+  (record-outcome! [{:keys [ds]} o]
+    ;; UPDATE first: after a job type's first run the row exists.
+    (when (zero? (update-outcome! ds o))
+      (let [{:keys [last-outcome last-started-at last-duration-ms last-succeeded-at
+                    last-failed-at last-error failures-since-success]}
+            (outcome/after-outcome nil o)]
+        (when-not (insert-unless-present!
+                   ds ["INSERT INTO job_outcomes (job_type, last_outcome, last_started_ms, last_duration_ms,
+                          last_succeeded_ms, last_failed_ms, last_error, failures_since_success)
+                          VALUES (?,?,?,?,?,?,?,?)"
+                       (job-type-key (:job-type o)) (name last-outcome) (epoch-ms last-started-at)
+                       last-duration-ms (epoch-ms last-succeeded-at) (epoch-ms last-failed-at)
+                       last-error failures-since-success])
+          (update-outcome! ds o))))
+    nil)
+  (job-outcome [{:keys [ds]} job-type]
+    (some-> (execute-one! ds ["SELECT * FROM job_outcomes WHERE job_type = ?" (job-type-key job-type)] (opts))
+            ->outcome-record))
+  (job-outcomes [{:keys [ds]}]
+    (into {} (map (comp (juxt :job-type identity) ->outcome-record))
+          (execute! ds ["SELECT * FROM job_outcomes"] (opts)))))
