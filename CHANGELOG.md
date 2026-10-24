@@ -210,6 +210,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Admin CSS without `!important` fights** (BOU-821): 6 left, each against an inline style or for reduced motion;
+  ~490 overridden declarations removed. No visible change.
 - **The admin loads one stylesheet** (BOU-808): `:admin-pilot` is `/css/wagoe-admin.css`, built by `npm run build:css`,
   with focus rings and shadows on the tokens. Load the bundle rather than listing the old CSS files.
 - **Groups, roles, permissions and workflow instances are searchable, sortable admin lists** (BOU-807); roles and a

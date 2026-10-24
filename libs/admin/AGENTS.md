@@ -433,7 +433,7 @@ tailwind/
 ├── pilot-rules.css      # daisy styling of the shared class contract
 ├── admin.css            # entry for wagoe-admin.css: imports the rest in cascade order
 └── admin/
-    ├── legacy.css       # the admin styles that predate wagoe-admin.css
+    ├── legacy.css       # older admin styles; load before app.css (new styles go in wagoe-admin.css)
     └── wagoe-admin.css  # wagoe.org tokens and admin display roles (ADR-040)
 ```
 

@@ -16,12 +16,431 @@
    ============================================================================= */
 
 /* -----------------------------------------------------------------------------
+   0. Admin pages styled on daisyUI (from pilot-rules.css, which :pilot shares)
+   ----------------------------------------------------------------------------- */
+
+/* Shell */
+
+.admin-shell {
+  @apply min-h-screen;
+}
+
+.admin-content {
+  @apply px-0;
+}
+
+.admin-sidebar {
+  @apply border-r border-base-300 bg-base-100 shadow-sm;
+}
+
+.admin-sidebar-header {
+  @apply bg-base-100/95 backdrop-blur;
+}
+
+.admin-sidebar-nav h3 {
+  @apply text-xs font-semibold uppercase tracking-widest text-base-content/50;
+}
+
+.admin-topbar {
+  @apply border-b border-base-300 bg-base-100/90 shadow-sm backdrop-blur;
+}
+
+/* List page */
+
+.entity-list-page {
+  @apply max-w-none mx-0;
+}
+
+#filter-table-container {
+  @apply mt-2 rounded-none border-0 bg-transparent shadow-none;
+}
+
+.admin-content .data-table {
+  @apply w-full;
+}
+
+.admin-content .table-wrapper {
+  @apply rounded-none border-x-0 border-t border-b border-base-300 bg-transparent shadow-none;
+}
+
+.entity-list-page .entity-list-hero,
+.entity-list-page .table-toolbar-container,
+.entity-list-page #filter-table-container,
+.entity-list-page .page-header {
+  @apply mx-0;
+}
+
+.admin-content .data-table thead th {
+  @apply border-b border-base-300/70 bg-transparent text-[11px] font-medium normal-case tracking-normal text-base-content/65;
+  box-shadow: none;
+}
+
+.admin-content .data-table tbody tr {
+  @apply border-b border-base-300/35;
+}
+
+.admin-content .data-table tbody tr:hover {
+  @apply bg-base-200/35;
+}
+
+.admin-content .data-table td {
+  @apply text-sm;
+}
+
+.admin-content .data-table col.col-select {
+  width: 48px;
+}
+
+.admin-content .data-table col.col-actions {
+  width: 80px;
+}
+
+/* Neutralize legacy zebra striping for a cleaner grid look */
+.admin-content .data-table tbody tr:nth-child(even),
+.admin-content .data-table tbody tr:nth-child(even) td:nth-child(2) {
+  background: transparent;
+}
+
+.admin-content .data-table th.sortable-header::before {
+  display: none;
+}
+
+.admin-content .data-table th.sortable-header {
+  @apply px-3;
+  white-space: nowrap;
+}
+
+.admin-content .data-table th.sortable-header .sort-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.2rem;
+  vertical-align: middle;
+}
+
+.admin-content .data-table th.sortable-header.sort-dir-desc .sort-icon {
+  transform: none;
+}
+
+.admin-content .data-table th.sortable-header::after {
+  content: none;
+}
+
+.admin-content .data-table th.sortable-header.sort-dir-asc::after {
+  content: none;
+}
+
+.admin-content .data-table th.sortable-header.sort-dir-desc::after {
+  content: none;
+}
+
+/* Remove legacy sticky-column seam next to the Name header/cells */
+.admin-content .data-table th:nth-child(2),
+.admin-content .data-table td:nth-child(2) {
+  box-shadow: none;
+  border-right: 0;
+}
+
+.admin-content .form-meta {
+  text-align: left;
+}
+
+/* Dashboard cards */
+
+.admin-home-hero {
+  @apply rounded-box border border-base-300 bg-base-100 shadow-sm;
+}
+
+.admin-home-hero-inner {
+  @apply p-5 md:p-6;
+}
+
+.admin-home-kicker {
+  @apply badge badge-outline mb-2;
+}
+
+.admin-home h1 {
+  @apply text-2xl font-bold md:text-3xl;
+}
+
+.admin-home p {
+  @apply mt-1 text-sm text-base-content/70;
+}
+
+/* A dashboard section per sidebar group */
+.admin-home-section {
+  @apply space-y-3 pt-2;
+}
+
+.admin-home-section-title {
+  @apply flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-base-content/70;
+}
+
+.audit-layout {
+  @apply mx-0 grid grid-cols-1 gap-0;
+}
+
+.audit-page {
+  @apply mx-0 max-w-none;
+}
+
+.audit-page > .page-header {
+  @apply rounded-none border-0 bg-transparent px-6 py-0 shadow-none;
+}
+
+.audit-page > .page-header h1 {
+  @apply text-2xl font-bold md:text-3xl;
+}
+
+.audit-page > .page-header p {
+  @apply mt-1 text-sm leading-normal text-base-content/70;
+}
+
+.audit-filters-card {
+  @apply mt-2 rounded-none border-x-0 border-t border-b border-base-300 bg-transparent px-6 py-2 shadow-none;
+}
+
+.audit-filters-card .audit-filters-form {
+  @apply grid grid-cols-1 gap-3;
+}
+
+.audit-filters-card .audit-filters-form .filter-group {
+  @apply space-y-1;
+}
+
+.audit-filters-card .audit-filters-form label {
+  @apply block text-xs font-medium uppercase tracking-wide text-base-content/65;
+}
+
+.audit-filters-card .audit-filters-form input,
+.audit-filters-card .audit-filters-form select {
+  @apply w-full rounded-md border border-base-300 bg-base-100 px-3 py-2;
+}
+
+.audit-filters-card .form-actions {
+  @apply mt-1 flex items-center gap-2;
+}
+
+.audit-table-card {
+  @apply rounded-none border-0 bg-transparent p-0 shadow-none;
+}
+
+.audit-table-card #audit-table-container .table-wrapper {
+  @apply rounded-none border-x-0 border-t-0 border-b border-base-300 bg-transparent;
+}
+
+.audit-content {
+  @apply mt-3;
+}
+
+.audit-table-card #audit-table {
+  @apply table-fixed;
+}
+
+.audit-table-card #audit-table th:first-child,
+.audit-table-card #audit-table td:first-child {
+  @apply font-mono text-sm;
+}
+
+.audit-table-card #audit-table td {
+  @apply align-top;
+}
+
+.audit-detail-modal h3 {
+  @apply text-lg font-semibold;
+}
+
+.audit-detail-grid {
+  @apply mt-4 space-y-2;
+}
+
+.audit-detail-row {
+  @apply grid grid-cols-1 gap-1 rounded-md border border-base-300 bg-base-200 p-2 sm:grid-cols-[120px,1fr] sm:items-start;
+}
+
+.audit-detail-label {
+  @apply text-xs font-semibold uppercase tracking-wide text-base-content/65;
+}
+
+.audit-detail-value {
+  @apply break-words text-sm text-base-content;
+}
+
+.audit-action-badge,
+.audit-result-badge {
+  @apply justify-center whitespace-nowrap border-0 text-center font-medium;
+}
+
+.audit-action-badge.ui-badge-warning {
+  background-color: color-mix(in oklab, var(--color-warning) 28%, white 72%);
+  color: color-mix(in oklab, var(--color-warning) 70%, black 30%);
+}
+
+.audit-action-badge.ui-badge-danger {
+  background-color: color-mix(in oklab, var(--color-error) 22%, white 78%);
+  color: color-mix(in oklab, var(--color-error) 62%, black 38%);
+}
+
+.audit-action-badge.ui-badge-neutral {
+  background-color: color-mix(in oklab, var(--color-base-300) 72%, white 28%);
+  color: color-mix(in oklab, var(--color-base-content) 80%, black 20%);
+}
+
+.audit-result-badge.ui-badge-danger {
+  background-color: color-mix(in oklab, var(--color-error) 80%, black 20%);
+  color: var(--text-on-accent);
+}
+
+[data-theme="dark"] .audit-action-badge.ui-badge-warning {
+  background-color: color-mix(in oklab, var(--color-warning) 70%, black 30%);
+  color: var(--text-on-accent);
+}
+
+[data-theme="dark"] .audit-action-badge.ui-badge-danger {
+  background-color: color-mix(in oklab, var(--color-error) 65%, black 35%);
+  color: var(--text-on-accent);
+}
+
+[data-theme="dark"] .audit-action-badge.ui-badge-neutral {
+  background-color: color-mix(in oklab, var(--color-base-300) 65%, black 35%);
+  color: var(--color-base-content);
+}
+
+[data-theme="dark"] .audit-result-badge.ui-badge-danger {
+  background-color: color-mix(in oklab, var(--color-error) 65%, black 35%);
+  color: var(--text-on-accent);
+}
+
+/* Admin table boolean badges (Yes/No) */
+.admin-bool-badge {
+  @apply justify-center whitespace-nowrap border-0 text-center font-medium;
+  min-width: var(--badge-width-boolean);
+}
+
+.admin-bool-badge-true {
+  background-color: color-mix(in oklab, var(--color-success) 20%, white 80%);
+  color: color-mix(in oklab, var(--color-success) 55%, black 45%);
+}
+
+.admin-bool-badge-false {
+  background-color: color-mix(in oklab, var(--color-base-300) 70%, white 30%);
+  color: color-mix(in oklab, var(--color-base-content) 75%, black 25%);
+}
+
+[data-theme="dark"] .admin-bool-badge-true {
+  background-color: color-mix(in oklab, var(--color-success) 70%, black 30%);
+  color: var(--text-on-accent);
+}
+
+[data-theme="dark"] .admin-bool-badge-false {
+  background-color: color-mix(in oklab, var(--color-base-300) 65%, black 35%);
+  color: var(--color-base-content);
+}
+
+.entity-detail-page .page-header {
+  @apply rounded-none border-0 bg-transparent px-6 py-0 shadow-none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.entity-detail-page {
+  @apply mx-0 max-w-none;
+}
+
+.entity-detail-page .form-card {
+  @apply rounded-none border-x-0 border-t-0 border-b border-base-300 bg-base-100 shadow-none;
+}
+
+.entity-detail-page .form-card-body {
+  @apply px-6 py-4;
+}
+
+.entity-detail-page .form-meta {
+  justify-content: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.entity-detail-page .form-section,
+.entity-detail-page .form-field-group {
+  @apply rounded-none border-x-0 border-t-0 border-b border-base-300 bg-base-100 px-0 py-4;
+}
+
+/* Admin detail forms: swap container/field contrast to match Profile & Security */
+.entity-detail-page .form-card .form-control,
+.entity-detail-page .form-card input[type="text"],
+.entity-detail-page .form-card input[type="email"],
+.entity-detail-page .form-card input[type="password"],
+.entity-detail-page .form-card input[type="search"],
+.entity-detail-page .form-card input[type="number"],
+.entity-detail-page .form-card select,
+.entity-detail-page .form-card textarea {
+  background-color: var(--color-base-200);
+  border-color: color-mix(in oklab, var(--color-base-300) 82%, transparent);
+  color: var(--color-base-content);
+}
+
+.entity-detail-page .form-card .form-control:focus,
+.entity-detail-page .form-card input[type="text"]:focus,
+.entity-detail-page .form-card input[type="email"]:focus,
+.entity-detail-page .form-card input[type="password"]:focus,
+.entity-detail-page .form-card input[type="search"]:focus,
+.entity-detail-page .form-card input[type="number"]:focus,
+.entity-detail-page .form-card select:focus,
+.entity-detail-page .form-card textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-primary) 26%, transparent);
+}
+
+.entity-detail-page .form-section + .form-section,
+.entity-detail-page .form-section-optional {
+  margin-top: 0;
+}
+
+.entity-detail-page .page-title {
+  @apply mt-0 text-left;
+  align-self: flex-start;
+  text-align: left;
+}
+
+.entity-detail-page .page-header-row {
+  @apply items-center;
+}
+
+.entity-detail-page .form-actions .button.secondary,
+.entity-detail-page .form-actions a.button.secondary {
+  background-color: transparent;
+  border-color: var(--color-base-300);
+  color: var(--color-base-content);
+}
+
+[data-theme="dark"] .entity-detail-page .form-actions .button.secondary:hover,
+[data-theme="dark"] .entity-detail-page .form-actions a.button.secondary:hover {
+  background-color: color-mix(in oklab, var(--color-base-100) 55%, var(--color-primary) 45%);
+  border-color: color-mix(in oklab, var(--color-base-300) 50%, var(--color-primary) 50%);
+  color: var(--text-on-accent);
+  filter: none;
+}
+
+.entity-detail-page .page-header-actions .button.secondary,
+.entity-detail-page .page-header-actions a.button.secondary {
+  background-color: transparent;
+  border-color: var(--color-base-300);
+  color: var(--color-base-content);
+}
+
+[data-theme="dark"] .entity-detail-page .page-header-actions .button.secondary:hover,
+[data-theme="dark"] .entity-detail-page .page-header-actions a.button.secondary:hover {
+  background-color: color-mix(in oklab, var(--color-base-100) 55%, var(--color-primary) 45%);
+  border-color: color-mix(in oklab, var(--color-base-300) 50%, var(--color-primary) 50%);
+  color: var(--text-on-accent);
+  filter: none;
+}
+
+/* -----------------------------------------------------------------------------
    1. Tokens
    ----------------------------------------------------------------------------- */
 
-/* One block for both themes: light-dark() picks by `color-scheme`, which the
-   system sets and [data-theme] (theme.js, daisyUI) overrides. */
-:root                { color-scheme: light dark; }
 [data-theme="light"] { color-scheme: light; }
 [data-theme="dark"]  { color-scheme: dark; }
 
@@ -125,12 +544,14 @@
 /* The sidebar is the dark green in both themes: chrome, not content */
 .admin-sidebar,
 .admin-sidebar-header {
-  background: var(--wg-ink) !important;
-  border-right-color: var(--wg-chrome-hover) !important;
+  background: var(--wg-ink);
+  border-right-color: var(--wg-chrome-hover);
   box-shadow: none;
   backdrop-filter: none;
   color: var(--wg-chrome-text);
 }
+/* pilot-rules.css gives the dark theme's panels a border colour */
+[data-theme="dark"] .admin-sidebar { border-right-color: var(--wg-chrome-hover); }
 .admin-sidebar-nav h3 {
   color: var(--wg-chrome-muted);
   font-size: 11px;
@@ -159,7 +580,6 @@
   color: var(--wg-teal);
   font-weight: 500;
 }
-.admin-sidebar button { color: var(--wg-chrome-dim); }
 .admin-sidebar .nav-module.has-active > .nav-module-toggle { color: var(--wg-teal); }
 @media (min-width: 769px) {
   :root[data-sidebar="closed"] .admin-sidebar .nav-module > .entity-list {
@@ -170,7 +590,7 @@
 .admin-sidebar .nav-flyout-title { color: var(--wg-chrome-muted); }
 
 .admin-topbar {
-  background: var(--color-base-100) !important;
+  background: var(--color-base-100);
   box-shadow: none;
   backdrop-filter: none;
 }
@@ -193,7 +613,7 @@
 .main-content:has(> .hiccup-fragment-wrapper > .admin-shell) { padding: 0; }
 .main-content > .hiccup-fragment-wrapper:has(> .admin-shell) { margin: 0; }
 
-.admin-content { padding: 16px 24px !important; }
+.admin-content { padding: 16px 24px; }
 
 @media (min-width: 769px) {
   .admin-content:has(> .entity-list-page) {
@@ -213,7 +633,10 @@
   .entity-list-page { gap: 12px; }
   .entity-list-page > #filter-table-container { gap: 10px; }
   .entity-list-page > *,
-  #filter-table-container > * { margin: 0 !important; flex: none; }
+  #filter-table-container > * { margin: 0; flex: none; }
+  .entity-list-page > #filter-table-container,
+  .entity-list-page > .kbd-hints,
+  #filter-table-container > .kbd-hints { margin: 0; }
   .entity-list-page > #filter-table-container,
   #filter-table-container > #entity-table-container { flex: 1 1 auto; }
   .table-and-pagination > .table-wrapper {
@@ -304,7 +727,7 @@
 
 /* The filter drawer: every field under the other; the fields scroll, the
    footer stays */
-.filter-drawer { overflow: hidden !important; }
+.filter-drawer { overflow: hidden; }
 .filter-drawer-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .filter-fields {
   flex: 1 1 auto;
@@ -330,10 +753,10 @@
   margin: 0;
   padding: 0 8px;
   font-size: 13px;
-  border: 1px solid var(--color-base-300) !important;
-  border-radius: 4px !important;
+  border: 1px solid var(--color-base-300);
+  border-radius: 4px;
   background: var(--color-base-100);
-  box-shadow: none !important;
+  box-shadow: none;
 }
 .filter-field-inputs select[multiple] { height: auto; padding: 4px; }
 .filter-field-inputs .filter-operator-select { flex: 0 0 auto; width: auto; color: var(--text-muted); }
@@ -343,7 +766,8 @@
 .filter-field-inputs .combobox input { width: 100%; }
 .filter-value-range { display: flex; align-items: center; gap: 6px; }
 .filter-value-range input { flex: 1 1 0; min-width: 0; }
-.filter-field-inputs :focus { border-color: var(--accent-primary) !important; outline: none; box-shadow: 0 0 0 3px var(--accent-primary-light) !important; }
+/* The outline stays: a keyboard focus keeps app.css's focus-visible ring */
+.filter-field-inputs :is(input, select):focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--accent-primary-light); }
 .drawer-footer {
   display: flex;
   gap: 8px;
@@ -351,10 +775,10 @@
   border-top: 1px solid var(--color-base-300);
   background: var(--color-base-100);
 }
-.drawer-footer kbd { font-family: var(--font-mono); font-size: 11px; opacity: 0.75; margin-left: 4px; }
+.drawer-footer kbd {   opacity: 0.75;  }
 
 .admin-content .table-pagination {
-  padding: 8px 12px !important;
+  padding: 8px 12px;
   border-top: 1px solid var(--border-subtle);
   background: var(--color-base-100);
   box-shadow: none;
@@ -369,10 +793,11 @@
   box-shadow: none;
   transform: none;
 }
-.admin-content .table-pagination .page-btn.active {
-  border-color: var(--accent-primary) !important;
-  color: var(--accent-primary) !important;
-  background: var(--accent-primary-light) !important;
+.admin-content .table-pagination .page-btn.active,
+.admin-content .table-pagination .page-btn.active:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-primary-light);
 }
 .admin-content .pagination-nav { gap: 4px; }
 
@@ -380,7 +805,7 @@
 .admin-sidebar-header {
   min-height: var(--topbar-height);
   height: var(--topbar-height);
-  padding: 0 10px 0 12px !important;
+  padding: 0 10px 0 12px;
   border-bottom: 1px solid var(--wg-chrome-hover);
 }
 .sidebar-brand {
@@ -394,6 +819,7 @@
 .admin-sidebar .brand-logo-light { display: none; }
 .admin-sidebar .brand-logo-dark { display: inline-block; }
 /* The mark fills the row, less an 8px margin above and below */
+/* !important: brand-logo's :size sets an inline height */
 .sidebar-brand .brand-logo img,
 .sidebar-brand-mark img {
   height: calc(var(--topbar-height) - 16px) !important;
@@ -410,12 +836,12 @@
 .admin-sidebar-nav { padding-top: 14px; }
 .admin-sidebar .entity-list a,
 .admin-sidebar .nav-module-toggle,
-.admin-sidebar-footer a { padding: 7px 10px !important; font-size: 13px; gap: 10px; }
+.admin-sidebar-footer a { padding: 7px 10px; font-size: 13px; gap: 10px; }
 /* The footer links line up with the group toggles above them */
 .admin-sidebar-footer a { margin: 0 var(--space-2); }
 .admin-sidebar .entity-list a svg,
 .admin-sidebar .nav-module-toggle > svg:first-child,
-.admin-sidebar-footer a svg { width: 16px !important; height: 16px !important; }
+.admin-sidebar-footer a svg { width: 16px; height: 16px; }
 .admin-sidebar-footer { border-top: 1px solid var(--wg-chrome-hover); }
 
 /* -----------------------------------------------------------------------------
@@ -444,8 +870,8 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--surface-1) !important;
-  color: var(--text-muted) !important;
+  background: var(--surface-1);
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
   text-transform: none;
@@ -468,28 +894,29 @@
 .admin-content .data-table tbody tr.clickable-row:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
 .admin-content .data-table th.sortable-header--active .sort-label { color: var(--text-primary); }
 .admin-content .data-table th.sortable-header .sort-icon {
-  background: none !important;
+  background: none;
   color: var(--accent-primary);
   width: auto;
   height: auto;
 }
 
-.admin-content .data-table tbody tr {
+/* table.data-table: as specific as app.css's row borders (dark theme, last row) */
+.admin-content table.data-table tbody tr,
+.admin-content table.data-table tbody tr:last-child {
   animation: none;
-  border-bottom: 1px solid var(--border-subtle) !important;
+  border-bottom: 1px solid var(--border-subtle);
 }
 .admin-content .data-table tbody td { border-bottom: 1px solid var(--border-subtle); }
-.admin-content .data-table tbody tr:hover,
-.admin-content .data-table tbody tr:nth-child(even):hover { background: var(--row-hover) !important; }
+/* table.data-table: as specific as app.css's dark-theme hover, which loads earlier */
+.admin-content table.data-table tbody tr:hover,
+.admin-content table.data-table tbody tr:nth-child(even):hover { background: var(--row-hover); }
 .admin-content .data-table tbody tr:hover td:first-child { box-shadow: none; }
-.admin-content .data-table tbody tr:has(input[type="checkbox"]:checked) { background: var(--row-selected) !important; }
+.admin-content .data-table tbody tr:has(input[type="checkbox"]:checked) { background: var(--row-selected); }
 
 .admin-content .data-table input[type="checkbox"] { accent-color: var(--accent-primary); }
 
 /* Row actions appear on hover or focus, like the mockup */
-.admin-content .data-table .row-nav-hint { opacity: 0; transition: opacity 120ms; }
-.admin-content .data-table tbody tr:hover .row-nav-hint,
-.admin-content .data-table .row-nav-hint:focus-visible { opacity: 1; }
+.admin-content .data-table .row-nav-hint {  transition: opacity 120ms; }
 
 .admin-content .data-table tfoot td {
   background: var(--surface-1);
@@ -544,7 +971,6 @@ th.c-money, th.c-number, th.c-percent, th.c-count { text-align: right; }
 .c-date time,
 .c-datetime time { color: var(--text-muted); }
 
-.c-boolean { text-align: center; }
 .c-check { color: var(--accent-primary); display: inline-flex; }
 
 /* Tones: enum badges, urgent dates, facet tab dots */
@@ -555,7 +981,7 @@ th.c-money, th.c-number, th.c-percent, th.c-count { text-align: right; }
   height: 20px;
   padding: 0 8px;
   border-radius: 10px;
-  border: 0 !important;
+  border: 0;
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
@@ -575,7 +1001,7 @@ th.c-money, th.c-number, th.c-percent, th.c-count { text-align: right; }
 .c-badge.tone-success { --tone-fg: var(--tone-success-fg); --tone-bg: var(--tone-success-bg); }
 .c-badge.tone-warning { --tone-fg: var(--tone-warning-fg); --tone-bg: var(--tone-warning-bg); }
 .c-badge.tone-danger  { --tone-fg: var(--tone-danger-fg);  --tone-bg: var(--tone-danger-bg); }
-.c-badge[class*="tone-"] { color: var(--tone-fg) !important; background: var(--tone-bg) !important; }
+.c-badge[class*="tone-"] { color: var(--tone-fg); background: var(--tone-bg); }
 
 time.tone-warning { color: var(--tone-warning-fg); font-weight: 500; }
 time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
@@ -651,16 +1077,11 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   bottom: 0;
   z-index: 20;
   width: min(var(--drawer-width), 100vw);
-  overflow-y: auto;
+
   background: var(--color-base-100);
   border-left: 1px solid var(--color-base-300);
   display: flex;
   flex-direction: column;
-}
-
-/* On a wide screen the list makes room, so the drawer sits beside it */
-@media (min-width: 1100px) {
-  .admin-content:has(.record-drawer) { padding-right: calc(var(--drawer-width) + 16px); }
 }
 
 .drawer-header {
@@ -676,10 +1097,9 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 .drawer-heading { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
 .drawer-title {
   margin: 0;
-  font-family: var(--font-display);
+
   font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+
   overflow-wrap: anywhere;
 }
 
@@ -767,7 +1187,7 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   font-size: 12px;
   background: var(--color-base-100);
   border: 1px solid var(--color-base-300);
-  color: var(--text-primary);
+
   box-shadow: none;
 }
 .bulk-bar .button:hover { border-color: var(--text-faint); }
@@ -786,8 +1206,6 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 .toolbar-filter select { height: 32px; }
 .bulk-bar kbd,
 .save-bar kbd {
-  font-family: var(--font-mono);
-  font-size: 11px;
   opacity: 0.75;
   background: none;
   border: 0;
@@ -808,17 +1226,15 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   align-items: center;
   gap: 12px;
   margin-top: 16px;
-  padding: 10px 16px;
+
   background: var(--color-base-100);
   border: 1px solid var(--color-base-300);
-  border-radius: var(--radius-box);
 }
 .save-state { display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted); }
 .save-state > span:last-child { color: var(--text-primary); font-weight: 500; }
 .save-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-base-300); }
 .save-dot.is-dirty { background: var(--wg-copper); }
-.save-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
-.save-kbd { margin-left: 4px; }
+.save-actions { display: flex; flex-wrap: wrap; gap: 8px;  }
 
 @media (max-width: 640px) {
   .admin-content .save-bar { flex-direction: column; align-items: stretch; }
@@ -853,8 +1269,9 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   min-height: 0;
   padding: 0 10px;
   font-size: 12px;
-  box-shadow: none !important;
+  box-shadow: none;
 }
+.entity-detail-page .page-header-actions .button:hover:not(:disabled) { box-shadow: none; }
 .entity-detail-page .sibling-nav { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-muted); }
 .entity-detail-page .sibling-nav .button { width: 30px; padding: 0; justify-content: center; }
 .entity-detail-page .sibling-nav-count { font-family: var(--font-mono); font-size: 11px; padding: 0 4px; }
@@ -876,8 +1293,8 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 .entity-detail-page .form-card,
 .entity-detail-page .form-section {
   background: none;
-  border: 0 !important;
-  border-radius: 0 !important;
+  border: 0;
+  border-radius: 0;
   box-shadow: none;
 }
 .entity-detail-page .form-card-body { padding: 0; }
@@ -885,8 +1302,8 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 .entity-detail-page .form-meta { display: none; }   /* the asterisks say it */
 .entity-detail-page .form-section {
   margin: 0;
-  padding: 14px 0 16px !important;
-  border-top: 1px solid var(--color-base-300) !important;
+  padding: 14px 0 16px;
+  border-top: 1px solid var(--color-base-300);
   gap: 12px;
 }
 .entity-detail-page .form-section-title {
@@ -921,7 +1338,7 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   width: 22px;
   height: 22px;
   border: 0;
-  background: none !important;
+  background: none;
   color: var(--text-muted);
 }
 
@@ -938,20 +1355,22 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   color: var(--text-muted);
 }
 .entity-detail-page .form-field .required { color: var(--accent-primary); margin-left: 2px; }
-.entity-detail-page .form-field .form-control {
-  height: 32px !important;
-  min-height: 0 !important;
-  padding: 0 10px !important;
+.entity-detail-page .form-field :is(input, select, textarea).form-control {
+  height: 32px;
+  min-height: 0;
+  padding: 0 10px;
   font-size: 13px;
-  border: 1px solid var(--color-base-300) !important;
-  border-radius: 4px !important;
-  background: var(--color-base-100) !important;
-  box-shadow: none !important;
+  border: 1px solid var(--color-base-300);
+  border-radius: 4px;
+  background: var(--color-base-100);
+  box-shadow: none;
 }
-.entity-detail-page .form-field textarea.form-control { height: auto !important; min-height: 72px !important; padding: 6px 10px !important; }
-.entity-detail-page .form-field .form-control:focus {
-  border-color: var(--accent-primary) !important;
-  box-shadow: 0 0 0 3px var(--accent-primary-light) !important;
+.entity-detail-page .form-field textarea.form-control { height: auto; min-height: 72px; padding: 6px 10px; }
+/* The form fields' hover border (legacy.css) does not apply here */
+.entity-detail-page .form-field :is(input, select, textarea).form-control:hover { border-color: var(--color-base-300); }
+.entity-detail-page .form-field :is(input, select, textarea).form-control:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-light);
   outline: none;
 }
 .entity-detail-page .form-field .form-control[readonly],
@@ -1012,8 +1431,9 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   min-height: 0;
   padding: 0 12px;
   font-size: 13px;
-  box-shadow: none !important;
+  box-shadow: none;
 }
+.save-bar .button:hover:not(:disabled) { box-shadow: none; }
 
 .save-bar .save-hint {
   flex-basis: 100%;
@@ -1067,11 +1487,6 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 .admin-topbar-title {
   flex: 1;
   min-width: 0;
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
 }
 .admin-topbar-actions { display: flex; align-items: center; gap: 6px; }
 .admin-topbar > .sidebar-toggle,
@@ -1157,8 +1572,9 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   height: 32px;
   min-height: 0;
   font-size: 13px;
-  box-shadow: none !important;
+  box-shadow: none;
 }
+.admin-content .toolbar-actions :is(.button, .icon-button):hover:not(:disabled) { box-shadow: none; }
 .admin-content .toolbar-actions .icon-button { width: 32px; padding: 0; }
 
 /* View menu: density and columns */
@@ -1167,8 +1583,7 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 .view-menu > summary::-webkit-details-marker { display: none; }
 .admin-content .view-menu-button {
   width: 32px;
-  height: 32px;
-  min-height: 0;
+
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -1300,7 +1715,6 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   white-space: nowrap;
 }
 
-
 .dashboard-activity {
   display: grid; gap: var(--space-3);
   padding: var(--space-4);
@@ -1372,7 +1786,7 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
 .admin-content .rights-list-page .data-table td { position: static; box-shadow: none; }
 /* A module's heading row in a list grouped by module */
 .admin-content .data-table tbody tr.list-group-row,
-.admin-content .data-table tbody tr.list-group-row:hover { background: var(--surface-1) !important; }
+.admin-content .data-table tbody tr.list-group-row:hover { background: var(--surface-1); }
 .admin-content .data-table tbody tr.list-group-row th {
   height: auto;
   padding-block: 6px;
@@ -1401,7 +1815,7 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
   .admin-content .data-table td { height: auto; }
 
   .admin-content:has(> .entity-list-page) {
-    padding: 12px !important;
+    padding: 12px;
     /* Focus and keyboard scrolling stop above the sticky pager */
     scroll-padding-bottom: var(--pager-height);
   }
@@ -1426,11 +1840,13 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
     position: relative;
     margin: 0 0 8px;
     padding: 10px 36px 10px 44px;
-    border: 1px solid var(--color-base-300) !important;
+    border: 1px solid var(--color-base-300);
     border-radius: var(--radius-box);
     background: var(--color-base-100);
     box-shadow: none;
   }
+  .admin-content .entity-list-page .data-table tbody tr:nth-child(n):hover { background: var(--row-hover); }
+  .admin-content .entity-list-page .data-table tbody tr:nth-child(n):has(input[type="checkbox"]:checked) { background: var(--row-selected); }
   .admin-content .entity-list-page .data-table tbody tr.row-cursor,
   .admin-content .entity-list-page .data-table tbody tr.row-open { box-shadow: inset 2px 0 0 var(--accent-primary); }
   .admin-content .entity-list-page .data-table tbody tr td:first-child { box-shadow: none; }
@@ -1448,7 +1864,7 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
     background: none;
     font-size: 13px;
     line-height: 20px;
-    text-align: left !important;
+    text-align: left;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1525,8 +1941,8 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
     display: block;
     margin: 12px 0 6px;
     padding: 0;
-    border: 0 !important;
-    background: none !important;
+    border: 0;
+    background: none;
   }
   .admin-content :is(.entity-list-page, .rights-page) .data-table tbody tr.list-group-row th { display: block; padding: 0; border: 0; background: none; }
   .admin-content .rights-list-page .data-table tbody td.c-title code { font-size: 14px; }
@@ -1571,7 +1987,7 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
     justify-content: space-between;
     gap: 4px 8px;
     min-height: var(--pager-height);
-    padding: 6px 10px;
+
     border-radius: var(--radius-box);
   }
 }
