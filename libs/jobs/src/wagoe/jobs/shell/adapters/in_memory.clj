@@ -21,6 +21,7 @@
    - stats: Map of queue-name -> statistics"
   (:require [wagoe.jobs.ports :as ports]
             [wagoe.jobs.core.job :as job]
+            [wagoe.jobs.core.outcome :as outcome]
             [clojure.tools.logging :as log])
   (:import [java.time Instant]))
 
@@ -36,19 +37,23 @@
             stats])       ; atom: queue-name -> {:processed :failed :succeeded :durations}
 
 (defn- create-state
-  "Create initial state atoms."
+  "Create initial state atoms. `:outcomes`, job-type -> its record
+   (`IJobOutcomes`), and `:unique-keys`, unique key -> the job holding it, ride
+   along outside the record's fields so its constructor keeps its arity."
   []
-  (->InMemoryState
-   (atom {})                    ; jobs
-   (atom {})                    ; queues
-   (atom (sorted-set-by         ; scheduled (sorted by execute-at)
-          (fn [a b]
-            (let [time-cmp (compare (:execute-at a) (:execute-at b))]
-              (if (zero? time-cmp)
-                (compare (:job-id a) (:job-id b))
-                time-cmp)))))
-   (atom [])                    ; failed
-   (atom {})))                  ; stats
+  (assoc (->InMemoryState
+          (atom {})                    ; jobs
+          (atom {})                    ; queues
+          (atom (sorted-set-by         ; scheduled (sorted by execute-at)
+                 (fn [a b]
+                   (let [time-cmp (compare (:execute-at a) (:execute-at b))]
+                     (if (zero? time-cmp)
+                       (compare (:job-id a) (:job-id b))
+                       time-cmp)))))
+          (atom [])                    ; failed
+          (atom {}))                   ; stats
+         :outcomes (atom {})
+         :unique-keys (atom {})))
 
 ;; =============================================================================
 ;; Queue Operations
@@ -177,23 +182,43 @@
 ;; Job Queue Implementation
 ;; =============================================================================
 
+(defn- claim-unique-key!
+  "True when `job` carries no :unique-key, or holds it now: it was free, or
+   this job held it already (a retry)."
+  [state job]
+  (if-let [k (some-> (:unique-key job) str)]
+    (let [id (:id job)]
+      (= id (get (swap! (:unique-keys state) #(if (contains? % k) % (assoc % k id))) k)))
+    true))
+
+(defn- release-unique-key!
+  "Free the key `job-id` holds, unless the job is queued or scheduled again."
+  [state job-id]
+  (when-let [k (some-> (get @(:jobs state) job-id) :unique-key str)]
+    (when-not (or (some #(= job-id (:job-id %)) @(:scheduled state))
+                  (some #(some #{job-id} %) (mapcat vals (vals @(:queues state)))))
+      (swap! (:unique-keys state) #(if (= job-id (get % k)) (dissoc % k) %)))))
+
 (defrecord InMemoryJobQueue [state]
   ports/IJobQueue
 
   (enqueue-job! [_ queue-name job]
-    (let [job-id (:id job)]
-      ;; Store job
-      (swap! (:jobs state) assoc job-id job)
+    (if-not (claim-unique-key! state job)
+      (do (log/info "Job refused: its unique key is held" {:job-id (:id job) :unique-key (:unique-key job)})
+          nil)
+      (let [job-id (:id job)]
+        ;; Store job
+        (swap! (:jobs state) assoc job-id job)
 
-      ;; Add to appropriate queue
-      (if (:execute-at job)
-        ;; Scheduled job: add to sorted set
-        (add-to-scheduled! (:scheduled state) job-id (:execute-at job))
-        ;; Immediate job: add to priority queue
-        (add-to-queue! (:queues state) queue-name (:priority job) job-id))
+        ;; Add to appropriate queue
+        (if (:execute-at job)
+          ;; Scheduled job: add to sorted set
+          (add-to-scheduled! (:scheduled state) job-id (:execute-at job))
+          ;; Immediate job: add to priority queue
+          (add-to-queue! (:queues state) queue-name (:priority job) job-id))
 
-      (log/info "Enqueued job" {:job-id job-id :queue queue-name :priority (:priority job)})
-      job-id))
+        (log/info "Enqueued job" {:job-id job-id :queue queue-name :priority (:priority job)})
+        job-id)))
 
   (schedule-job! [this queue-name job execute-at]
     (let [scheduled-job (assoc job :execute-at execute-at)]
@@ -206,7 +231,8 @@
   ;; In-memory jobs live in-process, so a crash loses the whole queue anyway;
   ;; there is no cross-process in-flight list to track. ack/reclaim are no-ops
   ;; that satisfy the protocol so worker code is adapter-agnostic.
-  (ack-job! [_ _queue-name _worker-id _job-id]
+  (ack-job! [_ _queue-name _worker-id job-id]
+    (release-unique-key! state job-id)
     true)
 
   (reclaim-abandoned-jobs! [_ _queue-name]
@@ -221,6 +247,8 @@
       (swap! (:jobs state) dissoc job-id)
       (remove-from-scheduled! (:scheduled state) job-id)
       (remove-job-from-queues! (:queues state) job-id)
+      (when-let [k (some-> (:unique-key job) str)]
+        (swap! (:unique-keys state) #(if (= job-id (get % k)) (dissoc % k) %)))
       ;; false, not nil: the port says "true if deleted, false if not found",
       ;; and a caller writing `(if (delete-job! …) …)` cannot tell the two
       ;; apart but one written with `false?` can.
@@ -351,6 +379,16 @@
         retry-job))))
 
 (extend-type InMemoryJobStore
+  ports/IJobOutcomes
+  (record-outcome! [{:keys [state]} o]
+    (swap! (:outcomes state) update (:job-type o) outcome/after-outcome o)
+    nil)
+  (job-outcome [{:keys [state]} job-type]
+    (get @(:outcomes state) job-type))
+  (job-outcomes [{:keys [state]}]
+    @(:outcomes state)))
+
+(extend-type InMemoryJobStore
   ports/IDeadLetterRetention
   (purge-dead-letters-before! [{:keys [state]} cutoff]
     (let [jobs @(:jobs state)
@@ -478,7 +516,9 @@
                                     (compare (:job-id a) (:job-id b))
                                     time-cmp)))))
   (reset! (:failed state) [])
-  (reset! (:stats state) {}))
+  (reset! (:stats state) {})
+  (reset! (:outcomes state) {})
+  (reset! (:unique-keys state) {}))
 
 (defn get-all-jobs
   "Get all jobs in state. Useful for testing.

@@ -84,3 +84,9 @@
   (testing "whitespace-insensitive — trimmed inputs produce same hash"
     (is (= (sut/query-hash {:city "Amsterdam"})
            (sut/query-hash {:city "  Amsterdam  "})))))
+
+(deftest ^:unit query-hash-per-provider-restriction-test
+  (let [q {:postcode "1012JS" :house-number 1}]
+    (is (= (sut/query-hash q) (sut/query-hash q nil)))
+    (is (not= (sut/query-hash q) (sut/query-hash q #{:pdok})))
+    (is (= (sut/query-hash q [:pdok :google]) (sut/query-hash q #{:google :pdok})))))

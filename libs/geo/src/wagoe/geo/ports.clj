@@ -65,3 +65,21 @@
 
      Returns:
        nil (side-effect only)."))
+
+;; =============================================================================
+;; GeoServiceProtocol
+;; =============================================================================
+
+(defprotocol GeoServiceProtocol
+  "The :wagoe/geo-service component, for an app that calls it through a port
+   rather than requiring wagoe.geo.shell.service.
+
+   opts:
+     :only - provider keywords this call may use, e.g. #{:pdok}; the configured
+             order is kept. Absent: every configured provider."
+
+  (lookup [this query opts]
+    "Forward geocode an AddressQuery, cache first. GeoResult or nil.")
+
+  (reverse-lookup [this point opts]
+    "Reverse geocode a GeoPoint. GeoResult or nil."))

@@ -36,6 +36,7 @@
    [:retry-count {:optional true} [:int {:min 0}]]
    [:max-retries {:optional true} [:int {:min 0 :max 10}]]
    [:execute-at {:optional true} inst?]
+   [:unique-key {:optional true} :string]
    [:created-at inst?]
    [:updated-at inst?]
    [:started-at {:optional true} inst?]
@@ -60,6 +61,7 @@
    [:priority {:optional true} Priority]
    [:max-retries {:optional true} [:int {:min 0 :max 10}]]
    [:execute-at {:optional true} inst?]
+   [:unique-key {:optional true} :string]
    [:metadata {:optional true} [:map-of keyword? any?]]])
 
 ;; =============================================================================

@@ -4,6 +4,7 @@
    blocks does not mean remembering which one wanted which word (BOU-436)."
   (:require [clojure.test :refer [deftest is testing]]
             [integrant.core :as ig]
+            [wagoe.jobs.ports :as ports]
             [wagoe.jobs.shell.adapters.in-memory :as mem]
             [wagoe.jobs.shell.module-wiring :as wiring]
             [wagoe.platform.ports.privacy :as privacy]))
@@ -63,3 +64,39 @@
   (let [workers #(get-in (wiring/ig-config {} {:enabled %}) [:components :wagoe/job-workers :tenant-runner])]
     (is (= (ig/ref :wagoe/job-tenant-runner) (workers #{:wagoe/jobs :wagoe/tenant})))
     (is (nil? (workers #{:wagoe/jobs})))))
+
+(defn on-outcome [_])
+
+(deftest ^:unit the-workers-take-the-outcome-hook-from-config
+  (is (= 'my.app/hook
+         (get-in (wiring/ig-config {:on-outcome 'my.app/hook} {:enabled #{:wagoe/jobs}})
+                 [:components :wagoe/job-workers :on-outcome])))
+  (is (= [] (ig/init-key :wagoe/job-workers {:workers    {:count 0}
+                                             :on-outcome `on-outcome})))
+  (testing "a symbol that resolves to nothing fails the boot"
+    (let [e (try (ig/init-key :wagoe/job-workers {:workers {:count 0} :on-outcome 'no.such/hook})
+                 (catch clojure.lang.ExceptionInfo e e))]
+      (is (= :configuration-error (:type (ex-data e)))))))
+
+(deftest ^:unit expect-success-gives-the-scheduler-a-watch
+  (let [runtime (ig/init-key :wagoe/jobs-runtime {:provider :memory})]
+    (is (= {:nightly-report 26}
+           (get-in (wiring/ig-config {:expect-success {:nightly-report 26}} {:enabled #{:wagoe/jobs}})
+                   [:components :wagoe/job-scheduler :expect-success])))
+    (let [s (ig/init-key :wagoe/job-scheduler {:runtime runtime :expect-success {:nightly-report 26}})]
+      (try (is (fn? (:watch s)))
+           (finally (ig/halt-key! :wagoe/job-scheduler s))))
+    (testing "the watch checks only job types with a handler"
+      (let [now (java.time.Instant/now)
+            s   (ig/init-key :wagoe/job-scheduler {:runtime        runtime
+                                                   :registry       (ig/init-key :wagoe/job-registry {:handler-maps []})
+                                                   :expect-success {:nightly-report 26}})]
+        (ports/record-outcome! (:store runtime) {:job-type :nightly-report :outcome :success :started-at now
+                                                 :finished-at now :duration-ms 1})
+        (try (is (= [] ((:watch s) (.plus now (java.time.Duration/ofHours 27)))))
+             (finally (ig/halt-key! :wagoe/job-scheduler s)))))
+    (testing "hours that are not a positive number fail the boot"
+      (doseq [bad [{:nightly-report 0} {:nightly-report "26"} [:nightly-report 26] 26]]
+        (let [e (try (ig/init-key :wagoe/job-scheduler {:runtime runtime :expect-success bad})
+                     (catch clojure.lang.ExceptionInfo e e))]
+          (is (= :validation-error (:type (ex-data e))) (pr-str bad)))))))

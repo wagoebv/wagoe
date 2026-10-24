@@ -14,7 +14,7 @@ automatic retries with exponential backoff, and multi-tenant support.
 | Pure functions: job creation, state transitions, retry logic
 
 | `wagoe.jobs.ports`
-| Protocols: `IJobQueue`, `IJobStore`, `IJobStats`, `IJobWorker`, `IJobRegistry`, `IIdempotencyStore`, `IRecurringState`
+| Protocols: `IJobQueue`, `IJobStore`, `IJobStats`, `IJobOutcomes`, `IJobWorker`, `IJobRegistry`, `IIdempotencyStore`, `IRecurringState`
 
 | `wagoe.jobs.core.cron`
 | Pure cron parsing and next-run calculation
@@ -69,6 +69,22 @@ automatic retries with exponential backoff, and multi-tenant support.
 ----
 
 Priority levels: `:critical`, `:high`, `:default`, `:low`, `:bulk`.
+
+=== One job at a time
+
+Give a job a `:unique-key` and the queue refuses another job with that key
+while the first is queued, scheduled or running: `enqueue-job!` returns nil
+instead of the job id. A retry keeps the key; it is free once the job succeeds
+or fails for good.
+
+[source,clojure]
+----
+(if (ports/enqueue-job! job-queue :default
+                        (job/create-job {:job-type :geo/refresh :unique-key "geo/refresh"}
+                                        (random-uuid) (java.time.Instant/now)))
+  :started
+  :already-running)
+----
 
 == Worker pool
 
@@ -147,6 +163,60 @@ nil for a duplicate. Claims last a week unless `:ttl-ms` says otherwise.
 The store behind it, `:wagoe/idempotency-store`, implements
 `wagoe.jobs.ports/IIdempotencyStore` (`claim-key!`, `release-key!`) on the
 jobs provider's backend, for any module to use.
+
+== Job outcomes
+
+The worker reports how every run of a handler ended, for every job type,
+Wagoe's own included. Nothing to wrap.
+
+[source,clojure]
+----
+:wagoe/jobs {:provider :db
+             :on-outcome my.app.jobs/on-outcome   ; optional, (fn [outcome])
+             :report-failures-every-ms 3600000    ; default: one hour
+             :expect-success {:nightly-report 26}} ; job type -> hours
+----
+
+Each outcome goes to:
+
+* *The job store* (`IJobOutcomes`, on memory, db and Redis): one record per job
+  type, so a watcher needs no table of its own.
++
+[source,clojure]
+----
+(ports/job-outcome (:wagoe/job-store system) :reports/generate)
+;; => {:job-type :reports/generate :last-outcome :failure
+;;     :last-started-at #inst ... :last-duration-ms 840
+;;     :last-succeeded-at #inst ... :last-failed-at #inst ...
+;;     :last-error "Connection refused" :failures-since-success 3}
+----
+* *`:wagoe/metrics`*: counter `jobs.runs` (tags `job-type`, `outcome`),
+  histogram `jobs.run.duration` in seconds, and gauge `jobs.last-success`, the
+  epoch second of the last success. Tagged `job-type`.
+* *`:wagoe/error-reporting`*: the first failure after a success, then one per
+  `:report-failures-every-ms` while the type keeps failing. Across nodes: the
+  throttle lives in `:wagoe/idempotency-store`.
+* *`:on-outcome`*: `{:job-id :job-type :queue :attempt :outcome :started-at
+  :finished-at :duration-ms}`, and on a failure `:error` (redacted, as stored)
+  and `:retrying?`.
+
+With no metrics or error tracker configured both are no-ops. A hook or store
+that throws is logged; the job's own result stands. A handler that throws an
+`Error`, such as an `AssertionError`, is a failed run like any other.
+
+`:expect-success` names job types that must succeed within so many hours. The
+scheduler checks every minute and reports a late one to the error tracker,
+through the same throttle as its failures. A type that never ran, or never
+succeeded, is not late: its failures are reported already. Nor is a type this
+node has no handler for, such as one switched off by config. A report the
+tracker refuses is logged and tried again on the next check.
+
+To list only the job types this node has handlers for:
+
+[source,clojure]
+----
+(outcomes/registered-outcomes job-store job-registry) ; wagoe.jobs.shell.outcomes
+----
 
 == Retry behaviour
 

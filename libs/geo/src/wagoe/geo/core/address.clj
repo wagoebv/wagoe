@@ -44,15 +44,21 @@
 (defn query-hash
   "Compute a SHA-256 hex digest of the normalised address query.
 
-   Used as the primary key in the geo_cache table.
+   Used as the primary key in the geo_cache table. With `providers`, the names a
+   lookup was restricted to, the key is that restriction's own, so an answer
+   from a provider left out is never served for it.
 
    Args:
-     query - AddressQuery map
+     query     - AddressQuery map
+     providers - optional collection of provider keywords
 
    Returns:
      64-character lowercase hex string."
-  [query]
-  (let [normalised (normalize-query query)
-        digest     (MessageDigest/getInstance "SHA-256")
-        bytes      (.digest digest (.getBytes normalised StandardCharsets/UTF_8))]
-    (apply str (map #(format "%02x" %) bytes))))
+  ([query]
+   (query-hash query nil))
+  ([query providers]
+   (let [normalised (cond-> (normalize-query query)
+                      (seq providers) (str " | " (str/join "," (sort (map name providers)))))
+         digest     (MessageDigest/getInstance "SHA-256")
+         bytes      (.digest digest (.getBytes ^String normalised StandardCharsets/UTF_8))]
+     (apply str (map #(format "%02x" %) bytes)))))

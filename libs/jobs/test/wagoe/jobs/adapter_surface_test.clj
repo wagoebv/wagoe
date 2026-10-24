@@ -513,6 +513,35 @@
        (is (= [(:id a)] (map :id (ports/find-jobs s {:status :running})))
            (str label ": :status"))))))
 
+(deftest ^:integration a-job-types-outcomes-are-kept-alike
+  (each-store
+   (fn [s label]
+     (let [t      (Instant/parse "2026-10-24T10:00:00Z")
+           run    (fn [outcome secs & {:as more}]
+                    (merge {:job-id (random-uuid) :job-type :reports/generate :queue :default
+                            :attempt 1 :outcome outcome :started-at (.plusSeconds t secs)
+                            :finished-at (.plusSeconds t (inc secs)) :duration-ms 1000}
+                           more))]
+       (is (nil? (ports/job-outcome s :reports/generate)) (str label ": before the first run"))
+       (ports/record-outcome! s (run :success 0))
+       (ports/record-outcome! s (run :failure 10 :error {:message "boom"}))
+       (ports/record-outcome! s (run :failure 20 :error {:message "again"}))
+       (is (= {:job-type               :reports/generate
+               :last-outcome           :failure
+               :last-started-at        (.plusSeconds t 20)
+               :last-duration-ms       1000
+               :last-succeeded-at      (.plusSeconds t 1)
+               :last-failed-at         (.plusSeconds t 21)
+               :last-error             "again"
+               :failures-since-success 2}
+              (ports/job-outcome s :reports/generate))
+           (str label ": after a success and two failures"))
+       (ports/record-outcome! s (run :success 30))
+       (is (zero? (:failures-since-success (ports/job-outcome s :reports/generate)))
+           (str label ": a success resets the count"))
+       (is (= #{:reports/generate} (set (keys (ports/job-outcomes s))))
+           (str label ": job-outcomes"))))))
+
 ;; =============================================================================
 ;; Queue and store together — where the backends disagreed
 ;; =============================================================================
@@ -617,3 +646,61 @@
          (ports/reclaim-abandoned-jobs! queue :stolen)
          (is (= (:id j) (:id (ports/dequeue-job! queue :stolen "fast")))
              (str label ": a late ack from the previous owner destroyed the job")))))))
+
+;; =============================================================================
+;; Unique keys (BOU-834)
+;; =============================================================================
+
+(deftest ^:integration a-unique-key-admits-one-job-until-it-is-done
+  (each-backend
+   (fn [q label]
+     (let [first-job  (assoc (job) :unique-key "nightly")
+           second-job (assoc (job) :unique-key "nightly")
+           other      (assoc (job :queue :elsewhere) :unique-key "other")]
+       (is (= (:id first-job) (ports/enqueue-job! q :default first-job)) (str label ": setup"))
+       (is (nil? (ports/enqueue-job! q :default second-job))
+           (str label ": a second job was let in while the first was queued"))
+       (is (= (:id other) (ports/enqueue-job! q :elsewhere other))
+           (str label ": another key was refused"))
+       (is (= (:id first-job) (:id (ports/dequeue-job! q :default "w1"))) (str label ": setup"))
+       (is (nil? (ports/enqueue-job! q :default second-job))
+           (str label ": a second job was let in while the first ran"))
+       ;; A retry, as the worker does it: the replacement first, then the ack.
+       (is (= (:id first-job)
+              (ports/enqueue-job! q :default (assoc first-job :retry-count 1
+                                                    :execute-at (.minusSeconds (Instant/now) 1))))
+           (str label ": the job's own retry was refused"))
+       (ports/ack-job! q :default "w1" (:id first-job))
+       (is (nil? (ports/enqueue-job! q :default second-job))
+           (str label ": a second job was let in while the first waited for its retry"))
+       (ports/process-scheduled-jobs! q)
+       (is (= (:id first-job) (:id (ports/dequeue-job! q :default "w2"))) (str label ": setup"))
+       (ports/ack-job! q :default "w2" (:id first-job))
+       (is (= (:id second-job) (ports/enqueue-job! q :default second-job))
+           (str label ": the key stayed held after its job was done"))))))
+
+(deftest ^:integration deleting-a-job-frees-its-unique-key
+  (each-backend
+   (fn [q label]
+     (let [a (assoc (job) :unique-key "k")
+           b (assoc (job) :unique-key "k")]
+       (ports/enqueue-job! q :default a)
+       (ports/delete-job! q (:id a))
+       (is (= (:id b) (ports/enqueue-job! q :default b))
+           (str label ": a deleted job still held its key"))))))
+
+(deftest ^:integration a-late-ack-does-not-free-a-key-someone-else-holds
+  (each-backend
+   {:lease-ms 1}
+   (fn [q label]
+     (if (contains? known-differences (str label "/reclaim"))
+       (is (= {:reclaimed 0} (ports/reclaim-abandoned-jobs! q :stolen)))
+       (let [j (assoc (job :queue :stolen) :unique-key "k")]
+         (ports/enqueue-job! q :stolen j)
+         (ports/dequeue-job! q :stolen "slow")
+         (Thread/sleep 50)
+         (ports/reclaim-abandoned-jobs! q :stolen)
+         (is (= (:id j) (:id (ports/dequeue-job! q :stolen "fast"))) (str label ": setup"))
+         (ports/ack-job! q :stolen "slow" (:id j))
+         (is (nil? (ports/enqueue-job! q :stolen (assoc (job :queue :stolen) :unique-key "k")))
+             (str label ": the previous owner's late ack freed the key")))))))

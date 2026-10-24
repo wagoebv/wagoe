@@ -37,8 +37,10 @@
             [wagoe.platform.ports.database :as db-ports]
             [next.jdbc.result-set :as rs]
             [clojure.string :as str]
+            [wagoe.core.utils.text :as text]
             [clojure.tools.logging :as log]
             [wagoe.jobs.core.job :as job]
+            [wagoe.jobs.core.outcome :as outcome]
             [wagoe.jobs.shell.adapters.codec :as codec]
             [wagoe.jobs.ports :as ports])
   (:import [java.sql Timestamp]
@@ -91,7 +93,19 @@
                         updated_at   %s NOT NULL,
                         payload      %s NOT NULL)" id ts payload)])
   (db/create-index-if-not-exists! ctx "ix_job_store_filters" :job_store [:status :job_type :queue])
-  (db/create-index-if-not-exists! ctx "ix_job_store_dead_letter" :job_store [:dead_letter :updated_at]))
+  (db/create-index-if-not-exists! ctx "ix_job_store_dead_letter" :job_store [:dead_letter :updated_at])
+  ;; IJobOutcomes: one row per job type. Times are epoch millis, as in
+  ;; job_recurring, so no driver turns them into a local date-time.
+  (execute! (:datasource ctx)
+            [(format "CREATE TABLE IF NOT EXISTS job_outcomes (
+                        job_type               VARCHAR(255) PRIMARY KEY,
+                        last_outcome           VARCHAR(20) NOT NULL,
+                        last_started_ms        BIGINT NOT NULL,
+                        last_duration_ms       BIGINT NOT NULL,
+                        last_succeeded_ms      BIGINT NULL,
+                        last_failed_ms         BIGINT NULL,
+                        last_error             VARCHAR(%d) NULL,
+                        failures_since_success BIGINT NOT NULL)" outcome/max-error-length)]))
 
 (defn create-job-store-table!
   "Create the `job_store` table + its indexes if absent, on H2, PostgreSQL or
@@ -99,6 +113,16 @@
   [ds]
   (let [ctx (db/context-of ds)]
     (create-job-store-table* ctx (ddl-types ctx))))
+
+(defn- column-names
+  "`table`'s lower-case column names, from an empty result's metadata: the
+   platform's introspection expects its own datasource, and this may be any."
+  [ds table]
+  (with-open [conn (jdbc/get-connection ds)
+              stmt (.createStatement conn)
+              rs   (.executeQuery stmt (str "SELECT * FROM " table " WHERE 1 = 0"))]
+    (let [md (.getMetaData rs)]
+      (into #{} (map #(text/lower-case (.getColumnName md (int %)))) (range 1 (inc (.getColumnCount md)))))))
 
 (defn create-jobs-table!
   "Create the `job_queue` table + ready-scan index if absent, and `job_store`
@@ -120,9 +144,16 @@
                              locked_by     VARCHAR(255),
                              locked_at     %s NULL,
                              payload       %s NOT NULL,
-                             created_at    %s NOT NULL)" id ts ts payload ts)])
+                             created_at    %s NOT NULL,
+                             unique_key    VARCHAR(255) NULL)" id ts ts payload ts)])
     (db/create-index-if-not-exists! ctx "ix_job_queue_ready" :job_queue
-                                    [:queue :status :priority_rank :created_at])))
+                                    [:queue :status :priority_rank :created_at])
+    ;; A table from before BOU-834 lacks the column. Every engine lets a unique
+    ;; index hold many NULLs, so only jobs that carry a key are constrained.
+    (db/add-columns-if-not-exist! ctx :job_queue [[:unique_key "VARCHAR(255) NULL"]]
+                                  (column-names ds "job_queue"))
+    (db/create-index-if-not-exists! ctx "ux_job_queue_unique_key" :job_queue [:unique_key]
+                                    {:unique? true})))
 
 (defn- kw-name [x] (when x (name x)))
 
@@ -186,9 +217,27 @@
                                       "a datasource would autocommit and reopen the "
                                       "dual-write window")}))))
 
+(defn- duplicate-key? [^java.sql.SQLException e]
+  (= :unique (:kind (constraint/violation {:sql-state  (.getSQLState e)
+                                           :error-code (.getErrorCode e)
+                                           :message    (ex-message e)}))))
+
+(defn- insert-queue-row!
+  "INSERT `job`'s queue row; false when its :unique-key is held. In a savepoint
+   inside a caller's transaction: PostgreSQL refuses every later statement of
+   a transaction after a failed one."
+  [connectable sqlv unique?]
+  (try
+    (db/in-savepoint (when (open-transaction? connectable) connectable)
+                     #(execute-one! connectable sqlv))
+    true
+    (catch java.sql.SQLException e
+      (if (and unique? (duplicate-key? e)) false (throw e)))))
+
 (defn- insert-job!
   "Write a job row using the given `connectable` — a datasource, a connection,
-   or an open `next.jdbc` transaction. Returns the job id.
+   or an open `next.jdbc` transaction. Returns the job id, or nil when the
+   job's :unique-key is held by a job still in the queue.
 
    An upsert, not a plain INSERT, because a worker re-enqueues a job it still
    holds: on a retry or a re-route the row exists and is `processing`, and this
@@ -216,24 +265,31 @@
                          WHERE id = ?"
                       (name queue-name) (priority-rank (:priority job)) status
                       (ts (:execute-at job)) payload job-id]))]
-    (when (zero? updated)
-      (execute-one!
-       connectable
-       ["INSERT INTO job_queue
-           (id, queue, priority_rank, status, execute_at, payload, created_at)
-           VALUES (?,?,?,?,?,?,?)"
-        job-id (name queue-name) (priority-rank (:priority job)) status
-        (ts (:execute-at job))
-        payload
-        (ts (:created-at job))]))
-    ;; And into the store, on the same connectable — so a transactional enqueue
-    ;; commits the history row with the business change too. Without this the
-    ;; store never saw a job it had not been handed directly: the worker's
-    ;; `update-job-status!` found nothing, `ack-job!` deleted the queue row, and
-    ;; a completed job left no history while a failed one never dead-lettered
-    ;; (BOU-418 review).
-    (upsert-job! connectable (assoc job :queue queue-name) nil)
-    job-id))
+    ;; An UPDATE first, so a job re-enqueued by the worker keeps its key: the
+    ;; row, and with it the key, goes only when an ack deletes it.
+    (if (and (zero? updated)
+             (not (insert-queue-row!
+                   connectable
+                   ["INSERT INTO job_queue
+                       (id, queue, priority_rank, status, execute_at, payload, created_at, unique_key)
+                       VALUES (?,?,?,?,?,?,?,?)"
+                    job-id (name queue-name) (priority-rank (:priority job)) status
+                    (ts (:execute-at job))
+                    payload
+                    (ts (:created-at job))
+                    (some-> (:unique-key job) str)]
+                   (some? (:unique-key job)))))
+      (do (log/info "Job refused: its unique key is held" {:job-id job-id :unique-key (:unique-key job)})
+          nil)
+      (do
+        ;; And into the store, on the same connectable — so a transactional enqueue
+        ;; commits the history row with the business change too. Without this the
+        ;; store never saw a job it had not been handed directly: the worker's
+        ;; `update-job-status!` found nothing, `ack-job!` deleted the queue row, and
+        ;; a completed job left no history while a failed one never dead-lettered
+        ;; (BOU-418 review).
+        (upsert-job! connectable (assoc job :queue queue-name) nil)
+        job-id))))
 
 (defrecord DbJobQueue [ds lease-ms]
   ;; Implemented here and NOT by the Redis / in-memory adapters: outbox
@@ -242,7 +298,7 @@
 
   (enqueue-in-tx! [_ tx queue-name job]
     (assert-open-transaction! tx queue-name)
-    (let [job-id (insert-job! tx queue-name job)]
+    (when-let [job-id (insert-job! tx queue-name job)]
       (log/info "Enqueued job in caller transaction"
                 {:job-id job-id :queue queue-name})
       job-id))
@@ -253,7 +309,7 @@
     ;; :scheduled? distinguishes an immediate enqueue from schedule-job!, which
     ;; funnels through here too. It was lost when the INSERT moved into
     ;; insert-job!, leaving the two indistinguishable in logs (BOU-252).
-    (let [job-id (insert-job! ds queue-name job)]
+    (when-let [job-id (insert-job! ds queue-name job)]
       (log/info "Enqueued job" {:job-id     job-id
                                 :queue      queue-name
                                 :scheduled? (some? (:execute-at job))})
@@ -470,11 +526,6 @@
 ;; Times are epoch-millis BIGINTs read from the database clock, so replicas
 ;; with skewed clocks agree on who holds the lease and which claim expired.
 
-(defn- duplicate-key? [^java.sql.SQLException e]
-  (= :unique (:kind (constraint/violation {:sql-state  (.getSQLState e)
-                                           :error-code (.getErrorCode e)
-                                           :message    (ex-message e)}))))
-
 (defn- insert-unless-present!
   "INSERT `sqlv`; false instead of an exception when the row already exists."
   [ds sqlv]
@@ -551,3 +602,64 @@
    `create-recurring-tables!` first."
   [ds]
   (->DbRecurringState ds (lease/create-lease ds :job_ticker_lease "ticker")))
+
+;; =============================================================================
+;; Job outcomes (IJobOutcomes)
+;; =============================================================================
+
+(defn- job-type-key [job-type] (str (symbol job-type)))
+
+(defn- epoch-ms [^Instant t] (some-> t .toEpochMilli))
+
+(defn- update-outcome!
+  "One UPDATE: the failure count goes up or back to 0 in the statement itself,
+   so concurrent workers need no lock or read. The number of rows it changed."
+  [ds {:keys [job-type outcome started-at finished-at duration-ms] :as o}]
+  (::jdbc/update-count
+   (execute-one!
+    ds
+    (if (= :success outcome)
+      ["UPDATE job_outcomes SET last_outcome = 'success', last_started_ms = ?, last_duration_ms = ?,
+          last_succeeded_ms = ?, failures_since_success = 0
+          WHERE job_type = ?"
+       (epoch-ms started-at) duration-ms (epoch-ms finished-at) (job-type-key job-type)]
+      ["UPDATE job_outcomes SET last_outcome = 'failure', last_started_ms = ?, last_duration_ms = ?,
+          last_failed_ms = ?, last_error = ?, failures_since_success = failures_since_success + 1
+          WHERE job_type = ?"
+       (epoch-ms started-at) duration-ms (epoch-ms finished-at) (outcome/error-message o)
+       (job-type-key job-type)]))))
+
+(defn- ->outcome-record [row]
+  (let [at #(some-> % long Instant/ofEpochMilli)]
+    {:job-type               (keyword (:job_type row))
+     :last-outcome           (keyword (:last_outcome row))
+     :last-started-at        (at (:last_started_ms row))
+     :last-duration-ms       (long (:last_duration_ms row))
+     :last-succeeded-at      (at (:last_succeeded_ms row))
+     :last-failed-at         (at (:last_failed_ms row))
+     :last-error             (:last_error row)
+     :failures-since-success (long (:failures_since_success row))}))
+
+(extend-type DbJobStore
+  ports/IJobOutcomes
+  (record-outcome! [{:keys [ds]} o]
+    ;; UPDATE first: after a job type's first run the row exists.
+    (when (zero? (update-outcome! ds o))
+      (let [{:keys [last-outcome last-started-at last-duration-ms last-succeeded-at
+                    last-failed-at last-error failures-since-success]}
+            (outcome/after-outcome nil o)]
+        (when-not (insert-unless-present!
+                   ds ["INSERT INTO job_outcomes (job_type, last_outcome, last_started_ms, last_duration_ms,
+                          last_succeeded_ms, last_failed_ms, last_error, failures_since_success)
+                          VALUES (?,?,?,?,?,?,?,?)"
+                       (job-type-key (:job-type o)) (name last-outcome) (epoch-ms last-started-at)
+                       last-duration-ms (epoch-ms last-succeeded-at) (epoch-ms last-failed-at)
+                       last-error failures-since-success])
+          (update-outcome! ds o))))
+    nil)
+  (job-outcome [{:keys [ds]} job-type]
+    (some-> (execute-one! ds ["SELECT * FROM job_outcomes WHERE job_type = ?" (job-type-key job-type)] (opts))
+            ->outcome-record))
+  (job-outcomes [{:keys [ds]}]
+    (into {} (map (comp (juxt :job-type identity) ->outcome-record))
+          (execute! ds ["SELECT * FROM job_outcomes"] (opts)))))

@@ -3,17 +3,27 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]))
 
+(def default-timeout-ms
+  "Connect and read timeout for a provider call. A stalled provider is a miss
+   after this, not a thread held until the OS gives up."
+  3000)
+
 (defn enforce-rate-limit!
-  "Block until `min-interval-ms` have passed since the previous request, and
-   return the slot this caller got. Each caller reserves its slot atomically, so
-   concurrent callers are spaced too, and none sleeps holding a monitor, which
-   would pin a virtual thread's carrier on JDK 21."
+  "Block until `min-interval-ms` have passed since the previous request, then
+   claim the slot and return its time. A waiter holds no slot while it sleeps,
+   so one interrupted or cancelled gives nothing up and delays no one; the price
+   is that waiters are not served in arrival order. No monitor is held while
+   sleeping, which would pin a virtual thread's carrier on JDK 21."
   [last-request-ms min-interval-ms]
-  (let [now  (System/currentTimeMillis)
-        slot (swap! last-request-ms #(max now (+ % min-interval-ms)))]
-    (when (> slot now)
-      (Thread/sleep (- slot now)))
-    slot))
+  (loop []
+    (let [now  (System/currentTimeMillis)
+          prev @last-request-ms
+          slot (+ prev min-interval-ms)]
+      (if (and (<= slot now) (compare-and-set! last-request-ms prev now))
+        now
+        (do (when (> slot now)
+              (Thread/sleep (- slot now)))
+            (recur))))))
 
 (defn parse-response
   "Apply `parse-fn` to a provider's result item. nil item means no match.

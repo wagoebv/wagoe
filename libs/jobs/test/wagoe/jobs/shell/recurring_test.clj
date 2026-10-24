@@ -2,6 +2,7 @@
   "The ticker's policy, on the in-memory backend. Every backend's lease and
    idempotency store are swept in `recurring_surface_test`."
   (:require [clojure.test :refer [deftest is testing]]
+            [wagoe.jobs.core.job :as job]
             [wagoe.jobs.ports :as ports]
             [wagoe.jobs.shell.adapters.in-memory :as mem]
             [wagoe.jobs.shell.recurring :as recurring]
@@ -163,3 +164,30 @@
     (recurring/schedule-recurring! s :nightly-report "0 2 * * *")
     (seed-tick! b :nightly-report "2026-01-01T02:00:00Z")
     (is (= [:nightly-report] (recurring/tick! s (at "2026-01-02T02:00:01Z"))))))
+
+(deftest ^:unit the-lease-holder-runs-the-watch-every-watch-ms
+  (let [b       (backend)
+        calls   (atom [])
+        holder  (recurring/create-scheduler (assoc b :watch #(swap! calls conj %)) {:watch-ms 60000})
+        other   (recurring/create-scheduler (assoc b :watch #(swap! calls conj [:other %])))]
+    (testing "with no schedules, a watch alone takes the lease"
+      (recurring/tick! holder (at "2026-01-01T00:00:00Z"))
+      (recurring/tick! other (at "2026-01-01T00:00:01Z"))
+      (is (= [(at "2026-01-01T00:00:00Z")] @calls)))
+    (recurring/tick! holder (at "2026-01-01T00:00:30Z"))
+    (recurring/tick! holder (at "2026-01-01T00:01:00Z"))
+    (is (= [(at "2026-01-01T00:00:00Z") (at "2026-01-01T00:01:00Z")] @calls))
+    (testing "a failing watch does not fail the tick"
+      (let [s (recurring/create-scheduler (assoc (backend) :watch (fn [_] (throw (ex-info "x" {:type :internal-error})))))]
+        (is (= [] (recurring/tick! s (at "2026-01-01T00:00:00Z"))))))))
+
+(deftest ^:unit a-refused-enqueue-releases-its-claim
+  (let [{:keys [queue idempotency]} (backend)
+        mk #(job/create-job {:job-type :sync :unique-key "k"} (random-uuid) (Instant/now))
+        a  (recurring/enqueue-once! queue idempotency :default (mk) "a")]
+    (is (some? a))
+    (is (nil? (recurring/enqueue-once! queue idempotency :default (mk) "b")) "refused: the unique key is held")
+    (ports/dequeue-job! queue :default "w")
+    (ports/ack-job! queue :default "w" a)
+    (is (some? (recurring/enqueue-once! queue idempotency :default (mk) "b"))
+        "the refused key stayed claimed")))

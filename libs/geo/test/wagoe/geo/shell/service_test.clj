@@ -1,8 +1,11 @@
 (ns wagoe.geo.shell.service-test
   "Integration tests for GeoService — mock provider + atom-backed cache."
   (:require [wagoe.geo.shell.service :as sut]
+            [wagoe.geo.shell.module-wiring]
             [wagoe.geo.ports :as ports]
-            [clojure.test :refer [deftest is testing]]))
+            [integrant.core :as ig]
+            [clojure.test :refer [deftest is testing]]
+            [clojure.tools.logging.test :as log-test]))
 
 ;; =============================================================================
 ;; Mock provider
@@ -137,3 +140,50 @@
   (testing "distance is zero for same point"
     (let [amsterdam {:lat 52.3676 :lng 4.9041}]
       (is (< (sut/distance amsterdam amsterdam) 0.001)))))
+
+;; =============================================================================
+;; Providers per call (BOU-833)
+;; =============================================================================
+
+(def ^:private abroad (assoc amsterdam-result :country "Belgium" :provider :openstreetmap))
+
+(deftest ^:integration geocode-only-named-providers-test
+  (let [pdok    (make-mock-provider {})
+        osm     (make-mock-provider {"Amsterdam" abroad})
+        service (sut/map->GeoService {:providers      [pdok osm]
+                                      :provider-names [:pdok :openstreetmap]
+                                      :cache          (make-atom-cache)})]
+    (testing "only the named provider is asked"
+      (is (nil? (sut/geocode! service {:city "Amsterdam"} {:only #{:pdok}})))
+      (is (= 1 @(:call-count-atom pdok)))
+      (is (zero? @(:call-count-atom osm))))
+    (testing "without :only the chain runs, and its answer is not served to a :pdok-only call"
+      (is (= "Belgium" (:country (sut/geocode! service {:city "Amsterdam"}))))
+      (is (nil? (sut/geocode! service {:city "Amsterdam"} {:only #{:pdok}}))))
+    (testing "a restricted call is cached under its restriction"
+      (reset! (:results-atom pdok) {"Utrecht" (assoc amsterdam-result :city "Utrecht")})
+      (reset! (:call-count-atom pdok) 0)
+      (is (false? (:cached? (sut/geocode! service {:city "Utrecht"} {:only #{:pdok}}))))
+      (is (true? (:cached? (sut/geocode! service {:city "Utrecht"} {:only #{:pdok}}))))
+      (is (= 1 @(:call-count-atom pdok))))
+    (testing "a name not configured is a WARN and a miss"
+      (log-test/with-log
+        (is (nil? (sut/geocode! service {:city "Amsterdam"} {:only #{:google}})))
+        (is (log-test/logged? 'wagoe.geo.shell.service :warn #"No configured geo provider"))))))
+
+(deftest ^:integration geo-service-port-test
+  (let [pdok    (make-mock-provider {"Amsterdam" amsterdam-result})
+        osm     (make-mock-provider {"Amsterdam" abroad})
+        service (sut/map->GeoService {:providers [pdok osm] :provider-names [:pdok :openstreetmap]})]
+    (is (= :openstreetmap (:provider (ports/lookup service {:city "Amsterdam"} {:only [:openstreetmap]}))))
+    (is (= :mock (:provider (ports/lookup service {:city "Amsterdam"} nil))))
+    (is (= :mock (:provider (ports/reverse-lookup service {:lat 52.3676 :lng 4.9041} {:only #{:pdok}}))))
+    (is (= 1 @(:call-count-atom osm)) "asked by the first lookup only")))
+
+(deftest ^:integration wiring-names-providers-and-sets-timeouts-test
+  (let [svc (ig/init-key :wagoe/geo-service {:provider [:pdok :openstreetmap] :timeout-ms 500
+                                             :user-agent "wagoe-test/1.0 (test@example.com)"})]
+    (is (satisfies? ports/GeoServiceProtocol svc))
+    (is (= [:pdok :openstreetmap] (:provider-names svc)))
+    (is (= [500 500] (map :timeout-ms (:providers svc)))))
+  (is (= [3000] (map :timeout-ms (:providers (ig/init-key :wagoe/geo-service {:provider :pdok}))))))

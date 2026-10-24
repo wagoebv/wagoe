@@ -267,3 +267,45 @@
                        (mapv deref)
                        sort)]
       (is (every? #(>= % 50) (map - (rest starts) starts))))))
+
+;; =============================================================================
+;; Timeouts and rate-limit slots (BOU-833)
+;; =============================================================================
+
+(deftest ^:integration every-adapter-sets-a-timeout-test
+  (doseq [[label adapter] [["pdok" (pdok-adapter)]
+                           ["osm" (osm-adapter)]
+                           ["google" (google/create-google-adapter {:api-key "k" :base-url "http://google.test"
+                                                                    :min-interval-ms 0})]
+                           ["mapbox" (mapbox/create-mapbox-adapter {:api-key "k" :base-url "http://mapbox.test"
+                                                                    :min-interval-ms 0
+                                                                    :timeout-ms 750})]]]
+    (testing label
+      (let [expected (if (= "mapbox" label) 750 support/default-timeout-ms)
+            requests (with-response {:status 500 :headers {} :body (ByteArrayInputStream. (.getBytes "{}"))}
+                       #(do (ports/geocode adapter {:address "Damrak 1"})
+                            (ports/reverse-geocode adapter {:lat 52.37 :lng 4.89})))]
+        (is (= 2 (count requests)))
+        (is (every? #(= [expected expected] [(:connection-timeout %) (:socket-timeout %)]) requests))))))
+
+(deftest ^:integration a-stalled-provider-is-a-miss-test
+  ;; Accepts the connection and never answers.
+  (with-open [server (java.net.ServerSocket. 0 1 (java.net.InetAddress/getLoopbackAddress))]
+    (let [adapter (pdok/create-pdok-adapter {:base-url        (str "http://127.0.0.1:" (.getLocalPort server))
+                                             :min-interval-ms 0
+                                             :timeout-ms      200})
+          started (System/currentTimeMillis)]
+      (log-test/with-log
+        (is (nil? (ports/geocode adapter {:postcode "1012JS" :house-number 1})))
+        (is (< (- (System/currentTimeMillis) started) 2000))
+        (is (log-test/logged? 'wagoe.geo.shell.adapters.pdok :error java.net.SocketTimeoutException
+                              #"request failed"))))))
+
+(deftest ^:unit a-cancelled-wait-holds-no-slot-test
+  (let [last-ms (atom 0)
+        t0      (support/enforce-rate-limit! last-ms 300)
+        waiter  (future (support/enforce-rate-limit! last-ms 300))]
+    (Thread/sleep 50)
+    (future-cancel waiter)
+    ;; The cancelled waiter would have gone at t0+300; this one goes then, not at t0+600.
+    (is (< (- (support/enforce-rate-limit! last-ms 300) t0) 500))))

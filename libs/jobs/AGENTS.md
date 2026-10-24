@@ -12,7 +12,9 @@ Background job processing with priority queues, scheduled execution, automatic r
 |-----------|---------|
 | `wagoe.jobs.core.job` | Pure functions: job creation, state transitions, retry logic |
 | `wagoe.jobs.core.cron` | Pure cron parsing, `next-run`, `latest-run`, `due-tick` |
-| `wagoe.jobs.ports` | Protocols: IJobQueue, IJobStore, IJobStats, IJobWorker, IJobRegistry |
+| `wagoe.jobs.ports` | Protocols: IJobQueue, IJobStore, IJobStats, IJobOutcomes, IJobWorker, IJobRegistry |
+| `wagoe.jobs.core.outcome` | Pure: a run's outcome, a job type's record, the error-tracker throttle |
+| `wagoe.jobs.shell.outcomes` | Where outcomes go: store, `:wagoe/metrics`, `:wagoe/error-reporting`, `:on-outcome` |
 | `wagoe.jobs.schema` | Malli schemas: job states, priorities, retry config |
 | `wagoe.jobs.shell.adapters.in-memory` | In-memory adapter (atoms, for dev/test) |
 | `wagoe.jobs.shell.adapters.redis` | Redis adapter (sorted sets, lists, hashes) |
@@ -34,7 +36,10 @@ Enabling `:wagoe/jobs` builds the runtime. Nothing else to assemble.
                         :queues [:default]     ; one pool per queue
                         :virtual-threads? false}  ; true: each worker loop on a virtual thread
              :recurring {:nightly-report {:cron "0 2 * * *" :zone "Europe/Amsterdam"}}
-             :scheduler {:tick-ms 5000 :lease-ms 30000 :zone "UTC"}}
+             :scheduler {:tick-ms 5000 :lease-ms 30000 :zone "UTC"}
+             :on-outcome my.app.jobs/on-outcome     ; optional (fn [outcome])
+             :report-failures-every-ms 3600000      ; error-tracker throttle
+             :expect-success {:nightly-report 26}}  ; job type -> hours
 ```
 
 `:redis` is one Redis server, not Redis Cluster:
@@ -186,6 +191,52 @@ docs: `docs/modules/libraries/pages/jobs.adoc`. What to keep true when editing:
 - **A scheduled type with no handler is warned about** once, by the lease
   holder, naming the known types. Not a boot failure: handlers may be registered
   after boot (`register-handler!`), or live only on worker nodes.
+
+## Job outcomes
+
+`process-single-job!` reports every handler run in one place
+(`shell/outcomes.clj`, BOU-832): the store's `IJobOutcomes` record, metrics
+(`jobs.runs`, `jobs.run.duration`, `jobs.last-success`), the error tracker and
+`:on-outcome`. User docs: `docs/modules/libraries/pages/jobs.adoc`.
+
+- **One write per run, no read, no lock.** The DB record is an `UPDATE` whose
+  `failures_since_success` goes up or to 0 in the statement (`INSERT` only on a
+  type's first run); Redis is one script. Keep it that way: this is the hot path.
+- **One throttle per job type, in the idempotency store** (BOU-834): a failure
+  report claims (`"wagoe.jobs/report"`, job type) for `:report-failures-every-ms`,
+  so nodes sharing the store report once. A success releases the claim only on
+  a reporter that saw the type fail, sparing a write per successful run.
+  Without `:idempotency` a reporter throttles alone. `run-pending!` builds one
+  per call unless given `:report-outcome`.
+- **Staleness** (`:expect-success`): the scheduler's lease holder runs
+  `outcomes/check-stale!` every `:watch-ms` (60 s). It claims the same key, so a
+  type both failing and stale is reported once per interval. A type with no
+  record or no success yet is never stale, nor is one without a handler in the
+  registry (BOU-835).
+- **A report that throws releases its claim** (BOU-835), is logged, and the
+  watch goes on to the next type; the next failure or pass reports again.
+- **Nothing in it fails a job.** Each step is caught and logged.
+- **The worker catches `Throwable`** (BOU-834): an `AssertionError` or
+  `ExceptionInInitializerError` is a failed run. `worker/fatal?` errors (OOM,
+  internal VM error, `ThreadDeath`, not `StackOverflowError`) are rethrown.
+- `IJobOutcomes` is its own protocol (Convention 5); the reporter checks
+  `satisfies?` once. Table `job_outcomes` is a boot table, times in epoch ms.
+
+## Unique jobs
+
+`:unique-key` on `create-job`: `enqueue-job!` returns nil while another job with
+that key is queued, scheduled or running. The holder keeps it through its
+retries (same job id) and frees it when acked without being put back.
+
+- **db**: column `job_queue.unique_key` with a unique index (NULLs never
+  collide); the row is the hold, so the ack's delete frees it. A refused insert
+  inside `enqueue-in-tx!` runs in a savepoint, leaving the caller's tx usable.
+- **redis**: `jobs:unique:<key>` -> job id, `jobs:unique-held` maps it back. Ack
+  frees it only when its `LREM` removed a claim and the job is neither in
+  `jobs:scheduled` nor on the queue's lists.
+- **in-memory**: an atom on the state; ack frees it unless the job is queued.
+
+`adapter_surface_test.clj` sweeps all three.
 
 ## Job Handler Signature
 

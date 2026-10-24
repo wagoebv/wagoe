@@ -24,10 +24,13 @@
 
     Args:
       queue-name - Queue name (e.g., :default, :critical, :low-priority)
-      job - Job map with {:job-type :job-id :args :metadata}
+      job - Job map with {:job-type :job-id :args :metadata}, and optionally
+            :unique-key
 
     Returns:
-      Job ID (UUID)")
+      Job ID (UUID), or nil when the job's :unique-key is held by another job
+      still pending or running. The key is freed when that job is acked
+      without being put back (done, or failed for good); a retry keeps it.")
 
   (schedule-job! [this queue-name job execute-at]
     "Schedule a job for future execution.
@@ -38,7 +41,7 @@
       execute-at - Instant when job should execute
 
     Returns:
-      Job ID (UUID)")
+      Job ID (UUID), or nil as for enqueue-job!")
 
   (dequeue-job! [this queue-name worker-id]
     "Reliably dequeue the next job from queue for a worker.
@@ -347,7 +350,7 @@
       job        - Job map
 
     Returns:
-      Job ID (UUID)
+      Job ID (UUID), or nil as for enqueue-job!
 
     Throws:
       ex-info {:type :validation-error} when `tx` is not an open transaction —
@@ -372,6 +375,23 @@
   (renew-lease! [this queue-name worker-id job-id]
     "Extend `worker-id`'s claim on `job-id`. False when the worker no longer
      holds it."))
+
+(defprotocol IJobOutcomes
+  "Optional capability of a job store: how each job type last fared, so an
+   application can tell a job that stopped succeeding without keeping a table
+   of its own (BOU-832). The worker records every run when its store has it."
+
+  (record-outcome! [this outcome]
+    "Fold one run's outcome (see `wagoe.jobs.core.outcome/run-outcome`) into
+     its job type's record. One write, no read.")
+
+  (job-outcome [this job-type]
+    "`job-type`'s record, or nil before its first run:
+     {:job-type :last-outcome :last-started-at :last-duration-ms
+      :last-succeeded-at :last-failed-at :last-error :failures-since-success}")
+
+  (job-outcomes [this]
+    "Every job type's record, by job type."))
 
 ;; =============================================================================
 ;; Idempotency keys and recurring jobs

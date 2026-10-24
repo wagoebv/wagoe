@@ -10,7 +10,9 @@
    - Job handler registry
    - Comprehensive error handling"
   (:require [wagoe.jobs.core.job :as job]
+            [wagoe.jobs.core.outcome :as outcome]
             [wagoe.jobs.ports :as ports]
+            [wagoe.jobs.shell.outcomes :as outcomes]
             [wagoe.jobs.shell.adapters.redis :as redis-adapter]
             [wagoe.observability.core.sql-redaction :as redaction]
             ;; Loaded for its effect: `log/error e` below is written redacted.
@@ -99,6 +101,15 @@
      :exception-class (-> e class .getName)
      :stacktrace      (str trace)}))
 
+(defn fatal?
+  "Whether `t` is an error no job should swallow: the JVM may not survive it.
+   Out of memory, an internal VM error, a killed thread. A StackOverflowError
+   has unwound by the time it is caught, so it is the handler's failure, as an
+   AssertionError or ExceptionInInitializerError is (BOU-834)."
+  [^Throwable t]
+  (or (and (instance? VirtualMachineError t) (not (instance? StackOverflowError t)))
+      (= "java.lang.ThreadDeath" (.getName (class t)))))
+
 (defn- execute-job-handler
   "Execute job handler function with error handling.
 
@@ -114,9 +125,10 @@
       (if (:success? result)
         result
         (assoc result :success? false)))
-    (catch Exception e
+    (catch Throwable t
+      (when (fatal? t) (throw t))
       {:success? false
-       :error    (failure e)})))
+       :error    (failure t)})))
 
 (defn- run-handler
   "Run `handler-fn` on `job`'s args. A job that carries a tenant runs inside
@@ -135,9 +147,10 @@
                         result
                         (throw (ex-info "Tenant job failed"
                                         {:type :job-failed ::failed result})))))
-        (catch Exception e
-          (or (::failed (ex-data e))
-              {:success? false :error (failure e)})))
+        (catch Throwable t
+          (when (fatal? t) (throw t))
+          (or (::failed (ex-data t))
+              {:success? false :error (failure t)})))
       {:success? false
        :error    {:type    :configuration-error
                   :message (str "Job " (:id job) " belongs to tenant " tenant-id
@@ -251,6 +264,16 @@
       ;; database must not hold up the worker.
       #(deliver stop true))))
 
+(defn- with-reporter
+  "`config` with `:report-outcome`, the fn each run's outcome goes to, built
+   from its `:metrics`, `:error-reporter`, `:on-outcome` and
+   `:report-failures-every-ms` unless it has one. Built once per pool, so the
+   pool's workers share one error-tracker throttle."
+  [config store]
+  (cond-> config
+    (not (:report-outcome config))
+    (assoc :report-outcome (outcomes/reporter (assoc config :store store)))))
+
 (defn- process-single-job!
   "Process a single job from queue.
 
@@ -299,7 +322,12 @@
                   (do
                     (log/info "Processing job" {:job-id job-id :job-type job-type})
                     (ports/update-job-status! store job-id :running nil)
-                    (let [result (run-handler config handler-fn job)]
+                    (let [started (Instant/now)
+                          t0      (System/nanoTime)
+                          result  (run-handler config handler-fn job)]
+                      (when-let [report! (:report-outcome config)]
+                        (report! (outcome/run-outcome job result started (Instant/now)
+                                                      (quot (- (System/nanoTime) t0) 1000000))))
                       (if (:success? result)
                         (do
                           (ports/update-job-status! store job-id :completed (:result result))
@@ -313,10 +341,11 @@
                   (reset! requeue
                           (handle-missing-handler! config store registry worker-state job)))
 
-                (catch Exception e
+                (catch Throwable t
+                  (when (fatal? t) (throw t))
                   ;; Unexpected error during processing
-                  (fail! (failure e))
-                  (log/error e "Unexpected error processing job" {:job-id job-id}))
+                  (fail! (failure t))
+                  (log/error t "Unexpected error processing job" {:job-id job-id}))
 
                 (finally
                   (stop-renewal!)
@@ -372,7 +401,8 @@
    a race (BOU-469). A retry or a scheduled job lands in the future, so this
    ends."
   [config queue store registry]
-  (let [state (create-worker-state :default)]
+  (let [state  (create-worker-state :default)
+        config (with-reporter config store)]
     (loop [n 0]
       ;; Every round: a job may enqueue one with an :execute-at already due,
       ;; which lands in the scheduled set rather than on a queue.
@@ -451,8 +481,11 @@
           (log/info "Worker interrupted, shutting down" {:worker-id (:id worker-state)})
           (reset! (:running? worker-state) false))
 
-        (catch Exception e
-          (log/error e "Unexpected error in worker loop" {:worker-id (:id worker-state)})
+        (catch Throwable t
+          (when (fatal? t)
+            (log/error t "Fatal error, worker stopping" {:worker-id (:id worker-state)})
+            (throw t))
+          (log/error t "Unexpected error in worker loop" {:worker-id (:id worker-state)})
           (Thread/sleep @current-poll-ms)
           (swap! current-poll-ms #(min max-poll-ms (* 2 %)))))))
 
@@ -519,6 +552,10 @@
               :tenant-runner - (fn [tenant-id f]) that calls f in the tenant's
                                schema; a job with :metadata :tenant-id fails
                                without one
+              :metrics, :error-reporter - where each run's outcome goes
+                               (optional, see `wagoe.jobs.shell.outcomes`)
+              :on-outcome - (fn [outcome]) called after each run (optional)
+              :report-failures-every-ms - error-tracker throttle (default 1h)
      queue - IJobQueue implementation
      store - IJobStore implementation
      registry - IJobRegistry implementation
@@ -526,7 +563,8 @@
    Returns:
      Worker implementing IJobWorker"
   [config queue store registry]
-  (let [queue-name (or (:queue-name config) :default)
+  (let [config (with-reporter config store)
+        queue-name (or (:queue-name config) :default)
         worker-state (create-worker-state queue-name)
         worker (->Worker worker-state nil queue store registry config)
         loop-fn #(worker-loop config queue store registry worker-state)
@@ -566,7 +604,8 @@
    Returns:
      Vector of Worker instances"
   [config queue store registry]
-  (let [worker-count (or (:worker-count config) 4)]
+  (let [worker-count (or (:worker-count config) 4)
+        config       (with-reporter config store)]
     (log/info "Creating worker pool" {:worker-count worker-count :queue-name (:queue-name config)})
     (vec (repeatedly worker-count #(create-worker config queue store registry)))))
 

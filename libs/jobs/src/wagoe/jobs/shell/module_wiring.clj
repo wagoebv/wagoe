@@ -10,7 +10,10 @@
         :redis    {:host \"localhost\" :port 6379}
         :workers  {:count 1 :queue-name :default :virtual-threads? false}
         :recurring {:nightly-report {:cron \"0 2 * * *\" :zone \"Europe/Amsterdam\"}}
-        :scheduler {:tick-ms 5000 :lease-ms 30000 :zone \"UTC\"}}
+        :scheduler {:tick-ms 5000 :lease-ms 30000 :zone \"UTC\"}
+        :on-outcome my.app.jobs/on-outcome   ; optional, (fn [outcome])
+        :report-failures-every-ms 3600000    ; error-tracker throttle
+        :expect-success {:nightly-report 26}} ; job type -> hours, else reported
 
    :wagoe/jobs-runtime
      Queue, store and stats from one adapter, so the three share a backend.
@@ -28,7 +31,9 @@
    :wagoe/job-scheduler
      The recurring-job ticker: `:recurring {job-type {:cron \"0 2 * * *\" …}}`
      from the settings block, plus whatever `recurring/schedule-recurring!`
-     adds. `:scheduler {:tick-ms :lease-ms :zone}` tunes it.
+     adds. `:scheduler {:tick-ms :lease-ms :zone :watch-ms}` tunes it. With
+     `:expect-success` its lease holder reports a job type that has not
+     succeeded within its hours (`outcomes/check-stale!`).
 
    :wagoe/job-registry
      The handler map every module contributed. Modules contribute handlers the
@@ -39,6 +44,8 @@
      The worker pool. `:count 0` builds none — that is a web node in the
      web/worker split; the default of 1 is a single process that both enqueues
      and runs, which is what an application without a deployment topology has.
+     Each run's outcome goes to the store's `IJobOutcomes`, `:wagoe/metrics`,
+     `:wagoe/error-reporting` and `:on-outcome` (`wagoe.jobs.shell.outcomes`).
 
    :wagoe/job-tenant-runner
      With the tenant module on: what runs a job that carries a tenant in that
@@ -57,6 +64,7 @@
             [wagoe.jobs.shell.adapters.db :as db]
             [wagoe.jobs.shell.adapters.in-memory :as mem]
             [wagoe.jobs.shell.adapters.redis :as redis]
+            [wagoe.jobs.shell.outcomes :as outcomes]
             [wagoe.jobs.shell.recurring :as recurring]
             [wagoe.jobs.shell.tenant-context :as tenant-context]
             [wagoe.tenant.shell.provisioning :as provisioning]
@@ -197,9 +205,27 @@
 
 (defmethod ig/halt-key! :wagoe/job-tenant-runner [_ _] nil)
 
+(defn- resolve-hook
+  "`:on-outcome` as config.edn names it, a symbol, resolved to its fn."
+  [hook]
+  (if (symbol? hook)
+    (or (some-> (try (requiring-resolve hook) (catch Exception _ nil)) deref)
+        (throw (ex-info (str ":wagoe/jobs :on-outcome names " hook ", which resolves to nothing")
+                        {:type :configuration-error :symbol hook})))
+    hook))
+
 (defmethod ig/init-key :wagoe/job-workers
-  [_ {:keys [queue store registry workers tenant-runner]}]
+  [_ {:keys [queue store registry workers tenant-runner metrics error-reporter
+             on-outcome report-failures-every-ms idempotency]}]
   (let [count*  (:count workers 1)
+        ;; One reporter for every pool: the error-tracker throttle is per job
+        ;; type, whichever queue it runs on, and on whichever node.
+        report  (outcomes/reporter {:store                    store
+                                    :metrics                  metrics
+                                    :error-reporter           error-reporter
+                                    :on-outcome               (resolve-hook on-outcome)
+                                    :report-failures-every-ms report-failures-every-ms
+                                    :idempotency              idempotency})
         ;; One pool per queue. A worker polls a single queue, so a module that
         ;; enqueues elsewhere is only served if a pool names that queue — push
         ;; enqueued on :push while the only pool polled :default, and every
@@ -211,7 +237,8 @@
       (into []
             (mapcat (fn [q]
                       (worker/create-worker-pool
-                       (merge workers {:queue-name q :worker-count count* :tenant-runner tenant-runner})
+                       (merge workers {:queue-name q :worker-count count* :tenant-runner tenant-runner
+                                       :report-outcome report})
                        queue store registry)))
             queues)
       (do (log/info "Jobs: no workers started (:count 0) — this node enqueues only")
@@ -221,13 +248,35 @@
   [_ workers]
   (when (seq workers) (worker/stop-worker-pool! workers)))
 
+(defn- expect-success!
+  "`expect-success`, {job-type hours}, refused unless each hours is positive."
+  [expect-success]
+  (when-not (or (nil? expect-success)
+                (and (map? expect-success)
+                     (every? (fn [[k v]] (and (keyword? k) (number? v) (pos? v))) expect-success)))
+    (throw (ex-info (str ":wagoe/jobs :expect-success takes {job-type hours}, hours above 0; got "
+                         (pr-str expect-success))
+                    {:type :validation-error :expect-success expect-success})))
+  expect-success)
+
 (defmethod ig/init-key :wagoe/job-scheduler
-  [_ {:keys [runtime registry recurring scheduler]}]
-  (let [s (recurring/create-scheduler {:queue       (:queue runtime)
-                                       :state       (:recurring-state runtime)
-                                       :idempotency (:idempotency runtime)
-                                       :registry    registry}
-                                      scheduler)]
+  [_ {:keys [runtime registry recurring scheduler expect-success error-reporter
+             report-failures-every-ms]}]
+  (let [watch (when (seq (expect-success! expect-success))
+                (let [opts {:store                    (:store runtime)
+                            :registry                 registry
+                            :idempotency              (:idempotency runtime)
+                            :error-reporter           error-reporter
+                            :expect-success           expect-success
+                            :report-failures-every-ms report-failures-every-ms}]
+                  (log/info "Jobs: expecting successes" {:hours expect-success})
+                  #(outcomes/check-stale! opts %)))
+        s     (recurring/create-scheduler {:queue       (:queue runtime)
+                                           :state       (:recurring-state runtime)
+                                           :idempotency (:idempotency runtime)
+                                           :registry    registry
+                                           :watch       watch}
+                                          scheduler)]
     (doseq [[job-type {:keys [cron] :as opts}] recurring]
       (recurring/schedule-recurring! s job-type cron opts))
     (when (seq recurring)
@@ -261,15 +310,23 @@
        :wagoe/job-store    {:runtime (ig/ref :wagoe/jobs-runtime)}
        :wagoe/job-stats    {:runtime (ig/ref :wagoe/jobs-runtime)}
        :wagoe/idempotency-store {:runtime (ig/ref :wagoe/jobs-runtime)}
-       :wagoe/job-scheduler {:runtime   (ig/ref :wagoe/jobs-runtime)
-                             :registry  (ig/ref :wagoe/job-registry)
-                             :recurring (:recurring settings)
-                             :scheduler (:scheduler settings)}
+       :wagoe/job-scheduler {:runtime        (ig/ref :wagoe/jobs-runtime)
+                             :registry       (ig/ref :wagoe/job-registry)
+                             :recurring      (:recurring settings)
+                             :scheduler      (:scheduler settings)
+                             :expect-success (:expect-success settings)
+                             :error-reporter (ig/ref :wagoe/error-reporting)
+                             :report-failures-every-ms (:report-failures-every-ms settings)}
        :wagoe/job-registry {:handler-maps []}
-       :wagoe/job-workers  {:queue    (ig/ref :wagoe/job-queue)
-                            :store    (ig/ref :wagoe/job-store)
-                            :registry (ig/ref :wagoe/job-registry)
-                            :workers  (:workers settings)}
+       :wagoe/job-workers  {:queue          (ig/ref :wagoe/job-queue)
+                            :store          (ig/ref :wagoe/job-store)
+                            :registry       (ig/ref :wagoe/job-registry)
+                            :workers        (:workers settings)
+                            :metrics        (ig/ref :wagoe/metrics)
+                            :error-reporter (ig/ref :wagoe/error-reporting)
+                            :on-outcome     (:on-outcome settings)
+                            :report-failures-every-ms (:report-failures-every-ms settings)
+                            :idempotency    (ig/ref :wagoe/idempotency-store)}
        :wagoe/job-dead-letter-retention {:store (ig/ref :wagoe/job-store)}}
       :retention {:jobs/dead-letter (ig/ref :wagoe/job-dead-letter-retention)}}
       tenancy?
