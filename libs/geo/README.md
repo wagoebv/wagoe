@@ -73,6 +73,9 @@ Add to `resources/conf/{env}/config.edn` and require `wagoe.geo.shell.module-wir
  :db         #ig/ref :wagoe/db}
 ```
 
+`:timeout-ms` (default 3000) bounds each provider call's connect and read. A
+timeout is a miss: logged, and the chain moves on.
+
 ---
 
 ## API
@@ -88,6 +91,13 @@ Add to `resources/conf/{env}/config.edn` and require `wagoe.geo.shell.module-wir
 (geo/geocode! service {:postcode "1012 JS" :house-number 1 :house-number-addition "A"})
 ;; => {:street "Dam" :house-number "1" :house-number-addition "A" :postcode "1012JS"
 ;;     :city "Amsterdam" :lat 52.37 :lng 4.89 :provider :pdok :cached? false ...}
+
+;; Only some providers, by name, for this call (cached per restriction)
+(geo/geocode! service {:postcode "1012 JS" :house-number 1} {:only #{:pdok}})
+
+;; Or through the component's port, without requiring a shell namespace
+(require '[wagoe.geo.ports :as geo-ports])
+(geo-ports/lookup service {:postcode "1012 JS" :house-number 1} {:only #{:pdok}})
 
 ;; Reverse geocode coordinates → address
 (geo/reverse-geocode! service {:lat 52.374 :lng 4.890})

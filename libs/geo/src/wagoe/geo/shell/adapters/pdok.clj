@@ -95,7 +95,9 @@
                              {:query-params     (assoc params "fl" fields)
                               :as               :json
                               :coerce           :always
-                              :throw-exceptions false})
+                              :throw-exceptions false
+                              :connection-timeout (:timeout-ms this)
+                              :socket-timeout     (:timeout-ms this)})
           status   (:status response)]
       (if (= 200 status)
         (get-in response [:body :response :docs])
@@ -110,7 +112,7 @@
 ;; Adapter record
 ;; =============================================================================
 
-(defrecord PdokAdapter [base-url last-request-ms min-interval-ms])
+(defrecord PdokAdapter [base-url last-request-ms min-interval-ms timeout-ms])
 
 (extend-protocol ports/GeoProviderProtocol
   PdokAdapter
@@ -139,10 +141,12 @@
    Config keys:
      :base-url        - Override base URL (default: https://api.pdok.nl/bzk/locatieserver/search/v3_1)
      :min-interval-ms - Minimum ms between requests (default: 100)
+     :timeout-ms      - Connect and read timeout in ms; a timeout is a miss (default: 3000)
 
    Returns:
      PdokAdapter implementing GeoProviderProtocol"
-  [{:keys [base-url min-interval-ms]
+  [{:keys [base-url min-interval-ms timeout-ms]
     :or   {base-url        default-base-url
-           min-interval-ms default-min-interval-ms}}]
-  (->PdokAdapter base-url (atom 0) min-interval-ms))
+           min-interval-ms default-min-interval-ms
+           timeout-ms      support/default-timeout-ms}}]
+  (->PdokAdapter base-url (atom 0) min-interval-ms timeout-ms))
