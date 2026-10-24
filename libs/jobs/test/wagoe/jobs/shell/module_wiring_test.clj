@@ -63,3 +63,16 @@
   (let [workers #(get-in (wiring/ig-config {} {:enabled %}) [:components :wagoe/job-workers :tenant-runner])]
     (is (= (ig/ref :wagoe/job-tenant-runner) (workers #{:wagoe/jobs :wagoe/tenant})))
     (is (nil? (workers #{:wagoe/jobs})))))
+
+(defn on-outcome [_])
+
+(deftest ^:unit the-workers-take-the-outcome-hook-from-config
+  (is (= 'my.app/hook
+         (get-in (wiring/ig-config {:on-outcome 'my.app/hook} {:enabled #{:wagoe/jobs}})
+                 [:components :wagoe/job-workers :on-outcome])))
+  (is (= [] (ig/init-key :wagoe/job-workers {:workers    {:count 0}
+                                             :on-outcome `on-outcome})))
+  (testing "a symbol that resolves to nothing fails the boot"
+    (let [e (try (ig/init-key :wagoe/job-workers {:workers {:count 0} :on-outcome 'no.such/hook})
+                 (catch clojure.lang.ExceptionInfo e e))]
+      (is (= :configuration-error (:type (ex-data e)))))))

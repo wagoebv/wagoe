@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **The jobs worker reports every run's outcome** (BOU-832): `IJobOutcomes` on the store, `jobs.*` metrics, throttled
+  error reports and an `:on-outcome` hook. Drop per-handler wrappers; see the jobs docs for the config.
 - **Geo `:provider :pdok`: street, city and point from postcode + house number, no key** (BOU-830). `AddressQuery`
   takes `:house-number`/`:house-number-addition`; results carry `:street`. Run `migrate up` for the cache columns.
 - **`bb check:ports-diff` compares every protocol in a stable library's ports with the last final release**: a method

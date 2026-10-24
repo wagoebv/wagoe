@@ -15,6 +15,7 @@
    - Atomic operations"
   (:require [wagoe.jobs.ports :as ports]
             [wagoe.jobs.core.job :as job]
+            [wagoe.jobs.core.outcome :as outcome]
             [wagoe.jobs.shell.adapters.codec :as codec]
             [clojure.tools.logging :as log])
   (:import [redis.clients.jedis Jedis JedisPool JedisPoolConfig]
@@ -561,6 +562,59 @@
             (long (.eval redis ^String purge-dead-letters-script
                          ^java.util.List (into [(dead-letter-key)] (map (comp job-key first)) candidates)
                          ^java.util.List (into [] cat candidates)))))))))
+
+;; IJobOutcomes: a hash per job type, written by one script so the failure
+;; count goes up or back to 0 atomically.
+
+(defn- outcome-key [job-type] (str "jobs:outcome:" (symbol job-type)))
+
+(def ^:private record-outcome-script
+  "redis.call('HSET', KEYS[1], 'job-type', ARGV[1], 'last-outcome', ARGV[2],
+              'last-started-ms', ARGV[3], 'last-duration-ms', ARGV[4])
+   if ARGV[2] == 'success' then
+     redis.call('HSET', KEYS[1], 'last-succeeded-ms', ARGV[5], 'failures-since-success', 0)
+   else
+     redis.call('HSET', KEYS[1], 'last-failed-ms', ARGV[5], 'last-error', ARGV[6])
+     redis.call('HINCRBY', KEYS[1], 'failures-since-success', 1)
+   end
+   return 1")
+
+(defn- ->outcome-record [^java.util.Map m]
+  (let [v  #(not-empty (.get m %))
+        at #(some-> (v %) parse-long Instant/ofEpochMilli)]
+    {:job-type               (keyword (v "job-type"))
+     :last-outcome           (keyword (v "last-outcome"))
+     :last-started-at        (at "last-started-ms")
+     :last-duration-ms       (parse-long-safe (v "last-duration-ms"))
+     :last-succeeded-at      (at "last-succeeded-ms")
+     :last-failed-at         (at "last-failed-ms")
+     :last-error             (v "last-error")
+     :failures-since-success (parse-long-safe (v "failures-since-success"))}))
+
+(extend-type RedisJobStore
+  ports/IJobOutcomes
+  (record-outcome! [{:keys [pool]} {:keys [job-type started-at finished-at duration-ms] :as o}]
+    (with-redis pool
+      (fn [^Jedis redis]
+        (.eval redis ^String record-outcome-script
+               ^java.util.List [(outcome-key job-type)]
+               ^java.util.List [(str (symbol job-type)) (name (:outcome o))
+                                (str (.toEpochMilli ^Instant started-at)) (str duration-ms)
+                                (str (.toEpochMilli ^Instant finished-at))
+                                (or (outcome/error-message o) "")])))
+    nil)
+  (job-outcome [{:keys [pool]} job-type]
+    (with-redis pool
+      (fn [^Jedis redis]
+        (let [m (.hgetAll redis ^String (outcome-key job-type))]
+          (when-not (.isEmpty m) (->outcome-record m))))))
+  (job-outcomes [{:keys [pool]}]
+    (with-redis pool
+      (fn [^Jedis redis]
+        (into {} (for [k (scan-keys redis "jobs:outcome:*")
+                       :let [m (.hgetAll redis ^String k)]
+                       :when (not (.isEmpty m))]
+                   (let [r (->outcome-record m)] [(:job-type r) r])))))))
 
 ;; =============================================================================
 ;; Job Statistics Implementation
