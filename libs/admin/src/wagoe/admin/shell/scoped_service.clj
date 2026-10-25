@@ -55,7 +55,7 @@
     (delay (or (first records) (ports/get-entity inner entity-name id)))))
 
 (defn- link-scope
-  "The scopes in which `user` may read what many-to-many `rel` links to; nil
+  "The scopes in which `user` may read what relation `rel` points to; nil
    when everywhere."
   [schema-provider user rel]
   (let [scopes (scopes-of schema-provider user (:entity rel) :read)]
@@ -68,6 +68,16 @@
   (into {}
         (keep (fn [rel] (some->> (link-scope schema-provider user rel) (vector (:key rel)))))
         (:many-to-many (ports/get-entity-config schema-provider entity-name))))
+
+(defn- title-scopes
+  "{field scopes} for each belongs-to of `entity-name` whose target `user` may
+   read only inside scopes: the title of a target outside them stays unshown."
+  [schema-provider user entity-name]
+  (into {}
+        (keep (fn [[field rel]]
+                (when (ports/validate-entity-exists schema-provider (:entity rel))
+                  (some->> (link-scope schema-provider user rel) (vector field)))))
+        (display/belongs-to-fields (ports/get-entity-config schema-provider entity-name))))
 
 (defn- with-link-scopes
   "`data` with the scopes its `:admin/links` must keep to: a link to a record
@@ -82,7 +92,8 @@
     (when (satisfies? ports/IListOverview inner)
       (ports/list-overview inner entity-name
                            (assoc (scoped schema-provider user entity-name :read options)
-                                  :overview/link-scopes (link-scopes schema-provider user entity-name))
+                                  :overview/link-scopes (link-scopes schema-provider user entity-name)
+                                  :overview/title-scopes (title-scopes schema-provider user entity-name))
                            records)))
 
   ports/ILinks

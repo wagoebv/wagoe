@@ -24,7 +24,7 @@
   {:enabled?         true
    :base-path        "/web/admin"
    :entity-discovery {:mode :allowlist :allowlist #{:orders :notes :order-lines :tags :order-tags}}
-   :entities         {:orders {:label "Orders" :list-fields [:number :domain-id :tags]
+   :entities         {:orders {:label "Orders" :list-fields [:number :domain-id :tags] :title-field :number
                                :scope {:domain-id :domain-id}}
                       ;; A line's domain is its order's
                       :order-lines {:label "Lines" :list-fields [:sku]
@@ -69,7 +69,7 @@
     (fn [db-ctx]
       (db/execute-update! db-ctx {:raw "CREATE TABLE orders (id VARCHAR(36) PRIMARY KEY, number VARCHAR(50) NOT NULL, domain_id INT NOT NULL)"})
       (db/execute-update! db-ctx {:raw "CREATE TABLE notes (id VARCHAR(36) PRIMARY KEY, body VARCHAR(200))"})
-      (db/execute-update! db-ctx {:raw "CREATE TABLE order_lines (id VARCHAR(36) PRIMARY KEY, sku VARCHAR(50) NOT NULL, order_id VARCHAR(36) NOT NULL)"})
+      (db/execute-update! db-ctx {:raw "CREATE TABLE order_lines (id VARCHAR(36) PRIMARY KEY, sku VARCHAR(50) NOT NULL, order_id VARCHAR(36) NOT NULL REFERENCES orders(id))"})
       (db/execute-update! db-ctx {:raw "CREATE TABLE tags (id VARCHAR(36) PRIMARY KEY, name VARCHAR(50) NOT NULL, area INT NOT NULL)"})
       (db/execute-update! db-ctx {:raw (str "CREATE TABLE order_tags (order_id VARCHAR(36) NOT NULL REFERENCES orders(id),"
                                             " tag_id VARCHAR(36) NOT NULL REFERENCES tags(id), area INT,"
@@ -265,3 +265,14 @@
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown tags"
                             (ports/update-entity svc :orders o1 {:admin/links {:tags [t42 t7]}})))
       (is (= #{t7} (linked))))))
+
+(deftest ^:integration relation-titles-show-only-targets-inside-their-read
+  (let [{:keys [service provider]} @state
+        held   [{:permission :admin.order-lines/read :scope {}}
+                {:permission :admin.orders/read :scope in-42}]
+        user   (permissions/with-access editor {:mode :enforce :platform-admin? false :rights held})
+        lines  [{:id l1 :order-id o1} {:id l3 :order-id o3}]
+        titles #(get-in (ports/list-overview % :order-lines {:overview/fields [:order-id]} lines)
+                        [:titles :order-id])]
+    (is (= {o1 "ORD-42-A" o3 "ORD-7-C"} (titles service)) "unscoped")
+    (is (= {o1 "ORD-42-A"} (titles (scoped-service/for-user service provider user))))))
