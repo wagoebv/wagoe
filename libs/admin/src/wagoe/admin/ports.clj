@@ -506,7 +506,8 @@
      counts are for those fields of `records` instead of the list columns, and
      there are no facets or summary: the record drawer asks this way.
      `:overview/link-scopes {column scopes}` keeps a many-to-many column's
-     items inside its scopes. `:overview/summary-only? true` skips the
+     items inside its scopes, and `:overview/title-scopes {field scopes}` a
+     relation column's titles. `:overview/summary-only? true` skips the
      facet: with no records, that leaves the summary alone. A part whose
      query fails is left out; the page still renders."))
 
