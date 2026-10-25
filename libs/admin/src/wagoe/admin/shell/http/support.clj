@@ -1017,9 +1017,9 @@
 (defn parent-trail
   "The record a page of `entity-name` hangs under, for its breadcrumbs: the
    one `return-to` opens, or the one an `eq` filter on a belongs-to names —
-   in `filters`, or in the list `return-to` points at. {:label :href :title
-   :title-href :list-href}, :list-href being this entity's list of that
-   record's children; nil when there is none."
+   in `filters`, or in the list `return-to` points at. {:label :href :record
+   :entity-config :title-href :list-href}, :list-href being this entity's list
+   of that record's children; nil when there is none."
   [admin-service schema-provider entity-name entity-config {:keys [filters return-to]}]
   (let [bts          (display/belongs-to-fields entity-config)
         [path qs]    (when return-to (str/split return-to #"\?" 2))
@@ -1037,13 +1037,13 @@
     (when (and parent (ports/validate-entity-exists schema-provider parent))
       (when-let [record (try (ports/get-entity admin-service parent id)
                              (catch Exception _ nil))]
-        (let [pcfg (ports/get-entity-config schema-provider parent)
-              pk   (:primary-key pcfg :id)]
-          {:label      (:label pcfg)
-           :href       (str "/web/admin/" (name parent))
-           :title      (str (get record (:title-field pcfg pk) (get record pk)))
-           :title-href (str "/web/admin/" (name parent) "/" id)
-           :list-href  (ui-base/filtered-list-url entity-name field id)})))))
+        (let [pcfg (ports/get-entity-config schema-provider parent)]
+          {:label         (:label pcfg)
+           :href          (str "/web/admin/" (name parent))
+           :record        record
+           :entity-config pcfg
+           :title-href    (str "/web/admin/" (name parent) "/" id)
+           :list-href     (ui-base/filtered-list-url entity-name field id)})))))
 
 (def ^:private sibling-cap
   "The most siblings a child page reads for its prev/next navigation. A record

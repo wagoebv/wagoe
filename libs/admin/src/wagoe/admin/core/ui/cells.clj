@@ -241,6 +241,29 @@
           (let [s (str value)]
             [:span {:title s} s]))))))
 
+(defn record-title
+  "What `record` is called: its `:title-field` rendered by the role it would
+   have if it were not the title, so an instant reads as a date, else its id.
+   Never a link, as a heading or breadcrumb holds it."
+  [entity-config record display]
+  (let [pk     (:primary-key entity-config :id)
+        field  (:title-field entity-config pk)
+        config (get-in entity-config [:fields field])
+        role   (display/display-role (dissoc entity-config :title-field) field)
+        ctx    {:entity-config entity-config :display display :field-config config
+                :relation (get (display/belongs-to-fields entity-config) field)}]
+    (cond
+      (or (= field pk) (nil? (get record field))) (str (get record pk))
+      (= :relation role) (or (get-in display [:overview :titles field (id-key (get record field))])
+                             (cell field record (assoc ctx :role :identifier)))
+      (#{:email :url :title} role) (str (get record field))
+      :else (cell field record (assoc ctx :role role)))))
+
+(defn with-record-title
+  "`trail`, the shell's parent trail, with its record's title rendered."
+  [{:keys [entity-config record] :as trail} display]
+  (assoc trail :title (record-title entity-config record display)))
+
 (defn page-total
   "The sum of `field` over `records`, or nil when no row has a number there."
   [records field]

@@ -827,10 +827,9 @@
         singular   (introspection/singular-label entity-config entity-name)
         is-edit?   (some? record)
         page-title (if is-edit? [:t :admin/page-edit-title {:label singular}] [:t :admin/page-create-title {:label singular}])
-        ;; What the record is called: the heading of an edit page
         pk         (:primary-key entity-config :id)
-        title-f    (:title-field entity-config pk)
-        heading    (when is-edit? (str (get record title-f (get record pk))))
+        ;; What the record is called: the heading of an edit page
+        heading    (when is-edit? (cells/record-title entity-config record (:display opts)))
         list-url   (or return-to (str "/web/admin/" (name entity-name)))]
     [:div.entity-detail-page {:class "space-y-4"}
      (when flash
@@ -844,7 +843,7 @@
       [:div.page-header-row
        ;; The list is the way back: the breadcrumb, Cancel and the save bar
        (if-let [trail (:parent-trail opts)]
-         (base/parent-breadcrumbs trail
+         (base/parent-breadcrumbs (cells/with-record-title trail (:display opts))
                                   [:a {:href (:list-href trail) :data-action "list"} label]
                                   [:span (if is-edit? heading page-title)])
          [:div.page-breadcrumbs
