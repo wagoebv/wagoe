@@ -316,6 +316,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A group grant can no longer hand out a code role** (BOU-836): `add-group-grant` and an import's `:grants` take only
+  a permission a module declares, unless `:wagoe/user :groups :permissions` is set, and never a code role's name. Such a
+  stored grant is no longer migrated to that role; boot logs it. Assign the role instead.
 - **An admin record's heading, drawer and breadcrumb show its title as a value** (BOU-827): a date, enum or relation
   as `:title-field` no longer reads as an ISO string, keyword or UUID. Nothing to change.
 - **Admin relation titles keep to the viewer's read scopes** (BOU-826): under `:enforce`, a related record outside them
