@@ -138,3 +138,23 @@
 (deftest ^:unit a-file-cell-shows-its-size
   (is (= :file (display/display-role {:fields {:datasheet {:type :binary}}} :datasheet)))
   (is (str/includes? (render :file :datasheet 15) "file-size{:n 15}")))
+
+(deftest ^:unit a-record-title-renders-as-its-list-cell-without-a-link
+  (let [title (fn [field record & [overview]]
+                (str (h/html (cells/record-title (assoc entity-config
+                                                        :title-field field
+                                                        :fields {:client-id {:type :uuid}
+                                                                 :status    {:type :enum :options [[:sent "Sent"]]}
+                                                                 :sent-at   {:type :instant}
+                                                                 :name      {:type :string}})
+                                                 (merge {:id "r1"} record)
+                                                 (assoc display :overview (merge {:now now} overview))))))]
+    (is (= "Acme" (title :name {:name "Acme"})))
+    (testing "an instant reads as the list reads it, not as an ISO string"
+      (is (not (str/includes? (title :sent-at {:sent-at (Instant/parse "2026-08-27T06:12:50.459979Z")}) "459979"))))
+    (is (str/includes? (title :status {:status "sent"}) "Sent"))
+    (testing "a relation: the target's title, else its id, never a link"
+      (is (= "Veldhuis" (title :client-id {:client-id "c1"} {:titles {:client-id {"c1" "Veldhuis"}}})))
+      (is (not (str/includes? (title :client-id {:client-id "c1"}) "<a"))))
+    (testing "no title: the id"
+      (is (= "r1" (title :name {}))))))

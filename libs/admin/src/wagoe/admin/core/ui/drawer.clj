@@ -58,8 +58,7 @@
   [entity-name entity-config record {:keys [display related-records return-to permissions]}]
   (let [pk       (:primary-key entity-config :id)
         id       (get record pk)
-        title-f  (:title-field entity-config pk)
-        heading  (str (get record title-f id))
+        heading  (cells/record-title entity-config record display)
         facet    (:facet entity-config)
         edit-url (cond-> (record-url entity-name id)
                    return-to (str "?return_to=" (base/url-encode return-to)))

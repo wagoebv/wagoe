@@ -460,7 +460,7 @@
          [:div {:class (str "alert alert-" (name type) " mb-2")} message]))
      ;; One parent's children: the way back to it
      (when parent-trail
-       (base/parent-breadcrumbs parent-trail [:span (:label entity-config)]))
+       (base/parent-breadcrumbs (cells/with-record-title parent-trail display) [:span (:label entity-config)]))
 
        ;; Compact toolbar: title + search + actions in one bar
      [:div.table-toolbar-container

@@ -313,6 +313,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **An admin record's heading, drawer and breadcrumb show its title as a value** (BOU-827): a date, enum or relation
+  as `:title-field` no longer reads as an ISO string, keyword or UUID. Nothing to change.
 - **`:expect-success` skips job types without a handler, and a failed report no longer holds the throttle** (BOU-835).
   A report the tracker refuses is logged and retried on the next failure or check. Nothing to change.
 - **A job handler throwing an `Error` (`AssertionError`, `ExceptionInInitializerError`) is a failed run** (BOU-834)
