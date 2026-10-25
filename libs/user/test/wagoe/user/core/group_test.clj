@@ -44,6 +44,10 @@
         (is (= :validation-error (:type error)))
         (is (= :scope (:field error)))
         (is (some? (:errors error))))))
+  (testing "a code role's name, which would shadow the grant's managed role"
+    (is (= :permission (get-in (sut/grant-refusal {:permission :orders/editor :scope {}} {}
+                                                  {:orders/editor {:permissions #{:orders/write}}})
+                               [:error :field]))))
   (testing "nothing declared: any keyword and any map of EDN"
     (is (nil? (sut/grant-refusal {:permission :anything :scope {:x #{1 :a "b"} :y (random-uuid)}} {})))
     (is (= :permission (get-in (sut/grant-refusal {:permission "invoice/approve" :scope {}} {}) [:error :field])))
