@@ -637,34 +637,62 @@ ok "prompt evaluates, and --port reached nREPL"
 
 # ── 12. do the AI commands work against a provider? ─────────────────────────
 # AI commands were tested only up to the shell-out (BOU-405). The stub answers
-# with a project and payment provider the description does not name, so the
-# summary shows them only if the reply was parsed. Skipped with SMOKE_AI: a
-# provider in config.edn outranks the env var.
+# each command with a value its request does not name, so the output shows it
+# only if the reply was parsed (BOU-828). Skipped with SMOKE_AI: a provider in
+# config.edn outranks the env var.
 if [ -z "${SMOKE_AI:-}" ]; then
-  echo "[12/12] bb scaffold ai and bb setup ai against a stub provider"
+  echo "[12/12] the AI commands against a stub provider"
   cat >/tmp/ai-stub.clj <<"STUB"
 (ns ai-stub
   (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [org.httpkit.server :as server]))
 
-(def answer
-  {:module-name "product"
-   :entities    [{:name "Product" :fields [{:name "name" :type "string"}
-                                           {:name "price" :type "decimal"}]}]
-   :project-name "stub-shop"
-   :database     "sqlite"
-   :payment      "mollie"})
+;; Each answer carries a value the request does not, so a command shows it
+;; only if it parsed the reply.
+(def spec-answer
+  (json/generate-string
+   {:module-name "product"
+    :entities    [{:name "Product" :fields [{:name "name" :type "string"}
+                                            {:name "price" :type "decimal"}]}]
+    :project-name "stub-shop"
+    :database     "sqlite"
+    :payment      "mollie"}))
+
+(defn- test-answer [user]
+  (let [source-ns (second (re-find #"\(ns\s+([^\s()]+)" user))]
+    (str "```clojure\n"
+         "(ns " source-ns "-test\n"
+         "  (:require [clojure.test :refer [deftest is]]))\n\n"
+         "(deftest stub-answer-test\n"
+         "  (is (= 3 (+ 1 2))))\n"
+         "```")))
+
+(defn- answer
+  "The reply to the command whose system prompt is `system`."
+  [system user]
+  (condp #(str/includes? %2 %1) system
+    "explain a Clojure/Wagoe stack trace" "Cause: stub-explained. Fix: none needed."
+    "Kaocha-compatible test namespace"    (test-answer user)
+    "into HoneySQL format"                (json/generate-string
+                                           {:honeysql    "{:select [:price] :from [:products] :where [:= :name \"stub-name\"]}"
+                                            :explanation "stub-explanation"})
+    "developer guide"                     "# stub-docs\n\nWritten by the stub."
+    "admin entity configuration"          "{:stub-widgets {:label \"Stub widgets\" :table-name :stub_widgets :fields {:name {:type :string}}}}"
+    spec-answer))
 
 (server/run-server
- (fn [{:keys [uri]}]
+ (fn [{:keys [uri body]}]
    ;; Any other path is the 404 a real endpoint gives a malformed URL.
    (if (= uri "/v1/chat/completions")
-     {:status  200
-      :headers {"Content-Type" "application/json"}
-      :body    (json/generate-string
-                {:choices [{:message {:content (json/generate-string answer)}
-                            :finish_reason "stop"}]
-                 :usage   {:total_tokens 42}})}
+     (let [messages (:messages (json/parse-string (slurp body) true))
+           content  #(str/join "\n" (keep (fn [m] (when (= % (:role m)) (:content m))) messages))]
+       {:status  200
+        :headers {"Content-Type" "application/json"}
+        :body    (json/generate-string
+                  {:choices [{:message {:content (answer (content "system") (content "user"))}
+                              :finish_reason "stop"}]
+                   :usage   {:total_tokens 42}})})
      {:status 404 :body (str "no route " uri)}))
  {:port 8123})
 @(promise)
@@ -696,6 +724,22 @@ STUB
     || { log_excerpt /tmp/setup-ai-stub.log 30
          fail "bb setup ai did not show the provider answer: parsed and dropped, or never asked (BOU-401)"; }
   ok "bb setup ai summarised the provider answer"
+
+  # One per remaining command, each its own way of reading the reply.
+  ai_case() { # name, expected text, command
+    bash -ic "cd /root/my-app && $3" </dev/null >"/tmp/ai-$1.log" 2>&1 \
+      || { log_excerpt "/tmp/ai-$1.log" 25; fail "bb ai $1 exited non-zero"; }
+    grep -qF -- "$2" "/tmp/ai-$1.log" \
+      || { log_excerpt "/tmp/ai-$1.log" 25; fail "bb ai $1 did not show the provider answer ($2)"; }
+    ok "bb ai $1 showed the provider answer"
+  }
+  printf "java.lang.NullPointerException\n\tat my_app.core.f(core.clj:1)\n" >/tmp/trace.txt
+  ai_case explain "stub-explained" "bb ai explain --file /tmp/trace.txt"
+  source_file=$(cd /root/my-app && find src/my_app/product -path "*/core/*" -name "*.clj" | sort | head -1)
+  ai_case gen-tests "(deftest ^:unit stub-answer-test" "bb ai gen-tests $source_file"
+  ai_case sql "stub-name" "bb ai sql \"prices of products named stub\""
+  ai_case docs "# stub-docs" "bb ai docs --module src/my_app/product"
+  ai_case admin-entity "Stub widgets" "bb ai admin-entity \"stub widgets with a name\" --yes && cat resources/conf/dev/admin/stub-widgets.edn"
 else
   echo "[12/12] skipped: SMOKE_AI=${SMOKE_AI} puts a provider in config.edn, which outranks the stub"
 fi
