@@ -14,7 +14,7 @@ automatic retries with exponential backoff, and multi-tenant support.
 | Pure functions: job creation, state transitions, retry logic
 
 | `wagoe.jobs.ports`
-| Protocols: `IJobQueue`, `IJobStore`, `IJobStats`, `IJobOutcomes`, `IJobWorker`, `IJobRegistry`, `IIdempotencyStore`, `IRecurringState`
+| Protocols: `IJobQueue`, `IJobStore`, `IJobStats`, `IJobOutcomes`, `IJobWorker`, `IJobRegistry`, `IIdempotencyStore`, `IRecurringState`, `ITransactionalJobQueue`, `ILeasedJobQueue`, `IDeadLetterRetention`
 
 | `wagoe.jobs.core.cron`
 | Pure cron parsing and next-run calculation
@@ -27,6 +27,9 @@ automatic retries with exponential backoff, and multi-tenant support.
 
 | `wagoe.jobs.shell.adapters.in-memory`
 | In-memory adapter (atoms, for dev/test)
+
+| `wagoe.jobs.shell.adapters.db`
+| Database adapter (`:provider :db`)
 
 | `wagoe.jobs.shell.adapters.redis`
 | Redis adapter (sorted sets, lists, hashes)
@@ -64,11 +67,12 @@ automatic retries with exponential backoff, and multi-tenant support.
                                 :args        {:to "user@example.com"}
                                 :priority    :high
                                 :max-retries 3}
-                               (random-uuid))]
+                               (random-uuid)
+                               (java.time.Instant/now))]
   (ports/enqueue-job! job-queue :default new-job))
 ----
 
-Priority levels: `:critical`, `:high`, `:default`, `:low`, `:bulk`.
+Priority levels: `:critical`, `:high`, `:normal` (the default), `:low`.
 
 === One job at a time
 
@@ -92,12 +96,13 @@ or fails for good.
 ----
 (require '[wagoe.jobs.shell.worker :as worker])
 
+;; Creates and starts the workers
 (def pool (worker/create-worker-pool
             {:queue-name :default :worker-count 5 :poll-interval-ms 500}
             queue store registry))
 
-(worker/start-pool! pool)
-(worker/stop-pool! pool)
+(worker/worker-pool-status pool)
+(worker/stop-worker-pool! pool)
 ----
 
 == Recurring jobs
@@ -220,17 +225,15 @@ To list only the job types this node has handlers for:
 
 == Retry behaviour
 
-Failed jobs retry with exponential backoff:
-
-* Attempt 1: immediate
-* Attempt 2: 30 seconds
-* Attempt 3: 5 minutes
-* Attempt 4: 1 hour
-* After `max-retries`: moved to dead letter queue
+Failed jobs retry with exponential backoff: the first retry waits two seconds
+and each next one twice as long, capped at a minute, plus up to 100 ms of jitter. The worker's
+`:retry-config` (`:backoff-strategy`, `:initial-delay-ms`, `:max-delay-ms`,
+`:jitter`) changes it. After `max-retries` attempts (default 3) the job is failed for
+good and lands in the dead letter queue.
 
 == Redis counters
 
-Stats are stored as Redis keys: `stats:global:*` and `+stats:queue:{name}:*+`.
+Stats are stored as Redis keys: `jobs:stats:global` and `+jobs:stats:queue:{name}+`.
 
 == Testing
 

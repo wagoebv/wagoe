@@ -26,7 +26,7 @@
    :label   "Active free-plan users"
    :filters [{:type :role        :field :plan :op :eq          :value "free"}
              {:type :last-active              :op :within-days :value 30}]
-   :cache   {:ttl-minutes 60}})
+   :cache-config {:ttl-minutes 60}})
 ;; :plan is not a default filter field: add it with :wagoe/audience {:filter-fields #{:plan}}
 
 ;; Resolve the audience (via injected IAudienceResolver)
@@ -45,23 +45,24 @@
 
 ## Integrant Configuration
 
-Add to `resources/conf/{env}/config.edn` and require `wagoe.audience.shell.module-wiring` at system start:
+Settings go under `:wagoe/audience` in `resources/conf/{env}/config.edn`, all optional:
 
 ```edn
 :wagoe/audience
-{:db-ctx           #ig/ref :wagoe/db-context
- :cache-service    #ig/ref :wagoe/cache
- :user-data-source #ig/ref :wagoe/user-data-source}
-
-:wagoe/audience-routes
-{:audience-service #ig/ref :wagoe/audience}
+{:filter-fields       #{:plan}       ; columns a filter may name, beyond the defaults
+ :users-table         :users
+ :users-field-mapping {:last_active_at :last_login}}
 ```
+
+The module's `ig-config` wires the components from that key: `:wagoe/audience-db-schema`,
+`:wagoe/audience-user-source`, `:wagoe/audience` and, when the user module is on,
+`:wagoe/audience-routes`.
 
 The `:wagoe/audience` component returns `{:store <IAudienceRepository> :resolver <IAudienceResolver> :cache <IAudienceCache>}`.
 
 `:wagoe/audience-routes` returns `{:api [...] :web [...]}` for composition by the HTTP handler.
 
-`:user-data-source` is required. Provide any implementation of `IUserDataSource`:
+`:wagoe/audience` refuses to boot without a `:user-data-source`; the wired default is a SQL source over `:users-table`. To use your own, implement `IUserDataSource`:
 
 ```clojure
 (defrecord MyUserDataSource [db]
@@ -99,44 +100,25 @@ Segments can be composed with AND, OR, and NOT using the `:compose` key:
 (audience/defaudience paid-active
   {:id      :paid-active
    :label   "Paid and active"
+   :filters []
    :compose {:and [{:ref :paid-users}
                    {:ref :active-users}]}})
 
 (audience/defaudience paid-not-churned
   {:id      :paid-not-churned
    :label   "Paid and not churned"
+   :filters []
    :compose {:and [{:ref :paid-users}
                    {:not {:ref :churned-users}}]}})
 ```
 
 ---
 
-## DB Migration
+## Tables
 
-Run once before using audience segmentation. When `wagoe-audience` is on the
-classpath, `clojure -M:migrate up` auto-discovers these migrations:
-
-```sql
--- libs/audience/resources/wagoe/audience/migrations/...-audience-segments.up.sql
-CREATE TABLE audience_segments (
-  audience_id   TEXT PRIMARY KEY,
-  label         TEXT NOT NULL,
-  definition    JSONB NOT NULL,
-  cache_config  JSONB,
-  cached_at     TIMESTAMP,
-  member_count  INTEGER,
-  created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
--- libs/audience/resources/wagoe/audience/migrations/...-audience-memberships.up.sql
-CREATE TABLE audience_memberships (
-  audience_id TEXT      NOT NULL,
-  user_id     UUID      NOT NULL,
-  cached_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (audience_id, user_id)
-);
-```
+`:wagoe/audience-db-schema` creates `audience_segments` and `audience_memberships` at boot
+(`CREATE TABLE IF NOT EXISTS`, per adapter: H2, SQLite, PostgreSQL, MySQL). There is no
+migration to run; the DDL is `wagoe.audience.shell.persistence/audience-ddl`.
 
 ---
 

@@ -305,11 +305,12 @@ surface found the rest in one pass.
 ```
 libs/events/src/wagoe/events/
 ├── core/event.clj                    # pure: envelope, validation, redelivery, tenancy
+├── core/outbox.clj                   # pure: outbox dead-letter and backoff policy
 ├── ports.clj                         # IEventPublisher, IEventSubscriber, IEventHistory, ITransactionalPublisher
 └── shell/
     ├── publisher.clj                 # id + clock, then publish
     ├── outbox.clj                    # event_outbox table, publish-in-tx!, relay
-    ├── module_wiring.clj             # :wagoe/events, :wagoe/events-outbox
+    ├── module_wiring.clj             # :wagoe/events, :wagoe/events-outbox, :wagoe/events-relay
     └── adapters/{in_memory,redis_streams}.clj
 ```
 

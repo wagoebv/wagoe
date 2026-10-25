@@ -9,9 +9,12 @@ Three adapters: Stripe, Mollie, and Mock (development/tests).
 [source]
 ----
 wagoe.payments.schema                        — Malli schemas: CheckoutRequest, CheckoutResult,
-                                                  PaymentStatusResult, WebhookResult
-wagoe.payments.ports                         — IPaymentProvider protocol: create-checkout-session,
-                                                  get-payment-status, process-webhook, verify-webhook-signature
+                                                  OffSessionPaymentRequest, PaymentStatusResult,
+                                                  ExpireCheckoutResult, WebhookResult
+wagoe.payments.ports                         — IPaymentProvider protocol: provider-name,
+                                                  create-checkout-session, create-off-session-payment,
+                                                  get-payment-status, expire-checkout-session,
+                                                  process-webhook, verify-webhook-signature
 wagoe.payments.core.provider                 — Pure helpers: cents->euro, event-type mapping,
                                                   status mapping (Mollie/Stripe)
 wagoe.payments.shell.adapters.stripe         — StripePaymentProvider (Checkout Sessions, HMAC webhooks)
@@ -55,7 +58,8 @@ Configure `:wagoe/payment-provider` in `config.edn`:
    :currency     "EUR"
    :description  "Monthly subscription"
    :redirect-url "https://app.example.com/return"})
-;; => {:checkout-url "https://..." :provider-checkout-id "cs_..."}
+;; => {:checkout-url "https://..." :provider-checkout-id "cs_..."
+;;     :correlation-id "..."}   ; store this: the webhook echoes it
 
 ;; Check payment status
 (payments/get-payment-status provider "cs_abc123")
@@ -65,7 +69,8 @@ Configure `:wagoe/payment-provider` in `config.edn`:
 (when (payments/verify-webhook-signature provider raw-body headers)
   (payments/process-webhook provider raw-body headers))
 ;; => {:event-type :payment.paid :provider-payment-id "pi_..."
-;;     :provider-checkout-id "cs_..." :payload {...}}
+;;     :correlation-id "..." :payload {...}}
+;; :event-type is nil for a verified event with no payment.* outcome
 ----
 
 == Testing

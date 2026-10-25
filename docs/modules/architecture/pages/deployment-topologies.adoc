@@ -101,9 +101,10 @@ quiet, which is the better of the two failures here.
 Scheduled jobs are *not* on this list, contrary to the usual expectation.
 Promotion of a due job is an atomic claim — `ZREM` on the scheduled sorted set,
 and only the worker whose `ZREM` returns 1 owns it — so N workers polling
-concurrently promote each due job exactly once (https://github.com/wagoebv/wagoe/pull/220[#220]). There is no recurring
-or cron scheduler in the framework, so there is nothing that fires per process
-at start-up either. Running more than one worker is safe; job handlers must be
+concurrently promote each due job exactly once (https://github.com/wagoebv/wagoe/pull/220[#220]). Recurring jobs
+(`:recurring` under `:wagoe/jobs`) are safe too: every replica may run the
+ticker, but only the lease holder enqueues, and each tick is claimed in the
+idempotency store. Running more than one worker is safe; job handlers must be
 idempotent for the ordinary at-least-once reason, not because of duplicate
 scheduling.
 

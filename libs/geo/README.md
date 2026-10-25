@@ -137,11 +137,11 @@ CREATE TABLE geo_cache (
 
 ## Providers
 
-| Provider | Key `:provider` | API Key | Rate Limit | Notes |
+| Provider | Key `:provider` | API Key | Min. interval (default) | Notes |
 |----------|----------------|---------|------------|-------|
-| OpenStreetMap Nominatim | `:openstreetmap` | None | 1 req/sec | Must set `:user-agent` |
-| Google Maps Geocoding API | `:google` | Required | 50 req/sec | Returns structured address components |
-| Mapbox Geocoding API | `:mapbox` | Required | 10 req/sec | Returns GeoJSON (lng, lat order) |
+| OpenStreetMap Nominatim | `:openstreetmap` | None | 1000 ms | Set `:user-agent` (warns and uses a shared default without) |
+| Google Maps Geocoding API | `:google` | Required | 100 ms | Returns structured address components |
+| Mapbox Geocoding API | `:mapbox` | Required | 100 ms | Returns GeoJSON (lng, lat order) |
 | PDOK Locatieserver | `:pdok` | None | 100 ms | Netherlands only; exact on postcode + house number |
 
 ---

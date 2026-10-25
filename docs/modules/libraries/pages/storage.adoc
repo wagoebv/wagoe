@@ -1,7 +1,7 @@
 = storage
-:description: File storage with local filesystem and AWS S3 backends.
+:description: File storage with local filesystem, AWS S3 and Google Cloud Storage backends.
 
-File storage abstraction with local filesystem and AWS S3 backends.
+File storage abstraction with local filesystem, AWS S3 and Google Cloud Storage backends.
 Includes file validation, image processing, and signed URL generation.
 
 == Key namespaces
@@ -14,7 +14,7 @@ Includes file validation, image processing, and signed URL generation.
 | Pure: file validation (size, type, extension), filename sanitization
 
 | `wagoe.storage.ports`
-| Protocols: `IFileStorage`, `IImageProcessor`
+| Protocols: `IFileStorage`, `IStreamingFileStorage`, `IUploadIndex`, `IExportJobStore`, `IImageProcessor`
 
 | `wagoe.storage.schema`
 | Malli schemas: `FileData`, `FileMetadata`, `StorageResult`
@@ -27,6 +27,9 @@ Includes file validation, image processing, and signed URL generation.
 
 | `wagoe.storage.shell.adapters.s3`
 | AWS S3 / S3-compatible adapter (MinIO, DigitalOcean Spaces)
+
+| `wagoe.storage.shell.adapters.gcs`
+| Google Cloud Storage adapter
 
 | `wagoe.storage.shell.adapters.image-processor`
 | Java AWT image processing (no external deps)
@@ -44,12 +47,12 @@ Includes file validation, image processing, and signed URL generation.
 (ports/store-file storage
   {:bytes (.getBytes "content") :content-type "text/plain"}
   {:filename "test.txt"})
-;=> {:key "ab/1234-uuid-hash.txt" :url "..." :size 7 :stored-at #inst"..."}
+;=> {:key "ab/1234-uuid-hash.txt" :url "..." :size 7 :content-type "text/plain"}
 
 (ports/retrieve-file storage "ab/1234-uuid-hash.txt")
 (ports/file-exists? storage "ab/1234-uuid-hash.txt")
 (ports/delete-file storage "ab/1234-uuid-hash.txt")
-(ports/generate-signed-url storage key 3600)  ; S3 only
+(ports/generate-signed-url storage key 3600)  ; local signs only with :signing-secret
 ----
 
 == File validation
@@ -59,24 +62,25 @@ Includes file validation, image processing, and signed URL generation.
 (require '[wagoe.storage.core.validation :as validation])
 
 (validation/validate-file
-  {:bytes file-bytes :content-type "image/png" :filename "photo.png"}
-  {:max-size-bytes (* 5 1024 1024)
-   :allowed-types  #{"image/jpeg" "image/png" "image/webp"}
-   :allowed-exts   #{".jpg" ".jpeg" ".png" ".webp"}})
+  {:bytes file-bytes :content-type "image/png"}
+  {:filename "photo.png"}
+  {:max-size           (* 5 1024 1024)
+   :allowed-types      #{"image/jpeg" "image/png" "image/webp"}
+   :allowed-extensions #{"jpg" "jpeg" "png" "webp"}})
 ----
 
 == Image processing
 
 [source,clojure]
 ----
-(ports/resize-image processor file-bytes {:width 800 :height 600 :maintain-aspect? true})
-(ports/create-thumbnail processor file-bytes {:width 150 :height 150})
+(ports/resize-image processor file-bytes {:width 800 :height 600}) ; nil keeps the aspect ratio
+(ports/create-thumbnail processor file-bytes 150)                   ; longest side, in pixels
 ----
 
 == Storage key format
 
 * *Local*: `+{shard}/{timestamp}-{uuid}-{hash16}.{ext}+` (shard = first 2 chars of SHA-256)
-* *S3*: `+{prefix}/{timestamp}-{uuid}-{hash16}.{ext}+`
+* *S3*: `+{prefix}/{timestamp}-{uuid8}.{ext}+`
 
 == Configuration
 
@@ -87,9 +91,12 @@ Includes file validation, image processing, and signed URL generation.
 ;; Local (development) — :root or :base-path
 :wagoe/storage {:provider :local :root "/var/uploads"}
 
-;; S3 (production)
+;; S3 (production); :endpoint for S3-compatible services
 :wagoe/storage {:provider :s3 :bucket #env AWS_S3_BUCKET :region #env AWS_REGION
                 :access-key #env AWS_ACCESS_KEY_ID :secret-key #env AWS_SECRET_ACCESS_KEY}
+
+;; Google Cloud Storage
+:wagoe/storage {:provider :gcs :bucket "b" :project-id "p"}
 ----
 
 == Upload index

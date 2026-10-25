@@ -4,7 +4,7 @@
 Multi-tenancy with schema-per-tenant isolation on PostgreSQL.
 Provides tenant CRUD, schema provisioning, tenant resolution, and cross-library integration.
 
-NOTE: Requires PostgreSQL. On SQLite or H2 the application refuses to boot with
+NOTE: Requires PostgreSQL. On SQLite, MySQL or H2 the application refuses to boot with
 `:wagoe/tenant` configured. A test profile on H2 sets `:allow-h2? true` under
 `:wagoe/tenant` and runs it with tenant rows but no per-tenant schemas.
 
@@ -18,7 +18,9 @@ NOTE: Requires PostgreSQL. On SQLite or H2 the application refuses to boot with
 | Pure functions: slug validation, schema name generation, prepare-tenant, decisions
 
 | `wagoe.tenant.ports`
-| Protocols: `ITenantRepository`, `ITenantService`, `ITenantSchemaProvider`
+| Protocols: `ITenantRepository`, `ITenantService`, `ITenantSchemaProvider`,
+  `ITenantAuditRepository`, and memberships and invites (`ITenantMembership*`,
+  `ITenantInvite*`)
 
 | `wagoe.tenant.schema`
 | Malli schemas: `Tenant`, `TenantInput`, `TenantUpdate`, `TenantSettings`
@@ -33,7 +35,10 @@ NOTE: Requires PostgreSQL. On SQLite or H2 the application refuses to boot with
 | PostgreSQL schema provisioning/deprovisioning
 
 | `wagoe.tenant.shell.http`
-| REST API handlers (CRUD + provision/suspend/activate)
+| REST API handlers (CRUD + provision/suspend/activate, export)
+
+| `wagoe.tenant.shell.membership-http`
+| Membership and invitation endpoints
 
 | `wagoe.tenant.shell.module-wiring`
 | Integrant lifecycle (`ig/init-key`, `ig/halt-key!`)
@@ -43,10 +48,9 @@ NOTE: Requires PostgreSQL. On SQLite or H2 the application refuses to boot with
 
 [source]
 ----
-:active       → Created, schema not yet provisioned
-:provisioned  → PostgreSQL schema created and ready
-:suspended    → Access disabled (data preserved)
-:deleted      → Soft delete (schema can be deprovisioned)
+:active     → Created; its PostgreSQL schema is created with it
+:suspended  → Access disabled (data preserved)
+:deleted    → Soft delete, `deleted-at` set; the schema is kept
 ----
 
 == Slug and schema naming
@@ -84,14 +88,25 @@ NOTE: Requires PostgreSQL. On SQLite or H2 the application refuses to boot with
 
 [source,bash]
 ----
-POST   /api/tenants               # Create tenant
-GET    /api/tenants               # List tenants
-GET    /api/tenants/:slug         # Get tenant
-PATCH  /api/tenants/:slug         # Update tenant
-POST   /api/tenants/:slug/provision  # Provision schema
-POST   /api/tenants/:slug/suspend    # Suspend tenant
-POST   /api/tenants/:slug/activate   # Activate tenant
-DELETE /api/tenants/:slug            # Soft delete
+# Admin role required
+POST   /api/v1/tenants                   # Create tenant
+GET    /api/v1/tenants                   # List tenants
+GET    /api/v1/tenants/:id               # Get tenant
+PUT    /api/v1/tenants/:id               # Update tenant
+POST   /api/v1/tenants/:id/provision     # Provision schema
+POST   /api/v1/tenants/:id/suspend       # Suspend tenant
+POST   /api/v1/tenants/:id/activate      # Activate tenant
+DELETE /api/v1/tenants/:id               # Soft delete
+
+# Platform admin
+GET    /api/v1/tenants/:id/export        # The tenant's data
+POST   /api/v1/tenants/:id/export-jobs   # The same, as a background job
+
+# Memberships
+POST   /api/v1/tenants/:tenant-id/memberships       # Invite a user
+GET    /api/v1/tenants/:tenant-id/memberships       # List members
+GET|PUT|DELETE /api/v1/tenants/:tenant-id/memberships/:id
+POST   /api/v1/memberships/:id/accept               # Accept an invitation
 ----
 
 == Testing

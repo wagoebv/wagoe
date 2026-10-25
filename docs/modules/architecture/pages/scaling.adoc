@@ -209,7 +209,7 @@ today, but the architecture is positioned for it.
 | Asset | How it helps
 
 | Per-module activation
-| Modules are gated by `:enabled?` / `:active` in `config.edn`. A process can boot a *subset* — the http-handler concats only present routes (`(or routes [])` in `wiring.clj`), so a "user-only" process is a config, not a fork.
+| Modules are gated by `:active` in `config.edn`. A process can boot a *subset* — the http-handler mounts only the route contributions present (`module-route-contributions` in `wiring.clj`), so a "user-only" process is a config, not a fork.
 
 | The protocol seam
 | Consumers depend on the protocol (e.g. `IUserService`), never the concrete record. Swapping an in-process record for a *remote HTTP client* implementing the same protocol leaves the caller untouched.
@@ -516,7 +516,7 @@ What it does, and what it deliberately does not:
 
 | payments
 | Easy
-| Zero internal Wagoe deps (only Maven). Already a self-contained provider. The natural *pilot* for the remote-adapter pattern.
+| Depends on `core` alone. Already a self-contained provider. The natural *pilot* for the remote-adapter pattern.
 
 | core, observability
 | Easy
@@ -534,8 +534,8 @@ What it does, and what it deliberately does not:
 [TIP]
 ====
 Recommended path: prove the remote-port adapter by extracting *payments* as a
-standalone service (zero internal deps, and the one the reference topology
-uses), then `user`. `admin`/`search`/`workflow` are last — not because of
+standalone service (it depends on `core` alone), then `user`, which the
+reference topology slices out. `admin`/`search`/`workflow` are last — not because of
 cycles any more, but because of the shared schema provider.
 ====
 

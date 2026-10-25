@@ -19,54 +19,17 @@ Code generation tool for creating new Wagoe modules following the Functional Cor
 
 | Feature | Description |
 |---------|-------------|
-| **Project Generation** | Create new Wagoe starter projects |
 | **Module Generation** | Scaffold complete modules with FC/IS architecture |
 | **Entity Templates** | Generate entity CRUD with validation schemas |
 | **Migration Generation** | Create database migrations |
-| **Test Scaffolding** | Generate unit, integration, and contract tests |
+| **Test Scaffolding** | Generate core, repository and service tests |
 | **CLI Interface** | Easy-to-use command-line tool |
-| **Customizable** | Template system for custom patterns |
 
 ## Creating a New Project
 
-> **Use `wagoe new` for new projects.** The Wagoe CLI (`wagoe new <name>`,
-> from `wagoe-cli`) is the canonical, actively-maintained project generator — it
-> produces the current template (`src/wagoe/system_config.clj`, `src/<project>/system.clj`,
-> `.env`, `bb.edn`, tests, hooks). The scaffolder's own `new` command below is a
-> lower-level/legacy generator kept for embedding; it emits a different, simpler
-> layout (`src/<name>/app.clj`) and does **not** match a `wagoe new` project.
-
-To generate the legacy starter layout directly from the scaffolder:
-
-```bash
-clojure -M:dev -m wagoe.scaffolder.shell.cli-entry new --name myapp
-```
-
-Generated projects are self-contained and use SQLite by default, making them ready to run immediately.
-
-### Generated Project Structure
-
-```
-myapp/
-├── deps.edn                      # Dependencies (Integrant, Ring, SQLite, etc.)
-├── README.md                     # Project documentation with REPL workflow
-├── src/myapp/
-│   └── app.clj                   # Integrant system with database & HTTP server
-└── resources/conf/dev/config.edn # Configuration (SQLite by default)
-```
-
-**Features included:**
-- ✓ Full Integrant system lifecycle
-- ✓ Database connection pooling (SQLite)
-- ✓ HTTP server setup (Ring/Jetty)
-- ✓ Component-based architecture
-- ✓ Comprehensive README with development guide
-
-**Next Steps:**
-1. `cd myapp`
-2. Run `clojure -M:repl-clj` to start the development environment
-3. Run `(ig-repl/go)` in the REPL to start the system
-4. Check the generated `README.md` for a full development workflow guide
+The scaffolder works inside an existing project. New projects come from the
+Wagoe CLI: `wagoe new <name>` (from `wagoe-cli`). The scaffolder's own `new`
+command was removed in BOU-259.
 
 ## Requirements
 
@@ -78,14 +41,14 @@ myapp/
 ### 1. Create a New Project
 
 ```bash
-clojure -M:dev -m wagoe.scaffolder.shell.cli-entry new --name myapp
+wagoe new myapp
 cd myapp
 ```
 
 ### 2. Generate a Module
 
 ```bash
-clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \
+bb scaffold generate \
   --module-name product \
   --entity Product \
   --field name:string:required \
@@ -98,52 +61,34 @@ clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \
 ### Generated Files
 
 ```
-libs/product/src/wagoe/product/
+src/myapp/product/
 ├── core/
-│   └── product.clj           # Pure business logic
-├── ports.clj                 # Service protocol
+│   ├── product.clj           # Pure business logic
+│   └── ui.clj                # Web UI (unless --no-web)
+├── ports.clj                 # Repository and service protocols
 ├── schema.clj                # Malli validation schemas
 └── shell/
     ├── service.clj           # Service implementation
-    ├── http.clj              # HTTP handlers
+    ├── http.clj              # HTTP handlers (unless --no-http)
     ├── persistence.clj       # Database adapter
-    └── module-wiring.clj     # Integrant configuration
+    ├── web_handlers.clj      # Web UI handlers (unless --no-web)
+    └── module_wiring.clj     # Integrant configuration
 
-libs/product/test/wagoe/product/
+test/myapp/product/
 ├── core/
-│   └── product_test.clj      # Unit tests
+│   └── product_test.clj
 └── shell/
-    ├── service_test.clj      # Integration tests
-    └── persistence_test.clj  # Contract tests
+    ├── product_repository_test.clj
+    └── service_test.clj
 
 migrations/
-└── 20240115120000-create-products-table.up.sql
+├── 20240115120000-create-products.up.sql
+└── 20240115120000-create-products.down.sql
 ```
+
+Then `bb scaffold integrate product` writes its config key.
 
 ## CLI Options
-
-### `new` Command
-
-Used to generate a new starter project.
-
-| Option         | Description                  | Example                 |
-|----------------|------------------------------|-------------------------|
-| `--name`       | Project name (required)      | `--name myapp`          |
-| `--output-dir` | Output directory (optional)  | `--output-dir /tmp`     |
-| `--dry-run`    | Preview without writing      | `--dry-run`             |
-
-**Examples:**
-
-```bash
-# Basic usage
-clojure -M:dev -m wagoe.scaffolder.shell.cli-entry new --name myapp
-
-# Custom output directory
-clojure -M:dev -m wagoe.scaffolder.shell.cli-entry new --name myapp --output-dir ./projects
-
-# Dry run (preview only)
-clojure -M:dev -m wagoe.scaffolder.shell.cli-entry new --name myapp --dry-run
-```
 
 ### `generate` Command
 
@@ -152,7 +97,11 @@ clojure -M:dev -m wagoe.scaffolder.shell.cli-entry new --name myapp --dry-run
 | `--module-name` | Module name (kebab-case)     | `--module-name order-item`     |
 | `--entity`      | Entity name (PascalCase)     | `--entity OrderItem`           |
 | `--field`       | Field definition (repeatable)| `--field name:string:required` |
-| `--output-dir`  | Output directory             | `--output-dir src`             |
+| `--base-ns`     | Namespace the module goes under (default: the project's) | `--base-ns myapp` |
+| `--workflow`    | A status as a forward-only workflow | `--workflow 'status:draft>sent'` |
+| `--[no-]http` / `--[no-]web` | Generate the REST API / web UI (default: both) | `--no-web` |
+| `--public-api`  | Routes open to anyone (default: signed-in users only) | `--public-api` |
+| `--output-dir`  | Project root to write into   | `--output-dir ../myapp`        |
 | `--dry-run`     | Preview without writing      | `--dry-run`                    |
 | `--force`       | Overwrite existing files     | `--force`                      |
 
@@ -164,19 +113,26 @@ Format: `name:type[:modifier...]`, e.g. `status:enum:values=draft,sent:required`
 
 | Type      | Clojure Type       | Database Type   |
 |-----------|--------------------| ----------------|
-| `string`  | `:string`          | `TEXT`          |
-| `int`     | `:int`             | `INTEGER`       |
-| `decimal` | `[:fn decimal?]`   | `DECIMAL(19,4)` |
+| `string`  | `:string`          | `VARCHAR(255)`  |
+| `text`    | `:string`          | `TEXT`          |
+| `int` / `integer` | `:int`     | `INTEGER`       |
+| `decimal` | `decimal?`         | `DECIMAL(19,4)` |
 | `boolean` | `:boolean`         | `BOOLEAN`       |
-| `uuid`    | `:uuid`            | `TEXT`          |
+| `email`   | `[:re …]`          | `VARCHAR(255)`  |
+| `uuid`    | `:uuid`            | `UUID`          |
+| `enum`    | `[:enum …]`        | `VARCHAR(50)`   |
 | `datetime` / `inst` | `inst?`  | `TIMESTAMP WITH TIME ZONE` |
 | `date`    | `YYYY-MM-DD` string | `DATE`         |
+| `json`    | `:map`             | `JSONB`         |
+| `relation` | `:uuid`           | `UUID` foreign key, `<name>_id` |
 
 **Modifiers**:
 
 | Modifier | Description |
 |----------|-------------|
 | `values=a,b,c` | Allowed values; required on an `enum` field |
+| `references=entity` | Target entity; required on a `relation` field (`references-table=` when its table is not the default plural) |
+| `on-delete=x` | `cascade` (default), `restrict`, `set-null` or `no-action`, on a `relation` |
 | `required` | Non-nullable field |
 | `optional` | Nullable field (default) |
 | `unique` | Unique constraint |
@@ -187,14 +143,14 @@ Format: `name:type[:modifier...]`, e.g. `status:enum:values=draft,sent:required`
 
 ```bash
 # Simple entity
-clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \
+bb scaffold generate \
   --module-name category \
   --entity Category \
   --field name:string:required \
   --field description:string
 
 # Entity with all field types
-clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \
+bb scaffold generate \
   --module-name order \
   --entity Order \
   --field order-number:string:required:unique \
@@ -205,7 +161,7 @@ clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \
   --field shipped-at:datetime
 
 # Dry run to preview
-clojure -M:dev -m wagoe.scaffolder.shell.cli-entry generate \
+bb scaffold generate \
   --module-name test \
   --entity Test \
   --field name:string \
@@ -257,128 +213,40 @@ the same files.
 
 ## Generated Code Examples
 
-### Schema (schema.clj)
-
-```clojure
-(ns myapp.product.schema
-  (:require [malli.core :as m]))
-
-(def product-schema
-  [:map
-   [:id {:optional true} :uuid]
-   [:name [:string {:min 1 :max 255}]]
-   [:sku [:string {:min 1 :max 100}]]
-   [:description {:optional true} [:maybe :string]]
-   [:price [:fn {:error/message "Must be a positive decimal"} 
-            #(and (decimal? %) (pos? %))]]
-   [:active {:optional true :default true} :boolean]
-   [:created-at {:optional true} inst?]
-   [:updated-at {:optional true} inst?]])
-
-(def create-product-schema
-  (m/schema
-    [:map
-     [:name [:string {:min 1 :max 255}]]
-     [:sku [:string {:min 1 :max 100}]]
-     [:description {:optional true} [:maybe :string]]
-     [:price [:fn pos-decimal?]]
-     [:active {:optional true} :boolean]]))
-```
-
-### Core Logic (core/product.clj)
-
-```clojure
-(ns myapp.product.core.product
-  (:require [myapp.product.schema :as schema]))
-
-(defn prepare-product
-  "Prepare product for creation (pure function)"
-  [product-data]
-  (let [now (java.time.Instant/now)]
-    (-> product-data
-        (assoc :id (random-uuid))
-        (assoc :created-at now)
-        (assoc :updated-at now)
-        (update :active #(if (nil? %) true %)))))
-
-(defn prepare-product-update
-  "Prepare product for update (pure function)"
-  [existing-product updates]
-  (-> existing-product
-      (merge updates)
-      (assoc :updated-at (java.time.Instant/now))))
-```
-
-### Service (shell/service.clj)
-
-```clojure
-(ns myapp.product.shell.service
-  (:require [myapp.product.ports :as ports]
-            [myapp.product.core.product :as product-core]
-            [wagoe.core.validation :as validation]
-            [myapp.product.schema :as schema]))
-
-(defrecord ProductService [repository logger]
-  ports/ProductServiceProtocol
-  
-  (create-product [this product-data]
-    (validation/validate! schema/create-product-schema product-data)
-    (let [product (product-core/prepare-product product-data)]
-      (ports/save-product repository product)))
-  
-  (get-product [this product-id]
-    (ports/find-product-by-id repository product-id))
-  
-  (update-product [this product-id updates]
-    (let [existing (ports/find-product-by-id repository product-id)]
-      (when-not existing
-        (throw (ex-info "Product not found" {:type :not-found :id product-id})))
-      (let [updated (product-core/prepare-product-update existing updates)]
-        (ports/save-product repository updated)))))
-```
+See [AGENTS.md](AGENTS.md) for a generated `schema.clj` and `ports.clj`.
 
 ## Module Structure
 
 ```
 libs/scaffolder/src/wagoe/scaffolder/
+├── cli.clj                   # Command definitions, option specs, wizards
+├── ports.clj                 # IScaffolderService
+├── schema.clj                # Request and field schemas
 ├── core/
-│   ├── generators.clj        # Template generation (pure)
-│   ├── field-parser.clj      # Field definition parsing
-│   └── templates/            # Template strings
+│   ├── generators.clj        # File content generation (pure)
+│   └── template.clj          # Names, types, template context (pure)
 └── shell/
-    ├── cli-entry.clj         # CLI entry point
-    └── file-writer.clj       # File system operations
+    ├── cli_entry.clj         # CLI entry point
+    └── service.clj           # Orchestration and file writing
 ```
 
 ## Programmatic Usage
 
 ```clojure
 (ns myapp.dev
-  (:require [wagoe.scaffolder.core.generators :as gen]))
+  (:require [wagoe.scaffolder.ports :as ports]
+            [wagoe.scaffolder.shell.service :as service]))
 
-;; Generate module programmatically
-(gen/generate-module
+(ports/generate-module
+  (service/create-scaffolder-service)
   {:module-name "product"
-   :entity-name "Product"
-   :fields [{:name "name" :type :string :required? true}
-            {:name "price" :type :decimal :required? true}
-            {:name "active" :type :boolean}]})
-;; => {:files [{:path "..." :content "..."} ...]}
-```
-
-## Customization
-
-### Custom Templates
-
-Place custom templates in `resources/scaffolder/templates/`:
-
-```
-resources/scaffolder/templates/
-├── core.clj.mustache
-├── ports.clj.mustache
-├── schema.clj.mustache
-├── service.clj.mustache
-└── test.clj.mustache
+   :base-ns     "myapp"
+   :entities    [{:name "Product"
+                  :fields [{:name :name :type :string :required true}
+                           {:name :price :type :decimal :required true}
+                           {:name :active :type :boolean}]}]
+   :dry-run     true})
+;; => {:success true :files [{:path "..." :content "..." :action :create} ...] ...}
 ```
 
 ## Dependencies
@@ -386,7 +254,9 @@ resources/scaffolder/templates/
 | Dependency | Version | Purpose |
 |------------|---------|---------|
 | `wagoe/core` | 1.0.1 | Utilities |
-| `org.clojure/tools.cli` | 1.3.250 | CLI parsing |
+| `org.clojure/tools.cli` | 1.4.256 | CLI parsing |
+| `metosin/malli` | 0.20.1 | Request schemas |
+| `rewrite-clj/rewrite-clj` | 1.2.57 | Editing existing source files |
 
 ## Relationship to Other Libraries
 

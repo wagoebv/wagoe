@@ -26,7 +26,7 @@ Marker-based internationalisation for Wagoe apps — translation keys live as `[
 | **Marker syntax** | `[:t :key]` data markers embedded in Hiccup trees — no UI signature changes |
 | **Interpolation** | Named params via a map: `[:t :key {:name "Alice"}]` → `"Hello {name}"` |
 | **Plurals** | Count-aware lookup with `:zero`/`:one`/`:many` catalogue entries |
-| **Locale chains** | user → tenant → default → `:en` fallback, then `(str key)` — never throws |
+| **Locale chains** | user → tenant → default → `:en` fallback, then the key's name — never throws |
 | **EDN catalogues** | One flat map per locale (`en.edn`, `nl.edn`, …) on the classpath |
 | **`bb i18n` tooling** | `find`, `scan`, `missing`, `unused` for catalogue hygiene and CI gating |
 

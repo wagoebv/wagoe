@@ -10,9 +10,9 @@ Cross-cutting observability for services and persistence layers: structured logg
 
 | Namespace | Purpose |
 |-----------|---------|
-| `wagoe.observability.logging.ports` | `ILogger`, `IAuditLogger` protocols |
-| `wagoe.observability.errors.ports` | `IErrorReporter`, `IErrorContext`, `IErrorFilter` protocols |
-| `wagoe.observability.metrics.ports` | `IMetricsRegistry`, `IMetricsEmitter` protocols |
+| `wagoe.observability.logging.ports` | `ILogger`, `IAuditLogger`, `ILoggingContext`, `ILoggingConfig` protocols |
+| `wagoe.observability.errors.ports` | `IErrorReporter`, `IErrorContext`, `IErrorFilter`, `IErrorReportingConfig` protocols |
+| `wagoe.observability.metrics.ports` | `IMetricsRegistry`, `IMetricsEmitter`, `IMetricsExporter`, `IMetricsConfig` protocols; `increment`, `gauge`, `observe`, `timed` |
 | `wagoe.observability.tracing.ports` | `ITracer` protocol (spans) |
 | `wagoe.observability.tracing.core` | `with-span` macro |
 | `wagoe.observability.<signal>.shell.adapters.*` | Provider implementations — see the matrix below |
@@ -83,7 +83,10 @@ The recommended way to add observability is to wrap operations with interceptors
    (fn [{:keys [params]}]
      ;; Business logic here — observability is automatic
      (let [user (user-core/prepare-user (:user-data params))]
-       (ports/save-user (:repository this) user)))))
+       (ports/save-user (:repository this) user)))
+   {:logger          (:logger this)
+    :metrics-emitter (:metrics this)
+    :error-reporter  (:error-reporter this)}))
 ```
 
 The interceptor automatically:
@@ -100,12 +103,12 @@ The interceptor automatically:
 ;; Wrap each database call
 (defn find-user-by-email [this email]
   (persistence-interceptors/execute-persistence-operation
-   (:logger this) (:error-reporter this)
-   "find-user-by-email"
+   :find-user-by-email
    {:email email}
-   (fn []
+   (fn [{:keys [params db-ctx]}]
      ;; Database query here
-     (jdbc/execute-one! (:datasource (:ctx this)) query))))
+     (jdbc/execute-one! (:datasource db-ctx) query))
+   (:ctx this)))
 ```
 
 ---
@@ -175,6 +178,7 @@ The interceptor automatically:
   (inc-counter!      [this metric-handle] [this metric-handle value] [this metric-handle value tags])
   (set-gauge!        [this metric-handle value] [this metric-handle value tags])
   (observe-histogram![this metric-handle value] [this metric-handle value tags])
+  (observe-summary!  [this metric-handle value] [this metric-handle value tags])
   (time-histogram!   [this metric-handle f] [this metric-handle tags f])
   (time-summary!     [this metric-handle f] [this metric-handle tags f]))
 ```
@@ -209,7 +213,7 @@ Providers via `:wagoe/tracing {:provider …}`:
   request (`"HTTP <METHOD> <path>"`, tagged method/path/correlation-id/status);
   no-op unless a tracer is wired, so it is always-on safe.
 - **Jobs** — the worker wraps each job execution in a `"job <type>"` span when a
-  `:tracer` is present in the worker config.
+  `:tracer` is present in the worker config. `:wagoe/jobs` does not pass one.
 
 Each is currently a per-unit **root** span; cross-thread parent/child linking
 (request → service → persistence) is a later enhancement (needs context support
@@ -363,13 +367,9 @@ Implement the protocols for your observability provider:
   (->MyLogger config))
 ```
 
-Register it in your Integrant config:
-
-```clojure
-;; In your system config
-{:wagoe/observability {:logger (my-app.observability.adapters.my-logger/create-my-logger
-                                   {:endpoint "..."})}}}
-```
+`:wagoe/logging` only builds the built-in providers, so pass your logger to the
+components that take one (`:logger` in a service's system map) rather than through
+config.
 
 ---
 

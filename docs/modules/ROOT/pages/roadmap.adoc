@@ -35,7 +35,7 @@ remaining work is about trust rather than capability.
 | Authentication, JWT, MFA, sessions, and role-based authorization
 
 | Data
-| next.jdbc with PostgreSQL, H2 and SQLite; migrations; multi-tenancy by
+| next.jdbc with PostgreSQL, MySQL, SQLite and H2; migrations; multi-tenancy by
   schema-per-tenant; full-text search
 
 | Async
@@ -100,6 +100,29 @@ The xref:stability.adoc[stability policy] defines what is public, what is
 internal, how deprecations work, and which libraries are incubating rather than
 covered by the `1.0` promise.
 
+=== In `main`, not yet released
+
+Most of what this page planned for 1.1 to 1.3. It ships in the next release; the
+https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md[CHANGELOG] lists it
+under `[Unreleased]`:
+
+* OIDC login (authorization code + PKCE) and a transactional outbox for events
+* Tenancy decided: PostgreSQL-only
+* Dependency vulnerability scanning (`bb check:vulns`) and coverage in CI
+* Database adapters that report their engine and capabilities; MySQL 8 support
+* Mollie finished, with one PSP contract sweep over Mock, Stripe and Mollie;
+  the metrics and error-reporting stubs fixed
+* Recurring cron jobs and job `:unique-key`s
+* Server-checked form fields from Malli schemas
+* A `#secret` config reader with pluggable sources
+* OpenAPI 3.1 instead of Swagger 2.0
+* Live htmx updates over server-sent events
+* A test kit for applications, `com.wagoe/wagoe-test`
+* Per-user and per-tenant data export, and retention policies
+* Combobox, toast and dialog components in the shared UI library
+* `wagoe upgrade`, a codemod for deprecated config keys and names
+* Opt-in virtual threads for requests and job workers
+
 == The road to 1.0.0
 
 `1.0.0` means the API is one we are willing to be held to. What is left is
@@ -135,39 +158,8 @@ than the tag — a framework gets one first impression.
 Grouped by the release they would ship in. `1.x` work keeps the stability
 promise; `2.0` is where the things that cannot are collected.
 
-=== 1.1 — Enterprise login and correctness
-
-* OIDC / OAuth2 login (authorization code + PKCE)
-* A transactional outbox, so publishing an event is decoupled from the database
-  transaction that produced it
-* A decision on multi-tenancy: PostgreSQL-only, or row-level tenancy as an
-  adapter capability
-* Dependency vulnerability scanning and coverage actually running in CI
-
-=== 1.2 — Contracts
-
-* A database-adapter port with a conformance suite across all four adapters
-* A PSP conformance sweep, finishing the Mollie adapter
-* Finishing the metrics and error-reporting stubs, or removing them and
-  correcting the documentation
-
-=== 1.3 — Batteries
-
-* Recurring and cron-scheduled jobs, with an idempotency-key store
-* Server-driven per-field form validation from Malli schemas
-* A `#secret` config reader with pluggable backends (env, file, vault, SOPS)
-* OpenAPI 3.1 instead of Swagger 2.0
-* A realtime-to-UI bridge: SSE plus out-of-band fragment responses
-* A test kit for consumer applications — test system, test tenant, Ring client,
-  job draining
-* GDPR data export per user and per tenant, and retention policies
-
 === Ongoing through 1.x
 
-* Component gaps in the shared UI library — dialog, combobox, toast region,
-  sortable tables
-* `wagoe upgrade`: a codemod for deprecated config keys, requires and functions.
-  This ships before the first `2.0` pre-release, not after it
 * A showcase application and a migration guide for people arriving from Kit or
   Luminus
 

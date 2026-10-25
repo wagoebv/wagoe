@@ -9,9 +9,11 @@ Generates new Wagoe modules with FC/IS structure, tests, and migrations.
 ----
 bb scaffold           # Show help and all commands
 bb scaffold generate  # Generate a new module (interactive wizard)
+bb scaffold entity    # Add an entity to an existing module
 bb scaffold field     # Add a field to an existing entity
 bb scaffold endpoint  # Add an endpoint to an existing module
 bb scaffold adapter   # Generate a new adapter implementation
+bb scaffold integrate # Write a module's config key into every profile
 ----
 
 The scaffolder works *inside* an existing project. To create a new project, use
@@ -67,12 +69,14 @@ bb scaffold ai "product module with name, price, stock" --yes
 
 == What gets generated
 
-For a module with three fields:
+For a module with one entity:
 
-* 8 source files: core, shell (`persistence`, `service`, `http`, `web_handlers`), ports, schema
-* 3 test files: unit (`^:unit`), integration (`^:integration`), contract (`^:contract`)
-* 1 SQL migration file
-* Zero linting errors and a complete FC/IS architecture
+* Source: `schema`, `ports`, `core/<entity>`, and `shell/` `service`,
+  `persistence`, `http` and `module_wiring`; with a web UI also `core/ui` and
+  `shell/web_handlers`
+* Tests: `core/<entity>_test`, `shell/<entity>_repository_test`,
+  `shell/service_test`, tagged `^:unit` or `^:integration`
+* A migration, as `.up.sql` and `.down.sql`
 
 == Key namespaces
 
@@ -83,11 +87,11 @@ For a module with three fields:
 | `wagoe.scaffolder.shell.cli-entry`
 | CLI entrypoint
 
-| `wagoe.scaffolder.core.*`
+| `wagoe.scaffolder.core.generators`, `wagoe.scaffolder.core.template`
 | Pure generation logic and naming/field transforms
 
-| `wagoe.scaffolder.shell.templates.*`
-| File templates and output orchestration
+| `wagoe.scaffolder.shell.service`
+| Output orchestration: which files to write, and writing them
 |===
 
 == Gotchas

@@ -67,7 +67,7 @@ _What initiates this use case?_
 [[_core_function]]
 ====== link:#_core_function[]Core Function
 
-`wagoe.core.++[++domain++]++/++[++function-name++]++`
+`++[++app++]++.++[++module++]++.core.++[++domain++]++/++[++function-name++]++`
 
 [[_input_schema]]
 ====== link:#_input_schema[]Input Schema
@@ -97,7 +97,7 @@ _What initiates this use case?_
 [[_shell_components]]
 ====== link:#_shell_components[]Shell Components
 
-* *HTTP Handler:* `wagoe.platform.shell.http/handle-++[++action++]++`
+* *HTTP Handler:* `++[++app++]++.++[++module++]++.shell.http/++[++action++]++-handler`
 * *CLI Command:* `wagoe ++[++resource++]++ ++[++action++]++`
 * *Validation:* Uses `++[++Schema++]++` with malli
 

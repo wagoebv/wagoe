@@ -27,35 +27,38 @@ Authentication and authorization domain: user lifecycle, credentials, sessions/t
 [source,bash]
 ----
 # Login
-curl -X POST http://localhost:3000/api/auth/login \
+curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "user@example.com", "password": "secret"}'
 
-# Register
-curl -X POST http://localhost:3000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email": "new@example.com", "password": "secret", "name": "Alice"}'
+# Create a user (admin)
+curl -X POST http://localhost:3000/api/v1/users \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"email": "new@example.com", "password": "secret", "name": "Alice", "role": "user"}'
 ----
+
+Anyone can create their own account at `/web/register` unless `:wagoe/user`
+sets `:registration false`.
 
 == Multi-Factor Authentication (MFA)
 
 [source,bash]
 ----
 # 1. Start MFA setup
-curl -X POST http://localhost:3000/api/auth/mfa/setup \
+curl -X POST http://localhost:3000/api/v1/auth/mfa/setup \
   -H "Authorization: Bearer <token>"
 
 # 2. Enable MFA (verify with TOTP code)
-curl -X POST http://localhost:3000/api/auth/mfa/enable \
+curl -X POST http://localhost:3000/api/v1/auth/mfa/enable \
   -H "Authorization: Bearer <token>" \
-  -d '{"secret": "...", "verificationCode": "123456"}'
+  -d '{"secret": "...", "backupCodes": ["..."], "verificationCode": "123456"}'
 
 # 3. Login with MFA
-curl -X POST http://localhost:3000/api/auth/login \
+curl -X POST http://localhost:3000/api/v1/auth/login \
   -d '{"email": "user@example.com", "password": "...", "mfaCode": "123456"}'
 
 # Disable MFA
-curl -X POST http://localhost:3000/api/auth/mfa/disable \
+curl -X POST http://localhost:3000/api/v1/auth/mfa/disable \
   -H "Authorization: Bearer <token>" \
   -d '{"code": "123456"}'
 ----
@@ -64,14 +67,18 @@ curl -X POST http://localhost:3000/api/auth/mfa/disable \
 
 [source,bash]
 ----
-# List active sessions
-curl http://localhost:3000/api/auth/sessions \
-  -H "Authorization: Bearer <token>"
+# Create a session (sign in)
+curl -X POST http://localhost:3000/api/v1/sessions \
+  -d '{"email": "user@example.com", "password": "..."}'
 
-# Revoke a session
-curl -X DELETE http://localhost:3000/api/auth/sessions/{session-id} \
-  -H "Authorization: Bearer <token>"
+# Validate a session token
+curl http://localhost:3000/api/v1/sessions/{token}
+
+# Invalidate it (sign out)
+curl -X DELETE http://localhost:3000/api/v1/sessions/{token}
 ----
+
+Admins list and revoke a user's sessions in the web UI at `/web/users/:id/sessions`.
 
 == Data export
 

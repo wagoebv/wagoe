@@ -15,6 +15,8 @@ JWT-authenticated WebSocket support with:
 - ✅ Role-based routing (send to users with specific role)
 - ✅ Connection-specific messaging (for job progress tracking)
 - ✅ Topic-based pub/sub (subscribe to arbitrary topics)
+- ✅ Multi-replica delivery over Redis pub/sub (`:provider :redis`)
+- ✅ Server-sent events for live htmx fragments
 - ✅ Pure functional core (FC/IS pattern)
 - ✅ Pluggable adapters (test and production)
 - ✅ Pluggable JWT verification (you supply the verifier)
@@ -683,17 +685,15 @@ a stream closes after logout; see the realtime guide.
 ### Integrant Configuration
 
 ```clojure
-;; resources/conf/config.edn
-{:wagoe/realtime-service
- {:connection-registry #ig/ref :wagoe/connection-registry
-  :jwt-verifier #ig/ref :wagoe/jwt-verifier
-  :logger #ig/ref :wagoe/logger
-  :error-reporter #ig/ref :wagoe/error-reporter}
- 
- :wagoe/connection-registry {}
- 
- :wagoe/jwt-verifier {}}
+;; resources/conf/<env>/config.edn, under :active
+:wagoe/realtime
+{:provider     :memory                    ; or :redis across replicas
+ :max-streams  32                         ; concurrent SSE streams per node
+ :jwt-verifier #ig/ref :my-app/jwt-verifier}
 ```
+
+`:wagoe/realtime` builds the registry, pub/sub manager and bus itself. The Redis
+keys are in [AGENTS.md](AGENTS.md).
 
 ### Environment Variables
 
@@ -798,30 +798,14 @@ All messages sent via WebSocket follow this JSON structure:
 
 ### Graceful Shutdown
 
-```clojure
-(defmethod ig/halt-key! :wagoe/realtime-service
-  [_ {:keys [connection-registry]}]
-  ;; Close all active connections gracefully
-  (let [connections (ports/all-connections connection-registry)]
-    (doseq [ws-adapter connections]
-      (try
-        (ports/send-message ws-adapter
-          {:type "server-shutdown"
-           :message "Server shutting down gracefully"})
-        (Thread/sleep 100)  ; Give time for message to send
-        (ports/close ws-adapter)
-        (catch Exception e
-          (log/warn e "Error closing connection during shutdown"))))))
-```
+Halting `:wagoe/realtime` closes every open connection, SSE streams included,
+then stops the bus.
 
 ### Load Balancing
 
-**Current limitation:** Single-server deployment only.
-
-For multi-server deployments (future feature), you'll need:
-- Redis pub/sub for cross-server messaging
-- Sticky sessions (route same user to same server)
-- Or implement connection registry in Redis
+`:provider :memory` is single-process: put it behind sticky sessions. Use
+`:provider :redis` for several replicas; each keeps its own sockets and relays
+messages over Redis pub/sub (ADR-035).
 
 ---
 
@@ -849,6 +833,11 @@ For multi-server deployments (future feature), you'll need:
 
 - `(send-to-connection service connection-id message)` - Send to specific connection
   - Returns: true if sent, false if connection not found
+
+- `(publish-to-topic service topic message)` - Send to a topic's subscribers
+  - Returns: count of connections message was sent to
+
+Under `:provider :redis` the send functions return nil: delivery is async.
 
 **IConnectionRegistry** - Connection storage
 
@@ -886,17 +875,25 @@ libs/realtime/
 │   │   ├── connection.clj             # Connection state management (pure)
 │   │   ├── message.clj                # Message routing logic (pure)
 │   │   ├── pubsub.clj                 # Topic subscription logic (pure)
-│   │   └── auth.clj                   # JWT validation logic (pure)
+│   │   ├── auth.clj                   # JWT validation logic (pure)
+│   │   ├── bus.clj                    # Routing envelopes (pure)
+│   │   └── sse.clj                    # SSE wire format (pure)
 │   ├── ports.clj                      # Protocol definitions
 │   ├── schema.clj                     # Malli schemas
 │   └── shell/                         # I/O adapters
 │       ├── service.clj                # Shell orchestration
 │       ├── connection_registry.clj    # Connection storage (atom)
 │       ├── pubsub_manager.clj         # Topic subscription storage (atom)
+│       ├── delivery.clj               # Delivers bus envelopes to local sockets
+│       ├── module_wiring.clj          # :wagoe/realtime
+│       ├── bus/                       # in_memory.clj, redis.clj
+│       ├── handlers/                  # ring_websocket.clj, sse.clj
 │       └── adapters/
 │           ├── websocket_adapter.clj  # WebSocket I/O
-│           └── jwt_adapter.clj        # JWT verification
-└── test/                              # Tests (134 tests, 409 assertions)
+│           ├── sse_adapter.clj        # SSE stream connection
+│           ├── redis_pubsub.clj       # Topic sets in Redis
+│           └── jwt_adapter.clj        # TestJWTAdapter
+└── test/
 ```
 
 ### Functional Core / Imperative Shell
@@ -912,7 +909,7 @@ libs/realtime/
 - WebSocket send/receive operations
 - Connection registry (stateful atom)
 - Pub/sub manager (stateful atom)
-- JWT verification (delegates to user module)
+- JWT verification (the application's `IJWTVerifier`)
 - Logging, error handling, time dependencies
 
 ### Data Flow
@@ -922,7 +919,7 @@ Client WebSocket Request
     ↓
 [Shell] WebSocket Handler (extract token from query params)
     ↓
-[Shell] JWT Adapter → [User Module] Validate JWT
+[Shell] IJWTVerifier (supplied by the application) → claims
     ↓
 [Core] Create Connection Record (pure function)
     ↓
@@ -945,28 +942,11 @@ Client Receives Message
 
 ### Current Limitations
 
-**Single-Server Deployment:**
-- ❌ **No multi-server support**: Connections tied to single server instance
-- ❌ **No Redis pub/sub**: Cross-server messaging not implemented
-- **Workaround**: Use sticky sessions or limit to single server
-- **Future**: Multi-server support with Redis planned for v0.2.0
-
 **No Presence Tracking:**
 - ❌ **No "who's online" features**: Cannot query list of active users
 - ❌ **No user activity status**: No typing indicators, last seen, etc.
 - **Workaround**: Implement at application level if needed
 - **Future**: Presence API planned for v0.3.0
-
-**Single-Server Pub/Sub:**
-- ✅ **Topic-based routing available**: Connections can subscribe to arbitrary topics
-- ❌ **No multi-server pub/sub**: Topics are per-server instance only
-- **Workaround**: Use sticky sessions or limit to single server
-- **Future**: Redis-backed pub/sub for multi-server planned for v0.2.0
-
-**Authentication:**
-- ⚠️ **JWT only**: No support for session cookies or API keys
-- **Workaround**: Issue short-lived JWT for WebSocket connections
-- **Future**: Alternative auth methods considered for v0.4.0
 
 ### Known Limitations
 
@@ -992,37 +972,24 @@ Client Receives Message
 Run core layer tests (pure functions):
 
 ```bash
-cd libs/realtime
-clojure -M:test --focus-meta :unit
+clojure -M:test :realtime --focus-meta :unit
 ```
-
-**Coverage:**
-- 58 unit tests (48 original + 10 pub/sub)
-- Tests for connection management, message routing, JWT validation, pub/sub
-- All tests pure (no mocks needed)
 
 ### Integration Tests
 
 Run shell layer tests (I/O operations):
 
 ```bash
-cd libs/realtime
-clojure -M:test --focus-meta :integration
+clojure -M:test :realtime --focus-meta :integration
 ```
 
-**Coverage:**
-- 76 integration tests (56 original + 20 pub/sub)
-- Tests for service orchestration, registry behavior, adapters, pub/sub manager
-- Uses test adapters (no real WebSockets or JWT verification)
+Uses test adapters (no real WebSockets or JWT verification).
 
 ### All Tests
 
 ```bash
-cd libs/realtime
-clojure -M:test
+clojure -M:test :realtime
 ```
-
-**Result**: 134 tests, 409 assertions, 0 failures
 
 ---
 
@@ -1036,7 +1003,7 @@ clojure -M:test
 1. Check JWT token is included in query params: `?token=<jwt>`
 2. Verify JWT is valid and not expired
 3. Ensure your IJWTVerifier is wired as :jwt-verifier
-4. Check JWT secret matches between user module and realtime module
+4. Check your `IJWTVerifier` accepts what your token issuer signs
 
 ### Messages Not Being Received
 
@@ -1064,9 +1031,13 @@ clojure -M:test
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `malli` | 0.20.0 | Schema validation |
-| `cheshire` | 6.1.0 | JSON encoding/decoding |
+| `malli` | 0.20.1 | Schema validation |
+| `cheshire` | 6.2.0 | JSON encoding/decoding |
 | `tools.logging` | 1.3.1 | Logging |
+| `jedis` | 8.0.1 | Redis provider |
+| `nippy` | 3.9.0 | Redis bus serialisation |
+| `ring-core` | 1.15.5 | WebSocket and SSE handlers |
+| `wagoe/i18n` | 1.0.1 | Per-subscriber fragment rendering |
 
 ---
 
@@ -1084,21 +1055,15 @@ Distributed under the Eclipse Public License version 2.0.
 
 **Want to contribute?**
 - See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines
-- Check [ADR-003](../../docs/adr/ADR-003-websocket-architecture.md) for architecture decisions
+- Check [ADR-003](../../dev-docs/adr/ADR-003-websocket-architecture.adoc) and [ADR-035](../../dev-docs/adr/ADR-035-realtime-redis-scaling.adoc) for architecture decisions
 - Open issues on GitHub for feature requests
 
 **Need help?**
 - GitHub Issues: https://github.com/wagoebv/wagoe/issues
-- Documentation: See [docs-site/](../../docs-site/) in the repository
-
-**Coming in v0.2.0:**
-- Multi-server support with Redis
-- Presence tracking API
-- Pub/sub channels
-- Message persistence
+- Documentation: See [docs/](../../docs/) in the repository
 
 ---
 
 **Last Updated**: 2026-02-04  
 **Version**: 1.0.1  
-**Status**: Production Ready (Single-Server)
+**Status**: Production Ready

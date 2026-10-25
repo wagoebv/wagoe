@@ -33,6 +33,9 @@ Pure functions from data to Hiccup. No I/O, no state, no HTTP.
 | `core.alpine` | Alpine.js attribute helpers, for the interactions HTMX does not cover |
 | `core.validation` | Rendering of field errors, so every module reports them the same way |
 | `core.form` | Fields from a malli map schema: HTML validation attributes, errors, and a wrapper that htmx re-validates on the server when the field changes |
+| `core.combobox` | Typeahead input that asks the server for options, single or `:multiple` |
+| `core.htmx` | `merge-attrs`, `fragment-request?` and `oob` for htmx responses |
+| `core.home` | `*path*`, the home link layouts point to, bound by the user module |
 
 ## Quick Start
 

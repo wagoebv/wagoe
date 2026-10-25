@@ -17,7 +17,7 @@ All pure functions in `core/`, side effects in `shell/`.
 | `core/error_formatter.clj` | Rich formatted output with WGE code header, stack trace, fix hint. Also `format-unclassified-error` fallback |
 | `core/stacktrace.clj` | Reorder stack traces: user code first, framework/JVM collapsed. Namespace prefix classification |
 | `core/auto_fix.clj` | Pure fix descriptor registry. Maps WGE codes to `{:fix-id :action :safe? :label}` |
-| `core/error_codes.clj` | WGE error catalog: WGE-1xx (config), WGE-2xx (validation), WGE-3xx (persistence), WGE-4xx (auth), WGE-5xx (interceptor), WGE-6xx (FC/IS) |
+| `error_codes.clj` | WGE error catalog (`resources/wagoe/devtools/error_catalog.edn`): WGE-1xx (config), WGE-2xx (validation), WGE-3xx (persistence), WGE-4xx (auth), WGE-5xx (interceptor), WGE-6xx (FC/IS), WGE-7xx (tooling), WGE-8xx (MCP guardrails) |
 | `core/project_repl.clj` | Which Integrant keys are modules (a scaffolded module wires four; the user module eight), and the command palette a generated project has |
 
 ### Shell Modules
@@ -28,7 +28,7 @@ All pure functions in `core/`, side effects in `shell/`.
 | `shell/auto_fix.clj` | Executes fix descriptors: migrations, env vars, JWT, module wiring. Multimethod dispatch on `:action` |
 | `shell/http_error_middleware.clj` | `wrap-dev-error-enrichment` — catches exceptions, attaches `:wagoe/dev-info` to ex-data, re-throws |
 | `shell/fcis_checker.clj` | Post-reset namespace scan for WGE-601 (core imports shell). Runs after `(go)` and `(reset)` |
-| `shell/project_repl.clj` | The helpers a `wagoe new` project gets: `status`, `modules`, `routes`, `config`, `fix!`, `commands`. Its generated `dev/user.clj` resolves these by name at call time |
+| `shell/project_repl.clj` | The helpers a `wagoe new` project gets: `status`, `modules`, `routes`, `config`, `explain-entity`, `fix!`, `commands`. Its generated `dev/user.clj` resolves these by name at call time |
 
 ### REPL Commands
 
@@ -36,7 +36,7 @@ All pure functions in `core/`, side effects in `shell/`.
 - `(fix! ex)` — Fix a specific exception
 
 In a project created by `wagoe new`, `dev/user.clj` also exposes `(status)`,
-`(modules)`, `(routes)`, `(config :k)` and `(commands)` from
+`(modules)`, `(routes)`, `(config :k)`, `(explain-entity :e)` and `(commands)` from
 `shell/project_repl.clj`. They resolve at call time, so removing devtools from
 the `:repl` alias degrades them to one line instead of breaking the namespace.
 
@@ -214,8 +214,8 @@ Steps executed interactively:
 
 1. **AI spec generation** — calls `ai-svc/scaffold-from-description`; falls back to basic scaffold if no AI service or parse failure
 2. **Confirm prompt** — prints proposed spec, asks `[y/N]` before proceeding
-3. **Scaffold** — `(scaffold! module-name {:fields fields})`
+3. **Scaffold + migrate** — `(prototype! module-name {:fields fields :endpoints [:crud :list]})`
 4. **Integrate** — runs `bb scaffold integrate <module>` via `clojure.java.shell/sh`
 5. **Test** — runs `(test-module (keyword module-name))`
 
-The workflow converts AI field specs (vector of `{:name :type}` maps) into the HoneySQL-compatible map format expected by the scaffolder.
+The workflow converts AI field specs (vector of `{:name :type}` maps) into the `[[:field malli-schema] ...]` vectors `prototype!` expects.

@@ -16,7 +16,7 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
 
 | `wagoe.geo.ports`
 | shared
-| `GeoProviderProtocol`, `GeoCacheProtocol`
+| `GeoProviderProtocol`, `GeoCacheProtocol`, `GeoServiceProtocol` (`lookup`, `reverse-lookup`)
 
 | `wagoe.geo.core.math`
 | core
@@ -70,8 +70,8 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
 
 ;; Fallback chain: OSM first, then Google
 :wagoe/geo-service
-{:provider   :openstreetmap
- :fallback   {:provider :google :api-key #env WAG_GEO_API_KEY}
+{:provider   [:openstreetmap :google]
+ :api-key    #env WAG_GEO_API_KEY
  :user-agent "MyApp/1.0"
  :cache-ttl  86400
  :db         #ig/ref :wagoe/db}
@@ -85,7 +85,7 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
 
 ;; Geocode an address
 (geo/geocode! service {:address "Prinsengracht 263, Amsterdam"})
-;=> {:lat 52.3747 :lon 4.8844 :formatted-address "Prinsengracht 263, Amsterdam"}
+;=> {:lat 52.3747 :lng 4.8844 :formatted-address "Prinsengracht 263, Amsterdam" :provider :openstreetmap :cached? false}
 
 ;; Postcode + house number (PDOK)
 (geo/geocode! service {:postcode "1012 JS" :house-number 1 :house-number-addition "A"})
@@ -99,11 +99,11 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
 (geo-ports/lookup service {:postcode "1012 JS" :house-number 1} {:only #{:pdok}})
 
 ;; Reverse geocode
-(geo/reverse-geocode! service {:lat 52.3747 :lon 4.8844})
+(geo/reverse-geocode! service {:lat 52.3747 :lng 4.8844})
 ;=> {:formatted-address "Prinsengracht 263, 1016 GV Amsterdam"}
 
 ;; Haversine distance (pure, no HTTP)
-(geo/distance {:lat 52.3747 :lon 4.8844} {:lat 52.3702 :lon 4.8952})
+(geo/distance {:lat 52.3747 :lng 4.8844} {:lat 52.3702 :lng 4.8952})
 ;=> 0.84  ; kilometres
 ----
 
@@ -125,7 +125,7 @@ Apply the `geo_cache` table migration before first use:
 clojure -M:migrate up
 ----
 
-Migration file: `resources/wagoe/geo/migrations/001-geo-cache.sql`
+Migration files: `resources/wagoe/geo/migrations/` (`20260324010000-geo-cache.up.sql` and later)
 
 == Testing
 

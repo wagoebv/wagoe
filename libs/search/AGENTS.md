@@ -11,7 +11,7 @@ Provides document indexing, full-text search (PostgreSQL FTS / LIKE fallback), a
 libs/search/
 ├── src/wagoe/search/
 │   ├── schema.clj          # Malli schemas: SearchDocument, SearchResult, SearchResponse, SearchDefinition (+ :filters)
-│   ├── ports.clj           # ISearchStore (persistence), ISearchEngine (orchestration)
+│   ├── ports.clj           # ISearchStore (persistence), ISearchEngine (orchestration), ISearchDefinitions
 │   ├── core/
 │   │   ├── index.clj       # defsearch (data only), collect-definitions, api-enabled?, build-document* (pure)
 │   │   ├── query.clj       # SQL builders (PostgreSQL FTS + H2/SQLite LIKE fallback)
@@ -21,7 +21,8 @@ libs/search/
 │   └── shell/
 │       ├── registry.clj    # deprecated global registry, read as a fallback
 │       ├── trigram.clj      # pg_trgm migration + installed? check
-│       ├── persistence.clj  # SearchStore (next.jdbc, HoneySQL ON CONFLICT upsert)
+│       ├── persistence.clj  # SearchStore (next.jdbc; ON CONFLICT upsert, or delete + insert)
+│       ├── filters_column.clj # migration: adds search_documents.filters when absent
 │       ├── service.clj      # SearchService (orchestration, pagination, reindex)
 │       ├── http.clj         # Ring routes: API + admin web UI
 │       └── module_wiring.clj # Integrant keys :wagoe/search + :wagoe/search-routes
@@ -57,7 +58,7 @@ Hand definitions to it, keyed by index id, in either of two places:
 
 (defsearch product-search
   {:entity-type :product
-   :language    "english"
+   :language    :english
    :fields      [{:name :title   :weight :a}
                  {:name :body    :weight :b}
                  {:name :tags    :weight :c}]
@@ -212,7 +213,7 @@ filters); anyone else gets 403.
 |--------|----------------------------------|-------------------|
 | GET    | `/search`                        | List served indices |
 | GET    | `/search/:index-id`              | Index detail page  |
-| GET    | `/search/:index-id/results`      | HTMX search fragment |
+| POST   | `/search/:index-id/search`       | HTMX search fragment |
 
 ---
 
@@ -237,12 +238,13 @@ CREATE TABLE search_documents (
 );
 ```
 
-Upsert uses `ON CONFLICT (index_id, entity_id) DO UPDATE SET ...` so re-indexing
-an existing entity is always safe to call.
+Upsert uses `ON CONFLICT (index_id, entity_id) DO UPDATE SET ...` where the
+adapter has `:on-conflict`, otherwise delete and insert in one transaction, so
+re-indexing an existing entity is always safe to call.
 
 The library ships this table as migrations (`resources/wagoe/search/migrations/`);
-`bb migrate up` creates it once search is enabled. Do not add `filters` by hand:
-the shipped `20260312000000-search-filters` migration adds it, and fails if it exists.
+`bb migrate up` creates it once search is enabled. The shipped
+`20260312000000-search-filters` migration adds `filters` only when it is absent (BOU-651).
 
 ---
 

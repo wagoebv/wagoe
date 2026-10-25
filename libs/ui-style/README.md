@@ -50,6 +50,8 @@ Contains:
   - `resources/public/css/app.css`
 - Shared JavaScript assets:
   - `resources/public/js/theme.js`
+  - `resources/public/js/components.js`
+  - `resources/public/js/admin-ux.js`
   - `resources/public/js/alpine.min.js`
   - `resources/public/js/htmx.min.js`
   - `resources/public/js/htmx-ext-sse.min.js`

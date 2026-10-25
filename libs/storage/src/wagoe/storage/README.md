@@ -1,6 +1,6 @@
 # Wagoe Storage Module
 
-File upload and storage functionality for the Wagoe framework. Supports local filesystem and cloud storage (S3, S3-compatible services) with image processing capabilities.
+File upload and storage functionality for the Wagoe framework. Supports local filesystem and cloud storage (S3, S3-compatible services, Google Cloud Storage) with image processing capabilities.
 
 ## Features
 
@@ -8,6 +8,7 @@ File upload and storage functionality for the Wagoe framework. Supports local fi
   - Local filesystem storage
   - AWS S3 storage
   - S3-compatible services (MinIO, DigitalOcean Spaces, etc.)
+  - Google Cloud Storage
 
 - **File Validation**
   - Size limits

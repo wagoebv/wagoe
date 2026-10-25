@@ -131,7 +131,7 @@ rate-limiting and audience).
 (require '[wagoe.cache.shell.tenant-cache :as tc])
 (def tenant-a (tc/create-tenant-cache c "acme"))
 (cache/set-value! tenant-a :user-123 data)   ; stored as "tenant:acme:user-123"
-;; In a handler: (tc/extract-tenant-cache c request) reads :tenant/:tenant-id off the request
+;; In a handler: (tc/extract-tenant-cache c request) scopes by `[:tenant :id]` or `:tenant-id`, else returns the base cache
 ```
 
 ## Common Pitfalls

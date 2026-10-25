@@ -30,19 +30,20 @@ com.wagoe/wagoe-calendar {:mvn/version "1.0.1"}
 ```clojure
 (require '[wagoe.calendar.core.recurrence :as r])
 (require '[wagoe.calendar.shell.service :as cal])
+(import '[java.time Instant])
 
 (def standup
   {:id        (random-uuid)
    :title     "Daily Standup"
-   :start     #inst "2026-03-02T09:00:00Z"
-   :end       #inst "2026-03-02T09:15:00Z"
+   :start     (Instant/parse "2026-03-02T09:00:00Z")
+   :end       (Instant/parse "2026-03-02T09:15:00Z")
    :timezone  "Europe/Amsterdam"
    :recurrence "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"})
 
 ;; Occurrences in a window
 (r/occurrences standup
-               #inst "2026-03-01T00:00:00Z"
-               #inst "2026-03-08T00:00:00Z")
+               (Instant/parse "2026-03-01T00:00:00Z")
+               (Instant/parse "2026-03-08T00:00:00Z"))
 ;; => [Mon Mar 2, Tue Mar 3, Wed Mar 4, Thu Mar 5, Fri Mar 6]
 
 ;; Export as iCal feed

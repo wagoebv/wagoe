@@ -9,9 +9,9 @@ conversion, type coercion, the interceptor pipeline engine, PII redaction, and
 feature flags. It sits at the bottom of the dependency graph — **it depends only
 on `org.clojure/clojure` and `metosin/malli`, and no Wagoe library depends
 *downward* into anything else from here.** There is **no `shell/`, no
-`ports.clj`, no I/O**; everything is a pure function (the interceptor/generator
-engines are the only namespaces tagged `^:wagoe/allow-throw`, because
-throwing *is* their error model).
+`ports.clj`, no I/O**; everything is a pure function (the interceptor engine
+and context, and the generator/behavior/snapshot test tooling, are tagged
+`^:wagoe/allow-throw`, because throwing *is* their error model).
 
 The four namespaces below carry almost all the traffic: `utils.type-conversion`,
 `utils.case-conversion`, `interceptor`, and the `validation.*` family.
@@ -61,6 +61,13 @@ return `nil` for invalid input by design.
 | Namespace | Key fns / vars |
 |-----------|----------------|
 | `wagoe.core.config.feature-flags` | `enabled?`, `all-flags`, `flag-info`, `add-flags-to-config`, `parse-bool`, `get-env-value`; `known-flags` registry (`:devex-validation` → `WAG_DEVEX_VALIDATION`, `:structured-logging` → `WAG_STRUCTURED_LOGGING`) |
+
+### Other utilities
+
+| Namespace | Key fns |
+|-----------|---------|
+| `wagoe.core.utils.redirect` | `local-path?` — is a user-supplied `return-to` a path on this site (BOU-553) |
+| `wagoe.core.utils.migration-id` | `next-id` (even-second id, so app migrations never collide with framework ids), `id-of` |
 
 ### PII redaction
 

@@ -4,10 +4,10 @@
 The `tenant` library provides full multi-tenancy: PostgreSQL schema-per-tenant isolation,
 membership management with roles, and a secure email invite flow.
 
-NOTE: Schema-per-tenant provisioning requires PostgreSQL. On SQLite the
+NOTE: Schema-per-tenant provisioning requires PostgreSQL. On SQLite and MySQL the
 application refuses to boot with `:wagoe/tenant` configured, and on H2 too unless
 `:wagoe/tenant` sets `:allow-h2? true`, as a test profile does. H2 then skips
-provisioning with a warning and is fine for unit/integration tests.
+provisioning (the provision route answers 501) and is fine for unit/integration tests.
 
 == Prerequisites
 
@@ -22,65 +22,25 @@ Run database migrations before starting the server:
 clojure -M:migrate up
 ----
 
-This creates three tables in the `public` schema:
-`tenants`, `tenant_memberships`, and `tenant_member_invites`.
+This creates four tables in the `public` schema:
+`tenants`, `tenant_memberships`, `tenant_member_invites` and `tenant_audit_log`.
 
 == Step 1 — Configure Integrant
 
-Add the tenant components to your `config.edn`:
+Switch the module on under `:active` in `resources/conf/<env>/config.edn`:
 
 [source,clojure]
 ----
-;; Initialise DB tables (run once on startup)
-:wagoe/tenant-db-schema
-{:db-context #ig/ref :wagoe/db-context
- :logger     #ig/ref :wagoe/logger}
-
-;; Tenant CRUD
-:wagoe/tenant-repository
-{:db-context     #ig/ref :wagoe/db-context
- :logger         #ig/ref :wagoe/logger
- :error-reporter #ig/ref :wagoe/error-reporter}
-
-:wagoe/tenant-service
-{:tenant-repository #ig/ref :wagoe/tenant-repository
- :logger            #ig/ref :wagoe/logger
- :metrics-emitter   #ig/ref :wagoe/metrics-emitter
- :error-reporter    #ig/ref :wagoe/error-reporter}
-
-;; Membership management
-:wagoe/membership-repository
-{:db-context     #ig/ref :wagoe/db-context
- :logger         #ig/ref :wagoe/logger
- :error-reporter #ig/ref :wagoe/error-reporter}
-
-:wagoe/membership-service
-{:repository      #ig/ref :wagoe/membership-repository
- :logger          #ig/ref :wagoe/logger
- :metrics-emitter #ig/ref :wagoe/metrics-emitter
- :error-reporter  #ig/ref :wagoe/error-reporter}
-
-;; Email invite flow
-:wagoe/invite-repository
-{:db-context     #ig/ref :wagoe/db-context
- :logger         #ig/ref :wagoe/logger
- :error-reporter #ig/ref :wagoe/error-reporter}
-
-:wagoe/invite-service
-{:repository            #ig/ref :wagoe/invite-repository
- :membership-repository #ig/ref :wagoe/membership-repository
- :logger                #ig/ref :wagoe/logger
- :metrics-emitter       #ig/ref :wagoe/metrics-emitter
- :error-reporter        #ig/ref :wagoe/error-reporter}
-
-;; Routes (merged into top-level router)
-:wagoe/tenant-routes
-{:tenant-service #ig/ref :wagoe/tenant-service
- :db-context     #ig/ref :wagoe/db-context}
-
-:wagoe/membership-routes
-{:service #ig/ref :wagoe/membership-service}
+:wagoe/tenant
+{:enabled? true}
 ----
+
+That brings in the tenant, membership and invite repositories and services,
+their routes and the tenant middleware (`:wagoe/tenant-db-schema`,
+`:wagoe/tenant-service`, `:wagoe/membership-service`,
+`:wagoe/invite-service`, `:wagoe/tenant-routes`, `:wagoe/membership-routes`,
+`:wagoe/tenant-http-middleware`, and the rest). There is nothing to wire by
+hand.
 
 == Step 2 — Inject the tenant middleware
 
@@ -112,7 +72,7 @@ After the stack has run, the request map contains:
 [source,clojure]
 ----
 {:user             {:id #uuid "..." :email "..."}
- :tenant           {:id #uuid "..." :slug "acme-corp" :status :provisioned}
+ :tenant           {:id #uuid "..." :slug "acme-corp" :status :active}
  :tenant-membership {:id #uuid "..." :tenant-id #uuid "..." :user-id #uuid "..."
                      :role :admin :status :active}}
 ----
@@ -132,9 +92,9 @@ After the stack has run, the request map contains:
 
 [source,clojure]
 ----
-(tm/wrap-multi-tenant handler tenant-service
+(tm/wrap-multi-tenant handler tenant-service db-context
   {:require-tenant? true    ; return 404 when tenant cannot be resolved (default false)
-   :cache           cache}) ; atom-based cache, TTL 1 hour (omit to disable caching)
+   :cache           cache}) ; atom-based cache, TTL 1 hour (default: a new one)
 ----
 
 == Step 3 — Protect routes with interceptors
@@ -196,19 +156,15 @@ instead of returning a bare JSON 403:
 == Step 4 — Bootstrap the first admin member
 
 A freshly created tenant has no members.
-Use `bootstrap-open?` to check, then create the first active membership directly:
+Use `bootstrap-open?` to check (true while the tenant has no active admin), then create the first active membership directly:
 
 [source,clojure]
 ----
-(require '[wagoe.tenant.core.membership :as m]
-         '[wagoe.tenant.ports :as ports])
+(require '[wagoe.tenant.ports :as ports])
 
 (defn on-tenant-created! [tenant user-id membership-service]
   (when (ports/bootstrap-open? membership-service (:id tenant))
-    (ports/create-active-membership! membership-service
-      {:tenant-id (:id tenant)
-       :user-id   user-id
-       :role      :admin})))
+    (ports/bootstrap-first-member membership-service (:id tenant) user-id :admin)))
 ----
 
 == Tenant CRUD
@@ -235,7 +191,7 @@ Response:
 
 [source,bash]
 ----
-# Provision PostgreSQL schema
+# Provision PostgreSQL schema (idempotent; creating a tenant already does this)
 curl -X POST http://localhost:3000/api/v1/tenants/<id>/provision \
   -H "Authorization: Bearer <admin-token>"
 
@@ -252,8 +208,7 @@ curl -X POST http://localhost:3000/api/v1/tenants/<id>/activate \
 
 [source]
 ----
-:active       → Created, schema not yet provisioned
-:provisioned  → PostgreSQL schema created and ready
+:active       → Created; on PostgreSQL its schema is created with it
 :suspended    → Access disabled (data preserved)
 :deleted      → Soft delete; schema NOT auto-dropped
 ----
@@ -334,15 +289,13 @@ know, use the token-based external invite flow.
 ----
 (require '[wagoe.tenant.ports :as ports])
 
-;; Returns {:invite {...} :token "<raw-token>"}
-;; Send :token to the user via email — it is NOT stored in the database
-(let [{:keys [invite token]}
-      (ports/create-external-invite! invite-service
-        {:tenant-id  tenant-id
-         :email      "alice@example.com"
-         :role       :member
-         :expires-in (java.time.Duration/ofDays 7)})]
-  (email/send-invite! email-service (:email invite) token))
+;; Returns the invite with :invite-token, the raw token.
+;; Send it to the user via email — it is NOT stored in the database.
+;; :expires-at defaults to 7 days from now.
+(let [invite (ports/invite-external-member invite-service
+               tenant-id "alice@example.com" :member
+               {:expires-at (.plus (java.time.Instant/now) (java.time.Duration/ofDays 7))})]
+  (email/send-invite! email-service (:email invite) (:invite-token invite)))
 ----
 
 === Accept an invite (two-phase)
@@ -350,15 +303,18 @@ know, use the token-based external invite flow.
 [source,clojure]
 ----
 ;; Phase 1 — validate (no mutations)
-(let [result (ports/load-external-invite-for-acceptance invite-service raw-token)]
-  ;; result = {:invite {...} :tenant {...}}
-  ;; throws ex-info {:type :validation-error} when expired or already used
+(let [invite (ports/load-external-invite-for-acceptance invite-service {:token raw-token})]
+  ;; the pending invite; throws :not-found when there is none for the token,
+  ;; :validation-error when it has expired
 
   ;; Phase 2 — atomic accept; creates membership in same transaction
-  (ports/accept-external-invite! invite-service raw-token user-id
-    {:after-accept-tx (fn [tx invite membership]
-                        ;; optional: run additional work in same transaction
-                        )}))
+  ;; Returns {:invite ... :membership ... :effects {:after-accept-tx result}}
+  (ports/accept-external-invite! invite-service
+    {:token               raw-token
+     :accepted-by-user-id user-id
+     :hooks {:after-accept-tx (fn [{:keys [invite membership tx-context]}]
+                                ;; optional: run additional work in same transaction
+                                )}}))
 ----
 
 NOTE: The raw token is never stored. Only the SHA-256 hash is kept in the database.
@@ -384,7 +340,7 @@ Always send the raw token to the user and discard it after.
   Check for an existing membership first.
 * **Expired invites** — `load-external-invite-for-acceptance` throws `:validation-error` for expired tokens.
   Surface this to the user as a 400, not a 500.
-* **H2 provisioning** — `provision-tenant!` silently skips on H2. Tests that check schema isolation
+* **H2 provisioning** — `provision-tenant!` throws `:not-supported` on H2, and creating a tenant skips its schema. Tests that check schema isolation
   must run against PostgreSQL.
 * **`require-tenant-member` returns 403** — check that `wrap-tenant-membership` is in the middleware stack
   and that the user has an `:active` membership (not `:invited` or `:suspended`).

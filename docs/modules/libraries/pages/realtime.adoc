@@ -23,7 +23,7 @@ message routing, and topic-based pub/sub.
 | Pure: topic subscription management
 
 | `wagoe.realtime.ports`
-| Protocols: `IRealtimeService`, `IConnectionRegistry`, `IWebSocketConnection`, `IJWTVerifier`, `IPubSubManager`
+| Protocols: `IRealtimeService`, `IIdentifiedConnections`, `IConnectionRegistry`, `IWebSocketConnection`, `IJWTVerifier`, `IPubSubManager`, `IMessageBus`
 
 | `wagoe.realtime.shell.service`
 | Service orchestrating core + adapters
@@ -74,7 +74,7 @@ message routing, and topic-based pub/sub.
 (require '[wagoe.realtime.ports :as ports])
 
 ;; Broadcast
-(ports/send-to-all service {:type :announcement :text "Maintenance in 5 minutes"})
+(ports/broadcast service {:type :announcement :text "Maintenance in 5 minutes"})
 
 ;; To specific user
 (ports/send-to-user service user-id {:type :notification :data {...}})

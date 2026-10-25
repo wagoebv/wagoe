@@ -14,12 +14,15 @@ WebSocket-based real-time communication with JWT authentication, message routing
 | `wagoe.realtime.core.message` | Pure: message creation, routing logic (4 types) |
 | `wagoe.realtime.core.auth` | Pure: JWT extraction, claims validation, permission checks |
 | `wagoe.realtime.core.pubsub` | Pure: topic subscription management |
-| `wagoe.realtime.ports` | Protocols: IRealtimeService, IConnectionRegistry, IWebSocketConnection, IJWTVerifier, IPubSubManager |
+| `wagoe.realtime.ports` | Protocols: IRealtimeService, IIdentifiedConnections, IConnectionRegistry, IWebSocketConnection, IJWTVerifier, IPubSubManager, IMessageBus |
 | `wagoe.realtime.schema` | Malli schemas: Connection, Message, JWT Claims, Topic |
 | `wagoe.realtime.shell.service` | Service orchestrating core + adapters |
 | `wagoe.realtime.shell.connection-registry` | In-memory registry (atom-backed) |
 | `wagoe.realtime.shell.pubsub-manager` | Atom-backed pub/sub state management |
+| `wagoe.realtime.shell.handlers.ring-websocket` | `websocket-handler`, the Ring WebSocket upgrade handler |
 | `wagoe.realtime.shell.adapters.websocket-adapter` | Ring/Jetty WebSocket adapter + TestWebSocketAdapter |
+| `wagoe.realtime.shell.bus.in-memory`, `shell.bus.redis` | `IMessageBus`: in-process, or Redis pub/sub relay |
+| `wagoe.realtime.shell.adapters.redis-pubsub` | `IPubSubManager` with topic sets in Redis |
 | `wagoe.realtime.shell.adapters.jwt-adapter` | TestJWTAdapter only — the application supplies the real IJWTVerifier |
 | `wagoe.realtime.core.sse` | Pure: SSE wire format, session user → identity, topic decision |
 | `wagoe.realtime.shell.handlers.sse` | SSE stream handler + `push-fragment!` for htmx |
@@ -158,7 +161,7 @@ See [ADR-035](../../dev-docs/adr/ADR-035-realtime-redis-scaling.adoc) for the fu
 ## Gotchas
 
 1. **Provider determines replica-safety** — the default `:memory` provider stores the connection registry and pub/sub state in process-local atoms; it is single-server only and requires sticky sessions when load-balanced. The `:redis` provider (shipped in BOU-85) scales across replicas — use it for any multi-instance deployment.
-2. **JWT adapter uses optional dependency** on wagoe/user - `requiring-resolve` at load time. Throws `:type :internal-error` if user module unavailable
+2. **No JWT verifier ships** — `:jwt-verifier` on `:wagoe/realtime` is an `IJWTVerifier` the application supplies; `jwt-adapter` holds only `TestJWTAdapter`
 3. **Messages get JSON-encoded** via Cheshire before sending over WebSocket
 4. **Topic subscriptions are server-side only** - no client-side subscribe/unsubscribe protocol messages
 5. **Shell checks `ports/open?`** before sending to prevent errors on closed connections

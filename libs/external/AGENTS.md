@@ -12,8 +12,10 @@ For payment processing (Mollie, Stripe), see [`libs/payments/AGENTS.md`](../paym
 ## Key Namespaces
 
 ```
-wagoe.external.schema           — Malli schemas for all three adapters
-wagoe.external.ports            — Protocol definitions (ISmtpProvider, IImapMailbox, ITwilioMessaging)
+wagoe.external.schema           — Malli schemas for all five adapters
+wagoe.external.ports            — Protocol definitions (ISmtpProvider, IImapMailbox, ITwilioMessaging,
+                                     IFileSource, ISoapClient)
+wagoe.external.core.mail-tls    — Pure SMTP/IMAP TLS properties (:ssl-trust, :check-server-identity?)
 wagoe.external.core.smtp        — Pure SMTP helpers (normalize-recipients, build-mime-properties)
 wagoe.external.core.imap        — Pure IMAP helpers (parse-message-headers, attachment-part?,
                                      build-attachment, mark-embedded, extract-body-text,
@@ -41,12 +43,18 @@ libs/external/src/wagoe/external/
 ├── core/
 │   ├── smtp.clj        Pure SMTP helpers (no Jakarta Mail I/O)
 │   ├── imap.clj        Pure IMAP message parsing
-│   └── twilio.clj      Pure Twilio param building + response parsing
+│   ├── mail_tls.clj    Pure SMTP/IMAP TLS properties
+│   ├── twilio.clj      Pure Twilio param building + response parsing
+│   ├── ftps.clj        Pure FTPS file selection + retry decisions
+│   └── soap.clj        Pure SOAP envelope building + parsing
 └── shell/
     ├── adapters/
     │   ├── smtp.clj    SmtpProviderAdapter — Jakarta Mail Transport
     │   ├── imap.clj    ImapMailboxAdapter — Jakarta Mail Store/UIDFolder
-    │   └── twilio.clj  TwilioAdapter — clj-http REST
+    │   ├── twilio.clj  TwilioAdapter — clj-http REST
+    │   ├── ftps.clj    FtpsFileSource — Commons Net
+    │   └── soap.clj    SoapClient — java.net.http
+    ├── resilience.clj  Retry + circuit breaker
     └── module_wiring.clj  Integrant multimethods
 ```
 
@@ -250,11 +258,11 @@ docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
 # All external tests
 clojure -M:test:test/mail:test/ftp :external
 
-# Unit tests only (pure functions, no I/O)
-clojure -M:test :external --focus-meta :unit
+# Unit tests only (pure functions, no I/O); the aliases are still needed to load the suite
+clojure -M:test:test/mail:test/ftp :external --focus-meta :unit
 
-# Integration tests (validates parsing; no real services needed)
-clojure -M:test :external --focus-meta :integration
+# Integration tests (GreenMail, MINA FtpServer and an HTTP stub, all in-process)
+clojure -M:test:test/mail:test/ftp :external --focus-meta :integration
 ```
 
 ## Links

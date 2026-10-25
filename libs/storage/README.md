@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-EPL--2.0-green)]()
 [![Clojars Project](https://img.shields.io/clojars/v/com.wagoe/wagoe-storage.svg)](https://clojars.org/com.wagoe/wagoe-storage)
 
-File storage abstraction with local filesystem and S3 backends, including upload validation and image processing.
+File storage abstraction with local filesystem, S3 and Google Cloud Storage backends, including upload validation and image processing.
 
 ## Installation
 
@@ -26,6 +26,7 @@ File storage abstraction with local filesystem and S3 backends, including upload
 | **Storage Protocol** | Abstract storage interface for multiple backends |
 | **Local Adapter** | Filesystem-based storage for development |
 | **S3 Adapter** | AWS S3 integration for production |
+| **GCS Adapter** | Google Cloud Storage |
 | **Upload Validation** | File type, size, and content validation |
 | **Image Processing** | Basic resize and thumbnail generation |
 
@@ -132,11 +133,11 @@ Upload, download, delete and signed-URL endpoints mount only with
 
 ```
 libs/storage/src/wagoe/storage/
-├── core/validation.clj      # Upload validation, filename sanitising (pure)
-├── ports.clj                # IFileStorage, IImageProcessor
+├── core/                    # validation, upload index record, export jobs (pure)
+├── ports.clj                # IFileStorage, IStreamingFileStorage, IUploadIndex, IExportJobStore, IImageProcessor
 ├── schema.clj               # Malli schemas: file data, metadata, config
 └── shell/
-    ├── adapters/            # local, s3, gcs, image-processor
+    ├── adapters/            # local, s3, gcs, spool, image-processor
     ├── service.clj          # validate-then-store service
     ├── http_handlers.clj    # optional routes
     └── module_wiring.clj    # Integrant :wagoe/storage, :wagoe/storage-routes
@@ -147,8 +148,9 @@ libs/storage/src/wagoe/storage/
 | Dependency | Version | Purpose |
 |------------|---------|---------|
 | `wagoe/platform` | 1.0.1 | Configuration, database |
-| `aws-sdk/s3` | 2.39.5 | S3 client |
-| `aws-sdk/s3-transfer-manager` | 2.39.5 | Efficient uploads |
+| `software.amazon.awssdk/s3` | 2.54.17 | S3 client |
+| `software.amazon.awssdk/s3-transfer-manager` | 2.54.17 | Efficient uploads |
+| `com.google.cloud/google-cloud-storage` | 2.73.0 | GCS client |
 
 ## S3 Configuration
 
@@ -183,7 +185,7 @@ For S3 storage, configure AWS credentials via:
                   ▼
 ┌─────────────────────────────────────────┐
 │            wagoe/storage             │
-│        (local, S3, validation)          │
+│      (local, S3, GCS, validation)       │
 └─────────────────┬───────────────────────┘
                   │ depends on
                   ▼

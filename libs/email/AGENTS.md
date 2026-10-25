@@ -103,8 +103,9 @@ in-memory queue is per-process and lost on restart.
 
 `wagoe.email.shell.module-wiring` ships `:wagoe/email` (builds a sender —
 `:provider :smtp` / `:logging`) and `:wagoe/email-queue` (in-memory queue over
-a sender). The app refs `:wagoe/email` and threads it into
-`:wagoe/user-routes` as `:email-sender`:
+a sender). Both are assembled in every app (`ig-config`); with no
+`:wagoe/email` settings, or an unknown `:provider`, the sender is `:logging`.
+`:wagoe/user-routes` receives `:wagoe/email` as `:email-sender`:
 
 ```clojure
 :wagoe/email       {:provider :smtp :host "smtp.example.com" :port 587
@@ -214,9 +215,10 @@ docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
 clojure -M:test :email
 ```
 
-Tests: `core/email_test.clj` (pure functions), `schema_test.clj` (Malli), and
-`shell/adapters/smtp_test.clj` (adapter + `email->outbound` translation,
-including attachment pass-through; tagged `^:integration`).
+Tests: `core/email_test.clj` (pure functions), `schema_test.clj` (Malli),
+`shell/adapters/queue_test.clj` (in-memory queue), `shell/module_wiring_test.clj`
+(Integrant keys), and `shell/adapters/smtp_test.clj` (adapter + `email->outbound`
+translation; the send tests are `^:integration`).
 
 ## Links
 

@@ -44,15 +44,18 @@ clj-paren-repair --help
 [[testing]]
 == Testing
 
-Wagoe uses https://github.com/lambdaisland/kaocha[Kaocha] for testing with H2 in-memory database.
+Wagoe uses https://github.com/lambdaisland/kaocha[Kaocha] for testing. Most suites run on in-memory H2; a few start an embedded PostgreSQL (`:test/pg`).
 
 [[test-all]]
 === Run All Tests
 
 [source,bash]
 ----
-clojure -M:test:test/all
+bb test:all                 # every surface: tests.edn suites, wagoe-cli, wagoe-mcp, tools, agents
+clojure -M:test:test/all    # every tests.edn suite
 ----
+
+`bb test:services up` starts the Redis and MySQL the adapter sweeps need.
 
 With JWT secret (required for auth tests):
 
@@ -78,7 +81,7 @@ clojure -M:test :jobs           # Jobs library tests
 clojure -M:test :email          # Email library tests
 clojure -M:test :realtime       # Realtime library tests
 clojure -M:test:test/pg :tenant         # Tenant library tests
-clojure -M:test :external       # External adapters tests
+clojure -M:test:test/mail:test/ftp :external  # External adapters tests
 clojure -M:test :payments       # Payments library tests
 clojure -M:test:test/pg :workflow  # Workflow library tests
 clojure -M:test :search         # Search library tests
@@ -86,7 +89,13 @@ clojure -M:test :reports        # Reports library tests
 clojure -M:test :calendar       # Calendar library tests
 clojure -M:test :geo            # Geo library tests
 clojure -M:test :ai             # AI library tests
+clojure -M:test :ui-style       # UI style library tests
+clojure -M:test :i18n           # i18n library tests
 ----
+
+`tests.edn` also defines `:app`, `:events`, `:webhooks`, `:push`, `:audience`,
+`:devtools`, `:shared-ui` and `:test`. On Apple Silicon add `:test/pg-mac` to
+every `:test/pg` command.
 
 [[test-metadata]]
 === Run Tests by Metadata Category
@@ -103,8 +112,8 @@ clojure -M:test:test/all --focus-meta :contract     # Database contract tests
 
 [source,bash]
 ----
-clojure -M:test :user --focus wagoe.user.core.user-test
-clojure -M:test:test/pg :admin --focus wagoe.admin.core.entity-test
+clojure -M:test :user --focus wagoe.user.core.user-validation-test
+clojure -M:test:test/pg :admin --focus wagoe.admin.core.forms-test
 ----
 
 [[test-watch]]
@@ -115,7 +124,7 @@ clojure -M:test:test/pg :admin --focus wagoe.admin.core.entity-test
 clojure -M:test:test/all --watch                           # Watch all tests
 clojure -M:test --watch :core                     # Watch core library
 clojure -M:test:test/all --watch --focus-meta :unit        # Watch unit tests
-clojure -M:test :user --watch --focus wagoe.user.core.user-test  # Watch specific namespace
+clojure -M:test :user --watch --focus wagoe.user.core.user-validation-test  # Watch specific namespace
 ----
 
 [[test-snapshots]]
@@ -153,7 +162,7 @@ clojure -M:clj-kondo --lint libs/admin/src libs/admin/test
 [source,bash]
 ----
 # Via Babashka (fast, local development)
-bb scripts/docs_lint.clj
+bb docs:lint
 
 # Via Clojure (CI)
 clojure -M:docs-lint
@@ -250,7 +259,9 @@ java -jar target/wagoe-*.jar server
 
 [source,bash]
 ----
-clojure -M:migrate migrate
+clojure -M:migrate up        # `migrate` is the same command
+clojure -M:migrate status
+bb migrate up                # same CLI, via Babashka
 ----
 
 [[migrate-down]]
@@ -296,9 +307,9 @@ clojure -M -m wagoe.scaffolder.shell.cli-entry generate \
 
 Generated files:
 
-* 9 source files (core, shell, ports, schema, wiring)
-* 3 test files (unit, integration, contract)
-* 1 migration file
+* 7 source files (schema, ports, core, service, persistence, http, module wiring)
+* 3 test files (core, repository, service)
+* 2 migration files (`.up.sql` and `.down.sql`)
 
 See link:../../docs/modules/libraries/pages/scaffolder.adoc[Scaffolder Reference] for complete options.
 
@@ -309,16 +320,14 @@ After scaffolding a module, wire it into the project:
 
 [source,bash]
 ----
-bb scaffold integrate product              # Write its config key (--dry-run to preview)
+bb scaffold integrate product              # Write its config key
 bb scaffold integrate product --dry-run    # Preview changes without writing
 ----
 
-This automates:
-
-* Adding source/test paths to `deps.edn`
-* Adding test suite to `tests.edn`
-* Adding module-wiring require to `wiring.clj`
-* Printing Integrant config snippet for manual insertion
+It writes the module's Integrant config key into every
+`resources/conf/<profile>/config.edn`. That is the whole registration: a module
+generated under `src/` is already on the classpath and its tests are picked up
+by the existing suites.
 
 [[tools]]
 == Babashka Developer Tools
@@ -335,10 +344,11 @@ Validate configuration for common mistakes:
 bb doctor                      # Check dev environment
 bb doctor --env prod           # Check specific environment
 bb doctor --env all            # Check all environments
+bb doctor --all                # Config and environment checks
 bb doctor --ci                 # Exit non-zero on any error (CI mode)
 ----
 
-Checks: `#env` references, provider values, JWT_SECRET, admin entity parity, prod placeholders, wiring requires.
+Checks: config loads, `#env` and `#secret` references, provider values, JWT_SECRET, admin entity parity, prod placeholders, the test reset flag, rate limiting without a cache, stale framework wiring. `bb doctor --help` lists them.
 
 [[tool-setup]]
 === Config Setup Wizard
@@ -377,7 +387,7 @@ bb ai admin-entity "products with name, price, status"  # Generate admin entity 
 bb create-admin                                            # Interactive wizard
 bb create-admin --email admin@app.com --name "Admin"       # Non-interactive
 bb create-admin --env prod                                 # Use production config
-bb create-admin --dir examples/ecommerce-api               # Target a sub-project
+bb create-admin --dir examples/shop                        # Target a sub-project
 ----
 
 [[tool-deploy]]
@@ -407,7 +417,7 @@ bb i18n:unused            # Report catalogue keys not referenced in source
 [source,bash]
 ----
 bb test:tools             # Run wagoe-tools unit tests
-bb check-links            # Validate markdown links in AGENTS.md files
+bb check-links            # Validate local links in AGENTS.md and the AsciiDoc docs
 bb smoke-check            # Verify deps.edn aliases and key tool entrypoints
 bb install-hooks          # Configure git hooks path to .githooks
 bb upgrade-outdated       # Check/upgrade outdated Maven deps (--update to apply)
@@ -437,7 +447,7 @@ Always use `clj-paren-repair` to fix parenthesis issues. Never manually repair -
 [source,bash]
 ----
 # Start watch mode for your focus area
-clojure -M:test :user --watch --focus wagoe.user.core.user-test
+clojure -M:test :user --watch --focus wagoe.user.core.user-validation-test
 
 # Edit code, save, tests run automatically
 # Ctrl+C to exit
@@ -448,14 +458,17 @@ clojure -M:test :user --watch --focus wagoe.user.core.user-test
 
 [source,bash]
 ----
-# Run all tests
-clojure -M:test:test/all
+# Run every test surface
+bb test:all
+
+# Quality gates (FC/IS, deps, ports, kondo, doctor, ...)
+bb check
 
 # Lint all code
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
 
 # Check docs for drift
-bb scripts/docs_lint.clj
+bb docs:lint
 ----
 
 [[workflow-ui-dev]]
@@ -487,8 +500,8 @@ clj-nrepl-eval -p 7888 "(require '[integrant.repl :as ig-repl]) (ig-repl/reset)"
 |(required for auth)
 
 |`WAG_ENV`
-|Environment name
-|`development`
+|Environment name (`dev`, `test`, `acc`, `prod`; `development` and `production` are aliases)
+|`dev`
 
 |`HTTP_PORT`
 |HTTP server port
@@ -497,10 +510,6 @@ clj-nrepl-eval -p 7888 "(require '[integrant.repl :as ig-repl]) (ig-repl/reset)"
 |`HTTP_HOST`
 |HTTP server bind address
 |`0.0.0.0`
-
-|`REPL_PORT`
-|nREPL server port
-|`7888`
 
 |`UPDATE_SNAPSHOTS`
 |Update test snapshots

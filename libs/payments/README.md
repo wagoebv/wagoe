@@ -26,7 +26,7 @@ PSP (Payment Service Provider) abstraction — a single `IPaymentProvider` proto
 | **PSP abstraction** | One `IPaymentProvider` protocol; swap providers with zero business-logic changes |
 | **Adapters** | Mollie, Stripe, and Mock — selected by config |
 | **Checkout-session flow** | Hosted checkout, status polling, and abandoned-session expiry |
-| **Off-session charges** | Idempotency-key-safe recurring billing against a stored mandate (Stripe, Mock) |
+| **Off-session charges** | Idempotency-key-safe recurring billing against a stored mandate (Stripe, Mollie, Mock) |
 | **Webhook verification** | Provider-agnostic signature check over the raw body + normalized event types |
 | **Boot-time validation** | `init-key` fails the boot when a provider is missing a required credential |
 
@@ -89,7 +89,7 @@ Other protocol methods: `create-off-session-payment`, `get-payment-status`,
 | Provider | Key | Required credentials | Env vars | Notes |
 |----------|-----|----------------------|----------|-------|
 | **Mock** | `:mock` | none | — | Auto-approves; no network calls. Refused outside the dev and test profiles |
-| **Mollie** | `:mollie` | `:api-key`, `:webhook-base-url` | `MOLLIE_API_KEY`, `APP_BASE_URL` | Form-POST webhook, no HMAC; mandates via `sequenceType` first/recurring |
+| **Mollie** | `:mollie` | `:api-key` (`:webhook-base-url` for the default webhook URL) | `MOLLIE_API_KEY`, `APP_BASE_URL` | Form-POST webhook, no HMAC; mandates via `sequenceType` first/recurring |
 | **Stripe** | `:stripe` | `:api-key`, `:webhook-secret` | `STRIPE_API_KEY`, `STRIPE_WEBHOOK_SECRET` | HMAC-SHA256 webhooks; full off-session + expiry support |
 
 A configured provider missing a required credential (e.g. a forgotten env var

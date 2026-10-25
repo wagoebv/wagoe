@@ -10,22 +10,22 @@ config management, i18n, deployment, and the CI quality gates.
 This library is **dev-only** in the sense that applications do not depend on it at
 runtime — but it **is published to Clojars**, as `com.wagoe/wagoe-tools`, in
 lockstep with the rest of the suite. Inside this monorepo it is consumed via a
-`:local/root` dependency in the root `bb.edn`, so every `bb ...` task below is
+`:paths` entry in the root `bb.edn`, so every `bb ...` task below is
 available out of the box:
 
 ```clojure
 ;; bb.edn
-{:deps {wagoe-tools {:local/root "libs/tools"}}}
+{:paths [... "libs/tools/src" "libs/tools/resources" ...]}
 ```
 
 ## What's inside
 
 | Namespace | `bb` command(s) | Purpose |
 |-----------|-----------------|---------|
-| `wagoe.tools.scaffold` | `bb scaffold`, `bb scaffold ai`, `bb scaffold generate/field/endpoint/adapter` | Interactive scaffolding wizards + AI passthrough |
+| `wagoe.tools.scaffold` | `bb scaffold`, `bb scaffold ai`, `bb scaffold generate/entity/subscriber/field/endpoint/adapter` | Interactive scaffolding wizards + AI passthrough |
 | `wagoe.tools.integrate` | `bb scaffold integrate`, `bb scaffold:integrate` | Write a scaffolded module's config key into config.edn |
 | `wagoe.tools.ai` | `bb ai explain/gen-tests/sql/docs/admin-entity` | Framework-aware AI CLI |
-| `wagoe.tools.doctor` | `bb doctor` | Rule-based config validation (6 checks) |
+| `wagoe.tools.doctor` | `bb doctor` | Rule-based config validation (`bb doctor --help` lists the checks) |
 | `wagoe.tools.setup` | `bb setup`, `bb setup ai` | Config setup wizard (interactive / flags / AI) |
 | `wagoe.tools.admin` | `bb create-admin` | Create the first admin user |
 | `wagoe.tools.deploy` | `bb deploy` (framework repo only) | Publish the 33 Clojars artifacts (tools itself included) |

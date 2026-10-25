@@ -10,12 +10,15 @@ NOTE: Stripe payments have moved to xref:payments.adoc[payments] library.
 
 [source]
 ----
-wagoe.external.schema              — Malli schemas for all three adapters
+wagoe.external.schema              — Malli schemas for all five adapters
 wagoe.external.ports               — Protocols: ISmtpProvider, IImapMailbox,
-                                        ITwilioMessaging
+                                        ITwilioMessaging, IFileSource, ISoapClient
 wagoe.external.core.smtp           — Pure SMTP helpers
 wagoe.external.core.imap           — Pure IMAP helpers
+wagoe.external.core.mail-tls       — Pure TLS settings shared by SMTP and IMAP
 wagoe.external.core.twilio         — Pure Twilio helpers (build SMS/WhatsApp params)
+wagoe.external.core.ftps           — Pure FTPS helpers
+wagoe.external.core.soap           — Pure SOAP envelope building and parsing
 wagoe.external.shell.adapters.smtp — SmtpProviderAdapter (Jakarta Mail)
 wagoe.external.shell.adapters.imap — ImapMailboxAdapter (Jakarta Mail, UIDFolder)
 wagoe.external.shell.adapters.twilio  — TwilioAdapter (clj-http, Basic auth)
@@ -89,10 +92,10 @@ self-signed for another name.
 (require '[wagoe.external.ports :as ports])
 
 ;; Send SMS
-(ports/send-sms twilio {:to "+31612345678" :body "Your code: 123456"})
+(ports/send-sms! twilio {:to "+31612345678" :body "Your code: 123456"})
 
 ;; Send WhatsApp
-(ports/send-whatsapp twilio {:to "+31612345678" :body "Your order has shipped!"})
+(ports/send-whatsapp! twilio {:to "+31612345678" :body "Your order has shipped!"})
 ----
 
 == FTPS file imports

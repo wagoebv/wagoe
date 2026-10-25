@@ -44,7 +44,7 @@ Add as a **`:dev` alias** extra-dep so it never reaches production:
 (fix! ex)
 ```
 
-WGE error codes group failures by category: `WGE-1xx` config, `WGE-2xx` validation, `WGE-3xx` persistence, `WGE-4xx` auth, `WGE-5xx` interceptor, `WGE-6xx` FC/IS.
+WGE error codes group failures by category: `WGE-1xx` config, `WGE-2xx` validation, `WGE-3xx` persistence, `WGE-4xx` auth, `WGE-5xx` interceptor, `WGE-6xx` FC/IS, `WGE-7xx` tooling, `WGE-8xx` MCP guardrails.
 
 ### Introspection & schema tools
 
@@ -52,9 +52,9 @@ WGE error codes group failures by category: `WGE-1xx` config, `WGE-2xx` validati
 (routes)                                 ; route table
 (config)                                 ; config tree (secrets redacted)
 (modules)                                ; module summary
-(schema-tree :user/CreateUser)           ; Malli schema tree
-(schema-example :user/CreateUser)        ; example value
-(schema-diff :user/CreateUser :user/UpdateUser)
+(schema UserSchema)                      ; Malli schema tree
+(generate UserSchema)                    ; example value
+(schema-diff CreateUser UpdateUser)
 ```
 
 ### AI REPL commands

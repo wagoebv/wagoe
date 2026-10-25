@@ -292,11 +292,11 @@ tests — and returns a structured report:
   "module": "invoice",
   "files":  [{"path":"src/wagoe/invoice/core/invoice.clj","action":"created"}, ...],
   "issues": [
-    {"step":"fc-is","severity":"error","file":"src/wagoe/invoice/core/invoice.clj",
-     "line":7,"code":"WGE-806","message":"core/ must not import shell"}
+    {"step":"fcis","severity":"error","file":"src/wagoe/invoice/core/invoice.clj",
+     "line":7,"code":"WGE-806","message":"Core namespace wagoe.invoice.core.invoice must not require ..."}
   ],
   "counts": {"errors":1,"warnings":0},
-  "steps":  ["kondo","fc-is","tests"]
+  "steps":  {"generate":"ok","kondo":"ok","fcis":"error","tests":"passed"}
 }
 ```
 
@@ -310,7 +310,7 @@ reviewing.
 ```jsonc
 {"jsonrpc":"2.0","id":12,"method":"tools/call",
  "params":{"name":"run-tests","arguments":{"module":"invoice"}}}
-// → {"status":"ok","module":"invoice","passed":7,"failed":0}
+// → {"status":"passed","module":"invoice","passed":7,"failed":0}
 ```
 
 Try that same `run-tests` call with `WAG_ENV=prod` and it's denied at dispatch
@@ -356,7 +356,8 @@ src/wagoe/mcp/
     ├── evaluator.clj  #   default `eval` evaluator: in-process load-string
     ├── migrator.clj   #   default migrator: shell out to :migrate
     ├── dispatch.clj   #   shell dispatch: gate (authorize) + audit + encode
-    └── server.clj     #   -main: composition root — resolves context, seeds registry, boots serve loop
+    ├── server.clj     #   -main: claims stdout, then loads boot (requires nothing)
+    └── boot.clj       #   composition root — resolves context, seeds registry, boots serve loop
 ```
 
 **Core is pure.** It contains every _decision_ — what's authorized, what a
@@ -389,7 +390,7 @@ direction), so the trail names exactly what ran.
 
 ### Composition root
 
-`shell/server.clj`'s `-main` wires the concrete adapters the way an Integrant
+`shell/boot.clj`'s `start!` wires the concrete adapters the way an Integrant
 config would — audit sink, system-source, scaffolder service, test-runner,
 evaluator, migrator. Anything not yet wired (the AI provider, the read-only
 `:db-query` datasource) is passed as `nil`, and the corresponding tool returns an
