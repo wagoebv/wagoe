@@ -64,6 +64,15 @@
                                (:wagoe/entity props) (assoc :entity (:wagoe/entity props)))]))
                    (m/children scope-schema))}))
 
+(defn with-registry-permissions
+  "`settings` checking a grant's permission against `registry` when
+   `:groups :permissions` declares none. Without either, any keyword passes."
+  [settings registry]
+  (cond-> settings
+    (and registry (nil? (:permissions settings)))
+    (assoc :permissions (m/schema [:fn {:error/message "should be a permission a module declares"}
+                                   #(authz/permission? registry %)]))))
+
 (defn with-registry-scopes
   "`settings` checking a grant's scope against the scope keys in `registry`
    (`wagoe.platform.core.scope/scope-schema`) when it declares any; else
@@ -138,10 +147,11 @@
 
 (defn- checked-grant
   "`grant` as stored, its scope {} when it has none. Throws :validation-error
-   when the declared schemas refuse it, carrying `data`."
-  [settings grant data]
+   when the declared schemas refuse it or it names a code role, carrying
+   `data`."
+  [settings registry grant data]
   (let [grant {:permission (:permission grant) :scope (or (:scope grant) {})}]
-    (when-let [{:keys [error]} (group-core/grant-refusal grant settings)]
+    (when-let [{:keys [error]} (group-core/grant-refusal grant settings (code-roles registry))]
       (throw (ex-info (:message error) (merge error data))))
     grant))
 
@@ -153,14 +163,6 @@
     (when-let [{:keys [error]} (group-core/assignment-refusal a roles settings)]
       (throw (ex-info (:message error) (merge error data))))
     a))
-
-(defn- legacy-role!
-  "The managed role a grant of `permission` becomes, created when missing."
-  [repo registry permission]
-  (or (get (all-roles repo registry) permission)
-      (ports/insert-role repo {:name        permission
-                               :description "Migrated from a group grant"
-                               :permissions #{permission}})))
 
 (defn- user-id-of [user]
   (if (map? user) (:id user) user))
@@ -187,6 +189,19 @@
   "The managed role named `role-name`, or nil."
   [repo role-name]
   (some #(when (= role-name (:name %)) %) (ports/find-roles repo)))
+
+(defn- legacy-role!
+  "The managed role a grant of `permission` becomes, created when missing.
+   Throws :validation-error when a code role has its name: assigning that
+   would hand out the code role's permissions."
+  [repo registry permission]
+  (when (contains? (code-roles registry) permission)
+    (throw (refused "A module ships a role of this name: assign the role"
+                    {:field :permission :permission permission})))
+  (or (find-role repo permission)
+      (ports/insert-role repo {:name        permission
+                               :description "Migrated from a group grant"
+                               :permissions #{permission}})))
 
 (defn- role-data
   "`role` trimmed and checked against the registry. Throws :validation-error."
@@ -232,12 +247,12 @@
   "`spec` checked and trimmed: its roles against `roles` and `settings`, its
    grants turned into roles, its members looked up. Throws :validation-error
    naming the group."
-  [user-repository settings roles spec]
+  [user-repository settings registry roles spec]
   (when-let [explanation (m/explain user-schema/GroupImport spec)]
     (throw (refused "Invalid group import" {:group  (:name spec)
                                             :errors (me/humanize explanation)})))
   (let [data   (group-data spec)
-        grants (mapv #(checked-grant settings % {:group (:name data)}) (:grants spec))
+        grants (mapv #(checked-grant settings registry % {:group (:name data)}) (:grants spec))
         ;; A grant's role is made in the transaction, if it is missing.
         roles  (into roles (map (fn [g] [(:permission g) {:permissions #{(:permission g)}}])) grants)]
     (assoc data
@@ -343,12 +358,18 @@
                            ", which no module registers under :scope-sources")
                       {:type :configuration-error :sources (vec unknown)})))))
 
+(defn- shadowed-grant?
+  "Whether legacy `grant` is not yet migrated and named after a code role."
+  [registry grant]
+  (and (nil? (:migrated-at grant)) (contains? (code-roles registry) (:permission grant))))
+
 (defn migration-plan
   "What `migrate!` changes, read without writing: {:everyone-roles (nil when
    Everyone exists or only admins do) :viewers [user-id] :readers-roles
-   :grants [legacy grant not yet migrated]}. Neither group gets a role holding
-   a permission something already checks as a grant (`gated-permissions`):
-   that would hand it to every user."
+   :grants [legacy grant not yet migrated]}, but not one named after a code
+   role: that stays unmigrated, and `migrate!` logs it. Neither group gets a
+   role holding a permission something already checks as a grant
+   (`gated-permissions`): that would hand it to every user."
   [{:keys [group-repository registry settings]}]
   (let [grants  (ports/find-legacy-grants group-repository)
         gated   (group-core/gated-permissions (when registry (authz/permissions registry))
@@ -360,7 +381,7 @@
                        (vec (group-core/module-roles (code-roles registry) "editor" gated)))
      :viewers        viewers
      :readers-roles  (when (seq viewers) (vec (group-core/module-roles (code-roles registry) "viewer" gated)))
-     :grants         (filterv (comp nil? :migrated-at) grants)}))
+     :grants         (filterv #(and (nil? (:migrated-at %)) (not (shadowed-grant? registry %))) grants)}))
 
 (defn migrate!
   "ADR-041's migration: under :enforce nobody may do less than under :off, and
@@ -389,6 +410,10 @@
         (log/info "Roles were migrated by another node")
         (throw e))))
   (when registry
+    (when-let [shadowed (seq (into (sorted-set) (comp (filter #(shadowed-grant? registry %)) (map :permission))
+                                   (ports/find-legacy-grants group-repository)))]
+      (log/warn "Group grants named after a code role are not migrated; assign the role or a managed one"
+                {:permissions (vec shadowed)}))
     (when-let [legacy (seq (sort (remove (authz/permissions registry)
                                          (mapcat :permissions (ports/find-roles group-repository)))))]
       (log/warn "Managed roles hold permissions no module declares; they still count" {:permissions (vec legacy)}))
@@ -499,7 +524,7 @@
 
   (add-group-grant [this group-id grant]
     (existing-group group-repository group-id)
-    (let [{:keys [permission scope]} (checked-grant settings grant nil)]
+    (let [{:keys [permission scope]} (checked-grant settings registry grant nil)]
       (legacy-role! group-repository registry permission)
       (let [a (ports/add-group-role this group-id {:role permission :scope scope})]
         (assoc a :permission permission))))
@@ -555,7 +580,7 @@
   (import-groups! [_ groups {:keys [replace?]}]
     (ports/ensure-tables group-repository)
     (let [roles (all-roles group-repository registry)
-          specs (mapv #(import-spec user-repository settings roles %) groups)]
+          specs (mapv #(import-spec user-repository settings registry roles %) groups)]
       (when-let [twice (first (for [[n xs] (group-by :name specs) :when (next xs)] n))]
         (throw (refused "A group is listed twice" {:group twice})))
       (ports/in-transaction group-repository
@@ -576,4 +601,5 @@
   ([group-repository user-repository audit-repository settings]
    (create-group-service group-repository user-repository audit-repository settings {}))
   ([group-repository user-repository audit-repository settings {:keys [registry membership]}]
-   (->UserGroupService group-repository user-repository audit-repository settings registry membership)))
+   (->UserGroupService group-repository user-repository audit-repository
+                       (with-registry-permissions settings registry) registry membership)))

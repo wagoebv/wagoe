@@ -97,19 +97,25 @@
       (refusal :scope "A scope holds EDN data only" nil))))
 
 (defn grant-refusal
-  "Nil when `grant` names a permission the `permissions` schema takes and a
-   scope the `scope` schema takes, else a :validation-error naming the field."
-  [{:keys [permission scope]} {:keys [permissions scope-schema]}]
-  (let [permissions (or permissions default-permissions)]
-    (cond
-      (not (keyword? permission))
-      (refusal :permission "A permission is a keyword" nil)
+  "Nil when `grant` names a permission the `permissions` schema takes, not
+   the name of one of `code-roles`, and a scope the `scope` schema takes, else
+   a :validation-error naming the field. A grant becomes the managed role
+   named after its permission, and a code role of that name would shadow it."
+  ([grant settings] (grant-refusal grant settings {}))
+  ([{:keys [permission scope]} {:keys [permissions scope-schema]} code-roles]
+   (let [permissions (or permissions default-permissions)]
+     (cond
+       (not (keyword? permission))
+       (refusal :permission "A permission is a keyword" nil)
 
-      (not (m/validate permissions permission))
-      (refusal :permission "Not a permission this application declares"
-               (me/humanize (m/explain permissions permission)))
+       (not (m/validate permissions permission))
+       (refusal :permission "Not a permission this application declares"
+                (me/humanize (m/explain permissions permission)))
 
-      :else (scope-refusal scope scope-schema))))
+       (contains? code-roles permission)
+       (refusal :permission "A module ships a role of this name: assign the role" nil)
+
+       :else (scope-refusal scope scope-schema)))))
 
 (defn assignment-refusal
   "Nil when `assignment` names one of `roles` and a scope the `scope` schema

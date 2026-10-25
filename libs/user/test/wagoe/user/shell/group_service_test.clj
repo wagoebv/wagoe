@@ -347,6 +347,40 @@
         (is (some #(= {:name :orders/editor :source :code} (select-keys % [:name :source]))
                   (ports/list-roles svc)))))))
 
+(deftest ^:integration grants-are-checked-against-the-registry
+  (testing "without :groups :permissions, a grant names a permission a module declares"
+    (with-service nil {:registry registry}
+      (fn [{:keys [svc user!]}]
+        (let [ada (user! "ada@example.com")
+              g   (ports/create-group svc {:name "Sales"})]
+          (ports/add-group-member svc (:id g) (:id ada))
+          (is (= :orders/read (:permission (ports/add-group-grant svc (:id g) {:permission :orders/read}))))
+          (doseq [p [:invoice/approve :orders/editor]]
+            (is (= {:type :validation-error :field :permission}
+                   (select-keys (refusal #(ports/add-group-grant svc (:id g) {:permission p})) [:type :field]))
+                (pr-str p)))
+          (is (= {:field :permission :group "Ops"}
+                 (select-keys (refusal #(ports/import-groups! svc [{:name "Ops" :grants [{:permission :orders/editor}]}] {}))
+                              [:field :group])))
+          (is (= #{:orders/read} (permissions-of (ports/user-grants svc ada)))
+              "a code role's name gives none of its permissions")
+          (is (not-any? (comp #{"Ops"} :name) (ports/list-groups svc)))))))
+  (testing ":groups :permissions still decides, but a code role's name is refused"
+    (with-service {:permissions [:enum :invoice/approve :orders/editor]} {:registry registry}
+      (fn [{:keys [svc]}]
+        (let [g (ports/create-group svc {:name "Finance"})]
+          (is (= :invoice/approve (:permission (ports/add-group-grant svc (:id g) {:permission :invoice/approve}))))
+          (is (= :permission (:field (refusal #(ports/add-group-grant svc (:id g) {:permission :orders/editor})))))
+          (is (= :permission (:field (refusal #(ports/import-groups! svc [{:name "Finance"
+                                                                           :grants [{:permission :orders/editor}]}]
+                                                                     {})))))
+          (is (= [:invoice/approve] (map :role (:roles (ports/get-group svc (:id g))))))))))
+  (testing "without a registry, any keyword"
+    (with-service nil
+      (fn [{:keys [svc]}]
+        (let [g (ports/create-group svc {:name "Ops"})]
+          (is (= :orders/editor (:permission (ports/add-group-grant svc (:id g) {:permission :orders/editor})))))))))
+
 (deftest ^:integration everyone-and-provider-groups-count-as-membership
   (with-service nil {:registry registry :membership (fn [user] (when (= "ada@example.com" (:email user))
                                                                  #{"Newsroom" "No such group"}))}
@@ -487,6 +521,16 @@
       (is (= #{} (set (map :role (:roles (ports/get-group svc group/everyone-id)))))
           "a declared permission, the groups schema's and a granted one each keep their module's role out")
       (is (not (group/holds? (ports/user-grants svc (user! "bob@example.com")) :workflow/read))))))
+
+(deftest ^:integration a-grant-named-after-a-code-role-is-not-migrated
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc ctx]}]
+      (let [ops (ports/create-group svc {:name "Ops"})]
+        (legacy-grant! ctx (:id ops) :orders/editor {})
+        (is (= [] (:grants (sut/migration-plan svc))))
+        (sut/migrate! svc)
+        (is (empty? (:roles (ports/get-group svc (:id ops)))) "the code role is not assigned")
+        (is (not-any? (comp #{:orders/editor} :name) (filter (comp #{:managed} :source) (ports/list-roles svc))))))))
 
 (deftest ^:integration provider-members-and-role-holders
   (with-service nil {:registry registry :membership (fn [user] (when (= "ada@example.com" (:email user))
