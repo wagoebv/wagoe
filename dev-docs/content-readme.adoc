@@ -89,6 +89,4 @@ templates, plus launch material under `reference/launch/`.
 * link:security-checklist.adoc[Security checklist]
 * link:DOCKER_DEVELOPMENT.adoc[Docker development]
 * link:DOCS_LINT.adoc[Documentation linting]
-* link:alpha-release-checklist.adoc[Alpha release checklist]
-* link:implementation/user-module-implementation.adoc[User module implementation]
 * link:presentations/fc-is-hexagonal-nl.adoc[Voorbij MVC: Functional Core / Imperative Shell] (NL)

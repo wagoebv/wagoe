@@ -62,12 +62,6 @@ Each ADR describes the context, the decision, and its consequences.
 
 Presentation slides and speaker notes for conference talks and internal knowledge sharing.
 
-=== link:implementation/[Implementation Notes]
-
-Detailed implementation notes and internal technical documentation.
-
-* link:implementation/user-module-implementation.adoc[User Module Implementation]
-
 === Babashka Developer Tooling
 
 The `libs/tools/` directory provides BB-based developer tools invoked via `bb.edn` tasks.
@@ -88,7 +82,6 @@ Key tools:
 * link:DECISIONS.adoc[DECISIONS] — Key project decisions log
 * link:DOCKER_DEVELOPMENT.adoc[Docker Development] — Docker-based development setup
 * link:DOCS_LINT.adoc[Docs Lint] — Documentation linting tooling and rules
-* link:alpha-release-checklist.adoc[Alpha Release Checklist] — Pre-release checklist
 * link:scaling-guide.adoc[Scaling Guide] — Vertical and horizontal scaling
 * link:security-checklist.adoc[Security Checklist] — Security review checklist
 * link:roadmap.adoc[Roadmap] — moved; the roadmap is published under `docs/`
