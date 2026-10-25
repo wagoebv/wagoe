@@ -468,7 +468,11 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
   from assignments only. Permissions no module declares stay in their roles and
   are logged.
 - `add-group-grant` / `remove-group-grant` and import `:grants` are deprecated:
-  each grant becomes the managed role of its permission.
+  each grant becomes the managed role of its permission. Its permission is
+  checked against `:groups :permissions` when set, else the registry
+  (`with-registry-permissions`), else any keyword (no registry). A code role's
+  name is refused, and such a stored grant is not migrated but logged: the
+  code role would shadow the managed one.
 - `:wagoe/user {:groups {:permissions <schema> :scope <schema>}}`, Malli or a
   symbol naming one, resolved in `ig-config`; a bad one fails boot. The
   permissions enum is declared into the registry until 2.0.
