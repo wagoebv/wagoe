@@ -313,6 +313,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Admin relation titles keep to the viewer's read scopes** (BOU-826): under `:enforce`, a related record outside them
+  shows its id, not its title. Nothing to change.
 - **`:expect-success` skips job types without a handler, and a failed report no longer holds the throttle** (BOU-835).
   A report the tracker refuses is logged and retried on the next failure or check. Nothing to change.
 - **A job handler throwing an `Error` (`AssertionError`, `ExceptionInInitializerError`) is a failed run** (BOU-834)

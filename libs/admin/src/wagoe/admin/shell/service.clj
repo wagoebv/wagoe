@@ -1080,8 +1080,9 @@
          nil)))
 
 (defn- relation-titles
-  "{id-string title} for the targets of relation `field` on this page."
-  [db-ctx schema-provider entity-config records field]
+  "{id-string title} for the targets of relation `field` on this page. With
+   `scopes`, only targets inside them: the others keep showing their id."
+  [db-ctx schema-provider entity-config records field scopes]
   (let [rel    (get (display/belongs-to-fields entity-config) field)
         target (:entity rel)
         ids    (id-strings records field)]
@@ -1100,7 +1101,8 @@
                           [(str id) (str title)])))
                 (db/execute-query! db-ctx
                                    (with-from {:select [[(col tpk) :id] [(col title) :title]]}
-                                     qc [:in (col tpk) ids]))))))))
+                                     qc (cond-> [:and [:in (col tpk) ids]]
+                                          scopes (conj (scope-where tcfg col scopes)))))))))))
 
 (defn- has-many-counts
   "{parent-id-string n} for has-many column `column` on this page."
@@ -1185,7 +1187,8 @@
         facet         (:facet entity-config)]
     {:now     (Instant/now)
      :titles  (per-column :titles (of-role :relation)
-                          #(relation-titles db-ctx schema-provider entity-config records %))
+                          #(relation-titles db-ctx schema-provider entity-config records %
+                                            (get-in options [:overview/title-scopes %])))
      :counts  (per-column :counts (of-role :count)
                           #(has-many-counts db-ctx schema-provider entity-config records %))
      :links   (per-column :links (of-role :links)
