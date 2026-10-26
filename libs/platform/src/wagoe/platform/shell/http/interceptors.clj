@@ -46,6 +46,7 @@
             [wagoe.observability.metrics.ports :as metrics-ports]
             [wagoe.observability.tracing.ports :as tracing-ports]
             [wagoe.observability.errors.core :as error-reporting]
+            [wagoe.observability.errors.ports :as error-ports]
             [wagoe.observability.core.sql-redaction :as redaction]
             [wagoe.platform.core.csrf :as csrf]
             [wagoe.platform.core.http.access :as access]
@@ -487,6 +488,10 @@
   {:name :http-error-reporting
    :enter (fn [{:keys [request system correlation-id] :as ctx}]
             (when-let [error-reporter (:error-reporter system)]
+              ;; A pooled thread still holds the previous request's context.
+              ;; Optional, so a reporter without the reset keeps working (BOU-843).
+              (when (satisfies? error-ports/IErrorContextReset error-reporter)
+                (error-ports/reset-context! error-reporter))
               (error-reporting/add-breadcrumb
                error-reporter
                "HTTP request started"
