@@ -25,7 +25,6 @@ Add configuration to `resources/conf/dev/config.edn`:
 {:wagoe/admin
  {:enabled? true
   :base-path "/web/admin"
-  :require-role :admin
   :entity-discovery {:mode :allowlist
                      :allowlist #{:users :products}}
   :pagination {:default-page-size 50
