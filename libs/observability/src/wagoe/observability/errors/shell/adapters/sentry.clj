@@ -221,7 +221,7 @@
                              :data (or data {})}
           ;; Nothing clears a pooled thread's breadcrumbs, so keep the newest
           ;; :max-breadcrumbs, as the Sentry SDK does.
-          max-n (:max-breadcrumbs config 100)
+          max-n (or (:max-breadcrumbs config) 100)
           crumbs (conj (get (get-thread-context) :breadcrumbs []) sentry-breadcrumb)]
       ;; A fresh vector, not subvec: conj on a subvec grows its backing vector.
       (merge-thread-context! {:breadcrumbs (if (> (count crumbs) max-n)
@@ -416,7 +416,8 @@
   (:error-reporter (shared-parts config)))
 
 (defn create-sentry-error-context
-  "Create a Sentry error context manager instance."
+  "Create a Sentry error context manager instance. `:max-breadcrumbs` caps
+   the breadcrumbs kept per thread (default 100)."
   [config]
   (->SentryErrorContext config))
 

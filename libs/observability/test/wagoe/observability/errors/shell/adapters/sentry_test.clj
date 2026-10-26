@@ -111,6 +111,16 @@
       (is (instance? clojure.lang.PersistentVector crumbs) "not a subvec over all 150"))
     (ports/clear-breadcrumbs! context)))
 
+(deftest ^:unit breadcrumbs-keep-the-configured-number
+  (doseq [[n expected] [[3 ["7" "8" "9"]] [0 []] [nil (map str (range 10))]]]
+    (let [context (sentry-adapter/create-sentry-error-context
+                   (assoc test-config :max-breadcrumbs n))]
+      (ports/clear-breadcrumbs! context)
+      (dotimes [i 10] (ports/add-breadcrumb! context {:message (str i)}))
+      (is (= expected (map :message (:breadcrumbs (ports/current-context context))))
+          (str ":max-breadcrumbs " n))
+      (ports/clear-breadcrumbs! context))))
+
 ;; =============================================================================
 ;; Error Filter Tests
 ;; =============================================================================
