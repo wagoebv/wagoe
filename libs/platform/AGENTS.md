@@ -365,7 +365,15 @@ ADR-041 §5. `authorization-middleware` in `shell.authorization`, mounted by
 Then the route's `:scope`, as above. Rights come once per request from
 `wagoe.platform.ports.authorization/IRights`, which the user module's group
 service implements (`:rights` on `:wagoe/http-handler`), and only for a rule
-that asks a permission.
+that asks a permission. They stay on the request, unresolved and unfiltered,
+as `:wagoe/rights` (under `:report` too; a platform admin's are not read).
+
+- A handler needing more of the caller's rights calls
+  `(authorization/request-rights registry rights-source request pred)`: the
+  rights whose permission `pred` admits, resolved as `rights-for` does. Taken
+  from `:wagoe/rights` when the middleware read them, else read once per call
+  (`:self`, `:signed-in`). A platform admin gets `[]`: check
+  `access/platform-admin?` first.
 
 - `:wagoe/authorization {:mode :off}` is the 1.x default: nothing mounts.
   `:report` lets everything through and warns once a minute per user, route,

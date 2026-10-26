@@ -8,7 +8,7 @@
             [clojure.tools.logging]
             [integrant.core :as ig]
             [wagoe.platform.ports.authorization :as ports]
-            [wagoe.platform.shell.authorization]
+            [wagoe.platform.shell.authorization :as authorization]
             [wagoe.platform.shell.system.authorization-report :as authz-report]
             [wagoe.platform.shell.system.wiring]))
 
@@ -16,6 +16,7 @@
   {"reader" {:rights [{:permission :orders/read}]}
    "editor" {:rights [{:permission :orders/read} {:permission :orders/write}]}
    "refund" {:rights [{:permission :orders/refund}]}
+   "both"   {:rights [{:permission :orders/refund} {:permission :orders/read :scope {:domain-id 42}}]}
    "nobody" {:rights []}
    "scoped" {:rights [{:permission :orders/read :scope {:domain-id 42}}]}
    "admin"  {:role :admin :rights []}
@@ -32,6 +33,21 @@
 
 (defn- ok [_] {:status 200 :body {:ok true}})
 
+(def ^:private seen
+  "What the last `rights-handler` call saw: the request's raw rights and the
+   resolved :orders/read rights `request-rights` gave it."
+  (atom nil))
+
+(def ^:private registry
+  (ig/init-key :wagoe/permission-registry
+               {:declarations {:wagoe/orders {:permissions {:orders/refund {:label "Refund"}}
+                                              :scopes {:domain-id {:label "Domain"}}}}}))
+
+(defn- rights-handler [request]
+  (reset! seen {:raw  (:wagoe/rights request)
+                :read (authorization/request-rights registry rights request #{:orders/read})})
+  (ok request))
+
 (def ^:private orders-routes
   {:api [["/orders" {:skip-interceptors? true :get {:handler ok} :post {:handler ok}}]
          ["/orders/:id/refund" {:skip-interceptors? true :permission :orders/refund :post {:handler ok}}]
@@ -39,6 +55,9 @@
                                         :get {:handler ok}}]
          ["/me" {:skip-interceptors? true :authorization :signed-in :get {:handler ok}}]
          ["/own/:id" {:skip-interceptors? true :authorization :self :get {:handler ok}}]
+         ["/orders/:id/rights" {:skip-interceptors? true :permission :orders/refund
+                                :get {:handler rights-handler}}]
+         ["/own/:id/rights" {:skip-interceptors? true :authorization :self :get {:handler rights-handler}}]
          ["/ping" {:skip-interceptors? true :public true :get {:handler ok}}]]
    :web [["/orders" {:skip-interceptors? true :get {:handler ok}}]]})
 
@@ -52,19 +71,16 @@
                request))))
 
 (defn- handler [mode & [extra]]
-  (let [registry (ig/init-key :wagoe/permission-registry
-                              {:declarations {:wagoe/orders {:permissions {:orders/refund {:label "Refund"}}
-                                                             :scopes {:domain-id {:label "Domain"}}}}})]
-    (ig/init-key :wagoe/http-handler
-                 (merge {:module-routes       [{:wagoe/module :wagoe/orders :contribution orders-routes}
-                                               unowned-routes]
-                         :permission-registry registry
-                         :rights              rights
-                         :auth-middleware     [authenticate]
-                         :router              {}
-                         :config              {:active (cond-> {:wagoe/settings {:name "t"}}
-                                                         mode (assoc :wagoe/authorization {:mode mode}))}}
-                        extra))))
+  (ig/init-key :wagoe/http-handler
+               (merge {:module-routes       [{:wagoe/module :wagoe/orders :contribution orders-routes}
+                                             unowned-routes]
+                       :permission-registry registry
+                       :rights              rights
+                       :auth-middleware     [authenticate]
+                       :router              {}
+                       :config              {:active (cond-> {:wagoe/settings {:name "t"}}
+                                                       mode (assoc :wagoe/authorization {:mode mode}))}}
+                      extra)))
 
 (defn- call
   ([h method uri user] (call h method uri user "application/json"))
@@ -129,6 +145,35 @@
     (call h :get "/api/v1/me" "reader")
     (call h :get "/api/v1/ping" nil)
     (is (= 1 @reads) "a marker or a public route reads none")))
+
+(deftest ^:integration a-handler-reuses-the-rights-the-middleware-read
+  (let [h (handler :enforce)]
+    (testing "a :permission route: all the caller's rights on the request, one read"
+      (reset! reads 0)
+      (is (= 200 (status h :get "/api/v1/orders/1/rights" "both")))
+      (is (= 1 @reads))
+      (is (= (get-in users ["both" :rights]) (:raw @seen)) "unresolved and unfiltered")
+      (is (= [{:permission :orders/read :scope {:domain-id #{42}}}] (:read @seen))
+          "another permission's rights, resolved"))
+    (testing "a :self route: the middleware reads none, the handler one"
+      (reset! reads 0)
+      (is (= 200 (status h :get "/api/v1/own/1/rights" "reader")))
+      (is (= 1 @reads))
+      (is (nil? (:raw @seen)))
+      (is (= [{:permission :orders/read :scope {}}] (:read @seen))))
+    (testing "a platform admin: nothing read, no rights"
+      (reset! reads 0)
+      (is (= 200 (status h :get "/api/v1/orders/1/rights" "admin")))
+      (is (zero? @reads))
+      (is (= [] (:read @seen))))))
+
+(deftest ^:integration report-hands-the-rights-to-a-refused-request
+  (let [h (handler :report)]
+    (reset! reads 0)
+    (is (= 200 (status h :get "/api/v1/orders/1/rights" "reader")))
+    (is (= 1 @reads))
+    (is (= [{:permission :orders/read}] (:raw @seen)))
+    (is (= [{:permission :orders/read :scope {}}] (:read @seen)))))
 
 (defn- logged
   "The refusals `f` logs, as the entries handed to the logger."

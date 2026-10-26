@@ -31,6 +31,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **A handler reuses the rights the authorization middleware read** (BOU-837): they ride on the request as
+  `:wagoe/rights`, and `shell.authorization/request-rights` resolves those of any permission, reading only when the
+  middleware did not. One `IRights` read per request on a `:permission` route.
 - **`:unique-key` on a job: `enqueue-job!` returns nil while one with that key is queued or running** (BOU-834).
   Replaces a status check before enqueueing a "run now" job.
 - **`:wagoe/jobs :expect-success {job-type hours}` reports a job type that stopped succeeding** (BOU-834), once per

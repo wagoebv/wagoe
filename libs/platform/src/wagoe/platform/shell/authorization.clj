@@ -120,43 +120,75 @@
     (log/warn "Authorization would refuse this request under :enforce" entry)
     (log/info "Authorization refused a request" entry)))
 
+(defn- resolve-matching
+  "`rights` whose permission `pred` admits, resolved. Only those: a resolver may read."
+  [registry user rights pred]
+  (->> rights
+       (filterv (comp pred :permission))
+       (resolve-rights registry user)))
+
 (defn rights-for
   "`user`'s rights whose permission `pred` admits, read once and resolved.
    Only those are resolved: a resolver may read. None without a source."
   [registry rights-source user pred]
-  (->> (when rights-source (ports/rights rights-source user))
-       (filterv (comp pred :permission))
-       (resolve-rights registry user)))
+  (resolve-matching registry user (when rights-source (ports/rights rights-source user)) pred))
+
+(defn request-rights
+  "The rights of the caller of `request` whose permission `pred` admits,
+   resolved as `rights-for` does. Taken from `:wagoe/rights` when the
+   authorization middleware read them, else read now: one read per request
+   on a permission route, one per call elsewhere (`:self`, `:signed-in`).
+   None for a platform admin, who holds every permission, or without a user."
+  [registry rights-source request pred]
+  (let [user (:user request)]
+    (cond (or (nil? user) (access/platform-admin? user)) []
+          (contains? request :wagoe/rights) (resolve-matching registry user (:wagoe/rights request) pred)
+          :else (rights-for registry rights-source user pred))))
+
+(defn- with-rights
+  "`request` with its caller's rights under `:wagoe/rights`, unresolved, as
+   `IRights` returns them. A platform admin's are not read."
+  [rights-source request]
+  (let [user (:user request)]
+    (cond-> request
+      (not (access/platform-admin? user))
+      (assoc :wagoe/rights (vec (when rights-source (ports/rights rights-source user)))))))
 
 (defn- scopes-of
-  "The scopes in which `user` holds `permission`, rights read once."
-  [registry rights-source user permission]
-  (if (access/platform-admin? user)
-    [{}]
-    (scope/scopes-for (rights-for registry rights-source user #{permission}) permission)))
+  "The scopes in which the caller of `request` holds `permission`."
+  [registry request permission]
+  (let [user (:user request)]
+    (if (access/platform-admin? user)
+      [{}]
+      (scope/scopes-for (resolve-matching registry user (:wagoe/rights request) #{permission}) permission))))
 
 (defn- check
-  "`{:request r}` admitted, or `{:response r :error e :permission p}`. Only for
-   a rule that can refuse: `:permission`, `:module` or `:none`."
+  "`{:request r}`, plus `{:response r :error e}` when refused and `:permission p`
+   when the rule asks one: the request carries the rights read either way.
+   Only for a rule that can refuse: `:permission`, `:module` or `:none`."
   [registry rights-source rule route-scope request]
-  (let [user (:user request)]
-    (if-let [permission (core/required-permission rule (:request-method request))]
-      (assoc (authorize-scope request (scopes-of registry rights-source user permission) route-scope)
-             :permission permission)
-      (if (access/platform-admin? user)
-        {:request request}
-        (let [error {:type :forbidden :message "No authorization rule covers this route"}]
-          {:error    error
-           :response (access/refusal-response 403 :forbidden (:message error)
-                                              (access/correlation-id request (str (random-uuid))))})))))
+  (if-let [permission (core/required-permission rule (:request-method request))]
+    (let [request (with-rights rights-source request)]
+      (merge {:request request}
+             (authorize-scope request (scopes-of registry request permission) route-scope)
+             {:permission permission}))
+    (if (access/platform-admin? (:user request))
+      {:request request}
+      (let [error {:type :forbidden :message "No authorization rule covers this route"}]
+        {:request  request
+         :error    error
+         :response (access/refusal-response 403 :forbidden (:message error)
+                                            (access/correlation-id request (str (random-uuid))))}))))
 
 (defn authorization-middleware
   "Reitit middleware deciding every endpoint by `core/route-rule`, then its
    scope (`authorize-scope`); a platform admin passes everything. Mounted
    after the sign-in guard, so it sees only signed-in callers, and not at all
    on a rule that admits every one of them. `rights-source` is an `IRights`,
-   read once per request. `mode`: `:report` logs what `:enforce` refuses and
-   lets it through, as it does a check that throws; `:off` mounts nothing."
+   read once per request and kept on it as `:wagoe/rights` for
+   `request-rights`, under `:report` too. `mode`: `:report` logs what
+   `:enforce` refuses and lets it through, as it does a check that throws;
+   `:off` mounts nothing."
   [registry rights-source {:keys [mode]}]
   (let [throttled (throttle/once-per-interval)]
     {:name    ::authorization
@@ -168,7 +200,7 @@
                       (fn [request]
                         (let [route  (or (:template (:reitit.core/match request)) (:uri request))
                               method (:request-method request)
-                              {admitted :request :keys [response error permission]}
+                              {checked :request :keys [response error permission]}
                               (try (check registry rights-source rule route-scope request)
                                    (catch Exception e
                                      (when-not (= :report mode) (throw e))
@@ -181,6 +213,6 @@
                               (throttled [user-id route method permission]
                                          #(log-refusal! {:mode mode :user-id user-id :route route :method method
                                                          :permission permission :reason (:type error)}))))
-                          (cond admitted         (handler admitted)
-                                (= :report mode) (handler request)
-                                :else            response)))))))}))
+                          (if (and response (not= :report mode))
+                            response
+                            (handler checked))))))))}))
