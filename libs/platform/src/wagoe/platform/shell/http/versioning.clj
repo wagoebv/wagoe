@@ -144,10 +144,12 @@
      ;;   GET /api/users/7?x=1  -->  Location: /api/v1/users/7?x=1"
   [path target-version]
   (let [version-str (name target-version)
-        target-path (str "/api/" version-str path)
+        api "/api"
+        version-prefix (str api "/" version-str)
+        target-path (str version-prefix path)
         redirect-handler (fn [{:keys [uri query-string]}]
                            ;; Matched at /api<path>, so uri starts with "/api".
-                           (let [location (cond-> (str "/api/" version-str (subs uri (count "/api")))
+                           (let [location (cond-> (str version-prefix (subs uri (count api)))
                                             (seq query-string) (str "?" query-string))]
                              (log/debug "Redirecting unversioned request"
                                         {:from uri :to location})
@@ -159,7 +161,7 @@
                                      :version version-str}}))]
     ;; Reitit data: the redirect is platform's own route, so it is written in
     ;; the target format rather than migrated later (ADR-037).
-    [(str "/api" path)
+    [(str api path)
      (into {} (map (fn [method]
                      ;; Public: it only points at the versioned route,
                      ;; which enforces its own access (BOU-568).

@@ -514,7 +514,7 @@
 (defn- without-claimed
   "`routes` minus the ones `default?` picks whose path a route in `served`
    already serves: an app's own route wins over a platform default, and the
-   boot does not fail on the conflict. Takes the `/` redirect and the
+   boot does not fail on the conflict. Used for the `/` redirect and the
    unversioned `/api/...` redirects."
   [routes default? served]
   ;; Flattened by Reitit, as the real router reads them: nested vectors, a
