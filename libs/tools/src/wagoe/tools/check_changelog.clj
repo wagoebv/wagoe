@@ -208,16 +208,25 @@
 
 (defn- number [word] (get number-words (some-> word text/lower-case)))
 
-(defn- section-breaks
+(defn- breaking-entries
   "The entries under `### Breaking` in the changelog section headed `heading`."
   [changelog heading]
   (let [section  (second (re-find (re-pattern (str "(?s)## \\[" (java.util.regex.Pattern/quote heading)
                                                    "\\][^\n]*(.*?)(?=\n## \\[|\\z)"))
                                   changelog))
         breaking (second (re-find #"(?s)### Breaking\s*\n(.*?)(?=\n### |\z)" (str section)))]
-    (count (re-seq #"(?m)^- " (str breaking)))))
+    (re-seq #"(?m)^- .*" (str breaking))))
 
-(defn- unreleased-breaks [changelog] (section-breaks changelog "Unreleased"))
+(defn- section-breaks [changelog heading] (count (breaking-entries changelog heading)))
+
+(defn- unexcused-breaks
+  "`[Unreleased]` breaking entries whose first code span the stability page's
+   `Removed in 1.x` section does not name. That section is where a 1.x
+   removal is declared an exception to the major-version rule."
+  [changelog stability]
+  (let [excused (str (second (re-find #"(?s)=== Removed in 1\.x\s*\n(.*?)(?=\n==|\z)" stability)))]
+    (remove #(some->> (re-find #"`[^`]+`" %) (str/includes? excused))
+            (breaking-entries changelog "Unreleased"))))
 
 (defn- listed-items
   "How many `**` items the paragraph for `version` lists."
@@ -231,8 +240,8 @@
   "What the stability page's breaking-change list gets wrong about the
    changelog. Before 1.0.0: the next candidate's count and listed items against
    the `[Unreleased]` `### Breaking` entries. At 1.0.0: the `1.0.0` paragraph
-   against the `[1.0.0]` section, and no breaking entry in `[Unreleased]`, since
-   one now needs a major version. Always: the running totals against the
+   against the `[1.0.0]` section, and no breaking entry in `[Unreleased]` the
+   page's `Removed in 1.x` does not name, since one now needs a major version. Always: the running totals against the
    per-release counts. The page names no tickets, so counts are what can be
    held; which item is which is a reviewer's job (BOU-579)."
   [changelog stability]
@@ -242,7 +251,8 @@
         counted (for [[_ word v] (re-seq #"(?m)^\* \*(\S+)[^*\n]*? in `(1\.0\.0(?:-rc-\d+)?)`:\*" stability)]
                   [v (number word)])
         rcs     (into {} counted)
-        breaks  (unreleased-breaks changelog)
+        breaks  (section-breaks changelog "Unreleased")
+        unexcused (when final? (count (unexcused-breaks changelog stability)))
         nxt     (some-> current inc)
         nxt-v   (some->> nxt (str "1.0.0-rc-"))
         items   (when nxt-v (listed-items stability nxt-v))
@@ -260,8 +270,9 @@
       (and current (pos? breaks) (not= breaks items))
       (conj (str "the rc-" nxt " paragraph lists " (or items 0) " items for " breaks " breaking entries"))
 
-      (and final? (pos? breaks))
-      (conj (str "`[Unreleased]` has " breaks " breaking entries after 1.0.0; a breaking change needs a major version"))
+      (and final? (pos? unexcused))
+      (conj (str "`[Unreleased]` has " unexcused " breaking entries after 1.0.0 that Removed in 1.x does not name;"
+                 " a breaking change needs a major version"))
 
       (and final? (not= shipped (get rcs "1.0.0" 0)))
       (conj (str "`[1.0.0]` has " shipped " breaking entries; the 1.0.0 paragraph counts " (get rcs "1.0.0" 0)))

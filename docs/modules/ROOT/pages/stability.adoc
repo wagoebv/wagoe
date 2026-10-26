@@ -19,7 +19,7 @@ at `1.0.1`, and the surface below is the one it promises.
   <<_from_1_0_0,From 1.0.0>>. The breaking changes made during the release
   candidates are listed in <<_before_1_0_0_release_candidates,Before 1.0.0>>.
   Everything deprecated is deferred to `2.0` — see <<_deferred_to_2_0,Deferred to 2.0>>.
-  The `:base` CSS bundle is the exception; see <<_removed_in_1_x,Removed in 1.x>>.
+  Three removals are the exception; see <<_removed_in_1_x,Removed in 1.x>>.
 
 | Artifacts
 | 33 libraries on Clojars, all in the `com.wagoe` group. Artifact ids are
@@ -371,7 +371,7 @@ major version; see xref:libraries:cli.adoc#_upgrade_past_deprecations[the CLI].
 === Deferred to 2.0
 
 Everything currently deprecated, and what replaces it. None of these is removed
-in a `1.x` release; the one exception is <<_removed_in_1_x,below>>. What `2.0` and the `1.x` releases before it will build is on
+in a `1.x` release; the exceptions are <<_removed_in_1_x,below>>. What `2.0` and the `1.x` releases before it will build is on
 the xref:roadmap.adoc#_after_1_0_0[roadmap].
 
 [cols="2,3",options="header"]
@@ -442,6 +442,13 @@ the vendored open-props files, and the `base-css` and `base-js` vars.
 `(bundle :base)` serves `:pilot`, daisyUI/Tailwind on `wagoe-tokens.css`, and
 warns once, so a page that selects it still renders. Code naming `base-css`
 does not compile; use `pilot-css`.
+
+The admin's `:dashboard-extra-cards` key went with the page it extended. For a
+dashboard card, give a module's nav item a `:description`.
+
+`window.AdminUX.showToast` and the `.flash-messages` banner went when toasts
+moved to one region. Send `HX-Trigger: {"showToast": {"type": ..., "message": ...}}`,
+or a toast out of band; `title` is no longer shown.
 
 == HTTP API versioning is a separate thing
 

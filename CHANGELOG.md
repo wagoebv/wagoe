@@ -29,6 +29,13 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Breaking
+
+- **`:dashboard-extra-cards` is removed** (BOU-765): the page it extended is gone. For a dashboard card, give a module's nav
+  item a `:description`.
+- **`window.AdminUX.showToast` and the `.flash-messages` banner are removed** (BOU-755): send
+  `HX-Trigger: {"showToast": {"type": ..., "message": ...}}` or a toast out of band instead; `title` is no longer shown.
+
 ### Added
 
 - **A handler reuses the rights the authorization middleware read** (BOU-837): they ride on the request as
@@ -307,10 +314,6 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Removed
 
-- **`:dashboard-extra-cards`** (BOU-765): the page it extended is gone. For a dashboard card, give a module's nav
-  item a `:description`.
-- **`window.AdminUX.showToast` and the `.flash-messages` banner** (BOU-755): send `HX-Trigger: {"showToast": {"type": ..., "message": ...}}`
-  or a toast out of band instead; `title` is no longer shown.
 - **The `:base` CSS bundle: pico, open-props, `tokens-openprops.css`, `base-css`** (BOU-458): `(bundle :base)` serves `:pilot` and warns.
   Use `pilot-css` and restyle pages that relied on pico with daisy classes.
 

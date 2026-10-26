@@ -143,6 +143,14 @@
                          "### Breaking\n\n- **E** (X-5). Do e.")
             (released-stability "Two" ["a" "b"] "Four" "seven")))))
 
+(deftest ^:unit an-unreleased-break-the-page-names-as-an-exception-passes
+  (let [changelog (str/replace released-changelog "### Fixed\n\n- **D** (X-4)."
+                               "### Breaking\n\n- **`:e` is removed** (X-5). Do e.")
+        page      (released-stability "Two" ["a" "b"] "Four" "seven")]
+    (is (empty? (sut/stability-findings changelog (str page "\n=== Removed in 1.x\n\n`:e` went.\n"))))
+    (testing "but not when another section names it"
+      (is (seq (sut/stability-findings changelog (str page "\n=== Deferred to 2.0\n\n`:e`.\n")))))))
+
 (deftest ^:unit a-patch-release-is-held-to-the-1-0-0-rules
   ;; 1.0.1 failed this gate with "no current version": the pattern knew only
   ;; 1.0.0 and its candidates.
