@@ -295,7 +295,7 @@ run_tests() {
     done
     
     # Run tests
-    $DOCKER_COMPOSE run --rm dev-tools clojure -X:test
+    $DOCKER_COMPOSE run --rm dev-tools clojure -M:test:test/all
     
     log_success "Tests completed"
 }
