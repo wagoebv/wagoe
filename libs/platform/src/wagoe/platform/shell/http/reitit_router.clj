@@ -349,14 +349,18 @@
 
 (defn- reset-error-context
   "Outermost, so a report from route middleware, outside the interceptor stack,
-   carries nothing of the thread's previous request either (BOU-843)."
+   carries nothing of the thread's previous request either (BOU-843), and the
+   idle thread keeps nothing of this one (BOU-848)."
   [config]
   (let [error-reporter (get-in config [:system :error-reporter])]
     (fn [handler]
       (if error-reporter
         (fn [request]
+          ;; For a context that implements only IErrorContextReset (BOU-843).
           (error-ports/reset-context! error-reporter)
-          (handler (assoc request ::http-interceptors/error-context-reset true)))
+          (error-ports/with-clean-context
+            error-reporter
+            #(handler (assoc request ::http-interceptors/error-context-reset true))))
         handler))))
 
 (defn- create-default-middleware

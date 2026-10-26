@@ -330,6 +330,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Nothing to change.
 - **Sentry breadcrumbs per thread are capped at `:max-breadcrumbs`** (BOU-840), default 100, the newest kept; they grew
   without limit. Nothing to change.
+- **Jobs, event handlers and realtime handlers start with a clean Sentry context, and a request leaves none behind**
+  (BOU-848). Nothing to change; pass `:error-reporter` to a bus or realtime service built by hand.
 - **A Sentry report no longer carries breadcrumbs, user, tags or extra from an earlier request** (BOU-843). A custom
   error context can implement `IErrorContextReset` to be cleared per request too.
 - **The geo cache boots from its documented config** (BOU-839): `:wagoe/geo-service` takes

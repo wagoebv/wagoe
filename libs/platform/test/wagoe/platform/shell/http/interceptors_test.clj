@@ -486,7 +486,9 @@
                     (error-ports/set-tags! reporter {:tag-a "a"})
                     (error-ports/set-extra! reporter {:extra-a "a"})
                     {:status 200 :body "ok"}))
-        (run "/b" (fn [_] (throw (RuntimeException. "boom"))))))
+        (run "/b" (fn [_] (throw (RuntimeException. "boom"))))
+        (testing "and leaves nothing on its thread (BOU-848)"
+          (is (empty? (error-ports/current-context reporter))))))
     (let [[event & more] @sent
           text           (pr-str (dissoc event :throwable))]
       (is (nil? more))
