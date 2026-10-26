@@ -79,7 +79,7 @@ carry no token, every callback is refused with 403, and push warns at boot.
 | Endpoint | Purpose
 
 | `/api/v1/push/devices` | Register and list the caller's device tokens
-| `/api/v1/push/devices/:token` | Unregister one
+| `/api/v1/push/devices/:token` | Read or unregister one; a registration's `Location`
 | `/api/v1/push/callback` | HMAC-secured delivery/open analytics callback (public)
 | `/api/v1/push/stats/:notification-id` | Per-notification delivery stats (`:push/read`)
 |===

@@ -185,6 +185,7 @@ Built by the `:wagoe.push/route-contribution` Integrant key and contributed as `
 |--------|------|---------|
 | `POST` | `/api/v1/push/devices` | Register device token |
 | `GET` | `/api/v1/push/devices` | List user's active devices |
+| `GET` | `/api/v1/push/devices/:token` | One of the user's devices, by token (the `Location` of a registration) |
 | `DELETE` | `/api/v1/push/devices/:token` | Unregister device token |
 | `POST` | `/api/v1/push/callback` | Delivery/open analytics callback (HMAC-secured) |
 | `GET` | `/api/v1/push/stats/:notification-id` | Aggregate stats with delivery/open rates |
