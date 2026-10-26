@@ -153,7 +153,7 @@
                      :component :wagoe.push/service}
               :keys [:wagoe.push/device-store :wagoe.push/analytics-store
                      :wagoe.push/fcm-provider :wagoe.push/apns-provider
-                     :wagoe.push/service :wagoe.push/routes
+                     :wagoe.push/service :wagoe.push/routes :wagoe.push/route-contribution
                      :wagoe.push/job-handlers]}
 
    ;; Deliveries run wherever the job workers run; the service enqueues them.

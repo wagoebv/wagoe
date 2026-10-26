@@ -179,19 +179,19 @@ Two job types registered under `:wagoe.push/job-handlers`:
 
 ## HTTP Routes
 
-Built by the `:wagoe.push/routes` Integrant key as a plain route vector; nothing mounts it for you. Contribute it yourself, e.g. as `{:static [routes]}` in `:wagoe/http-handler :module-routes` (as `test/support/route_table.clj` does), which keeps the paths below as written. Every route but the callback requires a signed-in user; the platform refuses anyone else, and the handlers read `[:user :id]`. The callback is `:public true`: its HMAC is the credential (BOU-568). The device routes say `:authorization :self` and the stats `:permission :push/read`, so `:wagoe/authorization :enforce` does not refuse them.
+Built by the `:wagoe.push/route-contribution` Integrant key and contributed as `:api`, so the platform mounts them under `/api/v1`. `:wagoe.push/routes` still builds the old `/api/push` vector for apps that mounted it by hand; it is deprecated, and where it is mounted the platform drops the unversioned redirects it would collide with. Every route but the callback requires a signed-in user; the platform refuses anyone else, and the handlers read `[:user :id]`. The callback is `:public true`: its HMAC is the credential (BOU-568). The device routes say `:authorization :self` and the stats `:permission :push/read`, so `:wagoe/authorization :enforce` does not refuse them.
 
 | Method | Path | Handler |
 |--------|------|---------|
-| `POST` | `/api/push/devices` | Register device token |
-| `GET` | `/api/push/devices` | List user's active devices |
-| `DELETE` | `/api/push/devices/:token` | Unregister device token |
-| `POST` | `/api/push/callback` | Delivery/open analytics callback (HMAC-secured) |
-| `GET` | `/api/push/stats/:notification-id` | Aggregate stats with delivery/open rates |
+| `POST` | `/api/v1/push/devices` | Register device token |
+| `GET` | `/api/v1/push/devices` | List user's active devices |
+| `DELETE` | `/api/v1/push/devices/:token` | Unregister device token |
+| `POST` | `/api/v1/push/callback` | Delivery/open analytics callback (HMAC-secured) |
+| `GET` | `/api/v1/push/stats/:notification-id` | Aggregate stats with delivery/open rates |
 
 ## HMAC Callback Flow
 
-Mobile app receives push payload including `callback-token` (HMAC of the `provider-message-id`). On delivery or open, mobile POSTs to `/api/push/callback`:
+Mobile app receives push payload including `callback-token` (HMAC of the `provider-message-id`). On delivery or open, mobile POSTs to `/api/v1/push/callback`:
 
 ```clojure
 ;; Server generates callback-token at send time:
@@ -279,10 +279,11 @@ Three migrations under `libs/push/resources/wagoe/push/migrations/` create the t
 ;; :wagoe/jobs is enabled; nothing to register by hand (BOU-418)
 :wagoe.push/job-handlers {:push-service #ig/ref :wagoe.push/service}
 
-;; Routes — mount in your router
-:wagoe.push/routes {:device-store    #ig/ref :wagoe.push/device-store
-                       :analytics-store #ig/ref :wagoe.push/analytics-store
-                       :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
+;; Routes — contributed by the module under :wagoe/push; wired by hand,
+;; add #ig/ref :wagoe.push/route-contribution to :wagoe/http-handler :module-routes
+:wagoe.push/route-contribution {:device-store    #ig/ref :wagoe.push/device-store
+                                :analytics-store #ig/ref :wagoe.push/analytics-store
+                                :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
 ```
 
 Require `wagoe.push.shell.module-wiring` at system start to load the `defmethod` definitions.

@@ -165,6 +165,11 @@
                               :summary            (str "Redirect to " target-path)}]))
            [:get :post :put :delete :patch])]))
 
+(defn redirect-route?
+  "Whether `route` is one `create-redirect-route` built."
+  [[_ data]]
+  (boolean (:wagoe/redirect-to (:get data))))
+
 (defn create-backward-compatibility-routes
   "One `/api/…` redirect for every `/api/<version>/…` route given.
 
