@@ -287,6 +287,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **Push's `generate-callback-token`, `verify-callback-token` and 3-arity `with-callback`** (BOU-849): the token fits
+  any push and never expires; accepted until 2.0. Use `callback-token` and `callback-verdict`.
 - **`wagoe.push.schema/valid-device-info?`, `valid-callback?`, and `:db` on the push stores** (BOU-847): the routes
   declare the schemas, and the stores take `:db-ctx`. All go in 2.0.
 - **`:wagoe.push/routes`** (BOU-838): the module mounts push itself; an app that mounts the vector by hand keeps
@@ -328,6 +330,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A push callback token counts for one notification, one device and seven days, once per event** (BOU-849); sent and
+  callback rows share `callback_id`. Run `migrate up`.
 - **`GET /api/v1/push/devices/:token` takes `?app-id=`** (BOU-847), and a registration's `Location` carries it. A token
   under two app-ids answers 409 without it; a token with `/` gets no `Location`.
 - **User CLI commands log and report through `:wagoe/logging` and `:wagoe/error-reporting`** (BOU-847). A failed

@@ -125,27 +125,43 @@
 ;; PushAnalyticsStore
 ;; =============================================================================
 
+(defn- insert-event! [db event]
+  (database/execute-update! db
+                            (-> (h/insert-into :push-analytics-events)
+                                (h/values [{:id                  (:id event)
+                                            :notification-id     (name (:notification-id event))
+                                            :device-token        (:device-token event)
+                                            :platform            (name (:platform event))
+                                            :event-type          (name (:event-type event))
+                                            :user-id             (:user-id event)
+                                            :provider-message-id (:provider-message-id event)
+                                            :callback-id         (:callback-id event)
+                                            :error-message       (get-in event [:error :message])
+                                            :timestamp           (or (->instant (:timestamp event)) (Instant/now))}]))))
+
+(defn- record-callback!
+  "A push's callback, counted once per event type: the index on (callback_id,
+   event_type) refuses a replay. In a savepoint, since PostgreSQL refuses the
+   rest of a transaction after a failed statement."
+  [db event]
+  (if-not (:callback-id event)
+    (insert-event! db event)
+    (try
+      (database/in-savepoint (database/current-transaction) #(insert-event! db event))
+      (catch clojure.lang.ExceptionInfo e
+        (if (database/unique-conflict? e) 0 (throw e))))))
+
 (defrecord PushAnalyticsStore [db]
   ports/IPushAnalyticsStore
 
   (record-send! [_ event]
-    (database/execute-update! db
-                              (-> (h/insert-into :push-analytics-events)
-                                  (h/values [{:id                  (:id event)
-                                              :notification-id     (name (:notification-id event))
-                                              :device-token        (:device-token event)
-                                              :platform            (name (:platform event))
-                                              :event-type          (name (:event-type event))
-                                              :user-id             (:user-id event)
-                                              :provider-message-id (:provider-message-id event)
-                                              :error-message       (get-in event [:error :message])
-                                              :timestamp           (or (->instant (:timestamp event)) (Instant/now))}]))))
+    (insert-event! db event))
 
-  (record-delivery! [this event]
-    (ports/record-send! this (assoc event :event-type :delivered)))
+  (record-delivery! [_ event]
+    (record-callback! db (assoc event :event-type :delivered)))
 
-  (record-open! [this event]
-    (ports/record-send! this (assoc event :event-type :opened)))
+  (record-open! [_ event]
+    (record-callback! db (assoc event :event-type :opened)))
 
   (get-push-stats [_ notification-id _opts]
     (let [rows   (database/execute-query! db

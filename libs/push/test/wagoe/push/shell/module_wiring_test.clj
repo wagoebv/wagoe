@@ -5,6 +5,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.tools.logging.test :as log-test]
             [integrant.core :as ig]
+            [wagoe.push.shell.adapters.mock :as mock]
             [wagoe.push.shell.module-wiring :as wiring]))
 
 (deftest ^:unit fcm-settings-reach-the-init-key-in-its-own-shape
@@ -74,7 +75,12 @@
       (ig/init-key :wagoe.push/service {:callback-secret secret})
       (is (= (not= "s3cret" secret)
              (log-test/logged? 'wagoe.push.shell.module-wiring :warn #"callback-secret"))
-          (pr-str secret)))))
+          (pr-str secret))))
+  (testing "but not with mock providers, which reach no device (BOU-849)"
+    (log-test/with-log
+      (ig/init-key :wagoe.push/service {:fcm-provider  (mock/->MockFCMProvider)
+                                        :apns-provider (mock/->MockAPNsProvider)})
+      (is (not (log-test/logged? 'wagoe.push.shell.module-wiring :warn #"callback-secret"))))))
 
 (deftest ^:unit stores-take-the-db-context-as-db-ctx
   (let [components (:components (wiring/ig-config {} {}))]

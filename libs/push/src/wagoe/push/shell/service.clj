@@ -1,12 +1,14 @@
 (ns wagoe.push.shell.service
   (:require [wagoe.push.ports :as ports]
+            [wagoe.push.core.callback :as callback]
             [wagoe.push.core.delivery :as delivery]
             [wagoe.jobs.core.job :as job]
             [wagoe.jobs.ports :as job-ports]
             [clojure.tools.logging :as log])
   (:import [javax.crypto Mac]
            [javax.crypto.spec SecretKeySpec]
-           [java.nio.charset StandardCharsets]))
+           [java.nio.charset StandardCharsets]
+           [java.time Instant]))
 
 (defn- hmac-sha256 [secret data]
   (let [mac (Mac/getInstance "HmacSHA256")
@@ -15,34 +17,92 @@
     (apply str (map #(format "%02x" (bit-and % 0xff))
                     (.doFinal mac (.getBytes ^String data StandardCharsets/UTF_8))))))
 
+(defn- same?
+  "Constant-time string equality."
+  [^String a ^String b]
+  (java.security.MessageDigest/isEqual (.getBytes a StandardCharsets/UTF_8)
+                                       (.getBytes b StandardCharsets/UTF_8)))
+
+(defn- legacy-token-valid?
+  "A token over the id alone, as 1.0 minted them."
+  [callback-secret provider-message-id callback-token]
+  (boolean (and (seq callback-secret)
+                (same? (hmac-sha256 callback-secret provider-message-id) callback-token))))
+
+(defn- bound-mac
+  "Keyed apart from the legacy token, so no legacy MAC passes for a bound one
+   or the other way round."
+  [callback-secret message]
+  (hmac-sha256 (hmac-sha256 callback-secret "wagoe.push/callback-token-v2") message))
+
 (defn generate-callback-token
-  "Generate HMAC callback token for a provider-message-id."
+  "Deprecated, goes in 2.0: the token covers the id alone, so it verifies for
+   any notification and device and never expires. Use `callback-token`."
+  {:deprecated "1.0.2"}
   [callback-secret provider-message-id]
   (hmac-sha256 callback-secret provider-message-id))
 
 (defn verify-callback-token
-  "Verify HMAC callback token. Constant-time comparison. False when no secret
-   is configured, blank included (an empty HMAC key throws): no token can be
-   valid then."
+  "Deprecated, goes in 2.0: checks only a `generate-callback-token` token.
+   Use `callback-verdict`."
+  {:deprecated "1.0.2"}
   [callback-secret provider-message-id callback-token]
-  (boolean
-   (when (seq callback-secret)
-     (java.security.MessageDigest/isEqual
-      (.getBytes ^String (hmac-sha256 callback-secret provider-message-id) StandardCharsets/UTF_8)
-      (.getBytes ^String callback-token StandardCharsets/UTF_8)))))
+  (legacy-token-valid? callback-secret provider-message-id callback-token))
+
+(defn callback-token
+  "A token valid for one push to one device until `:expires-at`, in epoch
+   seconds: `fields` are `:callback-id`, `:notification-id`, `:device-token`,
+   `:platform` and `:expires-at` (BOU-849)."
+  [callback-secret fields]
+  (callback/token (:expires-at fields)
+                  (bound-mac callback-secret (callback/signed-message fields))))
+
+(defn callback-verdict
+  "`:bound` for a callback whose token names its notification, device and
+   platform and has not expired at `now` (epoch seconds), `:legacy` for a
+   `generate-callback-token` token, nil for anything else, and for everything
+   without a secret: an empty HMAC key throws."
+  [callback-secret {:keys [provider-message-id callback-token] :as payload} now]
+  (when (seq callback-secret)
+    (if-let [{:keys [expires-at mac]} (callback/parse-token callback-token)]
+      (when (and (callback/live? expires-at now)
+                 (same? mac (bound-mac callback-secret
+                                       (callback/signed-message
+                                        (assoc payload
+                                               :callback-id provider-message-id
+                                               :expires-at expires-at)))))
+        :bound)
+      (when (legacy-token-valid? callback-secret provider-message-id callback-token)
+        :legacy))))
 
 (defn with-callback
-  "The notification with what a device posts back to `/push/callback`. The
-   provider's message id arrives only after the send, so the token signs an id
-   minted here. Unchanged without a secret: no token could verify."
-  [notification notification-id callback-secret]
-  (if (empty? callback-secret)
-    notification
-    (let [message-id (str (random-uuid))]
-      (update notification :data merge
-              {:notification-id     (str (symbol notification-id))
-               :provider-message-id message-id
-               :callback-token      (generate-callback-token callback-secret message-id)}))))
+  "The notification with what `device` posts back to `/push/callback`: a
+   minted id, and a token for this notification on this device that expires.
+   The provider's message id arrives only after the send, so the id is minted
+   here. Unchanged without a secret: no token could verify.
+
+   Without `device`, deprecated: one id and a token over it alone, which goes
+   in 2.0."
+  ([notification notification-id callback-secret]
+   (if (empty? callback-secret)
+     notification
+     (let [message-id (str (random-uuid))]
+       (update notification :data merge
+               (callback/callback-data notification-id message-id
+                                       (hmac-sha256 callback-secret message-id))))))
+  ([notification notification-id callback-secret {:keys [token platform]}]
+   (if (empty? callback-secret)
+     notification
+     (let [callback-id (str (random-uuid))
+           expires-at  (+ (.getEpochSecond (Instant/now)) callback/token-ttl-seconds)]
+       (update notification :data merge
+               (callback/callback-data
+                notification-id callback-id
+                (callback-token callback-secret {:callback-id     callback-id
+                                                 :notification-id notification-id
+                                                 :device-token    token
+                                                 :platform        platform
+                                                 :expires-at      expires-at})))))))
 
 (defn deliver-to-platform!
   "Internal: send notification to devices on a specific platform.
@@ -60,6 +120,25 @@
              apns-provider
              (delivery/build-apns-payload notification)
              (mapv :token devices)))))
+
+(defn deliver-each!
+  "Internal: each `[device-token notification]` sent on `platform`, concurrently
+   where the provider implements `IPerDeviceSend`. Per-token results, in order."
+  [{:keys [fcm-provider apns-provider]} platform sends]
+  (let [provider (case platform :fcm fcm-provider :apns apns-provider)
+        payloads (mapv (fn [[token notification]]
+                         [token (case platform
+                                  :fcm  (delivery/build-fcm-payload notification token)
+                                  :apns (delivery/build-apns-payload notification))])
+                       sends)]
+    (cond
+      (empty? payloads)                          []
+      (satisfies? ports/IPerDeviceSend provider) (ports/send-each! provider payloads)
+      :else (mapv (fn [[token payload]]
+                    (case platform
+                      :fcm  (ports/fcm-send! provider payload)
+                      :apns (ports/apns-send! provider payload token)))
+                  payloads))))
 
 (defn- push-job
   "A complete job map for the queue.

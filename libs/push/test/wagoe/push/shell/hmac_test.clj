@@ -1,5 +1,8 @@
 (ns wagoe.push.shell.hmac-test
-  (:require [clojure.test :refer [deftest testing is]]
+  "The deprecated legacy token is tested until it goes in 2.0."
+  {:clj-kondo/config '{:linters {:deprecated-var {:level :off}}}}
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest testing is]]
             [wagoe.push.shell.service :as service]))
 
 (deftest ^:unit generate-callback-token-test
@@ -40,3 +43,70 @@
   (let [notification {:title "Hi" :data {:k "v"}}]
     (doseq [secret [nil ""]]
       (is (= notification (service/with-callback notification :n secret)) (pr-str secret)))))
+
+;; --- bound tokens (BOU-849) ---
+
+(def ^:private secret "test-callback-secret-32chars!!!")
+
+(def ^:private now 1800000000)
+
+(def ^:private fields
+  {:callback-id "cb-1" :notification-id :orders/shipped :device-token "device-a"
+   :platform :fcm :expires-at (+ now 60)})
+
+(defn- payload
+  "A callback as the device posts it for `fields`, with `changes` applied."
+  [changes]
+  (merge {:provider-message-id (:callback-id fields)
+          :notification-id     (:notification-id fields)
+          :device-token        (:device-token fields)
+          :platform            (:platform fields)
+          :event-type          :delivered
+          :callback-token      (service/callback-token secret fields)}
+         changes))
+
+(deftest ^:unit a-bound-token-verifies-for-its-own-push-only
+  (is (= :bound (service/callback-verdict secret (payload {}) now)))
+  (is (= :bound (service/callback-verdict secret (payload {:event-type :opened}) now))
+      "one token reports delivery and the open")
+  (doseq [[what changes] {"another notification" {:notification-id :orders/cancelled}
+                          "another device"       {:device-token "device-b"}
+                          "another platform"     {:platform :apns}
+                          "another id"           {:provider-message-id "cb-2"}}]
+    (is (nil? (service/callback-verdict secret (payload changes) now)) what))
+  (is (nil? (service/callback-verdict "another-secret" (payload {}) now)))
+  (is (nil? (service/callback-verdict nil (payload {}) now))))
+
+(deftest ^:unit a-bound-token-expires
+  (is (= :bound (service/callback-verdict secret (payload {}) (+ now 59))))
+  (is (nil? (service/callback-verdict secret (payload {}) (+ now 60)))))
+
+(deftest ^:unit a-forged-expiry-fails
+  (let [token     (service/callback-token secret fields)
+        postponed (str/replace token (str "v2." (+ now 60) ".") (str "v2." (+ now 99999) "."))]
+    (is (nil? (service/callback-verdict secret (payload {:callback-token postponed}) (+ now 120))))))
+
+(deftest ^:unit a-legacy-token-still-verifies-and-says-so
+  (let [legacy (service/generate-callback-token secret "cb-1")]
+    (is (= :legacy (service/callback-verdict secret (payload {:callback-token legacy}) now))))
+  (testing "a bound token's MAC is no legacy token"
+    (let [mac (peek (str/split (service/callback-token secret fields) #"\."))]
+      (is (nil? (service/callback-verdict secret (payload {:callback-token mac}) now))))))
+
+(deftest ^:unit with-callback-binds-the-token-to-the-device
+  (let [n  {:title "Hi" :data {:k "v"}}
+        a  (:data (service/with-callback n :orders/shipped secret {:token "device-a" :platform :fcm}))
+        b  (:data (service/with-callback n :orders/shipped secret {:token "device-b" :platform :fcm}))
+        at (fn [data device] (service/callback-verdict
+                              secret
+                              {:provider-message-id (:provider-message-id data)
+                               :callback-token      (:callback-token data)
+                               :notification-id     (keyword (:notification-id data))
+                               :device-token        device
+                               :platform            :fcm}
+                              (quot (System/currentTimeMillis) 1000)))]
+    (is (= "v" (:k a)))
+    (is (not= (:callback-token a) (:callback-token b)) "each device its own token")
+    (is (not= (:provider-message-id a) (:provider-message-id b)))
+    (is (= :bound (at a "device-a")))
+    (is (nil? (at a "device-b")))))

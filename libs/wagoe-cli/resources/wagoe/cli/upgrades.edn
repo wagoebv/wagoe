@@ -115,4 +115,9 @@
  {:ticket "BOU-847"
   :since  "1.0.2"
   :note   "wagoe.push.schema/valid-device-info? and valid-callback?, and :db on :wagoe.push/device-store and :wagoe.push/analytics-store. All work until 2.0."
-  :manual "Validate against wagoe.push.schema/DeviceInfo or CallbackPayload with malli, and rename :db to :db-ctx where your config sets the push stores. A rewrite cannot tell push's :db from another component's."}]
+  :manual "Validate against wagoe.push.schema/DeviceInfo or CallbackPayload with malli, and rename :db to :db-ctx where your config sets the push stores. A rewrite cannot tell push's :db from another component's."}
+
+ {:ticket "BOU-849"
+  :since  "1.0.2"
+  :note   "wagoe.push.shell.service/generate-callback-token, verify-callback-token and the 3-arity with-callback: a token over the id alone, valid for any push and never expiring. Still accepted until 2.0."
+  :manual "Mint tokens with callback-token and check them with callback-verdict, or call with-callback with the device. The arguments differ, so no rewrite."}]

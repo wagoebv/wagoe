@@ -1,6 +1,6 @@
 (ns wagoe.push.shell.delivery-integration-test
   (:require [clojure.string :as str]
-            [clojure.test :refer [deftest use-fixtures is]]
+            [clojure.test :refer [deftest use-fixtures is testing]]
             [clojure.tools.logging.test :as log-test]
             [wagoe.push.shell.service :as service]
             [wagoe.push.shell.adapters.mock :as mock]
@@ -9,7 +9,9 @@
             [wagoe.push.shell.handlers :as handlers]
             [wagoe.push.shell.jobs :as jobs]
             [wagoe.push.shell.registry :as registry]
-            [wagoe.push.ports :as ports]))
+            [wagoe.push.ports :as ports]
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]))
 
 (use-fixtures :each
   (fn [f]
@@ -155,6 +157,7 @@
 
 (deftest ^:integration a-sent-push-carries-the-token-its-callback-needs
   ;; Nothing called generate-callback-token, so every callback was refused (BOU-844).
+  ;; A provider without IPerDeviceSend gets one send per device.
   (registry/register-push! {:id :orders/shipped :title "Hi" :body "There" :channels #{:fcm :apns}})
   (let [device-store    (p/->DeviceTokenStore pt/*db*)
         analytics-store (p/->PushAnalyticsStore pt/*db*)
@@ -162,16 +165,16 @@
         apns-token      (apply str (repeat 64 "b"))
         sent            (atom {})
         fcm             (reify ports/IFCMProvider
-                          (fcm-send! [_ _])
-                          (fcm-validate-token [_ _])
-                          (fcm-send-multicast! [_ payload tokens]
+                          (fcm-send! [_ payload]
                             (swap! sent assoc :fcm (get-in payload [:message :data]))
-                            (ports/fcm-send-multicast! (mock/->MockFCMProvider) payload tokens)))
+                            (ports/fcm-send! (mock/->MockFCMProvider) payload))
+                          (fcm-validate-token [_ _])
+                          (fcm-send-multicast! [_ _ _]))
         apns            (reify ports/IAPNsProvider
-                          (apns-send! [_ _ _])
-                          (apns-send-batch! [_ payload tokens]
+                          (apns-send! [_ payload token]
                             (swap! sent assoc :apns (:data payload))
-                            (ports/apns-send-batch! (mock/->MockAPNsProvider) payload tokens)))
+                            (ports/apns-send! (mock/->MockAPNsProvider) payload token))
+                          (apns-send-batch! [_ _ _]))
         secret          "test-callback-secret-32chars!!!"]
     (ports/register-device! device-store user-id {:token "fcm-cb" :platform :fcm :app-id "com.test"})
     (ports/register-device! device-store user-id {:token apns-token :platform :apns :app-id "com.test"})
@@ -195,4 +198,46 @@
                                           :platform            (name platform)}})))
           (name platform)))
     (is (= {:sent 2 :delivered 2}
-           (select-keys (ports/get-push-stats analytics-store :orders/shipped {}) [:sent :delivered])))))
+           (select-keys (ports/get-push-stats analytics-store :orders/shipped {}) [:sent :delivered])))
+    (testing "each callback row joins its sent row, which keeps the provider's id (BOU-849)"
+      (let [joined (jdbc/execute! (:datasource pt/*db*)
+                                  ["SELECT s.provider_message_id AS provider_id, c.device_token AS device
+                                      FROM push_analytics_events s
+                                      JOIN push_analytics_events c ON c.callback_id = s.callback_id
+                                     WHERE s.event_type = 'sent' AND c.event_type = 'delivered'"]
+                                  {:builder-fn rs/as-unqualified-lower-maps})]
+        (is (= #{"fcm-cb" apns-token} (set (map :device joined))))
+        (is (every? #(str/starts-with? (:provider_id %) "mock-") joined) (pr-str joined))))))
+
+(deftest ^:integration a-broadcast-gives-every-device-its-own-token
+  ;; One id and token per job meant every device of a broadcast shared them (BOU-849).
+  (registry/register-push! {:id :bcast-tokens :title "Alert" :body "Msg" :channels #{:fcm}})
+  (let [device-store (p/->DeviceTokenStore pt/*db*)
+        sent         (atom [])
+        fcm          (reify
+                       ports/IFCMProvider
+                       (fcm-send! [_ _])
+                       (fcm-validate-token [_ _])
+                       (fcm-send-multicast! [_ _ _])
+                       ports/IPerDeviceSend
+                       (send-each! [_ sends]
+                         (swap! sent into sends)
+                         (ports/send-each! (mock/->MockFCMProvider) sends)))]
+    (doseq [i (range 3)]
+      (ports/register-device! device-store (random-uuid)
+                              {:token (str "bcast-" i) :platform :fcm :app-id "com.test"}))
+    (jobs/handle-broadcast {:device-store    device-store
+                            :analytics-store (p/->PushAnalyticsStore pt/*db*)
+                            :fcm-provider    fcm
+                            :callback-secret "secret"}
+                           {:notification-id :bcast-tokens :data {} :platform :fcm :locale :en})
+    (is (= 3 (count @sent)))
+    (is (= 3 (count (set (map #(get-in (second %) [:message :data "callback-token"]) @sent)))))
+    (is (every? (fn [[token payload]] (= token (get-in payload [:message :token]))) @sent))))
+
+(deftest ^:integration app-data-keys-the-callback-replaces-are-named
+  (registry/register-push! {:id :shadowed :title "Hi" :body "There" :channels #{:fcm}})
+  (log-test/with-log
+    (jobs/handle-broadcast {:device-store (p/->DeviceTokenStore pt/*db*)}
+                           {:notification-id :shadowed :data {:callback-token "mine"} :platform :fcm})
+    (is (log-test/logged? 'wagoe.push.shell.jobs :warn #"callback-token"))))

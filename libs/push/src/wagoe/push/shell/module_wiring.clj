@@ -8,7 +8,8 @@
             [wagoe.push.shell.handlers :as handlers]
             [wagoe.push.shell.jobs :as jobs]
             [clojure.tools.logging :as log]
-            [integrant.core :as ig]))
+            [integrant.core :as ig])
+  (:import [wagoe.push.shell.adapters.mock MockFCMProvider MockAPNsProvider]))
 
 (defmethod ig/init-key :wagoe.push/fcm-provider
   [_ {:keys [provider project-id credentials-path]}]
@@ -49,7 +50,10 @@
   [_ {:keys [device-store analytics-store fcm-provider apns-provider
              job-queue queue-name callback-secret]}]
   (log/info "Push: initializing push service" {:queue (or queue-name :default)})
-  (when (empty? callback-secret)
+  ;; With mock providers nothing reaches a device, so nothing calls back.
+  (when (and (empty? callback-secret)
+             (not (and (instance? MockFCMProvider fcm-provider)
+                       (instance? MockAPNsProvider apns-provider))))
     (log/warn "Push: no :callback-secret in :wagoe/push. Pushes carry no callback token,"
               "and every POST to /push/callback is refused with 403."))
   (service/->PushService device-store analytics-store fcm-provider apns-provider

@@ -27,6 +27,12 @@
   (apns-send-batch! [this payload device-tokens]
     "Send to multiple APNs devices. Returns per-token results."))
 
+(defprotocol IPerDeviceSend
+  "Optional beside IFCMProvider and IAPNsProvider: each device its own payload,
+   sent concurrently. Without it, push sends to each device in turn."
+  (send-each! [this sends]
+    "sends: [[device-token payload] ...]. Per-token results, in order."))
+
 ;; ===== Persistence =====
 
 (defprotocol IDeviceTokenStore
