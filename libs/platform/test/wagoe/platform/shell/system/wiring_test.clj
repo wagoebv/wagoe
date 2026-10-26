@@ -227,7 +227,10 @@
     (let [mine  ["/" {:public true
                       :get {:handler (fn [_] {:status 302 :headers {"Location" "/web/welkom"}})}}]
           routes (root-routes [{:static [mine]}])]
-      (is (= [mine] routes)))))
+      (is (= [mine] routes))))
+  (testing "claimed by a nested static route, the platform's / is not mounted"
+    (let [mine ["/" {:get {:handler (fn [_] {:status 200})}}]]
+      (is (empty? (root-routes [{:static [["" [mine]]]}]))))))
 
 (deftest ^:unit a-static-route-claims-its-unversioned-redirect
   ;; Mounted as an app writes :static routes: nil, nested and "" rooted.
