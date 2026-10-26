@@ -308,8 +308,8 @@ for what is public API, what is internal, and how deprecations are announced.
   2.0. Give a module's nav item a `:description` instead.
 - **`window.AdminUX.showToast` and the `.flash-messages` banner** (BOU-755, BOU-841): both feed the toast region until
   2.0; `title` is no longer shown. Send `HX-Trigger: {"showToast": {"type": ..., "message": ...}}` or an OOB toast.
-- **`window.AdminUX.showConfirmModal`** (BOU-753, BOU-841): opens a native `<dialog>` until 2.0. Render shared-ui
-  `modal/confirm-modal` and put `confirm-attrs` on the element instead.
+- **`window.AdminUX.showConfirmModal` and `hx-confirm` + `data-confirm-*` on a delete** (BOU-753, BOU-841): a `<dialog>`
+  asks until 2.0. Render shared-ui `modal/confirm-modal` and put `confirm-attrs` on the element instead.
 
 ### Removed
 

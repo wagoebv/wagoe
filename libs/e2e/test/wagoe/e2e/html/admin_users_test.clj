@@ -197,7 +197,7 @@
       (page/wait-for-selector pg "#toasts .alert" {:state :detached :timeout 10000.0})
       (is (zero? (loc/count-elements (page/locator pg "#toasts .alert")))))))
 
-(deftest ^:integration ^:e2e deprecated-toast-api-and-flash-banner-still-toast
+(deftest ^:integration ^:e2e deprecated-admin-ux-apis-still-work
   (spel/with-testing-page [pg]
     (admin/login-as-admin! pg fx/*seed*)
     (page/navigate pg (admin/admin-url "/users"))
@@ -219,6 +219,10 @@
     (testing "AdminUX.showConfirmModal calls onConfirm on confirm only"
       (page/evaluate pg (str "window.AdminUX.showConfirmModal({title: 'Old confirm', confirmLabel: 'Go',"
                              " onConfirm: () => { window.confirmed = (window.confirmed || 0) + 1; }})"))
+      (is (= "Old confirm"
+             (page/evaluate pg (str "(() => { const d = document.querySelector('dialog[open][role=alertdialog]');"
+                                    " return document.getElementById(d.getAttribute('aria-labelledby')).textContent; })()")))
+          "named by its title")
       (loc/click (page/locator pg "dialog[open] button[value='cancel']"))
       ;; Closing is a task away; wait for the dialog to be gone
       (is (not (map? (page/wait-for-function pg "!document.querySelector('dialog.modal:not([id])')" {:timeout 5000.0})))
@@ -226,7 +230,20 @@
       (is (nil? (page/evaluate pg "window.confirmed")))
       (page/evaluate pg "window.AdminUX.showConfirmModal({onConfirm: () => { window.confirmed = 1; }})")
       (loc/click (page/locator pg "dialog[open] button[value='confirm']"))
-      (is (not (map? (page/wait-for-function pg "window.confirmed === 1" {:timeout 5000.0})))))))
+      (is (not (map? (page/wait-for-function pg "window.confirmed === 1 && !document.querySelector('dialog.modal:not([id])')"
+                                             {:timeout 5000.0})))
+          "confirmed and removed"))
+    (testing "hx-confirm on a delete asks in the dialog, with its data-confirm labels"
+      (page/evaluate pg (str "(() => { const b = document.createElement('button');"
+                             " b.id = 'old-delete'; b.textContent = 'x';"
+                             " b.setAttribute('hx-delete', '/nowhere'); b.setAttribute('hx-confirm', 'Really?');"
+                             " b.setAttribute('data-confirm-title', 'Old title');"
+                             " document.body.appendChild(b); htmx.process(b); })()"))
+      ;; Off-layout, so clicked from script
+      (page/evaluate pg "document.getElementById('old-delete').click()")
+      (is (= "Old title" (loc/text-content (page/locator pg "dialog[open] h3"))))
+      (is (str/includes? (loc/text-content (page/locator pg "dialog[open] p")) "Really?"))
+      (loc/click (page/locator pg "dialog[open] button[value='cancel']")))))
 
 (deftest ^:integration ^:e2e timezone-is-picked-from-the-zones
   (testing "The timezone is a combobox over the IANA zones; the one picked is saved"

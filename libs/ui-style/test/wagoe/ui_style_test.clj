@@ -46,7 +46,7 @@
     (doseq [sel ["th.checkbox-header" "td.checkbox-cell" "th.actions-header" "td.actions-cell"]]
       (is (str/includes? css (str "table.data-table " sel)) sel))))
 
-(deftest ^:unit the-admin-bundle-keeps-the-deprecated-toast-api
+(deftest ^:unit the-admin-bundle-keeps-the-deprecated-admin-ux-api
   ;; Deprecated, not removed, until 2.0; the e2e suite drives it in a browser.
   (let [js (slurp (io/resource "public/js/admin-ux.js"))]
     (is (some #{"/js/admin-ux.js"} sut/admin-pilot-js))

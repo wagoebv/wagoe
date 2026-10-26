@@ -104,5 +104,5 @@
 
  {:ticket "BOU-753"
   :since  "1.0.2"
-  :note   "window.AdminUX.showConfirmModal. It opens a native <dialog> until 2.0."
+  :note   "window.AdminUX.showConfirmModal, and hx-confirm with data-confirm-title/-label/-cancel on a delete. Both ask in a native <dialog> until 2.0."
   :manual "Render wagoe.shared.ui.core.modal/confirm-modal and put confirm-attrs on the element that sends the request. The rewrites do not touch JavaScript."}]

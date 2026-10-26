@@ -827,8 +827,8 @@ document.addEventListener('alpine:init', function () {
     toast('error', message);
   }
 
-  // Deprecated until 2.0: the toast API and .flash-messages banners from
-  // before the shared toast region. Both now feed that region.
+  // Deprecated until 2.0: the toast and confirm APIs and .flash-messages
+  // banners from before shared-ui's toast region and confirm-modal.
   var deprecationWarned = {};
   function warnDeprecated(what, instead) {
     if (deprecationWarned[what]) return;
@@ -866,9 +866,14 @@ document.addEventListener('alpine:init', function () {
 
   // The old confirm API, on a <dialog> shaped like shared-ui's confirm-modal.
   // onConfirm runs only on the confirm button; the dialog is removed on close.
+  var confirmCount = 0;
   function showConfirmModal(opts) {
     warnDeprecated('AdminUX.showConfirmModal',
       'Render shared-ui modal/confirm-modal and put confirm-attrs on the element.');
+    openConfirmModal(opts);
+  }
+
+  function openConfirmModal(opts) {
     opts = opts || {};
     function el(tag, cls, text) {
       var e = document.createElement(tag);
@@ -876,14 +881,19 @@ document.addEventListener('alpine:init', function () {
       if (text) e.textContent = text;
       return e;
     }
+    var id = 'admin-ux-confirm-' + (++confirmCount);
     var dialog = el('dialog', 'modal');
     dialog.setAttribute('role', 'alertdialog');
-    dialog.setAttribute('aria-label', opts.title || 'Confirm Delete');
+    dialog.setAttribute('aria-labelledby', id + '-title');
+    dialog.setAttribute('aria-describedby', id + '-message');
     var box = el('div', 'modal-box');
-    box.appendChild(el('h3', 'text-lg font-bold', opts.title || 'Confirm Delete'));
-    box.appendChild(el('p', 'py-4',
-      opts.message || 'Are you sure you want to delete this item? This action cannot be undone.'));
-    if (opts.detail) box.appendChild(el('div', 'confirm-detail', opts.detail));
+    var title = el('h3', 'text-lg font-bold', opts.title || 'Confirm Delete');
+    title.id = id + '-title';
+    var message = el('p', 'py-4',
+      opts.message || 'Are you sure you want to delete this item? This action cannot be undone.');
+    message.id = id + '-message';
+    box.append(title, message);
+    if (opts.detail) box.appendChild(el('div', 'alert alert-error text-sm', opts.detail));
     var actions = el('form', 'modal-action');
     actions.method = 'dialog';
     var cancel = el('button', 'btn', opts.cancelLabel || 'Cancel');
@@ -972,6 +982,25 @@ document.addEventListener('alpine:init', function () {
     convertFlashMessages();
     // The whole page: an outerHTML swap's target is the element it replaced
     document.addEventListener('htmx:afterSwap', function () { convertFlashMessages(); });
+
+    // Deprecated: hx-confirm on a delete asks in the styled modal, with the
+    // data-confirm-title/-label/-cancel labels. confirm-attrs elements are components.js's.
+    document.addEventListener('htmx:confirm', function (event) {
+      var elt = event.detail.elt;
+      if (!elt || !event.detail.question || elt.hasAttribute('data-confirm-modal')) return;
+      if (!(elt.hasAttribute('hx-delete') || elt.classList.contains('danger') ||
+            elt.getAttribute('value') === 'delete')) return;
+      event.preventDefault();
+      warnDeprecated('hx-confirm on a delete',
+        'Render shared-ui modal/confirm-modal and put confirm-attrs on the element.');
+      openConfirmModal({
+        title: elt.getAttribute('data-confirm-title') || undefined,
+        message: event.detail.question,
+        cancelLabel: elt.getAttribute('data-confirm-cancel') || undefined,
+        confirmLabel: elt.getAttribute('data-confirm-label') || undefined,
+        onConfirm: function () { event.detail.issueRequest(true); }
+      });
+    });
 
     // Expose public API
     window.AdminUX = {
