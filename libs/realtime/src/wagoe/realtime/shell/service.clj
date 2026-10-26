@@ -54,13 +54,17 @@
               {:connection-id connection-id :user-id user-id :email email :roles roles})
     connection-id))
 
+(def ^:private clean-context
+  ;; Resolved on first use: realtime does not depend on observability, and an
+  ;; error reporter exists only when it is loaded.
+  (delay (requiring-resolve 'wagoe.observability.errors.ports/with-clean-context)))
+
 (defn with-clean-error-context
   "Run `f` with the error context of `svc`'s `:error-reporter` empty, then put
-   back what was there (BOU-848). Resolved on use: realtime does not depend on
-   observability, and an error reporter exists only when it is loaded."
+   back what was there (BOU-848)."
   [svc f]
   (if-let [reporter (:error-reporter svc)]
-    ((requiring-resolve 'wagoe.observability.errors.ports/with-clean-context) reporter f)
+    (@clean-context reporter f)
     (f)))
 
 ;; =============================================================================

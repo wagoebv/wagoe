@@ -9,6 +9,7 @@
    - IErrorReporter: Exception and error message reporting
    - IErrorContext: Error context management and enrichment
    - IErrorContextReset: Optional; clears that context between requests
+   - IErrorContextScope: Optional; runs an entry point with that context clean
    
    Error Context Structure:
    {:correlation-id string - Request correlation ID
@@ -167,7 +168,15 @@
     "Drop all context on the current thread: breadcrumbs, user, tags, extra.
 
      Returns:
-       nil (side effect only)")
+       nil (side effect only)"))
+
+(extend-protocol IErrorContextReset
+  Object
+  (reset-context! [_] nil))
+
+(defprotocol IErrorContextScope
+  "Separate from IErrorContextReset, so a context implementing only that one
+   keeps working: an inline protocol misses the Object default (BOU-848)."
 
   (with-clean-context [this f]
     "Run `f` with this thread's context empty, then put back what was there,
@@ -179,13 +188,11 @@
      Returns:
        What `f` returns"))
 
-(extend-protocol IErrorContextReset
+(extend-protocol IErrorContextScope
   nil
-  (reset-context! [_] nil)
   (with-clean-context [_ f] (f))
 
   Object
-  (reset-context! [_] nil)
   (with-clean-context [_ f] (f)))
 
 ;; =============================================================================

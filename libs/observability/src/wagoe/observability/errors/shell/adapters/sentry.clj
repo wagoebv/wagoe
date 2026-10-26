@@ -263,6 +263,7 @@
     (.remove (store config))
     nil)
 
+  ports/IErrorContextScope
   (with-clean-context [_this f]
     (let [s     (store config)
           saved (get-thread-context s)]
@@ -270,7 +271,7 @@
       (try
         (f)
         (finally
-          (if saved (.set s saved) (.remove s)))))))
+          (set-thread-context! s saved))))))
 
 ;; =============================================================================
 ;; Sentry Error Filter Implementation
@@ -492,6 +493,7 @@
   (reset-context! [_this]
     (ports/reset-context! error-context))
 
+  ports/IErrorContextScope
   (with-clean-context [_this f]
     (ports/with-clean-context error-context f))
 
