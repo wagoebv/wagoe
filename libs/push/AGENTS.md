@@ -90,11 +90,12 @@ APNs uses ES256 JWT authentication (team-id + key-id + P8 private key). JWT is m
 ```clojure
 (record-send! [this event])
 ;; event: {:id uuid :notification-id kw :device-token str :platform kw
-;;         :event-type kw :user-id uuid :provider-message-id str :error str :timestamp inst}
+;;         :event-type kw :user-id uuid :provider-message-id str :callback-id str
+;;         :error str :timestamp inst}
 ;; Inserts into push_analytics_events. write-once — no updates.
 
-(record-delivery! [this event])  ;; delegates to record-send! with :event-type :delivered
-(record-open! [this event])      ;; delegates to record-send! with :event-type :opened
+(record-delivery! [this event])  ;; :event-type :delivered, once per :callback-id
+(record-open! [this event])      ;; :event-type :opened, once per :callback-id
 
 (get-push-stats [this notification-id opts])
 ;; GROUP BY event_type COUNT(*) → {:sent n :delivered n :opened n :failed n :notification-id kw}
@@ -169,7 +170,7 @@ Two job types registered under `:wagoe.push/job-handlers`:
 1. Look up push-def from registry (throws `:not-found` if missing)
 2. `get-user-devices` → filter `:active? true` → group by platform
 3. `build-notification` (locale fallback → template render)
-4. `deliver-to-platform!` per platform group
+4. Per platform group: `deliver-each!`, one payload per device, with a `:callback-secret`; `deliver-to-platform!` without
 5. `record-send!` per result; `mark-token-invalid!` when `:token-invalid?` is true
 
 **`:push/broadcast`** args: `{:notification-id kw :data map :platform kw :app-id str :locale kw}`
@@ -192,16 +193,16 @@ Built by the `:wagoe.push/route-contribution` Integrant key and contributed as `
 
 ## HMAC Callback Flow
 
-Every push's data carries `notification-id`, `provider-message-id` and `callback-token`; the app posts them back to `/api/v1/push/callback` on delivery or open. The id is minted at send time, because the provider's arrives only after the send. Without `:callback-secret` pushes carry none of the three, every callback gets 403, and the service warns at boot.
+Every push's data carries `notification-id`, `provider-message-id` and `callback-token`; the app posts them back to `/api/v1/push/callback` with `device-token`, `platform` and `event-type` on delivery or open. Without `:callback-secret` pushes carry none of the three, every callback gets 403, and the service warns at boot unless both providers are mocks.
+
+The `provider-message-id` a device gets is an id minted per device at send time (the provider's arrives only after the send). The token is `v2.<expires>.<hmac>`, an HMAC over that id, the notification, the device token and the platform, valid for `core.callback/token-ttl-seconds` (7 days). So it counts for one push to one device, once per event type (BOU-849). With a secret each device gets its own payload, sent through `IPerDeviceSend` where the provider implements it.
+
+The sent row stores the minted id in `callback_id` beside the provider's `provider_message_id`; the callback rows store it in `callback_id`, so the two join.
 
 ```clojure
-;; Added to the push data at send time:
-(service/with-callback notification notification-id callback-secret)
-;; → callback-token = HmacSHA256(callback-secret, provider-message-id) as hex string
-
-;; Callback handler verifies:
-(service/verify-callback-token callback-secret provider-message-id callback-token)
-;; → MessageDigest/isEqual (constant-time comparison)
+(service/with-callback notification notification-id callback-secret {:token "..." :platform :fcm})
+(service/callback-verdict callback-secret callback-body now-epoch-seconds)
+;; → :bound, :legacy (a deprecated generate-callback-token token), or nil
 ```
 
 Callback payload schema:
@@ -210,7 +211,7 @@ Callback payload schema:
 {:device-token        str
  :provider-message-id str
  :event-type          #{:delivered :opened}
- :callback-token      str     ; HMAC hex
+ :callback-token      str     ; v2.<expires>.<hmac>
  :notification-id     kw
  :platform            #{:fcm :apns}
  :timestamp           inst?}  ; optional, defaults to now
@@ -246,6 +247,7 @@ Three migrations under `libs/push/resources/wagoe/push/migrations/` create the t
 **`push_analytics_events`** (migration `20260524000002`)
 - Event-sourced: `:sent` written at delivery time; `:delivered`/`:opened` from callbacks
 - Indexed on `(notification_id, event_type)` for stats queries and `(timestamp)` for cleanup
+- `callback_id` (migration `20261026140017`), unique with `event_type`: joins a sent row to its callbacks
 
 ## Integrant Wiring
 
@@ -297,7 +299,7 @@ block, not an Integrant key.
 
 1. **FCM tokens rotate** — always handle `UNREGISTERED` by marking token invalid; adapters set `:token-invalid? true` automatically
 2. **APNs sandbox vs production** — different hosts (`api.sandbox.push.apple.com` vs `api.push.apple.com`), set `:sandbox?` correctly per environment
-3. **Callback HMAC** — mobile apps send back the `provider-message-id` and `callback-token` from the push data; the handler returns 403 on mismatch, and always without `:callback-secret`
+3. **Callback HMAC** — mobile apps send back the `provider-message-id` and `callback-token` from the push data; the handler returns 403 when the token does not name that notification, device and platform, has expired, or there is no `:callback-secret`
 4. **Template variables** — `{{var}}` syntax; missing vars left as-is (not stripped)
 5. **Locale fallback** — requested → `:en` → first available
 6. **`push_send_log` is legacy** — migration creates the table but current persistence shell writes to `push_analytics_events` only
@@ -323,13 +325,15 @@ block, not an Integrant key.
 (delivery/build-fcm-payload {:title "Hi" :body "Test" :priority :high
                              :ttl 3600 :data {:order-id "1"}} "some-fcm-token")
 
-;; Verify HMAC round-trip
+;; Verify a callback token round-trip
 (require '[wagoe.push.shell.service :as svc])
-(let [secret "dev-secret"
-      msg-id "msg-123"
-      tok    (svc/generate-callback-token secret msg-id)]
-  (svc/verify-callback-token secret msg-id tok))
-;; => true
+(let [fields {:callback-id "cb-1" :notification-id :orders/shipped :device-token "t"
+              :platform :fcm :expires-at (+ (quot (System/currentTimeMillis) 1000) 60)}]
+  (svc/callback-verdict "dev-secret"
+                        (assoc fields :provider-message-id "cb-1"
+                               :callback-token (svc/callback-token "dev-secret" fields))
+                        (quot (System/currentTimeMillis) 1000)))
+;; => :bound
 ```
 
 ## Testing

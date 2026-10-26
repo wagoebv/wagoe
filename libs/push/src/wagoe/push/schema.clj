@@ -66,6 +66,8 @@
    [:platform Platform]
    [:user-id {:optional true} :uuid]
    [:provider-message-id {:optional true} :string]
+   ;; The id minted for the push, on its sent row and its callbacks' (BOU-849).
+   [:callback-id {:optional true} :string]
    [:error {:optional true} :string]
    [:timestamp inst?]])
 

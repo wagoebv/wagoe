@@ -175,4 +175,8 @@
           post    #(rt/call :post "/api/v1/push/callback"
                             (json/generate-string (assoc payload :callback-token %)))]
       (is (= 403 (:status (post "not-the-hmac"))))
-      (is (= 204 (:status (post (push-service/generate-callback-token rt/callback-secret "msg-1"))))))))
+      (is (= 204 (:status (post (push-service/callback-token
+                                 rt/callback-secret
+                                 {:callback-id "msg-1" :notification-id :order-shipped
+                                  :device-token "device-token-1" :platform :fcm
+                                  :expires-at (+ (quot (System/currentTimeMillis) 1000) 600)}))))))))

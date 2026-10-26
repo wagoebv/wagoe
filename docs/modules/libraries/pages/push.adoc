@@ -69,8 +69,12 @@ An HMAC-secured callback endpoint accepts client-reported delivery and
 open events, recorded in `push_analytics_events`. Each push's data carries
 `notification-id`, `provider-message-id` and `callback-token`; the app posts
 them back with `device-token`, `platform` and `event-type` (`delivered` or
-`opened`). This needs `:callback-secret` in `:wagoe/push`: without it pushes
-carry no token, every callback is refused with 403, and push warns at boot.
+`opened`). Each device gets its own token, valid for seven days and for that
+notification, device and platform only; a repeat is answered but counted once.
+The sent row and its callbacks share `callback_id`. This needs
+`:callback-secret` in `:wagoe/push`: without it pushes carry no token, every
+callback is refused with 403, and push warns at boot unless both providers are
+mocks.
 
 == Endpoints
 

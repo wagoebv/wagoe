@@ -27,7 +27,12 @@
 
   (fcm-validate-token [_ token]
     (log/infof "Mock FCM: validate token %s → valid" (device/token-preview token))
-    {:valid? true :token token}))
+    {:valid? true :token token})
+
+  ports/IPerDeviceSend
+
+  (send-each! [this sends]
+    (ports/fcm-send-multicast! this nil (mapv first sends))))
 
 (defrecord MockAPNsProvider []
   ports/IAPNsProvider
@@ -49,4 +54,9 @@
              :message-id   (str "mock-apns-" (UUID/randomUUID))
              :device-token token
              :platform     :apns})
-          device-tokens)))
+          device-tokens))
+
+  ports/IPerDeviceSend
+
+  (send-each! [this sends]
+    (ports/apns-send-batch! this nil (mapv first sends))))

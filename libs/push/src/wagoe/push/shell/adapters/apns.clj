@@ -74,6 +74,28 @@
        :error          {:type :provider-rejected :message reason}
        :token-invalid? (contains? #{"BadDeviceToken" "Unregistered"} reason)})))
 
+(defn- send-all
+  "Each `[token payload]` sent concurrently; per-token results, in order."
+  [team-id key-id private-key bundle-id sandbox? http-client sends]
+  (let [jwt     (make-jwt team-id key-id private-key)
+        host    (apns-host sandbox?)
+        futures (mapv (fn [[token payload]]
+                        {:token  token
+                         :future (.sendAsync ^HttpClient http-client
+                                             (build-apns-request host bundle-id jwt payload token)
+                                             (HttpResponse$BodyHandlers/ofString))})
+                      sends)]
+    (mapv (fn [{:keys [token future]}]
+            (try
+              (parse-apns-response (.get ^CompletableFuture future) token)
+              (catch Exception e
+                (log/warnf "APNs async send failed for %s: %s" (device/token-preview token) (.getMessage e))
+                {:success?     false
+                 :device-token token
+                 :platform     :apns
+                 :error        {:type :push-send-failed :message (.getMessage e)}})))
+          futures)))
+
 (defrecord APNsProvider [team-id key-id private-key bundle-id sandbox? http-client]
   ports/IAPNsProvider
 
@@ -85,24 +107,13 @@
       (parse-apns-response response device-token)))
 
   (apns-send-batch! [_ payload device-tokens]
-    (let [jwt     (make-jwt team-id key-id private-key)
-          host    (apns-host sandbox?)
-          futures (mapv (fn [token]
-                          {:token  token
-                           :future (.sendAsync ^HttpClient http-client
-                                               (build-apns-request host bundle-id jwt payload token)
-                                               (HttpResponse$BodyHandlers/ofString))})
-                        device-tokens)]
-      (mapv (fn [{:keys [token future]}]
-              (try
-                (parse-apns-response (.get ^CompletableFuture future) token)
-                (catch Exception e
-                  (log/warnf "APNs async send failed for %s: %s" (device/token-preview token) (.getMessage e))
-                  {:success?     false
-                   :device-token token
-                   :platform     :apns
-                   :error        {:type :push-send-failed :message (.getMessage e)}})))
-            futures))))
+    (send-all team-id key-id private-key bundle-id sandbox? http-client
+              (mapv (fn [token] [token payload]) device-tokens)))
+
+  ports/IPerDeviceSend
+
+  (send-each! [_ sends]
+    (send-all team-id key-id private-key bundle-id sandbox? http-client sends)))
 
 (defn make-apns-provider [team-id key-id key-path bundle-id sandbox?]
   (let [pk     (load-p8-key key-path)

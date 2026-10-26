@@ -52,6 +52,28 @@
          :error          {:type :provider-rejected :message error-code}
          :token-invalid? (contains? #{"UNREGISTERED" "INVALID_ARGUMENT"} error-code)}))))
 
+(defn- send-all
+  "Each `[token payload]` sent concurrently; per-token results, in order."
+  [project-id credentials http-client sends]
+  (let [access-token (get-access-token credentials)
+        url          (fcm-url project-id)
+        futures      (mapv (fn [[token payload]]
+                             {:token  token
+                              :future (.sendAsync ^HttpClient http-client
+                                                  (build-request url payload access-token)
+                                                  (HttpResponse$BodyHandlers/ofString))})
+                           sends)]
+    (mapv (fn [{:keys [token future]}]
+            (try
+              (parse-response (.get ^CompletableFuture future) token)
+              (catch Exception e
+                (log/warnf "FCM async send failed for %s: %s" (device/token-preview token) (.getMessage e))
+                {:success?     false
+                 :device-token token
+                 :platform     :fcm
+                 :error        {:type :push-send-failed :message (.getMessage e)}})))
+          futures)))
+
 (defrecord FCMProvider [project-id credentials http-client]
   ports/IFCMProvider
 
@@ -63,30 +85,18 @@
       (parse-response response token)))
 
   (fcm-send-multicast! [_ payload tokens]
-    (let [access-token (get-access-token credentials)
-          url          (fcm-url project-id)
-          futures      (mapv (fn [token]
-                               (let [per-token (assoc-in payload [:message :token] token)
-                                     request   (build-request url per-token access-token)]
-                                 {:token  token
-                                  :future (.sendAsync ^HttpClient http-client request
-                                                      (HttpResponse$BodyHandlers/ofString))}))
-                             tokens)]
-      (mapv (fn [{:keys [token future]}]
-              (try
-                (parse-response (.get ^CompletableFuture future) token)
-                (catch Exception e
-                  (log/warnf "FCM async send failed for %s: %s" (device/token-preview token) (.getMessage e))
-                  {:success?     false
-                   :device-token token
-                   :platform     :fcm
-                   :error        {:type :push-send-failed :message (.getMessage e)}})))
-            futures)))
+    (send-all project-id credentials http-client
+              (mapv (fn [token] [token (assoc-in payload [:message :token] token)]) tokens)))
 
   (fcm-validate-token [this token]
     (let [payload {:message {:token token :data {"validate_only" "true"}}}
           result  (ports/fcm-send! this payload)]
-      {:valid? (:success? result) :token token})))
+      {:valid? (:success? result) :token token}))
+
+  ports/IPerDeviceSend
+
+  (send-each! [_ sends]
+    (send-all project-id credentials http-client sends)))
 
 (defn make-fcm-provider [project-id credentials-path]
   (let [creds  (load-credentials credentials-path)

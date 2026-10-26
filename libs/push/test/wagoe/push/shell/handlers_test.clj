@@ -102,7 +102,8 @@
   (let [analytics (p/->PushAnalyticsStore pt/*db*)
         deps      {:analytics-store analytics :callback-secret test-secret}
         msg-id    "provider-msg-123"
-        token     (service/generate-callback-token test-secret msg-id)
+        token     #_{:clj-kondo/ignore [:deprecated-var]}
+                  (service/generate-callback-token test-secret msg-id)
         request   {:body-params {:device-token        "device-abc"
                                  :provider-message-id msg-id
                                  :event-type          :delivered
@@ -113,6 +114,33 @@
     (is (= 204 (:status response)))
     (let [stats (ports/get-push-stats analytics :order-shipped {})]
       (is (= 1 (:delivered stats))))))
+
+(defn- bound-callback
+  "A callback body for a bound token over `fields`, with `changes` applied."
+  [fields changes]
+  {:body-params (merge {:provider-message-id (:callback-id fields)
+                        :notification-id     (:notification-id fields)
+                        :device-token        (:device-token fields)
+                        :platform            (:platform fields)
+                        :event-type          :delivered
+                        :callback-token      (service/callback-token test-secret fields)}
+                       changes)})
+
+(deftest ^:integration ^:security a-bound-token-counts-for-its-own-push-once
+  ;; One token used to count for any notification and device, as often as
+  ;; posted (BOU-849).
+  (let [analytics (p/->PushAnalyticsStore pt/*db*)
+        deps      {:analytics-store analytics :callback-secret test-secret}
+        fields    {:callback-id "cb-1" :notification-id :order-shipped :device-token "device-a"
+                   :platform :fcm :expires-at (+ (quot (System/currentTimeMillis) 1000) 600)}
+        post      #(:status (handlers/analytics-callback-handler deps (bound-callback fields %)))]
+    (is (= 403 (post {:notification-id :other-push})) "another notification")
+    (is (= 403 (post {:device-token "device-b"})) "another device")
+    (is (= 0 (:delivered (ports/get-push-stats analytics :other-push {}))))
+    (is (= [204 204] [(post {}) (post {})]) "a replay is answered, not counted")
+    (is (= 204 (post {:event-type :opened})))
+    (is (= {:delivered 1 :opened 1}
+           (select-keys (ports/get-push-stats analytics :order-shipped {}) [:delivered :opened])))))
 
 (deftest ^:integration callback-handler-invalid-hmac-test
   (let [deps     {:analytics-store (p/->PushAnalyticsStore pt/*db*)

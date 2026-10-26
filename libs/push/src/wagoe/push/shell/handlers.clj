@@ -96,28 +96,31 @@
 
 (defn analytics-callback-handler
   [{:keys [analytics-store callback-secret]} request]
-  (let [[body invalid] (request-body request decode-callback-payload callback-payload-explainer)]
+  (let [[body invalid] (request-body request decode-callback-payload callback-payload-explainer)
+        verdict        (when-not invalid
+                         (service/callback-verdict callback-secret body
+                                                   (.getEpochSecond (java.time.Instant/now))))]
     (cond
       invalid
       (invalid-body invalid)
 
-      (not (service/verify-callback-token
-            callback-secret
-            (:provider-message-id body)
-            (:callback-token body)))
+      (nil? verdict)
       (error-response 403 "forbidden" "Invalid callback token")
 
       :else
-      (do
-        (let [event {:id                  (random-uuid)
-                     :notification-id     (:notification-id body)
-                     :device-token        (:device-token body)
-                     :platform            (:platform body)
-                     :provider-message-id (:provider-message-id body)
-                     :timestamp           (or (:timestamp body) (java.util.Date.))}]
-          (case (:event-type body)
-            :delivered (ports/record-delivery! analytics-store event)
-            :opened    (ports/record-open! analytics-store event)))
+      ;; A bound token's id is the one minted for the push, which its sent row
+      ;; carries as :callback-id. A legacy id is kept where 1.0 kept it.
+      (let [id    (:provider-message-id body)
+            event (cond-> {:id              (random-uuid)
+                           :notification-id (:notification-id body)
+                           :device-token    (:device-token body)
+                           :platform        (:platform body)
+                           :timestamp       (or (:timestamp body) (java.util.Date.))}
+                    (= :bound verdict) (assoc :callback-id id)
+                    (= :legacy verdict) (assoc :provider-message-id id))]
+        (case (:event-type body)
+          :delivered (ports/record-delivery! analytics-store event)
+          :opened    (ports/record-open! analytics-store event))
         {:status 204 :headers {} :body nil}))))
 
 (defn push-stats-handler

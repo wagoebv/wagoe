@@ -172,6 +172,8 @@ CREATE TABLE IF NOT EXISTS push_analytics_events (
     timestamp           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     tenant_id           UUID
 );
+-- 20261026140017-analytics-callback-id.edn adds callback_id VARCHAR(255),
+-- unique with event_type: a sent row and its callbacks share it.
 ```
 
 ---

@@ -1,0 +1,5 @@
+;; push_analytics_events.callback_id: the id minted for a push, on its sent row
+;; and its callbacks', so the two join; unique per event type (BOU-849).
+{:ns      wagoe.push.shell.callback-id
+ :up-fn   "up"
+ :down-fn "down"}
