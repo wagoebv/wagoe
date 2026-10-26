@@ -195,13 +195,17 @@ Built by the `:wagoe.push/route-contribution` Integrant key and contributed as `
 
 Every push's data carries `notification-id`, `provider-message-id` and `callback-token`; the app posts them back to `/api/v1/push/callback` with `device-token`, `platform` and `event-type` on delivery or open. Without `:callback-secret` pushes carry none of the three, every callback gets 403, and the service warns at boot unless both providers are mocks.
 
-The `provider-message-id` a device gets is an id minted per device at send time (the provider's arrives only after the send). The token is `v2.<expires>.<hmac>`, an HMAC over that id, the notification, the device token and the platform, valid for `core.callback/token-ttl-seconds` (7 days). So it counts for one push to one device, once per event type (BOU-849). With a secret each device gets its own payload, sent through `IPerDeviceSend` where the provider implements it.
+The `provider-message-id` a device gets is an id minted per device at send time (the provider's arrives only after the send). The token is `v2.<expires>.<hmac>`, an HMAC over that id, the notification, the device token and the platform, valid for `:callback-token-ttl-seconds` in `:wagoe/push` (default `core.callback/token-ttl-seconds`, 7 days). So it counts for one push to one device, once per event type (BOU-849). With a secret each device gets its own payload, sent through `IPerDeviceSend` where the provider implements it.
+
+A token in the 1.0 form (`generate-callback-token`) still verifies, for any notification and device and without expiry. Set `:refuse-legacy-callback-tokens? true` in `:wagoe/push` to refuse it once the app versions that received such tokens are gone.
 
 The sent row stores the minted id in `callback_id` beside the provider's `provider_message_id`; the callback rows store it in `callback_id`, so the two join.
 
 ```clojure
 (service/with-callback notification notification-id callback-secret {:token "..." :platform :fcm})
+(service/with-callback notification notification-id callback-secret device ttl-seconds)
 (service/callback-verdict callback-secret callback-body now-epoch-seconds)
+(service/callback-verdict callback-secret callback-body now-epoch-seconds {:refuse-legacy? true})
 ;; → :bound, :legacy (a deprecated generate-callback-token token), or nil
 ```
 
@@ -276,7 +280,12 @@ Three migrations under `libs/push/resources/wagoe/push/migrations/` create the t
                         ;; Wired for you when :wagoe/jobs is enabled; omit it
                         ;; and schedule-push! has nowhere to enqueue (BOU-418).
                         :job-queue       #ig/ref :wagoe/job-queue
-                        :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
+                        :callback-secret #env WAG_PUSH_CALLBACK_SECRET
+                        ;; Optional: token lifetime, default 7 days.
+                        :callback-token-ttl-seconds 604800
+                        ;; Which providers are mocks; without a secret the
+                        ;; service warns at boot unless both are :mock.
+                        :providers {:fcm :fcm :apns :apns}}
 
 ;; Job handlers — contributed to :wagoe/job-registry automatically when
 ;; :wagoe/jobs is enabled; nothing to register by hand (BOU-418)
@@ -286,7 +295,9 @@ Three migrations under `libs/push/resources/wagoe/push/migrations/` create the t
 ;; add #ig/ref :wagoe.push/route-contribution to :wagoe/http-handler :module-routes
 :wagoe.push/route-contribution {:device-store    #ig/ref :wagoe.push/device-store
                                 :analytics-store #ig/ref :wagoe.push/analytics-store
-                                :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
+                                :callback-secret #env WAG_PUSH_CALLBACK_SECRET
+                                ;; Optional: refuse 1.0-form callback tokens.
+                                :refuse-legacy-callback-tokens? false}
 ```
 
 Require `wagoe.push.shell.module-wiring` at system start to load the `defmethod` definitions.

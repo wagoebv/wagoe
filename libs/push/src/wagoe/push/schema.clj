@@ -92,6 +92,13 @@
    [:platform [:enum :fcm :apns]]
    [:timestamp {:optional true} inst?]])
 
+;; --- Settings ---
+;; The `:wagoe/push` keys checked at boot; the map stays open for the rest.
+(def PushSettings
+  [:map
+   [:callback-token-ttl-seconds {:optional true} [:int {:min 1}]]
+   [:refuse-legacy-callback-tokens? {:optional true} :boolean]])
+
 ;; --- Validators ---
 (def ^:private push-definition-validator (m/validator PushDefinition))
 (def ^:private push-definition-explainer (m/explainer PushDefinition))

@@ -10,12 +10,17 @@
            [java.nio.charset StandardCharsets]
            [java.time Instant]))
 
-(defn- hmac-sha256 [secret data]
-  (let [mac (Mac/getInstance "HmacSHA256")
-        key (SecretKeySpec. (.getBytes ^String secret StandardCharsets/UTF_8) "HmacSHA256")]
+(defn- hmac-key ^SecretKeySpec [^String secret]
+  (SecretKeySpec. (.getBytes secret StandardCharsets/UTF_8) "HmacSHA256"))
+
+(defn- hmac-hex [^SecretKeySpec key ^String data]
+  (let [mac (Mac/getInstance "HmacSHA256")]
     (.init mac key)
     (apply str (map #(format "%02x" (bit-and % 0xff))
-                    (.doFinal mac (.getBytes ^String data StandardCharsets/UTF_8))))))
+                    (.doFinal mac (.getBytes data StandardCharsets/UTF_8))))))
+
+(defn- hmac-sha256 [secret data]
+  (hmac-hex (hmac-key secret) data))
 
 (defn- same?
   "Constant-time string equality."
@@ -29,11 +34,14 @@
   (boolean (and (seq callback-secret)
                 (same? (hmac-sha256 callback-secret provider-message-id) callback-token))))
 
-(defn- bound-mac
+(def ^:private bound-key
   "Keyed apart from the legacy token, so no legacy MAC passes for a bound one
-   or the other way round."
-  [callback-secret message]
-  (hmac-sha256 (hmac-sha256 callback-secret "wagoe.push/callback-token-v2") message))
+   or the other way round. Derived once per secret, not per token."
+  (memoize (fn [callback-secret]
+             (hmac-key (hmac-sha256 callback-secret "wagoe.push/callback-token-v2")))))
+
+(defn- bound-mac [callback-secret message]
+  (hmac-hex (bound-key callback-secret) message))
 
 (defn generate-callback-token
   "Deprecated, goes in 2.0: the token covers the id alone, so it verifies for
@@ -60,20 +68,23 @@
 (defn callback-verdict
   "`:bound` for a callback whose token names its notification, device and
    platform and has not expired at `now` (epoch seconds), `:legacy` for a
-   `generate-callback-token` token, nil for anything else, and for everything
-   without a secret: an empty HMAC key throws."
-  [callback-secret {:keys [provider-message-id callback-token] :as payload} now]
-  (when (seq callback-secret)
-    (if-let [{:keys [expires-at mac]} (callback/parse-token callback-token)]
-      (when (and (< now expires-at)
-                 (same? mac (bound-mac callback-secret
-                                       (callback/signed-message
-                                        (assoc payload
-                                               :callback-id provider-message-id
-                                               :expires-at expires-at)))))
-        :bound)
-      (when (legacy-token-valid? callback-secret provider-message-id callback-token)
-        :legacy))))
+   `generate-callback-token` token unless `:refuse-legacy?`, nil for anything
+   else, and for everything without a secret: an empty HMAC key throws."
+  ([callback-secret payload now]
+   (callback-verdict callback-secret payload now {}))
+  ([callback-secret {:keys [provider-message-id callback-token] :as payload} now {:keys [refuse-legacy?]}]
+   (when (seq callback-secret)
+     (if-let [{:keys [expires-at mac]} (callback/parse-token callback-token)]
+       (when (and (< now expires-at)
+                  (same? mac (bound-mac callback-secret
+                                        (callback/signed-message
+                                         (assoc payload
+                                                :callback-id provider-message-id
+                                                :expires-at expires-at)))))
+         :bound)
+       (when (and (not refuse-legacy?)
+                  (legacy-token-valid? callback-secret provider-message-id callback-token))
+         :legacy)))))
 
 (defn- attach-callback
   "`notification` with a minted id and `(mint-token id)` in its data; unchanged
@@ -90,15 +101,18 @@
   "The notification with what `device` posts back to `/push/callback`: a
    minted id, and a token for this notification on this device that expires.
    The provider's message id arrives only after the send, so the id is minted
-   here. Unchanged without a secret: no token could verify.
+   here. The token verifies for `ttl-seconds`, seven days by default. Unchanged
+   without a secret: no token could verify.
 
    Without `device`, deprecated: one id and a token over it alone, which goes
    in 2.0."
   ([notification notification-id callback-secret]
    (attach-callback notification notification-id callback-secret
                     #(hmac-sha256 callback-secret %)))
-  ([notification notification-id callback-secret {:keys [token platform]}]
-   (let [expires-at (+ (.getEpochSecond (Instant/now)) callback/token-ttl-seconds)]
+  ([notification notification-id callback-secret device]
+   (with-callback notification notification-id callback-secret device callback/token-ttl-seconds))
+  ([notification notification-id callback-secret {:keys [token platform]} ttl-seconds]
+   (let [expires-at (+ (.getEpochSecond (Instant/now)) ttl-seconds)]
      (attach-callback notification notification-id callback-secret
                       #(callback-token callback-secret {:callback-id     %
                                                         :notification-id notification-id

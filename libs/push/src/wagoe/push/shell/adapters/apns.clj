@@ -1,6 +1,6 @@
 (ns wagoe.push.shell.adapters.apns
-  (:require [wagoe.push.core.device :as device]
-            [wagoe.push.ports :as ports]
+  (:require [wagoe.push.ports :as ports]
+            [wagoe.push.shell.adapters.concurrent :as concurrent]
             [cheshire.core :as json]
             [clojure.tools.logging :as log])
   (:import [java.net URI]
@@ -10,8 +10,7 @@
            [java.security KeyFactory]
            [java.security.spec PKCS8EncodedKeySpec]
            [java.time Duration Instant]
-           [java.util Base64]
-           [java.util.concurrent CompletableFuture]))
+           [java.util Base64]))
 
 (defn- load-p8-key [key-path]
   (let [raw    (String. (Files/readAllBytes (Paths/get key-path (into-array String []))))
@@ -75,26 +74,12 @@
        :token-invalid? (contains? #{"BadDeviceToken" "Unregistered"} reason)})))
 
 (defn- send-all
-  "Each `[token payload]` sent concurrently; per-token results, in order."
   [team-id key-id private-key bundle-id sandbox? http-client sends]
-  (let [jwt     (make-jwt team-id key-id private-key)
-        host    (apns-host sandbox?)
-        futures (mapv (fn [[token payload]]
-                        {:token  token
-                         :future (.sendAsync ^HttpClient http-client
-                                             (build-apns-request host bundle-id jwt payload token)
-                                             (HttpResponse$BodyHandlers/ofString))})
-                      sends)]
-    (mapv (fn [{:keys [token future]}]
-            (try
-              (parse-apns-response (.get ^CompletableFuture future) token)
-              (catch Exception e
-                (log/warnf "APNs async send failed for %s: %s" (device/token-preview token) (.getMessage e))
-                {:success?     false
-                 :device-token token
-                 :platform     :apns
-                 :error        {:type :push-send-failed :message (.getMessage e)}})))
-          futures)))
+  (let [jwt  (make-jwt team-id key-id private-key)
+        host (apns-host sandbox?)]
+    (concurrent/send-all http-client :apns
+                         (fn [token payload] (build-apns-request host bundle-id jwt payload token))
+                         parse-apns-response sends)))
 
 (defrecord APNsProvider [team-id key-id private-key bundle-id sandbox? http-client]
   ports/IAPNsProvider

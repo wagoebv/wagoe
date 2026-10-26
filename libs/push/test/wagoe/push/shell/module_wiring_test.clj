@@ -78,9 +78,35 @@
           (pr-str secret))))
   (testing "but not with mock providers, which reach no device (BOU-849)"
     (log-test/with-log
+      (ig/init-key :wagoe.push/service
+                   (get-in (wiring/ig-config {} {}) [:components :wagoe.push/service]))
+      (is (not (log-test/logged? 'wagoe.push.shell.module-wiring :warn #"callback-secret")))))
+  (testing "the providers' config decides, not their class"
+    (log-test/with-log
       (ig/init-key :wagoe.push/service {:fcm-provider  (mock/->MockFCMProvider)
-                                        :apns-provider (mock/->MockAPNsProvider)})
-      (is (not (log-test/logged? 'wagoe.push.shell.module-wiring :warn #"callback-secret"))))))
+                                        :apns-provider (mock/->MockAPNsProvider)
+                                        :providers     {:fcm :fcm :apns :mock}})
+      (is (log-test/logged? 'wagoe.push.shell.module-wiring :warn #"callback-secret")))))
+
+(deftest ^:unit callback-token-settings-reach-the-components
+  (let [components (:components (wiring/ig-config {:callback-secret                "s"
+                                                   :callback-token-ttl-seconds     86400
+                                                   :refuse-legacy-callback-tokens? true}
+                                                  {:enabled #{:wagoe/jobs}}))
+        service    (ig/init-key :wagoe.push/service
+                                (dissoc (:wagoe.push/service components) :job-queue))]
+    (is (= 86400 (:callback-token-ttl-seconds service)))
+    (is (true? (get-in components [:wagoe.push/route-contribution :refuse-legacy-callback-tokens?])))
+    (is (true? (get-in components [:wagoe.push/routes :refuse-legacy-callback-tokens?]))))
+  (testing "off and seven days unless set"
+    (let [components (:components (wiring/ig-config {:callback-secret "s"} {}))]
+      (is (nil? (get-in components [:wagoe.push/route-contribution :refuse-legacy-callback-tokens?])))
+      (is (nil? (:callback-token-ttl-seconds (ig/init-key :wagoe.push/service
+                                                          (:wagoe.push/service components)))))))
+  (doseq [bad [{:callback-token-ttl-seconds 0} {:callback-token-ttl-seconds "7d"}
+               {:refuse-legacy-callback-tokens? "yes"}]]
+    (let [ex (is (thrown? clojure.lang.ExceptionInfo (wiring/ig-config bad {})) (pr-str bad))]
+      (is (= :configuration-error (:type (ex-data ex)))))))
 
 (deftest ^:unit stores-take-the-db-context-as-db-ctx
   (let [components (:components (wiring/ig-config {} {}))]

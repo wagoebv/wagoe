@@ -21,12 +21,13 @@
   "Results of sending `rendered` to `devices` on `platform`, each with the
    `:callback-id` its device posts back. Each device gets its own token, so
    without a secret one payload goes to them all."
-  [{:keys [callback-secret] :as deps} platform notification-id rendered devices]
+  [{:keys [callback-secret callback-token-ttl-seconds] :as deps} platform notification-id rendered devices]
   (if (empty? callback-secret)
     (service/deliver-to-platform! deps platform rendered devices)
-    (let [sends (mapv (fn [device]
+    (let [ttl   (or callback-token-ttl-seconds callback/token-ttl-seconds)
+          sends (mapv (fn [device]
                         [(:token device)
-                         (service/with-callback rendered notification-id callback-secret device)])
+                         (service/with-callback rendered notification-id callback-secret device ttl)])
                       devices)]
       (mapv (fn [[_ sent] result]
               (assoc result :callback-id (get-in sent [:data :provider-message-id])))
@@ -40,8 +41,7 @@
 
 (defn handle-send-push
   "Job handler for :push/send. Resolves notification, fans out to devices, delivers."
-  [{:keys [device-store fcm-provider apns-provider
-           analytics-store callback-secret]}
+  [{:keys [device-store analytics-store callback-secret] :as deps}
    {:keys [notification-id data user-id locale]}]
   (let [push-def (registry/get-push notification-id)]
     (when-not push-def
@@ -54,10 +54,7 @@
       (log/infof "Push: delivering %s to %d devices for user %s"
                  notification-id (count active) user-id)
       (doseq [[platform platform-devices] grouped]
-        (let [results (deliver! {:fcm-provider    fcm-provider
-                                 :apns-provider   apns-provider
-                                 :callback-secret callback-secret}
-                                platform notification-id rendered platform-devices)]
+        (let [results (deliver! deps platform notification-id rendered platform-devices)]
           (doseq [result results]
             (ports/record-send! analytics-store
                                 (assoc (sent-event notification-id result) :user-id user-id))

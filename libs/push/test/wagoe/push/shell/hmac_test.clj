@@ -93,6 +93,26 @@
     (let [mac (peek (str/split (service/callback-token secret fields) #"\."))]
       (is (nil? (service/callback-verdict secret (payload {:callback-token mac}) now))))))
 
+(deftest ^:unit legacy-tokens-can-be-refused
+  (let [legacy (service/generate-callback-token secret "cb-1")]
+    (is (nil? (service/callback-verdict secret (payload {:callback-token legacy}) now
+                                        {:refuse-legacy? true})))
+    (is (= :bound (service/callback-verdict secret (payload {}) now {:refuse-legacy? true}))
+        "a bound token is unaffected")))
+
+(deftest ^:unit with-callback-takes-a-token-ttl
+  (let [lifetime (fn [& ttl]
+                   (- (-> (apply service/with-callback {:data {}} :n secret
+                                 {:token "device-a" :platform :fcm} ttl)
+                          (get-in [:data :callback-token])
+                          (str/split #"\.")
+                          second
+                          parse-long)
+                      (quot (System/currentTimeMillis) 1000)))
+        days     #(* % 24 60 60)]
+    (is (<= (- (days 7) 5) (lifetime) (days 7)) "seven days by default")
+    (is (<= (- (days 28) 5) (lifetime (days 28)) (days 28)))))
+
 (deftest ^:unit with-callback-binds-the-token-to-the-device
   (let [n  {:title "Hi" :data {:k "v"}}
         a  (:data (service/with-callback n :orders/shipped secret {:token "device-a" :platform :fcm}))

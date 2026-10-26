@@ -235,6 +235,32 @@
     (is (= 3 (count (set (map #(get-in (second %) [:message :data "callback-token"]) @sent)))))
     (is (every? (fn [[token payload]] (= token (get-in payload [:message :token]))) @sent))))
 
+(deftest ^:integration a-push-token-lives-as-long-as-configured
+  (registry/register-push! {:id :ttl-push :title "Hi" :body "There" :channels #{:fcm}})
+  (let [device-store (p/->DeviceTokenStore pt/*db*)
+        user-id      (random-uuid)
+        sent         (atom [])
+        fcm          (reify
+                       ports/IFCMProvider
+                       (fcm-send! [_ _])
+                       (fcm-validate-token [_ _])
+                       (fcm-send-multicast! [_ _ _])
+                       ports/IPerDeviceSend
+                       (send-each! [_ sends]
+                         (swap! sent into sends)
+                         (ports/send-each! (mock/->MockFCMProvider) sends)))]
+    (ports/register-device! device-store user-id {:token "ttl-dev" :platform :fcm :app-id "com.test"})
+    (jobs/handle-send-push {:device-store               device-store
+                            :analytics-store            (p/->PushAnalyticsStore pt/*db*)
+                            :fcm-provider               fcm
+                            :callback-secret            "s"
+                            :callback-token-ttl-seconds 3600}
+                           {:notification-id :ttl-push :data {} :user-id user-id :locale :en})
+    (let [token    (get-in (second (first @sent)) [:message :data "callback-token"])
+          lifetime (- (parse-long (second (str/split token #"\.")))
+                      (quot (System/currentTimeMillis) 1000))]
+      (is (<= 3595 lifetime 3600) token))))
+
 (deftest ^:integration app-data-keys-the-callback-replaces-are-named
   (registry/register-push! {:id :shadowed :title "Hi" :body "There" :channels #{:fcm}})
   (log-test/with-log
