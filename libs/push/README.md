@@ -90,8 +90,10 @@ Wired by hand, add these to `resources/conf/{env}/config.edn` and require `wagoe
                        :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
 ```
 
-Use `:provider :mock` for FCM and APNs in dev/test environments. The module
-contributes `:wagoe.push/routes` to the HTTP handler, under `/api/v1/push` (see [AGENTS.md](AGENTS.md)).
+Use `:provider :mock` for FCM and APNs in dev/test environments. With `:wagoe/push`
+the module contributes `:wagoe.push/routes` to the HTTP handler, under `/api/v1/push`;
+wired by hand, add `#ig/ref :wagoe.push/routes` to `:wagoe/http-handler :module-routes`
+(see [AGENTS.md](AGENTS.md)).
 
 ---
 

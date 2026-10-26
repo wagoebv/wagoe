@@ -94,8 +94,12 @@
                      :post {:handler (partial register-device-handler deps)}
                      :get  {:handler (partial list-devices-handler deps)}}]
    ["/push/devices/:token" {:authorization :self
+                            :openapi {:parameters [{:name "token" :in "path" :required true
+                                                    :schema {:type "string"}}]}
                             :delete {:handler (partial unregister-device-handler deps)}}]
    ["/push/callback" {:post {:handler (partial analytics-callback-handler deps)
                              :public  true}}]
    ["/push/stats/:notification-id" {:permission :push/read
+                                    :openapi {:parameters [{:name "notification-id" :in "path" :required true
+                                                            :schema {:type "string"}}]}
                                     :get {:handler (partial push-stats-handler deps)}}]])

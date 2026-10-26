@@ -11,6 +11,7 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [wagoe.platform.core.http.errors :as errors]
+            [wagoe.push.shell.service :as push-service]
             [wagoe.user.shell.auth :as auth]
             [support.route-table :as rt]))
 
@@ -122,7 +123,7 @@
                                 r   (rt/call m uri (:empty rt/bodies) hdrs)]
                          :when (= "missing-error-type" (get-in (rt/decoded r) [:error :type]))]
                      [(name who) (str/upper-case (name m)) uri])
-                    distinct sort)]
+                   distinct sort)]
     (is (empty? found) (str/join "\n" (map #(str/join " " %) found)))))
 
 (deftest ^:integration an-unknown-admin-entity-is-a-404
@@ -161,9 +162,10 @@
         listed  (rt/call :get "/api/v1/push/devices" "" (:user callers))]
     (is (= 201 (:status created)) (pr-str (rt/decoded created)))
     (is (= ["device-token-1"] (map :token (:devices (rt/decoded listed))))))
-  (testing "the callback reaches its HMAC check anonymously"
+  (testing "the callback is checked by its HMAC, anonymously"
     (let [payload {:device-token "device-token-1" :provider-message-id "msg-1"
-                   :event-type "delivered" :callback-token "not-the-hmac"
-                   :notification-id "order-shipped" :platform "fcm"}]
-      (is (= 403 (:status (rt/call :post "/api/v1/push/callback"
-                                   (json/generate-string payload))))))))
+                   :event-type "delivered" :notification-id "order-shipped" :platform "fcm"}
+          post    #(rt/call :post "/api/v1/push/callback"
+                            (json/generate-string (assoc payload :callback-token %)))]
+      (is (= 403 (:status (post "not-the-hmac"))))
+      (is (= 204 (:status (post (push-service/generate-callback-token rt/callback-secret "msg-1"))))))))

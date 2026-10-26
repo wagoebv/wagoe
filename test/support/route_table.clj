@@ -31,6 +31,10 @@
   {"external" "its adapters need a host or an account; they serve no routes"
    "devtools" "dev-only; the dashboard refuses to boot in :test"})
 
+(def callback-secret
+  "Push's, so a test can sign a callback the booted handler accepts."
+  "route-table-callback-secret")
+
 (defn- every-module-config
   "The test profile with every framework module on, each from the config
    `wagoe add` writes for tests. Storage exposes its HTTP API, which it does
@@ -52,6 +56,7 @@
     (-> base
         (update :active merge extra)
         (assoc-in [:active :wagoe/storage :expose-http?] true)
+        (assoc-in [:active :wagoe/push :callback-secret] callback-secret)
         ;; Migrated at boot, as a generated test config is: push and the
         ;; others keep their tables in migrations, not in code.
         (update-in [:active :wagoe/h2] assoc

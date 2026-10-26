@@ -279,7 +279,8 @@ Three migrations under `libs/push/resources/wagoe/push/migrations/` create the t
 ;; :wagoe/jobs is enabled; nothing to register by hand (BOU-418)
 :wagoe.push/job-handlers {:push-service #ig/ref :wagoe.push/service}
 
-;; Routes — contributed to the HTTP handler by the module
+;; Routes — contributed by the module under :wagoe/push; wired by hand,
+;; add #ig/ref :wagoe.push/routes to :wagoe/http-handler :module-routes
 :wagoe.push/routes {:device-store    #ig/ref :wagoe.push/device-store
                        :analytics-store #ig/ref :wagoe.push/analytics-store
                        :callback-secret #env WAG_PUSH_CALLBACK_SECRET}

@@ -80,14 +80,15 @@
     (is (= 403 (:status response)))))
 
 (deftest ^:unit callback-handler-without-a-secret-refuses-test
-  (let [request  {:body-params {:device-token        "device-abc"
-                                :provider-message-id "msg-1"
-                                :event-type          "delivered"
-                                :callback-token      "any"
-                                :notification-id     "test"
-                                :platform            "fcm"}}
-        response (handlers/analytics-callback-handler {} request)]
-    (is (= 403 (:status response)))))
+  ;; A blank secret too: an empty HMAC key throws, which was a 500.
+  (let [request {:body-params {:device-token        "device-abc"
+                               :provider-message-id "msg-1"
+                               :event-type          "delivered"
+                               :callback-token      "any"
+                               :notification-id     "test"
+                               :platform            "fcm"}}]
+    (doseq [deps [{} {:callback-secret ""}]]
+      (is (= 403 (:status (handlers/analytics-callback-handler deps request))) (pr-str deps)))))
 
 (deftest ^:integration callback-handler-invalid-payload-test
   (let [deps     {:analytics-store (p/->PushAnalyticsStore pt/*db*)

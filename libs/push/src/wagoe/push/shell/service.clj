@@ -22,10 +22,11 @@
 
 (defn verify-callback-token
   "Verify HMAC callback token. Constant-time comparison. False when no secret
-   is configured: no token can be valid then."
+   is configured, blank included (an empty HMAC key throws): no token can be
+   valid then."
   [callback-secret provider-message-id callback-token]
   (boolean
-   (when callback-secret
+   (when (seq callback-secret)
      (java.security.MessageDigest/isEqual
       (.getBytes ^String (hmac-sha256 callback-secret provider-message-id) StandardCharsets/UTF_8)
       (.getBytes ^String callback-token StandardCharsets/UTF_8)))))
