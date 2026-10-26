@@ -318,6 +318,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **User service operations log, emit metrics and report errors** (BOU-840); they had no logger, emitter or reporter.
+  Nothing to change.
+- **Sentry breadcrumbs per thread are capped at `:max-breadcrumbs`** (BOU-840), default 100, the newest kept; they grew
+  without limit. Nothing to change.
 - **The geo cache boots from its documented config** (BOU-839): `:wagoe/geo-service` takes
   `:db-ctx #ig/ref :wagoe/db-context`; `:db` is deprecated, goes in 2.0. Rename `:db` to `:db-ctx`.
 - **A group grant can no longer hand out a code role** (BOU-836): `add-group-grant` and an import's `:grants` take only
