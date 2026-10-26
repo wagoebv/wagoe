@@ -49,20 +49,20 @@ Add to `resources/conf/{env}/config.edn` and require `wagoe.geo.shell.module-wir
 {:provider   :openstreetmap
  :user-agent "MyApp/1.0 (contact@example.com)"
  :cache-ttl  86400
- :db-ctx     #ig/ref :wagoe/db-context}
+ :cache?     true}
 
 ;; PDOK Locatieserver (Dutch addresses, free, no key)
 :wagoe/geo-service
 {:provider  :pdok
  :cache-ttl 86400
- :db-ctx    #ig/ref :wagoe/db-context}
+ :cache?    true}
 
 ;; Google Maps
 :wagoe/geo-service
 {:provider  :google
  :api-key   #env WAG_GEO_API_KEY
  :cache-ttl 86400
- :db-ctx    #ig/ref :wagoe/db-context}
+ :cache?    true}
 
 ;; Fallback chain (try OSM first, then Google)
 :wagoe/geo-service
@@ -70,11 +70,15 @@ Add to `resources/conf/{env}/config.edn` and require `wagoe.geo.shell.module-wir
  :api-key    #env WAG_GEO_API_KEY
  :cache-ttl  86400
  :rate-limit 1
- :db-ctx     #ig/ref :wagoe/db-context}
+ :cache?     true}
 ```
 
 `:timeout-ms` (default 3000) bounds each provider call's connect and read. A
 timeout is a miss: logged, and the chain moves on.
+
+`:cache? true` caches lookups in `geo_cache` through `:wagoe/db-context`, which the
+module wires itself; run the migration first. A config that does not match
+`wagoe.geo.schema/GeoConfig` fails at boot.
 
 ---
 

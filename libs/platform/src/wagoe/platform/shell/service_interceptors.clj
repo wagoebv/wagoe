@@ -86,17 +86,19 @@
               (assoc-in ctx [:timing :start] (System/nanoTime))))})
 
 (def service-operation-logging
-  "Handles service operation logging throughout the lifecycle."
+  "Logs start and completion at debug: the handler around the call logs both at
+   info, and `service-audit-logging`'s business event says it completed. Failures
+   log at their status's level."
   {:name :service-operation-logging
    :enter (fn [{:keys [operation-name params system context] :as ctx}]
             (when-let [logger (:logger system)]
-              (log-ports/info logger (str "Starting service operation: " operation-name)
-                              (pii/redact-for-log (merge context params))))
+              (log-ports/debug logger (str "Starting service operation: " operation-name)
+                               (pii/redact-for-log (merge context params))))
             ctx)
    :leave (fn [{:keys [operation-name result system context] :as ctx}]
             (when-let [logger (:logger system)]
-              (log-ports/info logger (str "Service operation completed: " operation-name)
-                              (merge context {:result-type (if result :success :null)})))
+              (log-ports/debug logger (str "Service operation completed: " operation-name)
+                               (merge context {:result-type (if result :success :null)})))
             ctx)
    :error (fn [{:keys [operation-name system context exception] :as ctx}]
             (when-let [logger (:logger system)]

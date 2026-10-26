@@ -544,6 +544,7 @@
  :admin/dashboard-activity         "Recente activiteit"
  :admin/dashboard-activity-empty   "Nog niets vastgelegd."
  :admin/dashboard-activity-failed  "Recente activiteit kon niet worden geladen."
+ :admin/dashboard-extra-cards      "Meer"
  :admin/filter-placeholder-search  "Zoek in {fields}..."
  :admin/button-clear-search        "Zoekopdracht wissen"
  :admin/select-placeholder         "Selecteer..."

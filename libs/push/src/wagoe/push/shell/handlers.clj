@@ -1,5 +1,6 @@
 (ns wagoe.push.shell.handlers
-  (:require [wagoe.push.ports :as ports]
+  (:require [clojure.string :as str]
+            [wagoe.push.ports :as ports]
             [wagoe.push.schema :as schema]
             [wagoe.push.shell.service :as service]
             [wagoe.push.core.analytics :as analytics]
@@ -40,24 +41,43 @@
     (let [body (decode (:body-params request))]
       [body (explain body)])))
 
+(defn- device-location
+  "The device's own path, under whichever prefix this was posted to, with its
+   app-id: one token may be registered under several. nil for a token with a
+   `/`, whose encoded form Jetty refuses in a path."
+  [request {:keys [token app-id]}]
+  (when-not (str/includes? token "/")
+    (str (:uri request) "/" (codec/url-encode token) "?app-id=" (codec/url-encode app-id))))
+
 (defn register-device-handler
   [{:keys [device-store]} request]
   (let [user-id        (get-in request [:user :id])
         [body invalid] (request-body request decode-device-info device-info-explainer)]
     (if invalid
       (invalid-body invalid)
-      (let [device (ports/register-device! device-store user-id body)]
-        ;; The device's own path, under whichever prefix this was posted to.
-        (-> (resp/created (str (:uri request) "/" (codec/url-encode (:token device))) device)
-            (resp/content-type "application/json"))))))
+      (let [device   (ports/register-device! device-store user-id body)
+            location (device-location request device)]
+        (cond-> (-> (resp/response device)
+                    (resp/status 201)
+                    (resp/content-type "application/json"))
+          location (resp/header "Location" location))))))
+
+(defn- user-devices-with-token [store user-id token app-id]
+  (if (satisfies? ports/IDeviceLookup store)
+    (ports/find-user-devices store user-id token app-id)
+    (filter #(and (= token (:token %)) (or (nil? app-id) (= app-id (:app-id %))))
+            (ports/get-user-devices store user-id))))
 
 (defn get-device-handler
   [{:keys [device-store]} request]
-  (let [token (get-in request [:path-params :token])]
-    (if-let [device (->> (ports/get-user-devices device-store (get-in request [:user :id]))
-                         (some #(when (= token (:token %)) %)))]
-      (resp/response device)
-      (error-response 404 "not-found" "Device not found"))))
+  (let [devices (user-devices-with-token device-store
+                                         (get-in request [:user :id])
+                                         (get-in request [:path-params :token])
+                                         (not-empty (get-in request [:query-params "app-id"])))]
+    (case (count devices)
+      0 (error-response 404 "not-found" "Device not found")
+      1 (resp/response (first devices))
+      (error-response 409 "conflict" "The token is registered under several app-ids; pass ?app-id="))))
 
 (defn unregister-device-handler
   [{:keys [device-store]} request]
@@ -118,7 +138,9 @@
    ["/push/devices/:token" {:authorization :self
                             :openapi {:parameters [{:name "token" :in "path" :required true
                                                     :schema {:type "string"}}]}
-                            :get    {:handler (partial get-device-handler deps)}
+                            :get    {:handler (partial get-device-handler deps)
+                                     :openapi {:parameters [{:name "app-id" :in "query" :required false
+                                                             :schema {:type "string"}}]}}
                             :delete {:handler (partial unregister-device-handler deps)}}]
    ["/push/callback" {:post {:handler    (partial analytics-callback-handler deps)
                              :parameters {:body schema/CallbackPayload}

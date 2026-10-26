@@ -123,15 +123,16 @@
    :malformed "{not json"})
 
 (defn call
-  "The response to `method` on `uri`, as a JSON client sends it. `headers` are
-   added to the request's. A handler that throws has been reached, which is
-   an answer too: `{:status \"threw <Class>\"}`."
+  "The response to `method` on `uri`, which may carry a query string, as a JSON
+   client sends it. `headers` are added to the request's. A handler that throws
+   has been reached, which is an answer too: `{:status \"threw <Class>\"}`."
   ([method uri] (call method uri (:empty bodies) {}))
   ([method uri body] (call method uri body {}))
   ([method uri body headers]
    (try
      (*handler* {:request-method method
-                 :uri            uri
+                 :uri            (first (str/split uri #"\?" 2))
+                 :query-string   (second (str/split uri #"\?" 2))
                  :scheme         :http
                  :server-name    "localhost"
                  :server-port    80

@@ -11,7 +11,10 @@
    well-formed vector, which is exactly why calling it directly in a test
    missed this."
   (:require [clojure.test :refer [deftest is testing]]
-            [wagoe.user.shell.cli-entry :as cli-entry]))
+            [wagoe.observability.errors.ports :as error-ports]
+            [wagoe.observability.logging.ports :as log-ports]
+            [wagoe.user.shell.cli-entry :as cli-entry]
+            [wagoe.user.shell.service :as user-service]))
 
 (defn- run-main
   "Call -main with run-cli! stubbed. Returns {:args ... :exit ...}."
@@ -42,3 +45,12 @@
 
   (testing "failure propagates, so a script can tell"
     (is (= 1 (:exit (run-main 1 "create"))))))
+
+(deftest ^:unit the-cli-user-service-logs
+  ;; It was built with no logger, so a CLI command recorded nothing.
+  (let [obs (cli-entry/cli-observability {:active {:wagoe/logging {:provider :slf4j}}})
+        svc (user-service/create-user-service nil nil nil {} nil obs)]
+    (is (satisfies? log-ports/ILogger (:logger svc)))
+    (is (satisfies? error-ports/IErrorReporter (:error-reporter svc)))
+    (is (some? (:metrics-emitter svc)))
+    (is (= (:logger obs) (:logger (user-service/interceptor-system svc))))))

@@ -110,4 +110,9 @@
  {:ticket "BOU-838"
   :since  "1.0.2"
   :note   ":wagoe.push/routes, the /api/push route vector an app mounted by hand. The push module now mounts its routes under /api/v1/push."
-  :manual "Before 2.0, remove the hand-written mounting and point clients at /api/v1/push. A rewrite cannot find where an app spliced the vector into its routes."}]
+  :manual "Before 2.0, remove the hand-written mounting and point clients at /api/v1/push. A rewrite cannot find where an app spliced the vector into its routes."}
+
+ {:ticket "BOU-847"
+  :since  "1.0.2"
+  :note   "wagoe.push.schema/valid-device-info? and valid-callback?, and :db on :wagoe.push/device-store and :wagoe.push/analytics-store. All work until 2.0."
+  :manual "Validate against wagoe.push.schema/DeviceInfo or CallbackPayload with malli, and rename :db to :db-ctx where your config sets the push stores. A rewrite cannot tell push's :db from another component's."}]

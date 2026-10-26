@@ -126,7 +126,9 @@
 
 (deftest ^:unit deprecated-extra-cards-follow-the-sections
   (let [body (home nil nil [:orders] {:admin-config {:dashboard-extra-cards [[:div.my-card "Reports"]]}})]
-    (is (re-find #"(?s)/web/admin/orders.*<div class=\"my-card\">Reports</div>" body)))
+    (is (re-find #"(?s)/web/admin/orders.*<div class=\"my-card\">Reports</div>" body))
+    (is (re-find #"aria-labelledby=\"admin-home-extra\"" body) "a section with a heading, like the others")
+    (is (re-find #"<h2[^>]*id=\"admin-home-extra\"" body)))
   (is (not (str/includes? (home nil nil [:orders]) "admin-home-extra")) "none configured, no section"))
 
 (deftest ^:unit a-tile-shows-the-entity-summary

@@ -17,16 +17,17 @@
      {:provider   :google
       :api-key    #env WAG_GEO_API_KEY
       :cache-ttl  86400
-      :db-ctx     #ig/ref :wagoe/db-context}
+      :cache?     true}
 
    Example (fallback chain):
      :wagoe/geo-service
      {:provider   [:openstreetmap :google]
       :api-key    #env WAG_GEO_API_KEY
       :cache-ttl  86400
-      :db-ctx     #ig/ref :wagoe/db-context}
+      :cache?     true}
 
-   :db-ctx caches lookups in the geo_cache table.
+   :cache? true caches lookups in the geo_cache table, through the
+   :wagoe/db-context the module wires itself. An explicit :db-ctx still works.
 
    :timeout-ms (default 3000) bounds each provider's connect and read.
    The component is a service/GeoService; a call can keep to some of the
@@ -37,8 +38,11 @@
             [wagoe.geo.shell.adapters.pdok :as pdok]
             [wagoe.geo.shell.cache :as cache]
             [wagoe.geo.shell.service :as service]
+            [wagoe.geo.schema :as schema]
             [clojure.tools.logging :as log]
-            [integrant.core :as ig]))
+            [integrant.core :as ig]
+            [malli.core :as m]
+            [malli.error :as me]))
 
 ;; =============================================================================
 ;; Provider construction helpers
@@ -72,26 +76,47 @@
   (if (vector? provider) provider [provider]))
 
 ;; =============================================================================
+;; Module graph
+;; =============================================================================
+
+(defn ig-config
+  "This module's Integrant entries. `:cache? true` wires `:wagoe/db-context`
+   for the cache; it is opt-in because the cache needs the geo_cache table."
+  [settings _ctx]
+  {:components
+   {:wagoe/geo-service (cond-> settings
+                         (and (:cache? settings) (not (contains? settings :db-ctx)))
+                         (assoc :db-ctx (ig/ref :wagoe/db-context)))}})
+
+;; =============================================================================
 ;; Integrant lifecycle
 ;; =============================================================================
 
+(def ^:private config-explainer (m/explainer schema/GeoConfig))
+
+(defn- check-config!
+  "Fails at boot, naming the bad keys, rather than on the first lookup."
+  [config]
+  (when-let [explanation (config-explainer config)]
+    (throw (ex-info (str ":wagoe/geo-service config is invalid: " (pr-str (me/humanize explanation)))
+                    {:type   :wagoe/geo-config-error
+                     :errors (me/humanize explanation)}))))
+
 (defn- cache-datasource
-  "The datasource to cache in, from :db-ctx. Fails at boot rather than on the
-   first lookup. :db, a bare datasource, is read until 2.0."
+  "The datasource to cache in, from :db-ctx. :db, a bare datasource, is read
+   until 2.0."
   [{:keys [db-ctx db]}]
   (cond
-    db-ctx
-    (or (:datasource db-ctx)
-        (throw (ex-info ":wagoe/geo-service :db-ctx has no :datasource"
-                        {:type :wagoe/geo-config-error})))
+    db-ctx (:datasource db-ctx)
 
     db
-    (do (log/warn ":wagoe/geo-service :db is deprecated and goes in 2.0; use :db-ctx #ig/ref :wagoe/db-context")
+    (do (log/warn ":wagoe/geo-service :db is deprecated and goes in 2.0; use :cache? true")
         (or (:datasource db) db))))
 
 (defmethod ig/init-key :wagoe/geo-service
   [_ {:keys [provider cache-ttl] :as config}]
   (log/info "Initializing geo service" {:provider provider})
+  (check-config! config)
   (let [names     (provider-names provider)
         providers (mapv #(build-provider % config) names)
         ds        (cache-datasource config)

@@ -158,11 +158,11 @@
                       {"IUserSessionInvalidation" [ports/IUserSessionInvalidation ['invalidate-user-session]]})
   ;; Observability rides on the service: its operations and the user handlers
   ;; build their interceptor :system from it.
-  (let [service (-> (user-service/create-user-service
-                     user-repository session-repository audit-repository validation-config auth-service)
-                    (assoc :logger logger
-                           :metrics-emitter metrics-emitter
-                           :error-reporter error-reporter))]
+  (let [service (user-service/create-user-service
+                 user-repository session-repository audit-repository validation-config auth-service
+                 {:logger          logger
+                  :metrics-emitter metrics-emitter
+                  :error-reporter  error-reporter})]
     (log/info "User service initialized")
     service))
 
@@ -449,7 +449,10 @@
    `:login-redirect`, `:login-layout`, `:profile-layout`, `:dashboard`, `:home`, `:landing` and `:registration` are checked and resolved here,
    once, so a bad value fails boot whichever components start, as are the
    `:groups` schemas."
-  [settings {:keys [config validation-config]}]
+  [settings {:keys [config validation-config enabled]}]
+  ;; Deprecated, and shown only by the admin dashboard.
+  (when (and (some? (:dashboard-extra-cards config)) (not (contains? enabled :wagoe/admin)))
+    (log/warn "DEPRECATED :dashboard-extra-cards is shown nowhere: only the admin dashboard shows it, and the admin module is off."))
   (let [config (landing/prepare config)
         groups (group-service/prepare-settings (:groups settings))]
     (cond-> (assoc (base-graph config validation-config (:auth settings {}) groups)

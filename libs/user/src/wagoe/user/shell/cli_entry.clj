@@ -14,15 +14,28 @@
             [wagoe.user.shell.auth :as user-auth]
             [wagoe.user.shell.mfa :as user-mfa]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
-            [wagoe.observability.logging.shell.adapters.no-op :as no-op-logging]
+            [wagoe.observability.logging.shell.adapters.slf4j :as slf4j-logging]
             [wagoe.observability.metrics.shell.adapters.no-op :as no-op-metrics]
             [wagoe.observability.errors.shell.adapters.no-op :as no-op-error-reporting]
+            [wagoe.observability.errors.shell.adapters.sentry :as sentry]
             [clojure.tools.logging :as log]))
 
 (def ^:dynamic *exit!*
   "Terminates the process with `code`. Indirection so tests can observe the exit
    code -main asks for instead of killing the test JVM."
   (fn [code] (System/exit code)))
+
+(defn cli-observability
+  "What the CLI's user service logs and reports through: Logback, where the
+   rest of the CLI logs, and Sentry when `:wagoe/error-reporting` names it.
+   Metrics are a no-op: the process exits before anything would collect them."
+  [cfg]
+  (let [errors (get-in cfg [:active :wagoe/error-reporting])]
+    {:logger          (slf4j-logging/create-logging-component (get-in cfg [:active :wagoe/logging] {}))
+     :metrics-emitter (no-op-metrics/create-metrics-emitter nil)
+     :error-reporter  (if (= :sentry (:provider errors))
+                        (sentry/create-sentry-error-reporting-component errors)
+                        (no-op-error-reporting/create-error-reporter nil))}))
 
 (defn run-cli!
   "Run the user module CLI for the given command-line arguments.
@@ -48,12 +61,6 @@
                 session-repo (user-persistence/create-session-repository db-ctx)
                 audit-repo (user-persistence/create-audit-repository db-ctx pagination-cfg)
 
-                ;; Create no-op observability services for CLI
-                ;; (available for future use if needed)
-                _logger (no-op-logging/create-no-op-logger nil)
-                _metrics (no-op-metrics/create-metrics-emitter nil)
-                _error-reporter (no-op-error-reporting/create-error-reporter nil)
-
                 ;; Validation and auth configuration
                 validation-cfg (config/user-validation-config cfg)
                 auth-cfg (get-in cfg [:active :wagoe/user :auth] {})
@@ -67,7 +74,8 @@
 
                 ;; Create user service with full dependencies
                 user-svc (user-service/create-user-service
-                          user-repo session-repo audit-repo validation-cfg auth-svc)
+                          user-repo session-repo audit-repo validation-cfg auth-svc
+                          (cli-observability cfg))
 
                 ;; Dispatch CLI commands and capture exit status
                 status (user-cli/run-cli! user-svc args)]

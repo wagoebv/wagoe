@@ -107,7 +107,19 @@
     (let [cutoff (days-ago max-age-days)]
       (database/execute-update! db
                                 (-> (h/delete-from :push-device-tokens)
-                                    (h/where [:and [:= :active false] [:< :last-used-at cutoff]]))))))
+                                    (h/where [:and [:= :active false] [:< :last-used-at cutoff]])))))
+
+  ports/IDeviceLookup
+
+  (find-user-devices [_ user-id device-token app-id]
+    (->> (database/execute-query! db
+                                  (-> (h/select :*)
+                                      (h/from :push-device-tokens)
+                                      (h/where [:= :user-id user-id]
+                                               [:= :token device-token]
+                                               [:= :active true]
+                                               (when app-id [:= :app-id app-id]))))
+         (mapv row->device))))
 
 ;; =============================================================================
 ;; PushAnalyticsStore

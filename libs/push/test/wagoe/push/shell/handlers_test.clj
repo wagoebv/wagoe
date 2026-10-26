@@ -22,7 +22,17 @@
         response (handlers/register-device-handler deps request)]
     (is (= 201 (:status response)))
     ;; The path GET and DELETE answer on, not the id nothing serves (BOU-845).
-    (is (= "/api/v1/push/devices/fcm%3Atoken-1" (get-in response [:headers "Location"])))))
+    (is (= "/api/v1/push/devices/fcm%3Atoken-1?app-id=com.test" (get-in response [:headers "Location"])))))
+
+(deftest ^:integration a-token-with-a-slash-gets-no-location
+  ;; Its %2F is refused by Jetty, so the Location would name nothing.
+  (let [response (handlers/register-device-handler
+                  {:device-store (p/->DeviceTokenStore pt/*db*)}
+                  {:user        {:id (random-uuid)}
+                   :uri         "/api/v1/push/devices"
+                   :body-params {:token "a/b" :platform :fcm :app-id "com.test"}})]
+    (is (= 201 (:status response)))
+    (is (not (contains? (:headers response) "Location")))))
 
 (deftest ^:integration register-device-reads-the-coerced-body
   (let [store   (p/->DeviceTokenStore pt/*db*)
@@ -33,15 +43,31 @@
     (is (= 201 (:status (handlers/register-device-handler {:device-store store} request))))
     (is (= ["coerced"] (map :token (ports/get-user-devices store user-id))))))
 
+(defn- scanning
+  "`store` without IDeviceLookup, as a store written before it would be."
+  [store]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify ports/IDeviceTokenStore
+    (get-user-devices [_ user-id] (ports/get-user-devices store user-id))))
+
 (deftest ^:integration get-device-handler-test
   (let [store   (p/->DeviceTokenStore pt/*db*)
-        deps    {:device-store store}
-        user-id (random-uuid)
-        fetch   #(handlers/get-device-handler deps {:user {:id %1} :path-params {:token %2}})]
+        user-id (random-uuid)]
     (ports/register-device! store user-id {:token "mine" :platform :fcm :app-id "com.test"})
-    (is (= "mine" (get-in (fetch user-id "mine") [:body :token])))
-    (is (= 404 (:status (fetch user-id "missing"))))
-    (is (= 404 (:status (fetch (random-uuid) "mine"))) "another user's device")))
+    (ports/register-device! store user-id {:token "both" :platform :fcm :app-id "com.a"})
+    (ports/register-device! store user-id {:token "both" :platform :fcm :app-id "com.b"})
+    (doseq [[label s] [["lookup" store] ["scan" (scanning store)]]]
+      (let [fetch (fn [user token & [app-id]]
+                    (handlers/get-device-handler {:device-store s}
+                                                 {:user         {:id user}
+                                                  :path-params  {:token token}
+                                                  :query-params (if app-id {"app-id" app-id} {})}))]
+        (is (= "mine" (get-in (fetch user-id "mine") [:body :token])) label)
+        (is (= 404 (:status (fetch user-id "missing"))) label)
+        (is (= 404 (:status (fetch (random-uuid) "mine"))) (str label ": another user's device"))
+        (is (= 404 (:status (fetch user-id "mine" "com.other"))) (str label ": another app-id"))
+        (is (= 409 (:status (fetch user-id "both"))) (str label ": one token, two app-ids"))
+        (is (= "com.b" (get-in (fetch user-id "both" "com.b") [:body :app-id])) label)))))
 
 (deftest ^:integration register-device-invalid-body-test
   (let [deps    {:device-store (p/->DeviceTokenStore pt/*db*)}

@@ -26,15 +26,24 @@
     :apns (do (log/info "Push: initializing APNs provider" {:team-id team-id :sandbox? sandbox?})
               (apns/make-apns-provider team-id key-id key-path bundle-id sandbox?))))
 
+(defn- db-ctx
+  "`:db-ctx`, the name geo and search use for `:wagoe/db-context`. `:db` is read
+   until 2.0."
+  [k {:keys [db-ctx db]}]
+  (or db-ctx
+      (do (when db
+            (log/warn (str "DEPRECATED " k " :db goes in 2.0; name it :db-ctx")))
+          db)))
+
 (defmethod ig/init-key :wagoe.push/device-store
-  [_ {:keys [db]}]
+  [k config]
   (log/info "Push: initializing device token store")
-  (persistence/->DeviceTokenStore db))
+  (persistence/->DeviceTokenStore (db-ctx k config)))
 
 (defmethod ig/init-key :wagoe.push/analytics-store
-  [_ {:keys [db]}]
+  [k config]
   (log/info "Push: initializing analytics store")
-  (persistence/->PushAnalyticsStore db))
+  (persistence/->PushAnalyticsStore (db-ctx k config)))
 
 (defmethod ig/init-key :wagoe.push/service
   [_ {:keys [device-store analytics-store fcm-provider apns-provider
@@ -130,8 +139,8 @@
               :wagoe.push/apns-provider   (provider-settings
                                            :apns "APNs" (:apns-credentials settings)
                                            [:team-id :key-id :key-path :bundle-id])
-              :wagoe.push/device-store    {:db (ig/ref :wagoe/db-context)}
-              :wagoe.push/analytics-store {:db (ig/ref :wagoe/db-context)}
+              :wagoe.push/device-store    {:db-ctx (ig/ref :wagoe/db-context)}
+              :wagoe.push/analytics-store {:db-ctx (ig/ref :wagoe/db-context)}
               :wagoe.push/service         (cond-> {:device-store    (ig/ref :wagoe.push/device-store)
                                                    :analytics-store (ig/ref :wagoe.push/analytics-store)
                                                    :fcm-provider    (ig/ref :wagoe.push/fcm-provider)

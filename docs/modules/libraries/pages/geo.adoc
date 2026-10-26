@@ -60,13 +60,13 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
 {:provider   :openstreetmap
  :user-agent "MyApp/1.0 (contact@example.com)"
  :cache-ttl  86400   ; 24 hours
- :db-ctx     #ig/ref :wagoe/db-context}
+ :cache?     true}
 
 ;; PDOK: street, city and point from postcode + house number (no API key)
 :wagoe/geo-service
 {:provider  :pdok
  :cache-ttl 86400
- :db-ctx    #ig/ref :wagoe/db-context}
+ :cache?    true}
 
 ;; Fallback chain: OSM first, then Google
 :wagoe/geo-service
@@ -74,8 +74,12 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
  :api-key    #env WAG_GEO_API_KEY
  :user-agent "MyApp/1.0"
  :cache-ttl  86400
- :db-ctx     #ig/ref :wagoe/db-context}
+ :cache?     true}
 ----
+
+`:cache? true` caches lookups in `geo_cache` through `:wagoe/db-context`, which the
+module wires itself; run the migration first. A config that does not match
+`wagoe.geo.schema/GeoConfig` fails at boot.
 
 == Usage
 

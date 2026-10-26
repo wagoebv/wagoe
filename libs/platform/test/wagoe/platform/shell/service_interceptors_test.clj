@@ -15,6 +15,7 @@
     {:logger #_{:clj-kondo/ignore [:missing-protocol-method]}
      (reify
        log-ports/ILogger
+       (debug [_ m c] (record! m c))
        (info [_ m c] (record! m c))
        (error [_ m c] (record! m c))
        log-ports/IAuditLogger
@@ -51,6 +52,7 @@
     (let [levels (atom [])
           logger #_{:clj-kondo/ignore [:missing-protocol-method]}
           (reify log-ports/ILogger
+            (debug [_ _ _] nil)
             (info [_ m _] (when (str/includes? m "failed") (swap! levels conj :info)))
             (warn [_ m _] (when (str/includes? m "failed") (swap! levels conj :warn)))
             (error [_ m _] (when (str/includes? m "failed") (swap! levels conj :error))))]
@@ -116,3 +118,15 @@
     (is (= [{:operation-type "get-user"}]
            (keys (:series (metrics-ports/get-metric-values m "service-operation-duration"))))
         "no user id in the labels")))
+
+(deftest ^:unit start-and-completion-log-at-debug
+  ;; The handler around the call logs both at info already.
+  (let [lines  (atom [])
+        logger #_{:clj-kondo/ignore [:missing-protocol-method]}
+               (reify log-ports/ILogger
+                 (debug [_ m _] (swap! lines conj [:debug m]))
+                 (info [_ m _] (swap! lines conj [:info m])))]
+    (si/execute-service-operation :get-user {} (constantly {:ok true}) {:logger logger})
+    (is (= [[:debug "Starting service operation: get-user"]
+            [:debug "Service operation completed: get-user"]]
+           (filter #(re-find #"(?i)service operation" (second %)) @lines)))))

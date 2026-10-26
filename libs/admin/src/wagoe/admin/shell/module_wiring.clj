@@ -217,6 +217,10 @@
         app-settings  (get-in ctx [:config :active :wagoe/settings])
         ;; Top level of the config, where the user module's old dashboard read it
         extra-cards   (get-in ctx [:config :dashboard-extra-cards])
+        _             (when-not (seqable? extra-cards)
+                        (throw (ex-info (str ":dashboard-extra-cards must be a vector of Hiccup cards, not "
+                                             (pr-str extra-cards))
+                                        {:type :configuration-error :key :dashboard-extra-cards})))
         _             (when (seq extra-cards)
                         (log/warn (str "DEPRECATED :dashboard-extra-cards — shown on the admin dashboard until 2.0."
                                        " Give a module's nav item a :description instead.")))

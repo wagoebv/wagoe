@@ -44,6 +44,11 @@
   (cleanup-stale-tokens! [this max-age-days]
     "Purge tokens not used within max-age-days."))
 
+(defprotocol IDeviceLookup
+  "Optional beside IDeviceTokenStore: a store without it is scanned instead."
+  (find-user-devices [this user-id device-token app-id]
+    "The user's active devices with this token, only under app-id unless it is nil."))
+
 ;; ===== Analytics =====
 
 (defprotocol IPushAnalyticsStore
