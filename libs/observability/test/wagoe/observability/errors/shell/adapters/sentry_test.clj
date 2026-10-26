@@ -101,6 +101,15 @@
       (testing "extra operations don't throw"
         (is (nil? (ports/set-extra! context {:test "extra"})))))))
 
+(deftest ^:unit breadcrumbs-keep-the-newest-hundred
+  ;; Nothing clears a pooled thread's breadcrumbs, so they grew for good.
+  (let [context (sentry-adapter/create-sentry-error-context test-config)]
+    (ports/clear-breadcrumbs! context)
+    (dotimes [i 150] (ports/add-breadcrumb! context {:message (str i)}))
+    (let [crumbs (:breadcrumbs (ports/current-context context))]
+      (is (= (map str (range 50 150)) (map :message crumbs))))
+    (ports/clear-breadcrumbs! context)))
+
 ;; =============================================================================
 ;; Error Filter Tests
 ;; =============================================================================

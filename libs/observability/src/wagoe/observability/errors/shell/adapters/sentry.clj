@@ -219,10 +219,11 @@
                              :level (normalize-level (or level :info))
                              :timestamp (or timestamp (current-timestamp))
                              :data (or data {})}
-          current-context (get-thread-context)
-          breadcrumbs (get current-context :breadcrumbs [])
-          updated-breadcrumbs (conj breadcrumbs sentry-breadcrumb)]
-      (merge-thread-context! {:breadcrumbs updated-breadcrumbs})
+          ;; Nothing clears a pooled thread's breadcrumbs, so keep the newest
+          ;; :max-breadcrumbs, as the Sentry SDK does.
+          max-n (:max-breadcrumbs config 100)
+          crumbs (conj (get (get-thread-context) :breadcrumbs []) sentry-breadcrumb)]
+      (merge-thread-context! {:breadcrumbs (subvec crumbs (max 0 (- (count crumbs) max-n)))})
       nil))
 
   (clear-breadcrumbs! [_this]
