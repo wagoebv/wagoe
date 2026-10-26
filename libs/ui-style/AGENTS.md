@@ -65,6 +65,11 @@ tables and buttons a base style (`resources/tailwind/pilot-rules.css`).
 - **JS** (`js/`): `theme.js`, `components.js`, `admin-ux.js`, `forms.js`,
   `keyboard.js`, `init.js`, plus vendored `alpine.min.js`, `htmx.min.js` and
   `htmx-ext-sse.min.js` (htmx's `sse` extension, 2.2.4; must load after htmx).
+  `admin-ux.js` keeps `window.AdminUX.showToast` and the `.flash-messages`
+  banner deprecated until 2.0; both feed the toast region. Send
+  `HX-Trigger: {"showToast": {...}}` or a shared-ui `toast` instead.
+  `window.AdminUX.showConfirmModal` is deprecated too; use shared-ui
+  `modal/confirm-modal` with `confirm-attrs`.
 - **Fonts** (`fonts/`): DM Sans, Inter, Space Grotesk + JetBrains Mono woff2.
 - **Assets** (`assets/`): Wagoe light/dark logo + icon PNGs.
 - **Tailwind sources** (`resources/tailwind/`): `pilot.css` builds

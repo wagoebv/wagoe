@@ -225,6 +225,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **`default-admin-config` drops `:require-role`, and `AdminConfig` makes it optional** (BOU-842). An admin config
+  without it validates; nothing to change.
 - **Admin CSS without `!important` fights or `legacy.css`** (BOU-821): 6 `!important` left; `tailwind/admin/legacy.css`
   is part of `admin/wagoe-admin.css` now. No visible change.
 - **Methods 1.1 adds to a stable port are their own protocols** (BOU-829), so an app's own repository or service keeps
@@ -306,13 +308,15 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Admin `render-field-value` and `render-inline-edit-cell`** (BOU-799): no page renders through them. Use
   `cells/cell` and `field-cell`; they go in 2.0.
+- **`:dashboard-extra-cards`** (BOU-765, BOU-841): its cards show on the admin dashboard, with a boot warning, until
+  2.0. Give a module's nav item a `:description` instead.
+- **`window.AdminUX.showToast` and the `.flash-messages` banner** (BOU-755, BOU-841): both feed the toast region until
+  2.0; `title` is no longer shown. Send `HX-Trigger: {"showToast": {"type": ..., "message": ...}}` or an OOB toast.
+- **`window.AdminUX.showConfirmModal` and `hx-confirm` + `data-confirm-*` on a delete** (BOU-753, BOU-841): a `<dialog>`
+  asks until 2.0. Render shared-ui `modal/confirm-modal` and put `confirm-attrs` on the element instead.
 
 ### Removed
 
-- **`:dashboard-extra-cards`** (BOU-765): the page it extended is gone. For a dashboard card, give a module's nav
-  item a `:description`.
-- **`window.AdminUX.showToast` and the `.flash-messages` banner** (BOU-755): send `HX-Trigger: {"showToast": {"type": ..., "message": ...}}`
-  or a toast out of band instead; `title` is no longer shown.
 - **The `:base` CSS bundle: pico, open-props, `tokens-openprops.css`, `base-css`** (BOU-458): `(bundle :base)` serves `:pilot` and warns.
   Use `pilot-css` and restyle pages that relied on pico with daisy classes.
 
@@ -320,8 +324,18 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Pushes carry the callback token, so `POST /api/v1/push/callback` records analytics** (BOU-844). Set
   `:callback-secret` in `:wagoe/push`; push warns at boot without one.
+- **An unversioned `/api/...` redirect points at the requested path, query string kept** (BOU-846); Location was the
+  route template, e.g. `/api/v1/push/devices/:token`. Nothing to change.
 - **Push serves its device, callback and stats routes under `/api/v1/push`** (BOU-838); they were never mounted.
   Point clients at `/api/v1/push`.
+- **User service operations log, emit metrics and report errors** (BOU-840); they had no logger, emitter or reporter.
+  Nothing to change.
+- **Sentry breadcrumbs per thread are capped at `:max-breadcrumbs`** (BOU-840), default 100, the newest kept; they grew
+  without limit. Nothing to change.
+- **A Sentry report no longer carries breadcrumbs, user, tags or extra from an earlier request** (BOU-843). A custom
+  error context can implement `IErrorContextReset` to be cleared per request too.
+- **The geo cache boots from its documented config** (BOU-839): `:wagoe/geo-service` takes
+  `:db-ctx #ig/ref :wagoe/db-context`; `:db` is deprecated, goes in 2.0. Rename `:db` to `:db-ctx`.
 - **A group grant can no longer hand out a code role** (BOU-836): `add-group-grant` and an import's `:grants` take only
   a permission a module declares, unless `:wagoe/user :groups :permissions` is set, and never a code role's name. Such a
   stored grant is no longer migrated to that role; boot logs it. Assign the role instead.

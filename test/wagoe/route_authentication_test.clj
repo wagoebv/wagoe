@@ -90,3 +90,9 @@
         "the public routes changed; update expected-public only on purpose")
     (is (every? public redirects)
         "an unversioned /api redirect is not public, so it cannot redirect")))
+
+(deftest ^:integration an-unversioned-api-path-redirects-to-itself-versioned
+  ;; BOU-846: Location was the route template, /api/v1/push/devices/:token.
+  (let [response (rt/call :get "/api/push/devices/ab%20c" "" {} {:query-string "x=1"})]
+    (is (= 307 (:status response)))
+    (is (= "/api/v1/push/devices/ab%20c?x=1" (get-in response [:headers "Location"])))))

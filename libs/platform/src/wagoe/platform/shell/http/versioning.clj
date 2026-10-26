@@ -136,25 +136,32 @@
   "A route at `/api<path>` that 307s to `/api/<version><path>`.
 
    307 rather than 301: it preserves the method, so a POST stays a POST.
+   Location is the request's own path with the version put in, query string
+   kept, not the route template (BOU-846).
 
-     (create-redirect-route \"/users\" :v1)
-     ;;=> [\"/api/users\" {:get {:handler …} :post {…} …}]"
+     (create-redirect-route \"/users/:id\" :v1)
+     ;;=> [\"/api/users/:id\" {:get {:handler …} :post {…} …}]
+     ;;   GET /api/users/7?x=1  -->  Location: /api/v1/users/7?x=1"
   [path target-version]
   (let [version-str (name target-version)
-        target-path (str "/api/" version-str path)
-        redirect-handler (fn [request]
-                           (log/debug "Redirecting unversioned request"
-                                      {:from (:uri request)
-                                       :to target-path})
-                           {:status 307  ; Temporary Redirect (preserves method)
-                            :headers {"Location" target-path
-                                      "X-API-Deprecated-Path" "true"}
-                            :body {:message "Please use versioned API endpoint"
-                                   :location target-path
-                                   :version (name target-version)}})]
+        api "/api"
+        version-prefix (str api "/" version-str)
+        target-path (str version-prefix path)
+        redirect-handler (fn [{:keys [uri query-string]}]
+                           ;; Matched at /api<path>, so uri starts with "/api".
+                           (let [location (cond-> (str version-prefix (subs uri (count api)))
+                                            (seq query-string) (str "?" query-string))]
+                             (log/debug "Redirecting unversioned request"
+                                        {:from uri :to location})
+                             {:status 307  ; Temporary Redirect (preserves method)
+                              :headers {"Location" location
+                                        "X-API-Deprecated-Path" "true"}
+                              :body {:message "Please use versioned API endpoint"
+                                     :location location
+                                     :version version-str}}))]
     ;; Reitit data: the redirect is platform's own route, so it is written in
     ;; the target format rather than migrated later (ADR-037).
-    [(str "/api" path)
+    [(str api path)
      (into {} (map (fn [method]
                      ;; Public: it only points at the versioned route,
                      ;; which enforces its own access (BOU-568).
