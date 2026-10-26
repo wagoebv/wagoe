@@ -18,11 +18,11 @@
         user-id (random-uuid)
         request {:user        {:id user-id}
                  :uri         "/api/v1/push/devices"
-                 :body-params {:token "fcm:token/1" :platform :fcm :app-id "com.test"}}
+                 :body-params {:token "fcm:token-1" :platform :fcm :app-id "com.test"}}
         response (handlers/register-device-handler deps request)]
     (is (= 201 (:status response)))
     ;; The path GET and DELETE answer on, not the id nothing serves (BOU-845).
-    (is (= "/api/v1/push/devices/fcm%3Atoken%2F1" (get-in response [:headers "Location"])))))
+    (is (= "/api/v1/push/devices/fcm%3Atoken-1" (get-in response [:headers "Location"])))))
 
 (deftest ^:integration register-device-reads-the-coerced-body
   (let [store   (p/->DeviceTokenStore pt/*db*)
@@ -161,4 +161,6 @@
   (let [[root & children] (handlers/push-routes {})]
     (is (= "/api/push" root))
     (is (= ["/devices" "/devices/:token" "/callback" "/stats/:notification-id"]
-           (map first children)))))
+           (map first children)))
+    (is (not-any? :parameters (mapcat (comp (juxt :get :post :delete) second) children))
+        "an app's own router may not coerce with malli")))

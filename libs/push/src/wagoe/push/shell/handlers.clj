@@ -128,10 +128,18 @@
                                                             :schema {:type "string"}}]}
                                     :get {:handler (partial push-stats-handler deps)}}]])
 
+(defn- without-body-parameters
+  "Route data with no `:parameters` on its methods: an app's own router may
+   coerce with something else, and the handlers check the body themselves."
+  [data]
+  (reduce (fn [d method] (cond-> d (map? (get d method)) (update method dissoc :parameters)))
+          data
+          [:get :post :delete]))
+
 (defn push-routes
   "Deprecated: the module mounts `api-routes` itself. The same routes as one
    `/api/push` vector, for apps that mounted it by hand."
   [deps]
   (into ["/api/push"]
-        (map (fn [[path data]] [(subs path (count "/push")) data]))
+        (map (fn [[path data]] [(subs path (count "/push")) (without-body-parameters data)]))
         (api-routes deps)))
