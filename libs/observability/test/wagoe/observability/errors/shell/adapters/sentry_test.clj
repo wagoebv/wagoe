@@ -130,6 +130,28 @@
     (is (nil? (ports/reset-context! context)))
     (is (empty? (ports/current-context context)))))
 
+(deftest ^:unit with-clean-context-runs-empty-and-restores
+  ;; BOU-848
+  (let [context (sentry-adapter/create-sentry-error-context test-config)]
+    (try
+      (ports/set-user! context {:id "outer"})
+      (is (= :inner (ports/with-clean-context
+                      context
+                      #(do (is (empty? (ports/current-context context)))
+                           (ports/set-user! context {:id "inner"})
+                           :inner))))
+      (is (= "outer" (get-in (ports/current-context context) [:user :id])))
+      (testing "after a throw too"
+        (is (thrown? RuntimeException
+                     (ports/with-clean-context
+                       context
+                       #(do (ports/set-user! context {:id "inner"})
+                            (throw (RuntimeException. "boom"))))))
+        (is (= "outer" (get-in (ports/current-context context) [:user :id]))))
+      (testing "a reporter without context just runs"
+        (is (= 1 (ports/with-clean-context nil (constantly 1)))))
+      (finally (ports/reset-context! context)))))
+
 (deftest ^:unit components-keep-their-own-breadcrumbs
   ;; One shared store let a cap of 1 trim the other's (BOU-843).
   (with-redefs [sentry/init! (fn [& _] nil)]
