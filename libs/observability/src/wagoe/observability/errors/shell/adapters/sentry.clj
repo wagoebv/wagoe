@@ -223,7 +223,10 @@
           ;; :max-breadcrumbs, as the Sentry SDK does.
           max-n (:max-breadcrumbs config 100)
           crumbs (conj (get (get-thread-context) :breadcrumbs []) sentry-breadcrumb)]
-      (merge-thread-context! {:breadcrumbs (subvec crumbs (max 0 (- (count crumbs) max-n)))})
+      ;; A fresh vector, not subvec: conj on a subvec grows its backing vector.
+      (merge-thread-context! {:breadcrumbs (if (> (count crumbs) max-n)
+                                             (vec (take-last max-n crumbs))
+                                             crumbs)})
       nil))
 
   (clear-breadcrumbs! [_this]

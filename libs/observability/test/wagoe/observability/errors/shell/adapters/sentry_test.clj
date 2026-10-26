@@ -107,7 +107,8 @@
     (ports/clear-breadcrumbs! context)
     (dotimes [i 150] (ports/add-breadcrumb! context {:message (str i)}))
     (let [crumbs (:breadcrumbs (ports/current-context context))]
-      (is (= (map str (range 50 150)) (map :message crumbs))))
+      (is (= (map str (range 50 150)) (map :message crumbs)))
+      (is (instance? clojure.lang.PersistentVector crumbs) "not a subvec over all 150"))
     (ports/clear-breadcrumbs! context)))
 
 ;; =============================================================================
