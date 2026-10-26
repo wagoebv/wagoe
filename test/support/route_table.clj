@@ -59,11 +59,6 @@
                    :db     (str "mem:" db ";DB_CLOSE_DELAY=-1")
                    :migrate-on-start? true))))
 
-(defmethod ig/init-key ::push-mounted [_ {:keys [routes]}]
-  ;; Push's README says to mount its routes in your router; nothing in the
-  ;; framework does. Mounted here as an application would.
-  {:static [routes]})
-
 (def ^:dynamic *handler* nil)
 
 (defn system-fixture
@@ -72,10 +67,7 @@
   [db]
   (fn [f]
     (let [ig-cfg (-> (sys-config/ig-config (every-module-config db))
-                     (dissoc :wagoe/http-server)
-                     (assoc ::push-mounted {:routes (ig/ref :wagoe.push/routes)})
-                     (update-in [:wagoe/http-handler :module-routes]
-                                (fnil conj []) (ig/ref ::push-mounted)))
+                     (dissoc :wagoe/http-server))
           system (ig/init ig-cfg)]
       (try
         (binding [*handler* (:wagoe/http-handler system)]

@@ -74,14 +74,14 @@ open events, recorded in `push_analytics_events`.
 |===
 | Endpoint | Purpose
 
-| `/api/push/devices` | Register and list the caller's device tokens
-| `/api/push/devices/:token` | Unregister one
-| `/api/push/callback` | HMAC-secured delivery/open analytics callback (public)
-| `/api/push/stats/:notification-id` | Per-notification delivery stats (`:push/read`)
+| `/api/v1/push/devices` | Register and list the caller's device tokens
+| `/api/v1/push/devices/:token` | Unregister one
+| `/api/v1/push/callback` | HMAC-secured delivery/open analytics callback (public)
+| `/api/v1/push/stats/:notification-id` | Per-notification delivery stats (`:push/read`)
 |===
 
-The `:wagoe.push/routes` component builds these routes, but the module
-contributes no `:routes`, so the platform does not mount them.
+The module mounts these routes itself. Every route but the callback needs a
+signed-in user.
 
 == Database
 

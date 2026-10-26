@@ -316,6 +316,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Push serves its device, callback and stats routes under `/api/v1/push`** (BOU-838); they were never mounted. Drop
+  any mounting of `:wagoe.push/routes` you added yourself.
 - **A group grant can no longer hand out a code role** (BOU-836): `add-group-grant` and an import's `:grants` take only
   a permission a module declares, unless `:wagoe/user :groups :permissions` is set, and never a code role's name. Such a
   stored grant is no longer migrated to that role; boot logs it. Assign the role instead.

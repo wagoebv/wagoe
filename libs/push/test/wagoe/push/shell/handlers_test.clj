@@ -79,6 +79,17 @@
         response (handlers/analytics-callback-handler deps request)]
     (is (= 403 (:status response)))))
 
+(deftest ^:integration callback-handler-without-a-secret-refuses-test
+  (let [deps     {:analytics-store (p/->PushAnalyticsStore pt/*db*)}
+        request  {:body-params {:device-token        "device-abc"
+                                :provider-message-id "msg-1"
+                                :event-type          "delivered"
+                                :callback-token      "any"
+                                :notification-id     "test"
+                                :platform            "fcm"}}
+        response (handlers/analytics-callback-handler deps request)]
+    (is (= 403 (:status response)))))
+
 (deftest ^:integration callback-handler-invalid-payload-test
   (let [deps     {:analytics-store (p/->PushAnalyticsStore pt/*db*)
                   :callback-secret test-secret}
@@ -107,21 +118,19 @@
 (deftest ^:unit only-the-callback-is-public
   ;; The platform refuses every route that is not :public true. The callback is
   ;; posted by a device, and its HMAC is the credential (BOU-568).
-  (let [[_ & children] (handlers/push-routes {})
-        public (for [[path data] children
+  (let [public (for [[path data] (handlers/push-routes {})
                      [method endpoint] data
                      :when (:public endpoint)]
                  [path method])]
-    (is (= [["/callback" :post]] public))))
+    (is (= [["/push/callback" :post]] public))))
 
 (deftest ^:unit every-route-has-an-authorization-rule
-  ;; Mounted by hand, so no module tags them: without a rule of their own,
-  ;; :wagoe/authorization :enforce refuses them. No parent data to inherit.
-  (let [[_ & children] (handlers/push-routes {})]
-    (is (= {["/devices" :get]                [:self []]
-            ["/devices" :post]               [:self []]
-            ["/devices/:token" :delete]      [:self []]
-            ["/callback" :post]              [:public []]
-            ["/stats/:notification-id" :get] [:permission [:push/read]]}
-           (into {} (map (juxt (juxt :path :method) (juxt :rule :permissions)))
-                 (authorization/route-report children))))))
+  ;; Each route says its own rule: the module tag would ask a device owner
+  ;; for :push/read or :push/write, which no ordinary user holds.
+  (is (= {["/push/devices" :get]                [:self []]
+          ["/push/devices" :post]               [:self []]
+          ["/push/devices/:token" :delete]      [:self []]
+          ["/push/callback" :post]              [:public []]
+          ["/push/stats/:notification-id" :get] [:permission [:push/read]]}
+         (into {} (map (juxt (juxt :path :method) (juxt :rule :permissions)))
+               (authorization/route-report (handlers/push-routes {}))))))

@@ -57,9 +57,11 @@
 
 (defmethod ig/init-key :wagoe.push/routes
   [_ {:keys [device-store analytics-store callback-secret]}]
-  (handlers/push-routes {:device-store    device-store
-                         :analytics-store analytics-store
-                         :callback-secret callback-secret}))
+  {:api    (handlers/push-routes {:device-store    device-store
+                                  :analytics-store analytics-store
+                                  :callback-secret callback-secret})
+   :web    []
+   :static []})
 
 ;; =============================================================================
 ;; Module graph
@@ -138,7 +140,8 @@
                                                    :queue-name (:queue settings :default)))
               :wagoe.push/routes          {:device-store    (ig/ref :wagoe.push/device-store)
                                            :analytics-store (ig/ref :wagoe.push/analytics-store)
-                                           :callback-secret (:callback-secret settings)}}}
+                                           :callback-secret (:callback-secret settings)}}
+             :routes [(ig/ref :wagoe.push/routes)]}
 
       jobs?
       (-> (assoc-in [:components :wagoe.push/job-handlers]
