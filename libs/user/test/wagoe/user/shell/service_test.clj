@@ -618,7 +618,8 @@
   ;; The service handed its repositories to the interceptors as :system, so
   ;; no operation found a logger, emitter or reporter (BOU-840).
   (let [calls   (atom [])
-        emitter (reify metrics/IMetricsEmitter
+        emitter #_{:clj-kondo/ignore [:missing-protocol-method]}
+                (reify metrics/IMetricsEmitter
                   (inc-counter! [_ h v tags] (swap! calls conj [h v tags]))
                   (observe-histogram! [_ h _v tags] (swap! calls conj [h tags])))
         user-id (UUID/randomUUID)
@@ -636,7 +637,8 @@
   ;; :session-invalid had no status, so the service pipeline took every
   ;; expired session for a 500 and reported it (BOU-840).
   (let [reported (atom [])
-        reporter (reify
+        reporter #_{:clj-kondo/ignore [:missing-protocol-method]}
+                 (reify
                    errors/IErrorReporter
                    (capture-exception [_ e _ctx] (swap! reported conj e) "id")
                    errors/IErrorContext

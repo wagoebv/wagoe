@@ -229,6 +229,24 @@
           routes (root-routes [{:static [mine]}])]
       (is (= [mine] routes)))))
 
+(deftest ^:unit a-static-route-claims-its-unversioned-redirect
+  ;; Mounted as an app writes :static routes: nil, nested and "" rooted.
+  (let [captured (atom nil)
+        mine     ["/api/things" {:get {:handler (fn [_] {:status 200})}}]]
+    (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                  (fn [routes _] (reset! captured routes) identity)]
+      (ig/init-key :wagoe/http-handler
+                   {:module-routes   [{:api    [["/things" {:get {:handler (fn [_] {:status 200})}}]]
+                                       :static [nil [["" [mine]]]]}]
+                    :router          ::router
+                    :logger          ::logger
+                    :metrics-emitter ::metrics
+                    :error-reporter  ::error-reporter
+                    :config {:active {:wagoe/settings {:name "Wagoe" :version "1.2.3"}}}}))
+    (let [at (fn [p] (filter #(= p (first %)) @captured))]
+      (is (seq (at "/api/v1/things")))
+      (is (empty? (at "/api/things")) "the redirect yields to the app's route"))))
+
 (deftest ^:security ^:unit invalid-trusted-proxies-fail-the-boot
   (is (thrown-with-msg?
        clojure.lang.ExceptionInfo
