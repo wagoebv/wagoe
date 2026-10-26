@@ -77,18 +77,17 @@
 
 (defn- cache-datasource
   "The datasource to cache in, from :db-ctx. Fails at boot rather than on the
-   first lookup."
-  [{:keys [db-ctx] :as config}]
+   first lookup. :db, a bare datasource, is read until 2.0."
+  [{:keys [db-ctx db]}]
   (cond
-    (contains? config :db)
-    (throw (ex-info ":wagoe/geo-service takes :db-ctx #ig/ref :wagoe/db-context, not :db"
-                    {:type :wagoe/geo-config-error}))
+    db-ctx
+    (or (:datasource db-ctx)
+        (throw (ex-info ":wagoe/geo-service :db-ctx has no :datasource"
+                        {:type :wagoe/geo-config-error})))
 
-    (and db-ctx (not (:datasource db-ctx)))
-    (throw (ex-info ":wagoe/geo-service :db-ctx has no :datasource"
-                    {:type :wagoe/geo-config-error}))
-
-    :else (:datasource db-ctx)))
+    db
+    (do (log/warn ":wagoe/geo-service :db is deprecated and goes in 2.0; use :db-ctx #ig/ref :wagoe/db-context")
+        (or (:datasource db) db))))
 
 (defmethod ig/init-key :wagoe/geo-service
   [_ {:keys [provider cache-ttl] :as config}]
