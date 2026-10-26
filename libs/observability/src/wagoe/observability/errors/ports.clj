@@ -159,8 +159,8 @@
        Map of current context including user, tags, extra, breadcrumbs"))
 
 (defprotocol IErrorContextReset
-  "Optional: an IErrorContext whose context outlives a request, as a
-   per-thread one does on a pooled thread. Its own protocol, so a context
+  "For an IErrorContext whose context outlives a request, as a per-thread one
+   does on a pooled thread. Its own protocol with a no-op default, so a context
    that does not implement it keeps working (BOU-843)."
 
   (reset-context! [this]
@@ -168,6 +168,10 @@
 
      Returns:
        nil (side effect only)"))
+
+(extend-protocol IErrorContextReset
+  Object
+  (reset-context! [_] nil))
 
 ;; =============================================================================
 ;; Error Filtering Protocol
