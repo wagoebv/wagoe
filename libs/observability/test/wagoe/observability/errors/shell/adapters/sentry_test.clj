@@ -101,6 +101,51 @@
       (testing "extra operations don't throw"
         (is (nil? (ports/set-extra! context {:test "extra"})))))))
 
+(deftest ^:unit breadcrumbs-keep-the-newest-hundred
+  ;; Nothing clears a pooled thread's breadcrumbs, so they grew for good.
+  (let [context (sentry-adapter/create-sentry-error-context test-config)]
+    (ports/clear-breadcrumbs! context)
+    (dotimes [i 150] (ports/add-breadcrumb! context {:message (str i)}))
+    (let [crumbs (:breadcrumbs (ports/current-context context))]
+      (is (= (map str (range 50 150)) (map :message crumbs)))
+      (is (instance? clojure.lang.PersistentVector crumbs) "not a subvec over all 150"))
+    (ports/clear-breadcrumbs! context)))
+
+(deftest ^:unit breadcrumbs-keep-the-configured-number
+  (doseq [[n expected] [[3 ["7" "8" "9"]] [0 []] [nil (map str (range 10))]]]
+    (let [context (sentry-adapter/create-sentry-error-context
+                   (assoc test-config :max-breadcrumbs n))]
+      (ports/clear-breadcrumbs! context)
+      (dotimes [i 10] (ports/add-breadcrumb! context {:message (str i)}))
+      (is (= expected (map :message (:breadcrumbs (ports/current-context context))))
+          (str ":max-breadcrumbs " n))
+      (ports/clear-breadcrumbs! context))))
+
+(deftest ^:unit reset-context-drops-everything
+  (let [context (sentry-adapter/create-sentry-error-context test-config)]
+    (ports/add-breadcrumb! context {:message "a"})
+    (ports/set-user! context {:id "u"})
+    (ports/set-tags! context {:t "t"})
+    (ports/set-extra! context {:e "e"})
+    (is (nil? (ports/reset-context! context)))
+    (is (empty? (ports/current-context context)))))
+
+(deftest ^:unit components-keep-their-own-breadcrumbs
+  ;; One shared store let a cap of 1 trim the other's (BOU-843).
+  (with-redefs [sentry/init! (fn [& _] nil)]
+    (let [small (sentry-adapter/create-sentry-error-reporting-component
+                 (assoc test-config :max-breadcrumbs 1))
+          big   (sentry-adapter/create-sentry-error-reporting-component test-config)]
+      (try
+        (ports/add-breadcrumb! big {:message "1"})
+        (ports/add-breadcrumb! big {:message "2"})
+        (ports/add-breadcrumb! small {:message "x"})
+        (is (= ["1" "2"] (map :message (:breadcrumbs (ports/current-context big)))))
+        (is (= ["x"] (map :message (:breadcrumbs (ports/current-context small)))))
+        (finally
+          (ports/reset-context! small)
+          (ports/reset-context! big))))))
+
 ;; =============================================================================
 ;; Error Filter Tests
 ;; =============================================================================

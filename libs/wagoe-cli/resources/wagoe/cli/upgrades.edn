@@ -105,4 +105,9 @@
  {:ticket "BOU-753"
   :since  "1.0.2"
   :note   "window.AdminUX.showConfirmModal, and hx-confirm with data-confirm-title/-label/-cancel on a delete. Both ask in a native <dialog> until 2.0."
-  :manual "Render wagoe.shared.ui.core.modal/confirm-modal and put confirm-attrs on the element that sends the request. The rewrites do not touch JavaScript."}]
+  :manual "Render wagoe.shared.ui.core.modal/confirm-modal and put confirm-attrs on the element that sends the request. The rewrites do not touch JavaScript."}
+
+ {:ticket "BOU-838"
+  :since  "1.0.2"
+  :note   ":wagoe.push/routes, the /api/push route vector an app mounted by hand. The push module now mounts its routes under /api/v1/push."
+  :manual "Before 2.0, remove the hand-written mounting and point clients at /api/v1/push. A rewrite cannot find where an app spliced the vector into its routes."}]

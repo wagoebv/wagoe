@@ -12,7 +12,8 @@
             [wagoe.config :as config]
             [wagoe.main]
             [wagoe.platform.shell.modules :as modules]
-            [wagoe.system-config :as sys-config]))
+            [wagoe.system-config :as sys-config]
+            [wagoe.user.shell.auth :as auth]))
 
 (defn- catalogue []
   (edn/read-string {:readers {'ig/ref ig/ref}}
@@ -30,6 +31,10 @@
   "Framework modules this setup does not switch on, and why."
   {"external" "its adapters need a host or an account; they serve no routes"
    "devtools" "dev-only; the dashboard refuses to boot in :test"})
+
+(def callback-secret
+  "Push's, so a test can sign a callback the booted handler accepts."
+  "route-table-callback-secret")
 
 (defn- every-module-config
   "The test profile with every framework module on, each from the config
@@ -52,6 +57,7 @@
     (-> base
         (update :active merge extra)
         (assoc-in [:active :wagoe/storage :expose-http?] true)
+        (assoc-in [:active :wagoe/push :callback-secret] callback-secret)
         ;; Migrated at boot, as a generated test config is: push and the
         ;; others keep their tables in migrations, not in code.
         (update-in [:active :wagoe/h2] assoc
@@ -59,28 +65,38 @@
                    :db     (str "mem:" db ";DB_CLOSE_DELAY=-1")
                    :migrate-on-start? true))))
 
-(defmethod ig/init-key ::push-mounted [_ {:keys [routes]}]
-  ;; Push's README says to mount its routes in your router; nothing in the
-  ;; framework does. Mounted here as an application would.
+(def ^:dynamic *handler* nil)
+
+(defmethod ig/init-key ::hand-mounted [_ {:keys [routes]}]
   {:static [routes]})
 
-(def ^:dynamic *handler* nil)
+(defn- with-hand-mounted
+  "`ig-cfg` with `routes-key`'s routes mounted as an app's `:static` ones."
+  [ig-cfg routes-key]
+  (-> ig-cfg
+      (assoc ::hand-mounted {:routes (ig/ref routes-key)})
+      (update-in [:wagoe/http-handler :module-routes] (fnil conj []) (ig/ref ::hand-mounted))))
 
 (defn system-fixture
   "A :once fixture that boots every module on its own H2 database `db` and
-   binds `*handler*` to the HTTP handler."
-  [db]
-  (fn [f]
-    (let [ig-cfg (-> (sys-config/ig-config (every-module-config db))
-                     (dissoc :wagoe/http-server)
-                     (assoc ::push-mounted {:routes (ig/ref :wagoe.push/routes)})
-                     (update-in [:wagoe/http-handler :module-routes]
-                                (fnil conj []) (ig/ref ::push-mounted)))
-          system (ig/init ig-cfg)]
-      (try
-        (binding [*handler* (:wagoe/http-handler system)]
-          (f))
-        (finally (ig/halt! system))))))
+   binds `*handler*` to the HTTP handler. `:mount-by-hand` names a routes
+   component to mount as `:static` too, as an app that wired it itself does."
+  ([db] (system-fixture db {}))
+  ([db {:keys [mount-by-hand]}]
+   (fn [f]
+     (let [ig-cfg (cond-> (dissoc (sys-config/ig-config (every-module-config db)) :wagoe/http-server)
+                    mount-by-hand (with-hand-mounted mount-by-hand))
+           system (ig/init ig-cfg)]
+       (try
+         (binding [*handler* (:wagoe/http-handler system)]
+           (f))
+         (finally (ig/halt! system)))))))
+
+(defn bearer
+  "Headers that sign a request in as `user`, a map of `:id`, `:email`, `:role`."
+  [{:keys [id email role]}]
+  {"authorization"
+   (str "Bearer " (auth/create-jwt-token {:id id :email email :role (keyword role)} 1))})
 
 (def http-methods [:get :head :post :put :patch :delete])
 

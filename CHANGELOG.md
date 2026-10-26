@@ -225,6 +225,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **`default-admin-config` drops `:require-role`, and `AdminConfig` makes it optional** (BOU-842). An admin config
+  without it validates; nothing to change.
 - **Admin CSS without `!important` fights or `legacy.css`** (BOU-821): 6 `!important` left; `tailwind/admin/legacy.css`
   is part of `admin/wagoe-admin.css` now. No visible change.
 - **Methods 1.1 adds to a stable port are their own protocols** (BOU-829), so an app's own repository or service keeps
@@ -281,6 +283,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **`:wagoe.push/routes`** (BOU-838): the module mounts push itself; an app that mounts the vector by hand keeps
+  `/api/push` too; goes in 2.0. Drop it from your wiring.
 - **`wagoe.platform.shell.database.migrations/create-config`** (BOU-813): `create-migration` no longer calls
   migratus/create, so nothing needs it; goes in 2.0. Call `create-migration`.
 - **`:require-role` in the admin config** (BOU-774): nothing reads it; boot warns outside `:off`, and it goes in 2.0.
@@ -318,6 +322,16 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Push serves its device, callback and stats routes under `/api/v1/push`** (BOU-838); they were never mounted.
+  Point clients at `/api/v1/push`.
+- **User service operations log, emit metrics and report errors** (BOU-840); they had no logger, emitter or reporter.
+  Nothing to change.
+- **Sentry breadcrumbs per thread are capped at `:max-breadcrumbs`** (BOU-840), default 100, the newest kept; they grew
+  without limit. Nothing to change.
+- **A Sentry report no longer carries breadcrumbs, user, tags or extra from an earlier request** (BOU-843). A custom
+  error context can implement `IErrorContextReset` to be cleared per request too.
+- **The geo cache boots from its documented config** (BOU-839): `:wagoe/geo-service` takes
+  `:db-ctx #ig/ref :wagoe/db-context`; `:db` is deprecated, goes in 2.0. Rename `:db` to `:db-ctx`.
 - **A group grant can no longer hand out a code role** (BOU-836): `add-group-grant` and an import's `:grants` take only
   a permission a module declares, unless `:wagoe/user :groups :permissions` is set, and never a code role's name. Such a
   stored grant is no longer migrated to that role; boot logs it. Assign the role instead.

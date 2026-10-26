@@ -2,10 +2,12 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest testing is]]
             [wagoe.observability.errors.ports :as error-ports]
+            [wagoe.observability.errors.shell.adapters.sentry :as sentry-adapter]
             [wagoe.observability.logging.ports :as log-ports]
             [wagoe.observability.tracing.ports :as tracing-ports]
             [wagoe.platform.shell.http.interceptors :as http-interceptors]
-            [wagoe.config :as config]))
+            [wagoe.config :as config]
+            [sentry-clj.core :as sentry]))
 
 ;; ==============================================================================
 ;; Mock System (simplified)
@@ -466,6 +468,31 @@
       (let [{:keys [reported spans]} (reported-and-traced (ex-info "nope" {:type type}))]
         (is (empty? reported))
         (is (= [[:attrs {:http.response.status_code status}]] spans))))))
+
+(deftest ^:unit a-request-reports-nothing-from-the-one-before-it
+  ;; Both on this thread, as on a pooled one (BOU-843).
+  (let [sent (atom [])]
+    (with-redefs [sentry/init!      (fn [& _] nil)
+                  sentry/send-event #(swap! sent conj %)]
+      (let [reporter (sentry-adapter/create-sentry-error-reporting-component
+                      {:dsn "https://key@sentry.invalid/1"})
+            run      (fn [uri handler]
+                       (http-interceptors/run-http-interceptors
+                        handler http-interceptors/default-http-interceptors
+                        {:request-method :get :uri uri :headers {}}
+                        {:error-reporter reporter}))]
+        (run "/a" (fn [_]
+                    (error-ports/set-user! reporter {:id "user-a"})
+                    (error-ports/set-tags! reporter {:tag-a "a"})
+                    (error-ports/set-extra! reporter {:extra-a "a"})
+                    {:status 200 :body "ok"}))
+        (run "/b" (fn [_] (throw (RuntimeException. "boom"))))))
+    (let [[event & more] @sent
+          text           (pr-str (dissoc event :throwable))]
+      (is (nil? more))
+      (is (= ["/b"] (map #(get-in % [:data :uri]) (:breadcrumbs event))))
+      (doseq [a ["/a" "user-a" ":tag-a" ":extra-a"]]
+        (is (not (str/includes? text a)) a)))))
 
 (deftest ^:unit a-server-error-is-reported-and-a-span-error
   (doseq [ex [(RuntimeException. "boom")

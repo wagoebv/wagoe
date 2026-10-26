@@ -206,7 +206,6 @@
   ;; the whole application config to the routes, which would let any handler
   ;; reach anything.
   (let [mode          (authorization-mode ctx)
-        ;; Before the defaults, which carry :require-role themselves
         _             (when (and (:require-role settings) (not= :off mode))
                         (log/warn (str "DEPRECATED :require-role in the admin config — under :wagoe/authorization"
                                        " :mode " mode " the admin reads admin.<entity>/read|write instead."

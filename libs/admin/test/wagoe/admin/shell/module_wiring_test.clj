@@ -173,7 +173,9 @@
   (log-test/with-log
     (wiring/ig-config {} (with-mode :enforce))
     (is (not (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #":require-role"))
-        "the defaults carry it; a config without it is not warned")))
+        "a config without it is not warned")
+    (is (not (contains? (get-in (wiring/ig-config {} {}) [:components :wagoe/admin-service :config]) :require-role))
+        "the defaults do not bring it back")))
 
 (deftest ^:unit dashboard-extra-cards-reach-the-dashboard-and-are-deprecated
   (let [cards [[:div.card "Reports"]]]
