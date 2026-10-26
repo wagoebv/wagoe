@@ -65,8 +65,9 @@ Everything logged or attached to a breadcrumb goes through
 Each interceptor acts only when the `:system` map it is given holds a
 `:logger`, `:metrics-emitter` or `:error-reporter`. `:wagoe/user-service` is
 wired with `:wagoe/logging`, `:wagoe/metrics` and `:wagoe/error-reporting`, and
-passes those three on to every operation. `:validate-session` runs on every
-authenticated request and gets no logger.
+passes those three on to every operation. `:validate-session` and
+`:get-user-by-id` run on every authenticated request (session and JWT) and get
+no logger.
 
 === Persistence pipeline
 

@@ -574,7 +574,8 @@
      (fn [{:keys [params]}]
        (some-> (.find-user-by-id user-repository (:user-id params))
                (dissoc :password-hash)))
-     (observability this)))
+     ;; The JWT middleware's read on every request, like validate-session.
+     (dissoc (observability this) :logger)))
 
   (get-user-by-email [this email]
     (service-interceptors/execute-service-operation

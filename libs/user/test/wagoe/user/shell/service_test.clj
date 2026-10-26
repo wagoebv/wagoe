@@ -4,6 +4,7 @@
             [wagoe.user.shell.service :as sut]
             [wagoe.user.ports :as ports]
             [wagoe.observability.metrics.ports :as metrics]
+            [wagoe.observability.errors.ports :as errors]
             [integrant.core :as ig]
             [clojure.test :refer [deftest is testing]])
   (:import (java.time Instant)
@@ -630,3 +631,24 @@
     (is (= user-id (:id (ports/get-user-by-id service user-id))))
     (is (some #{["get-user-by-id-successful" 1 {}]} @calls))
     (is (some #{["service-operation-duration" {:operation-type "get-user-by-id"}]} @calls))))
+
+(deftest ^:unit refused-session-is-not-reported-test
+  ;; :session-invalid had no status, so the service pipeline took every
+  ;; expired session for a 500 and reported it (BOU-840).
+  (let [reported (atom [])
+        reporter (reify
+                   errors/IErrorReporter
+                   (capture-exception [_ e _ctx] (swap! reported conj e) "id")
+                   errors/IErrorContext
+                   (add-breadcrumb! [_ _] nil))
+        expired  {:expires-at (Instant/parse "2020-01-01T00:00:00Z")}
+        service  (ig/init-key :wagoe/user-service
+                              {:user-repository    (->UserRepoStub (atom {}))
+                               :session-repository (->SessionRepoStub expired)
+                               :audit-repository   (->AuditRepoStub)
+                               :validation-config  {}
+                               :error-reporter     reporter})
+        ex       (try (ports/validate-session service "token") nil
+                      (catch clojure.lang.ExceptionInfo e e))]
+    (is (= :session-invalid (:type (ex-data ex))))
+    (is (empty? @reported))))
