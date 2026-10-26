@@ -97,10 +97,9 @@
 (defn- check-config!
   "Fails at boot, naming the bad keys, rather than on the first lookup."
   [config]
-  (when-let [explanation (config-explainer config)]
-    (throw (ex-info (str ":wagoe/geo-service config is invalid: " (pr-str (me/humanize explanation)))
-                    {:type   :wagoe/geo-config-error
-                     :errors (me/humanize explanation)}))))
+  (when-let [errors (some-> (config-explainer config) me/humanize)]
+    (throw (ex-info (str ":wagoe/geo-service config is invalid: " (pr-str errors))
+                    {:type :wagoe/geo-config-error :errors errors}))))
 
 (defn- cache-datasource
   "The datasource to cache in, from :db-ctx. :db, a bare datasource, is read

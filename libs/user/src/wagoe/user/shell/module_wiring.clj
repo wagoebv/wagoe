@@ -450,7 +450,7 @@
    once, so a bad value fails boot whichever components start, as are the
    `:groups` schemas."
   [settings {:keys [config validation-config enabled]}]
-  ;; Deprecated, and shown only by the admin dashboard.
+  ;; Deprecated, and shown only by the admin dashboard. Goes with the key in 2.0.
   (when (and (some? (:dashboard-extra-cards config)) (not (contains? enabled :wagoe/admin)))
     (log/warn "DEPRECATED :dashboard-extra-cards is shown nowhere: only the admin dashboard shows it, and the admin module is off."))
   (let [config (landing/prepare config)

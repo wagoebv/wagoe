@@ -330,8 +330,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`GET /api/v1/push/devices/:token` takes `?app-id=`** (BOU-847), and a registration's `Location` carries it. A token
   under two app-ids answers 409 without it; a token with `/` gets no `Location`.
-- **User CLI commands are logged, and reported when `:wagoe/error-reporting` is Sentry** (BOU-847). A failed user
-  audit write logs its stack trace.
+- **User CLI commands log and report through `:wagoe/logging` and `:wagoe/error-reporting`** (BOU-847). A failed
+  user audit write logs its stack trace.
 - **`:dashboard-extra-cards` warns when the admin module is off, names a non-collection at boot, and has a heading**
   (BOU-847).
 - **Push registration's `Location` names `GET /api/v1/push/devices/:token`, a route that now exists** (BOU-845).

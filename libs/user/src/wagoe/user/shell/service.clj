@@ -927,8 +927,8 @@
   ([user-repository session-repository audit-repository validation-config auth-service]
    (->UserService user-repository session-repository audit-repository validation-config auth-service))
   ([user-repository session-repository audit-repository validation-config auth-service observability]
-   (merge (create-user-service user-repository session-repository audit-repository validation-config auth-service)
-          (select-keys observability [:logger :metrics-emitter :error-reporter]))))
+   (merge (->UserService user-repository session-repository audit-repository validation-config auth-service)
+          observability)))
 
 (defn interceptor-system
   "The interceptor :system for a user HTTP or CLI handler."

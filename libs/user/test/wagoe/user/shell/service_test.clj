@@ -620,9 +620,9 @@
   ;; no operation found a logger, emitter or reporter (BOU-840).
   (let [calls   (atom [])
         emitter #_{:clj-kondo/ignore [:missing-protocol-method]}
-        (reify metrics/IMetricsEmitter
-          (inc-counter! [_ h v tags] (swap! calls conj [h v tags]))
-          (observe-histogram! [_ h _v tags] (swap! calls conj [h tags])))
+                (reify metrics/IMetricsEmitter
+                  (inc-counter! [_ h v tags] (swap! calls conj [h v tags]))
+                  (observe-histogram! [_ h _v tags] (swap! calls conj [h tags])))
         user-id (UUID/randomUUID)
         service (ig/init-key :wagoe/user-service
                              {:user-repository    (->UserRepoStub (atom {user-id {:id user-id}}))
@@ -639,11 +639,11 @@
   ;; expired session for a 500 and reported it (BOU-840).
   (let [reported (atom [])
         reporter #_{:clj-kondo/ignore [:missing-protocol-method]}
-        (reify
-          errors/IErrorReporter
-          (capture-exception [_ e _ctx] (swap! reported conj e) "id")
-          errors/IErrorContext
-          (add-breadcrumb! [_ _] nil))
+                 (reify
+                   errors/IErrorReporter
+                   (capture-exception [_ e _ctx] (swap! reported conj e) "id")
+                   errors/IErrorContext
+                   (add-breadcrumb! [_ _] nil))
         expired  {:expires-at (Instant/parse "2020-01-01T00:00:00Z")}
         service  (ig/init-key :wagoe/user-service
                               {:user-repository    (->UserRepoStub (atom {}))
@@ -659,8 +659,8 @@
 (deftest ^:unit a-failed-audit-write-logs-its-stack
   (let [user-id (UUID/randomUUID)
         failing #_{:clj-kondo/ignore [:missing-protocol-method]}
-        (reify ports/IUserAuditRepository
-          (create-audit-log [_ _] (throw (ex-info "audit table gone" {}))))
+                (reify ports/IUserAuditRepository
+                  (create-audit-log [_ _] (throw (ex-info "audit table gone" {}))))
         service (sut/->UserService (->UserRepoStub (atom {user-id {:id user-id :email "a@b.nl" :role :user :active true}}))
                                    (->SessionRepoStub nil) failing {} nil)]
     (log-test/with-log

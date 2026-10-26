@@ -14,11 +14,10 @@
             [wagoe.user.shell.auth :as user-auth]
             [wagoe.user.shell.mfa :as user-mfa]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
-            [wagoe.observability.logging.shell.adapters.slf4j :as slf4j-logging]
+            [wagoe.platform.shell.system.wiring]
             [wagoe.observability.metrics.shell.adapters.no-op :as no-op-metrics]
-            [wagoe.observability.errors.shell.adapters.no-op :as no-op-error-reporting]
-            [wagoe.observability.errors.shell.adapters.sentry :as sentry]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log]
+            [integrant.core :as ig]))
 
 (def ^:dynamic *exit!*
   "Terminates the process with `code`. Indirection so tests can observe the exit
@@ -26,16 +25,13 @@
   (fn [code] (System/exit code)))
 
 (defn cli-observability
-  "What the CLI's user service logs and reports through: Logback, where the
-   rest of the CLI logs, and Sentry when `:wagoe/error-reporting` names it.
-   Metrics are a no-op: the process exits before anything would collect them."
+  "What the CLI's user service logs and reports through: the configured
+   `:wagoe/logging` and `:wagoe/error-reporting`, built as the system builds
+   them. Metrics are a no-op: the process exits before anything collects them."
   [cfg]
-  (let [errors (get-in cfg [:active :wagoe/error-reporting])]
-    {:logger          (slf4j-logging/create-logging-component (get-in cfg [:active :wagoe/logging] {}))
-     :metrics-emitter (no-op-metrics/create-metrics-emitter nil)
-     :error-reporter  (if (= :sentry (:provider errors))
-                        (sentry/create-sentry-error-reporting-component errors)
-                        (no-op-error-reporting/create-error-reporter nil))}))
+  {:logger          (ig/init-key :wagoe/logging (config/logging-config cfg))
+   :metrics-emitter (no-op-metrics/create-metrics-emitter nil)
+   :error-reporter  (ig/init-key :wagoe/error-reporting (config/error-reporting-config cfg))})
 
 (defn run-cli!
   "Run the user module CLI for the given command-line arguments.

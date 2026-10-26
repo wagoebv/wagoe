@@ -130,18 +130,19 @@
   ([method uri body] (call method uri body {}))
   ([method uri body headers]
    (try
-     (*handler* {:request-method method
-                 :uri            (first (str/split uri #"\?" 2))
-                 :query-string   (second (str/split uri #"\?" 2))
-                 :scheme         :http
-                 :server-name    "localhost"
-                 :server-port    80
-                 :remote-addr    "127.0.0.1"
-                 :headers        (merge {"accept"       "application/json"
-                                         "content-type" "application/json"
-                                         "host"         "localhost"}
-                                        headers)
-                 :body           (java.io.ByteArrayInputStream. (.getBytes ^String body))})
+     (let [[path query] (str/split uri #"\?" 2)]
+       (*handler* {:request-method method
+                   :uri            path
+                   :query-string   query
+                   :scheme         :http
+                   :server-name    "localhost"
+                   :server-port    80
+                   :remote-addr    "127.0.0.1"
+                   :headers        (merge {"accept"       "application/json"
+                                           "content-type" "application/json"
+                                           "host"         "localhost"}
+                                          headers)
+                   :body           (java.io.ByteArrayInputStream. (.getBytes ^String body))}))
      (catch Exception e
        {:status (str "threw " (.getSimpleName (class e)))}))))
 
