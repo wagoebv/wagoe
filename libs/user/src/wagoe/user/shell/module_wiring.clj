@@ -149,18 +149,20 @@
 
 (defmethod ig/init-key :wagoe/user-service
   [_ {:keys [user-repository session-repository audit-repository validation-config auth-service
-             metrics-emitter]}]
+             logger metrics-emitter error-reporter]}]
   (log/info "Initializing user service")
   (require-protocols! "user repository" user-repository
                       {"ILoginAttempts" [ports/ILoginAttempts ['claim-login-attempts 'release-login-attempt]]
                        "IAdminLock"     [ports/IAdminLock ['with-admins-locked]]})
   (require-protocols! "session repository" session-repository
                       {"IUserSessionInvalidation" [ports/IUserSessionInvalidation ['invalidate-user-session]]})
-  ;; The emitter rides on the service because the user handlers build their
-  ;; interceptor :system from it; without it op metrics never fire.
+  ;; Observability rides on the service: its operations and the user handlers
+  ;; build their interceptor :system from it.
   (let [service (-> (user-service/create-user-service
                      user-repository session-repository audit-repository validation-config auth-service)
-                    (assoc :metrics-emitter metrics-emitter))]
+                    (assoc :logger logger
+                           :metrics-emitter metrics-emitter
+                           :error-reporter error-reporter))]
     (log/info "User service initialized")
     service))
 

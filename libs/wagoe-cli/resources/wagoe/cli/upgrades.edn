@@ -90,4 +90,24 @@
  {:ticket "BOU-799"
   :since  "1.0.2"
   :note   "wagoe.admin.core.ui/render-field-value is wagoe.admin.core.ui.cells/cell; render-inline-edit-cell is field-cell."
-  :manual "Both take the record and its entity config, not one value and its field config."}]
+  :manual "Both take the record and its entity config, not one value and its field config."}
+
+ {:ticket "BOU-765"
+  :since  "1.0.2"
+  :note   ":dashboard-extra-cards, Hiccup cards for the old /web/dashboard page. The admin dashboard shows them until 2.0."
+  :manual "Give a module's nav item a :description; it gets a dashboard card. A rewrite cannot turn Hiccup into a nav item."}
+
+ {:ticket "BOU-755"
+  :since  "1.0.2"
+  :note   "window.AdminUX.showToast and .flash-messages banners. Both feed the shared-ui toast region until 2.0."
+  :manual "Send HX-Trigger {\"showToast\": {\"type\": ..., \"message\": ...}} or a shared-ui toast out of band. The rewrites do not touch JavaScript or markup."}
+
+ {:ticket "BOU-753"
+  :since  "1.0.2"
+  :note   "window.AdminUX.showConfirmModal, and hx-confirm with data-confirm-title/-label/-cancel on a delete. Both ask in a native <dialog> until 2.0."
+  :manual "Render wagoe.shared.ui.core.modal/confirm-modal and put confirm-attrs on the element that sends the request. The rewrites do not touch JavaScript."}
+
+ {:ticket "BOU-838"
+  :since  "1.0.2"
+  :note   ":wagoe.push/routes, the /api/push route vector an app mounted by hand. The push module now mounts its routes under /api/v1/push."
+  :manual "Before 2.0, remove the hand-written mounting and point clients at /api/v1/push. A rewrite cannot find where an app spliced the vector into its routes."}]

@@ -90,6 +90,7 @@
                                (admin-ui/dashboard groups stats
                                                    {:activity       (recent-activity user-service groups)
                                                     :entity-configs entity-configs
+                                                    :extra-cards    (:dashboard-extra-cards config)
                                                     :display        (support/display-options config request)
                                                     :now            (Instant/now)})
                                {:user user

@@ -27,7 +27,8 @@
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.service-interceptors :as service-interceptors]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [clojure.tools.logging :as log])
   (:import (java.security SecureRandom)
            (java.time Instant)
            (java.util UUID)))
@@ -211,7 +212,7 @@
       (.create-audit-log audit-repository
                          (entry-fn actor-id actor-email user-id email ip-address user-agent)))
     (catch Exception e
-      (println "WARN: Failed to create audit log:" (.getMessage e)))))
+      (log/warn "Failed to create audit log:" (.getMessage e)))))
 
 (defn- existing-user [user-repository user-id]
   (or (.find-user-by-id user-repository user-id)
@@ -271,12 +272,19 @@
                           (or (:ip-address session) (:ip_address session))
                           (or (:user-agent session) (:user_agent session)))))))
 
+;; Wiring assocs these onto the service; the interceptors read them. Keyword
+;; lookups, not select-keys: a handler may get any IUserService, a reify too.
+(defn- observability [user-service]
+  {:logger          (:logger user-service)
+   :metrics-emitter (:metrics-emitter user-service)
+   :error-reporter  (:error-reporter user-service)})
+
 (defrecord UserService [user-repository session-repository audit-repository validation-config auth-service]
 
   ports/IUserService
 
   ;; User Management - Shell layer orchestrates I/O and calls pure core functions
-  (register-user [_ user-data]
+  (register-user [this user-data]
     (let [result (service-interceptors/execute-service-operation
                   :register-user
                   {:user-data user-data
@@ -347,13 +355,11 @@
                                               nil)) ; user-agent (extract from request context if available)
                           (catch Exception e
                             ;; Log audit failure but don't fail the operation
-                            (println "WARN: Failed to create audit log:" (.getMessage e))))
+                            (log/warn "Failed to create audit log:" (.getMessage e))))
 
                         ;; Remove sensitive data before returning
                         (dissoc created-user :password-hash))))
-                  {:system {:user-repository user-repository
-                            :session-repository session-repository
-                            :auth-service auth-service}})]
+                  (observability this))]
       result))
 
   (register-or-authenticate-user [this user-data login-context]
@@ -408,11 +414,9 @@
               :created? true
               :authenticated? true
               :auth-result auth-result}))))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :auth-service auth-service}}))
+     (observability this)))
 
-  (authenticate-user [_ user-credentials]
+  (authenticate-user [this user-credentials]
     (service-interceptors/execute-service-operation
      :authenticate-user
      {:user-credentials user-credentials
@@ -515,12 +519,9 @@
                    ;; Only a right password gets here with a user: one to enrol.
                    (:user auth-result) (assoc :user (:user auth-result)
                                               :password-fingerprint (:password-fingerprint auth-result)))))))))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :audit-repository audit-repository
-               :auth-service auth-service}}))
+     (observability this)))
 
-  (validate-session [_ session-token]
+  (validate-session [this session-token]
     (service-interceptors/execute-service-operation
      :validate-session
      {:session-token session-token}
@@ -545,11 +546,10 @@
                           to-write
                           session)
                       :user (user-core/without-credentials user)))))))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :auth-service auth-service}}))
+     ;; Runs on every authenticated request: metrics, but no three log lines.
+     (dissoc (observability this) :logger)))
 
-  (logout-user [_ session-token]
+  (logout-user [this session-token]
     (service-interceptors/execute-service-operation
      :logout-user
      {:session-token session-token}
@@ -564,23 +564,20 @@
 
            ;; Session not found
            {:invalidated false})))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :auth-service auth-service}}))
+     (observability this)))
 
   ;; Additional IUserService methods
-  (get-user-by-id [_ user-id]
+  (get-user-by-id [this user-id]
     (service-interceptors/execute-service-operation
      :get-user-by-id
      {:user-id user-id}
      (fn [{:keys [params]}]
        (some-> (.find-user-by-id user-repository (:user-id params))
                (dissoc :password-hash)))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :auth-service auth-service}}))
+     ;; The JWT middleware's read on every request, like validate-session.
+     (dissoc (observability this) :logger)))
 
-  (get-user-by-email [_ email]
+  (get-user-by-email [this email]
     (service-interceptors/execute-service-operation
      :get-user-by-email
      {:email email}
@@ -590,11 +587,9 @@
          ;; Remove sensitive data before returning
          (when user
            (dissoc user :password-hash))))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :auth-service auth-service}}))
+     (observability this)))
 
-  (list-users [_ options]
+  (list-users [this options]
     (service-interceptors/execute-service-operation
      :list-users
      {:options options}
@@ -607,11 +602,9 @@
          ;; Remove sensitive data from all users and return with pagination info
          {:users cleaned-users
           :total-count total-count}))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :auth-service auth-service}}))
+     (observability this)))
 
-  (update-user-profile [_ user-entity]
+  (update-user-profile [this user-entity]
     (service-interceptors/execute-service-operation
      :update-user-profile
      {:user-entity user-entity
@@ -675,11 +668,9 @@
 
            ;; Remove sensitive data before returning.
            (some-> after (dissoc :password-hash)))))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :auth-service auth-service}}))
+     (observability this)))
 
-  (deactivate-user [_ user-id]
+  (deactivate-user [this user-id]
     (service-interceptors/execute-service-operation
      :deactivate-user
      {:user-id user-id}
@@ -698,10 +689,7 @@
          (when result
            (audit-quietly! audit-repository audit-core/deactivate-user-audit-entry user-id (:email user)))
          (boolean result)))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :audit-repository audit-repository
-               :auth-service auth-service}}))
+     (observability this)))
 
   (permanently-delete-user [this user-id]
     (service-interceptors/execute-service-operation
@@ -709,15 +697,12 @@
      {:user-id user-id}
      (fn [{:keys [params]}]
        (boolean (seq (delete-users! this [(:user-id params)] true))))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :audit-repository audit-repository
-               :auth-service auth-service}}))
+     (observability this)))
 
   (logout-user-everywhere [this user-id]
     (.revoke-sessions-except this user-id nil))
 
-  (get-user-sessions [_ user-id]
+  (get-user-sessions [this user-id]
     (service-interceptors/execute-service-operation
      :get-user-sessions
      {:user-id user-id}
@@ -726,15 +711,13 @@
              sessions (.find-sessions-by-user session-repository user-id)]
          ;; Return sessions (no sensitive data to filter)
          sessions))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :auth-service auth-service}}))
+     (observability this)))
 
   ;; ---------------------------------------------------------------------------
   ;; Audit Log Query Operations
   ;; ---------------------------------------------------------------------------
 
-  (list-audit-logs [_ options]
+  (list-audit-logs [this options]
     (service-interceptors/execute-service-operation
      :list-audit-logs
      {:options options}
@@ -744,9 +727,9 @@
              result (.find-audit-logs audit-repository options)]
          ;; Return result map with :audit-logs and :total-count
          result))
-     {:system {:audit-repository audit-repository}}))
+     (observability this)))
 
-  (get-audit-logs-for-user [_ user-id options]
+  (get-audit-logs-for-user [this user-id options]
     (service-interceptors/execute-service-operation
      :get-audit-logs-for-user
      {:user-id user-id :options options}
@@ -757,13 +740,13 @@
              logs (.find-audit-logs-by-user audit-repository user-id options)]
          ;; Return vector of audit log entities
          logs))
-     {:system {:audit-repository audit-repository}}))
+     (observability this)))
 
   ;; ---------------------------------------------------------------------------
   ;; Password Management Operations
   ;; ---------------------------------------------------------------------------
 
-  (change-password [_ user-id current-password new-password]
+  (change-password [this user-id current-password new-password]
     (service-interceptors/execute-service-operation
      :change-password
      {:user-id user-id}
@@ -828,13 +811,11 @@
                                 user-agent)]
                (.create-audit-log audit-repository audit-entry))
              (catch Exception e
-               (println "WARN: Failed to create audit log for password change:" (.getMessage e))))
+               (log/warn "Failed to create audit log for password change:" (.getMessage e))))
 
            ;; Return success
            true)))
-     {:system {:user-repository user-repository
-               :audit-repository audit-repository
-               :auth-service auth-service}}))
+     (observability this)))
 
   ports/IUserAccountRecovery
 
@@ -867,10 +848,7 @@
      {:user-id user-id}
      (fn [{:keys [params]}]
        (boolean (seq (delete-users! this [(:user-id params)] false))))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :audit-repository audit-repository
-               :auth-service auth-service}}))
+     (observability this)))
 
   (delete-users [this user-ids {:keys [permanent?]}]
     (service-interceptors/execute-service-operation
@@ -878,13 +856,10 @@
      {:user-ids user-ids}
      (fn [{:keys [params]}]
        (mapv :id (delete-users! this (:user-ids params) permanent?)))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :audit-repository audit-repository
-               :auth-service auth-service}}))
+     (observability this)))
 
   ports/IUserSessionRevocation
-  (revoke-sessions-except [_ user-id keep-session-id]
+  (revoke-sessions-except [this user-id keep-session-id]
     (service-interceptors/execute-service-operation
      :logout-user-everywhere
      {:user-id user-id :keep-session-id keep-session-id}
@@ -903,11 +878,9 @@
                            (partial audit-core/sessions-revoked-audit-entry n kept)
                            user-id (:email user)))
          n))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :auth-service auth-service}}))
+     (observability this)))
 
-  (revoke-user-session [_ user-id session-id]
+  (revoke-user-session [this user-id session-id]
     (service-interceptors/execute-service-operation
      :revoke-user-session
      {:user-id user-id :session-id session-id}
@@ -921,9 +894,7 @@
                                  user-id (:email user)))
                {:invalidated true})
            {:invalidated false})))
-     {:system {:user-repository user-repository
-               :session-repository session-repository
-               :auth-service auth-service}})))
+     (observability this))))
 
 ;; =============================================================================
 ;; Factory Functions
@@ -948,8 +919,6 @@
   (->UserService user-repository session-repository audit-repository validation-config auth-service))
 
 (defn interceptor-system
-  "The interceptor :system for a user operation. Wiring puts the metrics
-   emitter on the service; the platform op-metrics interceptor reads it."
+  "The interceptor :system for a user HTTP or CLI handler."
   [user-service]
-  {:user-service    user-service
-   :metrics-emitter (:metrics-emitter user-service)})
+  (assoc (observability user-service) :user-service user-service))

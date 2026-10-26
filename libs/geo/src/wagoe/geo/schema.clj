@@ -63,7 +63,8 @@
    [:rate-limit {:optional true} :int]              ; requests per second
    [:timeout-ms {:optional true} :int]              ; connect and read timeout per call
    [:api-key    {:optional true} [:maybe :string]]  ; nil for OSM
-   [:db         {:optional true} :any]])             ; next.jdbc datasource
+   [:db-ctx     {:optional true} [:map [:datasource some?]]]  ; :wagoe/db-context
+   [:db         {:optional true} :any]])            ; deprecated: a datasource; goes in 2.0
 
 ;; =============================================================================
 ;; Validation helpers

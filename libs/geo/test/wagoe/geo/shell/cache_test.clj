@@ -3,7 +3,7 @@
   (:require [wagoe.geo.shell.cache :as sut]
             [wagoe.geo.ports :as ports]
             [clojure.test :refer [deftest is testing use-fixtures]]
-            [next.jdbc :as jdbc]
+            [wagoe.geo.test-db :as test-db]
             [next.jdbc.sql :as sql])
   (:import [java.sql Timestamp]
            [java.time Instant]))
@@ -12,42 +12,15 @@
 ;; H2 test DB setup
 ;; =============================================================================
 
-(def ^:private h2-spec
-  {:dbtype "h2:mem"
-   :dbname "geo_test"
-   :DB_CLOSE_DELAY "-1"})
-
-(defn- create-schema! [ds]
-  (jdbc/execute! ds ["CREATE TABLE IF NOT EXISTS geo_cache (
-    address_hash      TEXT PRIMARY KEY,
-    lat               NUMERIC(10, 7) NOT NULL,
-    lng               NUMERIC(10, 7) NOT NULL,
-    formatted_address TEXT,
-    street            TEXT,
-    house_number      TEXT,
-    house_number_addition TEXT,
-    postcode          TEXT,
-    city              TEXT,
-    country           TEXT,
-    provider          TEXT NOT NULL,
-    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )"])
-  (jdbc/execute! ds ["CREATE INDEX IF NOT EXISTS idx_geo_cache_coords ON geo_cache(lat, lng)"]))
-
-(defn- drop-schema! [ds]
-  (jdbc/execute! ds ["DROP TABLE IF EXISTS geo_cache"]))
-
 (def ^:dynamic *ds* nil)
 (def ^:dynamic *cache* nil)
 
 (defn with-test-db [f]
-  (let [ds (jdbc/get-datasource h2-spec)]
-    (drop-schema! ds)
-    (create-schema! ds)
+  (let [ds (test-db/fresh-cache-db! "geo_test")]
     (binding [*ds*    ds
               *cache* (sut/create-db-geo-cache ds 3600)]
       (f))
-    (drop-schema! ds)))
+    (test-db/drop-cache-table! ds)))
 
 (use-fixtures :each with-test-db)
 
