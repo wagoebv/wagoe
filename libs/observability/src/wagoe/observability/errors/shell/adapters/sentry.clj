@@ -53,26 +53,31 @@
 ;; State Management
 ;; =============================================================================
 
-(def ^:private thread-local-context
-  "Thread-local context storage for error reporting context."
+(def ^:private default-store
+  "Context of a standalone reporter and context, which share it as before."
   (ThreadLocal.))
 
+(defn- store
+  "Per thread. A component's reporter and context get their own, so two
+   components with different caps do not trim each other's breadcrumbs (BOU-843).
+   An HTTP request runs synchronously on one thread and the router resets this
+   as it starts, so there it is per request. Nothing resets it between jobs."
+  ^ThreadLocal [config]
+  (or (::store config) default-store))
+
 (defn- get-thread-context
-  "Get the current thread-local error reporting context."
-  []
-  (.get thread-local-context))
+  [^ThreadLocal store]
+  (.get store))
 
 (defn- set-thread-context!
-  "Set the thread-local error reporting context."
-  [context]
-  (.set thread-local-context context))
+  [^ThreadLocal store context]
+  (.set store context))
 
 (defn- merge-thread-context!
-  "Merge additional context into the current thread-local context."
-  [additional-context]
-  (let [current (get-thread-context)
-        merged (merge current additional-context)]
-    (set-thread-context! merged)
+  "Merge additional context into the current thread's context."
+  [store additional-context]
+  (let [merged (merge (get-thread-context store) additional-context)]
+    (set-thread-context! store merged)
     merged))
 
 ;; =============================================================================
@@ -99,10 +104,8 @@
 
 (defn- prepare-context
   "Prepare context map for Sentry, merging thread-local and provided context."
-  [provided-context]
-  (let [thread-context (get-thread-context)
-        merged-context (merge thread-context provided-context)]
-    merged-context))
+  [store provided-context]
+  (merge (get-thread-context store) provided-context))
 
 (defn- extract-sentry-context
   "Extract Sentry-specific context from merged context map."
@@ -150,7 +153,7 @@
     (when-not (#{:exception :message} type)
       (throw (ex-info "Unknown event type" {:type :validation-error :event-type type})))
     (when (reporting-enabled?* @settings)
-      (let [merged (prepare-context context)]
+      (let [merged (prepare-context (store @settings) context)]
         (when (report? error-filter event merged)
           (let [{:keys [environment release] :as config} @settings
                 event-id (generate-event-id)]
@@ -204,13 +207,13 @@
 (defrecord SentryErrorContext [config]
   ports/IErrorContext
   (with-context [_this context-map f]
-    (let [original-context (get-thread-context)
-          merged-context (merge original-context context-map)]
+    (let [s (store config)
+          original-context (get-thread-context s)]
       (try
-        (set-thread-context! merged-context)
+        (set-thread-context! s (merge original-context context-map))
         (f)
         (finally
-          (set-thread-context! original-context)))))
+          (set-thread-context! s original-context)))))
 
   (add-breadcrumb! [_this breadcrumb]
     (let [{:keys [message category level timestamp data]} breadcrumb
@@ -219,18 +222,18 @@
                              :level (normalize-level (or level :info))
                              :timestamp (or timestamp (current-timestamp))
                              :data (or data {})}
-          ;; Nothing clears a pooled thread's breadcrumbs, so keep the newest
-          ;; :max-breadcrumbs, as the Sentry SDK does.
+          ;; The newest :max-breadcrumbs, as the Sentry SDK keeps.
           max-n (or (:max-breadcrumbs config) 100)
-          crumbs (conj (get (get-thread-context) :breadcrumbs []) sentry-breadcrumb)]
+          s (store config)
+          crumbs (conj (get (get-thread-context s) :breadcrumbs []) sentry-breadcrumb)]
       ;; A fresh vector, not subvec: conj on a subvec grows its backing vector.
-      (merge-thread-context! {:breadcrumbs (if (> (count crumbs) max-n)
-                                             (vec (take-last max-n crumbs))
-                                             crumbs)})
+      (merge-thread-context! s {:breadcrumbs (if (> (count crumbs) max-n)
+                                               (vec (take-last max-n crumbs))
+                                               crumbs)})
       nil))
 
   (clear-breadcrumbs! [_this]
-    (merge-thread-context! {:breadcrumbs []})
+    (merge-thread-context! (store config) {:breadcrumbs []})
     nil)
 
   (set-user! [_this user-info]
@@ -241,19 +244,24 @@
                         email (assoc :email email)
                         ip-address (assoc :ip_address ip-address)
                         additional (merge additional))]
-      (merge-thread-context! {:user sentry-user :user-id id})
+      (merge-thread-context! (store config) {:user sentry-user :user-id id})
       nil))
 
   (set-tags! [_this tags]
-    (merge-thread-context! {:tags tags})
+    (merge-thread-context! (store config) {:tags tags})
     nil)
 
   (set-extra! [_this extra]
-    (merge-thread-context! {:extra extra})
+    (merge-thread-context! (store config) {:extra extra})
     nil)
 
   (current-context [_this]
-    (get-thread-context)))
+    (get-thread-context (store config)))
+
+  ports/IErrorContextReset
+  (reset-context! [_this]
+    (.remove (store config))
+    nil))
 
 ;; =============================================================================
 ;; Sentry Error Filter Implementation
@@ -395,7 +403,8 @@
    through IErrorReportingConfig or IErrorFilter reaches the reporter."
   [config]
   (init-sentry! config)
-  (let [settings     (atom config)
+  (let [config       (update config ::store #(or % (ThreadLocal.)))
+        settings     (atom config)
         error-filter (new-filter settings)]
     {:error-reporter (->SentryErrorReporter settings error-filter)
      :error-context  (->SentryErrorContext config)
@@ -413,7 +422,8 @@
    - :filtering - {:min-severity, :exclude-exceptions, :exclude-messages}
    - :redact - PII redaction options (wagoe.core.utils.pii-redaction)"
   [config]
-  (:error-reporter (shared-parts config)))
+  ;; The store create-sentry-error-context uses, so the two share context.
+  (:error-reporter (shared-parts (assoc config ::store default-store))))
 
 (defn create-sentry-error-context
   "Create a Sentry error context manager instance. `:max-breadcrumbs` caps
@@ -468,6 +478,10 @@
     (ports/set-extra! error-context extra))
   (current-context [_this]
     (ports/current-context error-context))
+
+  ports/IErrorContextReset
+  (reset-context! [_this]
+    (ports/reset-context! error-context))
 
   ports/IErrorFilter
   (should-report? [_this exception context]

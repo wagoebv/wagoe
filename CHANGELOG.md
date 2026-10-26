@@ -338,12 +338,16 @@ for what is public API, what is internal, and how deprecations are announced.
   Push bodies are declared, so they appear in `/openapi.json` and a bad one gets the platform's 400.
 - **Pushes carry the callback token, so `POST /api/v1/push/callback` records analytics** (BOU-844). Set
   `:callback-secret` in `:wagoe/push`; push warns at boot without one.
+- **An unversioned `/api/...` redirect points at the requested path, query string kept** (BOU-846); Location was the
+  route template, e.g. `/api/v1/push/devices/:token`. Nothing to change.
 - **Push serves its device, callback and stats routes under `/api/v1/push`** (BOU-838); they were never mounted.
   Point clients at `/api/v1/push`.
 - **User service operations log, emit metrics and report errors** (BOU-840); they had no logger, emitter or reporter.
   Nothing to change.
 - **Sentry breadcrumbs per thread are capped at `:max-breadcrumbs`** (BOU-840), default 100, the newest kept; they grew
   without limit. Nothing to change.
+- **A Sentry report no longer carries breadcrumbs, user, tags or extra from an earlier request** (BOU-843). A custom
+  error context can implement `IErrorContextReset` to be cleared per request too.
 - **The geo cache boots from its documented config** (BOU-839): `:wagoe/geo-service` takes
   `:db-ctx #ig/ref :wagoe/db-context`; `:db` is deprecated, goes in 2.0. Rename `:db` to `:db-ctx`.
 - **A group grant can no longer hand out a code role** (BOU-836): `add-group-grant` and an import's `:grants` take only
