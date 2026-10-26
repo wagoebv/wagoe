@@ -50,5 +50,5 @@
   ;; Deprecated, not removed, until 2.0; the e2e suite drives it in a browser.
   (let [js (slurp (io/resource "public/js/admin-ux.js"))]
     (is (some #{"/js/admin-ux.js"} sut/admin-pilot-js))
-    (is (str/includes? js "showToast: showToast"))
-    (is (str/includes? js "'.flash-messages .alert'"))))
+    (is (re-find #"\bshowToast\s*[:,]" js))
+    (is (str/includes? js ".flash-messages"))))

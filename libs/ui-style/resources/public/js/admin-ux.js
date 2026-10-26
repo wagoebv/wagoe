@@ -798,6 +798,11 @@ document.addEventListener('alpine:init', function () {
     return Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 14);
   }
 
+  // components.js renders it into the toast region
+  function toast(type, message) {
+    document.dispatchEvent(new CustomEvent('showToast', { detail: { type: type, message: message } }));
+  }
+
   // A failed request shows a toast, unless its response asked for one or its
   // element is marked data-quiet-failure: an enhancement the page reads fine
   // without, such as a label lookup.
@@ -814,7 +819,7 @@ document.addEventListener('alpine:init', function () {
     var id = xhr.getResponseHeader('X-Correlation-ID') || headers['X-Correlation-ID'];
     var message = region.dataset.errorMessage;
     if (id) message += ' ' + region.dataset.errorReference + ' ' + id;
-    document.dispatchEvent(new CustomEvent('showToast', { detail: { type: 'error', message: message } }));
+    toast('error', message);
   }
 
   // Deprecated until 2.0: the toast API and .flash-messages banners from
@@ -830,14 +835,11 @@ document.addEventListener('alpine:init', function () {
     warnDeprecated('AdminUX.showToast',
       'Send HX-Trigger {"showToast": {"type": ..., "message": ...}} or dispatch a showToast event.');
     opts = opts || {};
-    document.dispatchEvent(new CustomEvent('showToast', {
-      detail: { type: opts.type || 'info', message: opts.message || opts.title || '' }
-    }));
+    toast(opts.type || 'info', opts.message || opts.title || '');
   }
 
-  function convertFlashMessages(root) {
-    var scope = root && root.querySelectorAll ? root : document;
-    scope.querySelectorAll('.flash-messages .alert').forEach(function (el) {
+  function convertFlashMessages() {
+    document.querySelectorAll('.flash-messages .alert').forEach(function (el) {
       if (el.dataset.toastConverted === '1') return;
       el.dataset.toastConverted = '1';
       warnDeprecated('.flash-messages', 'Render flashes with shared-ui toast/with-toast.');
@@ -845,9 +847,7 @@ document.addEventListener('alpine:init', function () {
       if (el.classList.contains('alert-success')) type = 'success';
       else if (el.classList.contains('alert-error') || el.classList.contains('alert-danger')) type = 'error';
       else if (el.classList.contains('alert-warning')) type = 'warning';
-      document.dispatchEvent(new CustomEvent('showToast', {
-        detail: { type: type, message: el.textContent.trim() }
-      }));
+      toast(type, el.textContent.trim());
       el.style.display = 'none';
     });
   }
@@ -915,9 +915,8 @@ document.addEventListener('alpine:init', function () {
     initClickableRows();
 
     convertFlashMessages();
-    document.addEventListener('htmx:afterSwap', function (event) {
-      convertFlashMessages(event.detail && event.detail.target);
-    });
+    // The whole page: an outerHTML swap's target is the element it replaced
+    document.addEventListener('htmx:afterSwap', function () { convertFlashMessages(); });
 
     // Expose public API
     window.AdminUX = {
