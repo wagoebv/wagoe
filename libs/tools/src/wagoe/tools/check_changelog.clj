@@ -220,13 +220,13 @@
 (defn- section-breaks [changelog heading] (count (breaking-entries changelog heading)))
 
 (defn- unexcused-breaks
-  "`[Unreleased]` breaking entries whose first code span the stability page's
+  "The breaking `entries` whose first code span the stability page's
    `Removed in 1.x` section does not name. That section is where a 1.x
    removal is declared an exception to the major-version rule."
-  [changelog stability]
+  [entries stability]
   (let [excused (str (second (re-find #"(?s)=== Removed in 1\.x\s*\n(.*?)(?=\n==|\z)" stability)))]
     (remove #(some->> (re-find #"`[^`]+`" %) (str/includes? excused))
-            (breaking-entries changelog "Unreleased"))))
+            entries)))
 
 (defn- listed-items
   "How many `**` items the paragraph for `version` lists."
@@ -241,8 +241,8 @@
    changelog. Before 1.0.0: the next candidate's count and listed items against
    the `[Unreleased]` `### Breaking` entries. At 1.0.0: the `1.0.0` paragraph
    against the `[1.0.0]` section, and no breaking entry in `[Unreleased]` the
-   page's `Removed in 1.x` does not name, since one now needs a major version. Always: the running totals against the
-   per-release counts. The page names no tickets, so counts are what can be
+   page's `Removed in 1.x` does not name, since one now needs a major version.
+   Always: the running totals against the per-release counts. The page names no tickets, so counts are what can be
    held; which item is which is a reviewer's job (BOU-579)."
   [changelog stability]
   (let [version (second (re-find #"Current version\s*\n\|\s*`(1\.\d+\.\d+(?:-rc-\d+)?)`" stability))
@@ -251,8 +251,9 @@
         counted (for [[_ word v] (re-seq #"(?m)^\* \*(\S+)[^*\n]*? in `(1\.0\.0(?:-rc-\d+)?)`:\*" stability)]
                   [v (number word)])
         rcs     (into {} counted)
-        breaks  (section-breaks changelog "Unreleased")
-        unexcused (when final? (count (unexcused-breaks changelog stability)))
+        entries (breaking-entries changelog "Unreleased")
+        breaks  (count entries)
+        unexcused (when final? (count (unexcused-breaks entries stability)))
         nxt     (some-> current inc)
         nxt-v   (some->> nxt (str "1.0.0-rc-"))
         items   (when nxt-v (listed-items stability nxt-v))
