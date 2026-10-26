@@ -32,11 +32,6 @@
                                      (re-matches #"v2\.(\d{1,12})\.([0-9a-f]{64})" token))]
     {:expires-at (parse-long expires-at) :mac mac}))
 
-(defn live?
-  "Whether a token expiring at `expires-at` still verifies at `now`, both epoch seconds."
-  [expires-at now]
-  (< now expires-at))
-
 (defn callback-data
   "The keys a push carries for its callback, as the device posts them back."
   [notification-id callback-id callback-token]

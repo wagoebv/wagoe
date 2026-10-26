@@ -238,6 +238,6 @@
 (deftest ^:integration app-data-keys-the-callback-replaces-are-named
   (registry/register-push! {:id :shadowed :title "Hi" :body "There" :channels #{:fcm}})
   (log-test/with-log
-    (jobs/handle-broadcast {:device-store (p/->DeviceTokenStore pt/*db*)}
+    (jobs/handle-broadcast {:device-store (p/->DeviceTokenStore pt/*db*) :callback-secret "s"}
                            {:notification-id :shadowed :data {:callback-token "mine"} :platform :fcm})
     (is (log-test/logged? 'wagoe.push.shell.jobs :warn #"callback-token"))))

@@ -9,10 +9,10 @@
             [clojure.tools.logging :as log]))
 
 (defn- render
-  "The notification as rendered for `locale`. A data key the callback needs is
-   the callback's: the app's value would never reach the device."
-  [push-def notification-id data locale]
-  (when-let [shadowed (seq (callback/shadowed-keys data))]
+  "The notification as rendered for `locale`. With a secret, a data key the
+   callback needs is the callback's: the app's value never reaches the device."
+  [push-def notification-id data locale callback-secret]
+  (when-let [shadowed (and (seq callback-secret) (seq (callback/shadowed-keys data)))]
     (log/warnf "Push %s: data keys %s are replaced by the callback's; rename them"
                notification-id (vec shadowed)))
   (notif/build-notification push-def data (or locale :en)))
@@ -49,7 +49,7 @@
                       {:type :not-found :notification-id notification-id})))
     (let [devices   (ports/get-user-devices device-store user-id)
           active    (filter :active? devices)
-          rendered  (render push-def notification-id data locale)
+          rendered  (render push-def notification-id data locale callback-secret)
           grouped   (delivery/group-devices-by-platform active)]
       (log/infof "Push: delivering %s to %d devices for user %s"
                  notification-id (count active) user-id)
@@ -69,10 +69,10 @@
 
 (defn handle-broadcast
   "Job handler for :push/broadcast. Paginated send to all devices on platform."
-  [{:keys [device-store] :as deps}
+  [{:keys [device-store callback-secret] :as deps}
    {:keys [notification-id data platform _app-id locale]}]
   (let [push-def  (registry/get-push notification-id)
-        rendered  (render push-def notification-id data locale)]
+        rendered  (render push-def notification-id data locale callback-secret)]
     (log/infof "Push: broadcasting %s to platform %s" notification-id platform)
     (loop [after-id nil]
       (let [devices (ports/get-devices-by-platform device-store platform

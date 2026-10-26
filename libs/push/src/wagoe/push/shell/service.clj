@@ -65,7 +65,7 @@
   [callback-secret {:keys [provider-message-id callback-token] :as payload} now]
   (when (seq callback-secret)
     (if-let [{:keys [expires-at mac]} (callback/parse-token callback-token)]
-      (when (and (callback/live? expires-at now)
+      (when (and (< now expires-at)
                  (same? mac (bound-mac callback-secret
                                        (callback/signed-message
                                         (assoc payload
@@ -74,6 +74,16 @@
         :bound)
       (when (legacy-token-valid? callback-secret provider-message-id callback-token)
         :legacy))))
+
+(defn- attach-callback
+  "`notification` with a minted id and `(mint-token id)` in its data; unchanged
+   without a secret, as no token could verify."
+  [notification notification-id callback-secret mint-token]
+  (if (empty? callback-secret)
+    notification
+    (let [callback-id (str (random-uuid))]
+      (update notification :data merge
+              (callback/callback-data notification-id callback-id (mint-token callback-id))))))
 
 (defn with-callback
   "The notification with what `device` posts back to `/push/callback`: a
@@ -84,25 +94,16 @@
    Without `device`, deprecated: one id and a token over it alone, which goes
    in 2.0."
   ([notification notification-id callback-secret]
-   (if (empty? callback-secret)
-     notification
-     (let [message-id (str (random-uuid))]
-       (update notification :data merge
-               (callback/callback-data notification-id message-id
-                                       (hmac-sha256 callback-secret message-id))))))
+   (attach-callback notification notification-id callback-secret
+                    #(hmac-sha256 callback-secret %)))
   ([notification notification-id callback-secret {:keys [token platform]}]
-   (if (empty? callback-secret)
-     notification
-     (let [callback-id (str (random-uuid))
-           expires-at  (+ (.getEpochSecond (Instant/now)) callback/token-ttl-seconds)]
-       (update notification :data merge
-               (callback/callback-data
-                notification-id callback-id
-                (callback-token callback-secret {:callback-id     callback-id
-                                                 :notification-id notification-id
-                                                 :device-token    token
-                                                 :platform        platform
-                                                 :expires-at      expires-at})))))))
+   (let [expires-at (+ (.getEpochSecond (Instant/now)) callback/token-ttl-seconds)]
+     (attach-callback notification notification-id callback-secret
+                      #(callback-token callback-secret {:callback-id     %
+                                                        :notification-id notification-id
+                                                        :device-token    token
+                                                        :platform        platform
+                                                        :expires-at      expires-at})))))
 
 (defn deliver-to-platform!
   "Internal: send notification to devices on a specific platform.
@@ -125,20 +126,14 @@
   "Internal: each `[device-token notification]` sent on `platform`, concurrently
    where the provider implements `IPerDeviceSend`. Per-token results, in order."
   [{:keys [fcm-provider apns-provider]} platform sends]
-  (let [provider (case platform :fcm fcm-provider :apns apns-provider)
-        payloads (mapv (fn [[token notification]]
-                         [token (case platform
-                                  :fcm  (delivery/build-fcm-payload notification token)
-                                  :apns (delivery/build-apns-payload notification))])
-                       sends)]
-    (cond
-      (empty? payloads)                          []
-      (satisfies? ports/IPerDeviceSend provider) (ports/send-each! provider payloads)
-      :else (mapv (fn [[token payload]]
-                    (case platform
-                      :fcm  (ports/fcm-send! provider payload)
-                      :apns (ports/apns-send! provider payload token)))
-                  payloads))))
+  (let [[provider build send-one]
+        (case platform
+          :fcm  [fcm-provider #(delivery/build-fcm-payload %2 %1) #(ports/fcm-send! fcm-provider %2)]
+          :apns [apns-provider #(delivery/build-apns-payload %2) #(ports/apns-send! apns-provider %2 %1)])
+        payloads (mapv (fn [[token notification]] [token (build token notification)]) sends)]
+    (if (satisfies? ports/IPerDeviceSend provider)
+      (ports/send-each! provider payloads)
+      (mapv (fn [[token payload]] (send-one token payload)) payloads))))
 
 (defn- push-job
   "A complete job map for the queue.
