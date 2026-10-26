@@ -203,9 +203,12 @@
     (page/navigate pg (admin/admin-url "/users"))
     (page/wait-for-load-state pg)
     (testing "AdminUX.showToast puts a toast in the region"
-      (page/evaluate pg "window.AdminUX.showToast({type: 'success', title: 'Saved', message: 'Via the old API'})")
-      (page/wait-for-selector pg "#toasts .alert.alert-success" {:timeout 10000.0})
-      (is (str/includes? (loc/text-content (page/locator pg "#toasts .alert.alert-success")) "Via the old API")))
+      (is (true? (page/evaluate pg "window.AdminUX.showToast({type: 'success', message: 'Via the old API', duration: 0}).isConnected"))
+          "returns the toast, as it did")
+      (is (str/includes? (loc/text-content (page/locator pg "#toasts .alert.alert-success")) "Via the old API"))
+      ;; Past the default 5 s
+      (Thread/sleep 6000)
+      (is (= 1 (loc/count-elements (page/locator pg "#toasts .alert.alert-success"))) "duration 0 stays"))
     (testing "a .flash-messages banner a swap brings in becomes a toast"
       (page/evaluate pg (str "(() => { const d = document.createElement('div');"
                              " d.innerHTML = '<div class=\"flash-messages\"><div class=\"alert alert-warning\">Old flash</div></div>';"

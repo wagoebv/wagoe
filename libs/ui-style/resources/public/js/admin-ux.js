@@ -835,7 +835,14 @@ document.addEventListener('alpine:init', function () {
     warnDeprecated('AdminUX.showToast',
       'Send HX-Trigger {"showToast": {"type": ..., "message": ...}} or dispatch a showToast event.');
     opts = opts || {};
+    var region = document.getElementById('toasts');
+    var before = region && region.lastElementChild;
     toast(opts.type || 'info', opts.message || opts.title || '');
+    var el = region && region.lastElementChild;
+    if (!el || el === before) return undefined;
+    // The old API's duration, 0 to stay; set before Alpine initialises the toast
+    if (typeof opts.duration === 'number') el.setAttribute('x-data', 'toast(' + opts.duration + ')');
+    return el;
   }
 
   function convertFlashMessages() {
