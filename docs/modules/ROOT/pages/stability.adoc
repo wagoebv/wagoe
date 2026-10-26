@@ -248,7 +248,8 @@ entries, the totals to the counts above, and `[Unreleased]` to none.
 === From 1.0.0
 
 * *Semantic Versioning*, applied to the public surface defined above.
-* A breaking change requires a major version.
+* A breaking change requires a major version. The exceptions are in
+  <<_removed_in_1_x,Removed in 1.x>>.
 * Anything removed in a major version must have been deprecated in a prior
   minor version, and must have been deprecated for at least *one minor release
   and 90 days*, whichever is longer.
@@ -371,8 +372,9 @@ major version; see xref:libraries:cli.adoc#_upgrade_past_deprecations[the CLI].
 === Deferred to 2.0
 
 Everything currently deprecated, and what replaces it. None of these is removed
-in a `1.x` release; the exceptions are <<_removed_in_1_x,below>>. What `2.0` and the `1.x` releases before it will build is on
-the xref:roadmap.adoc#_after_1_0_0[roadmap].
+in a `1.x` release; the exceptions are <<_removed_in_1_x,below>>. What `2.0`
+and the `1.x` releases before it will build is on the
+xref:roadmap.adoc#_after_1_0_0[roadmap].
 
 [cols="2,3",options="header"]
 |===

@@ -35,6 +35,8 @@ for what is public API, what is internal, and how deprecations are announced.
   item a `:description`.
 - **`window.AdminUX.showToast` and the `.flash-messages` banner are removed** (BOU-755): send
   `HX-Trigger: {"showToast": {"type": ..., "message": ...}}` or a toast out of band instead; `title` is no longer shown.
+- **The `:base` CSS bundle is removed: pico, open-props, `tokens-openprops.css`, `base-css`** (BOU-458): `(bundle :base)` serves `:pilot` and warns.
+  Use `pilot-css` and restyle pages that relied on pico with daisy classes.
 
 ### Added
 
@@ -311,11 +313,6 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Admin `render-field-value` and `render-inline-edit-cell`** (BOU-799): no page renders through them. Use
   `cells/cell` and `field-cell`; they go in 2.0.
-
-### Removed
-
-- **The `:base` CSS bundle: pico, open-props, `tokens-openprops.css`, `base-css`** (BOU-458): `(bundle :base)` serves `:pilot` and warns.
-  Use `pilot-css` and restyle pages that relied on pico with daisy classes.
 
 ### Fixed
 

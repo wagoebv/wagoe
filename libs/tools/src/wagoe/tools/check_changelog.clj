@@ -217,16 +217,17 @@
         breaking (second (re-find #"(?s)### Breaking\s*\n(.*?)(?=\n### |\z)" (str section)))]
     (re-seq #"(?m)^- .*" (str breaking))))
 
-(defn- section-breaks [changelog heading] (count (breaking-entries changelog heading)))
+(defn- first-code-span [s] (re-find #"`[^`]+`" s))
 
 (defn- unexcused-breaks
-  "The breaking `entries` whose first code span the stability page's
-   `Removed in 1.x` section does not name. That section is where a 1.x
-   removal is declared an exception to the major-version rule."
+  "The breaking `entries` whose first code span is not the first code span of a
+   paragraph in the stability page's `Removed in 1.x`, where a 1.x removal is
+   declared an exception to the major-version rule. A span the section only
+   mentions, such as a replacement, excuses nothing."
   [entries stability]
-  (let [excused (str (second (re-find #"(?s)=== Removed in 1\.x\s*\n(.*?)(?=\n==|\z)" stability)))]
-    (remove #(some->> (re-find #"`[^`]+`" %) (str/includes? excused))
-            entries)))
+  (let [section (str (second (re-find #"(?s)=== Removed in 1\.x\s*\n(.*?)(?=\n==|\z)" stability)))
+        excused (set (keep first-code-span (str/split section #"\n\s*\n")))]
+    (remove (comp excused first-code-span) entries)))
 
 (defn- listed-items
   "How many `**` items the paragraph for `version` lists."
@@ -242,8 +243,9 @@
    the `[Unreleased]` `### Breaking` entries. At 1.0.0: the `1.0.0` paragraph
    against the `[1.0.0]` section, and no breaking entry in `[Unreleased]` the
    page's `Removed in 1.x` does not name, since one now needs a major version.
-   Always: the running totals against the per-release counts. The page names no tickets, so counts are what can be
-   held; which item is which is a reviewer's job (BOU-579)."
+   Always: the running totals against the per-release counts. The page names no
+   tickets, so counts are what can be held; which item is which is a reviewer's
+   job (BOU-579)."
   [changelog stability]
   (let [version (second (re-find #"Current version\s*\n\|\s*`(1\.\d+\.\d+(?:-rc-\d+)?)`" stability))
         final?  (some? (re-matches #"1\.\d+\.\d+" (str version)))
@@ -257,7 +259,7 @@
         nxt     (some-> current inc)
         nxt-v   (some->> nxt (str "1.0.0-rc-"))
         items   (when nxt-v (listed-items stability nxt-v))
-        shipped (when final? (section-breaks changelog "1.0.0"))
+        shipped (when final? (count (breaking-entries changelog "1.0.0")))
         [_ additions total] (re-find #"(\S+)\s+additions\s+to\s+the\s+three\s+frozen\s+at\s+`rc-1`,\s+so\s+the\s+list\s+is\s+(\S+?)\." stability)
         sum     (reduce + (keep second counted))]
     (cond-> []
