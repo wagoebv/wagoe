@@ -7,11 +7,13 @@
             [reitit.core :as r]
             [reitit.ring.middleware.multipart :as multipart]
             [wagoe.observability.errors.ports :as error-ports]
+            [wagoe.observability.errors.shell.adapters.sentry :as sentry-adapter]
             [wagoe.observability.logging.ports :as log-ports]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.platform.core.http.pages :as pages]
             [ring.util.codec :as codec]
-            [ring.util.request :as ring-request]))
+            [ring.util.request :as ring-request]
+            [sentry-clj.core :as sentry]))
 
 ;; =============================================================================
 ;; Test Helpers
@@ -907,6 +909,57 @@
                     {:system {:error-reporter reporter}})]
       (handler {:request-method :get :uri "/x" :headers {}})
       (is (= reported @captured) (str type)))))
+
+(deftest ^:unit a-report-from-route-middleware-carries-nothing-of-the-request-before
+  ;; Route middleware throws before the interceptor stack resets (BOU-843).
+  (let [sent (atom [])]
+    (with-redefs [sentry/init!      (fn [& _] nil)
+                  sentry/send-event #(swap! sent conj %)]
+      (let [reporter (sentry-adapter/create-sentry-error-reporting-component
+                      {:dsn "https://key@sentry.invalid/1"})
+            handler  (reitit/compile-routes
+                      [["/a" {:get {:handler (fn [_]
+                                               (error-ports/set-user! reporter {:id "user-a"})
+                                               {:status 200 :body {}})}}]
+                       ["/x" {:get {:handler    (fn [_] {:status 200 :body {}})
+                                    :middleware [(fn [_] (fn [_] (throw (ex-info "nope" {:type :configuration-error}))))]}}]]
+                      {:system {:error-reporter reporter}})]
+        (handler {:request-method :get :uri "/a" :headers {}})
+        (handler {:request-method :get :uri "/x" :headers {}})))
+    (is (= 1 (count @sent)))
+    (is (not (str/includes? (pr-str (dissoc (first @sent) :throwable)) "user-a")))))
+
+(deftest ^:unit a-report-keeps-what-route-middleware-added
+  ;; The interceptor stack must not reset again inside route middleware (BOU-843).
+  (let [sent (atom [])]
+    (with-redefs [sentry/init!      (fn [& _] nil)
+                  sentry/send-event #(swap! sent conj %)]
+      (let [reporter (sentry-adapter/create-sentry-error-reporting-component
+                      {:dsn "https://key@sentry.invalid/1"})
+            crumb    (fn [handler]
+                       (fn [request]
+                         (error-ports/add-breadcrumb! reporter {:message "from-middleware"})
+                         (handler request)))
+            handler  (reitit/compile-routes
+                      [["/x" {:get {:handler    (fn [_] (throw (RuntimeException. "boom")))
+                                    :middleware [crumb]}}]]
+                      {:system {:error-reporter reporter}})]
+        (handler {:request-method :get :uri "/x" :headers {}})))
+    (is (= 1 (count @sent)))
+    (is (some #{"from-middleware"} (map :message (:breadcrumbs (first @sent)))))))
+
+(deftest ^:unit a-request-leaves-nothing-on-its-thread
+  ;; The idle thread kept the last request's user until the next one (BOU-848).
+  (with-redefs [sentry/init! (fn [& _] nil)]
+    (let [reporter (sentry-adapter/create-sentry-error-reporting-component
+                    {:dsn "https://key@sentry.invalid/1"})
+          handler  (reitit/compile-routes
+                    [["/a" {:get {:handler (fn [_]
+                                             (error-ports/set-user! reporter {:id "user-a"})
+                                             {:status 200 :body {}})}}]]
+                    {:system {:error-reporter reporter}})]
+      (handler {:request-method :get :uri "/a" :headers {}})
+      (is (empty? (error-ports/current-context reporter))))))
 
 ;; =============================================================================
 ;; Static asset caching (BOU-389)

@@ -37,10 +37,10 @@
 
    Guarded individually, for the same reason sockets are: a subscriber that
    throws must not stop the ones after it, and must not stop the sockets."
-  [handlers message]
+  [run handlers message]
   (reduce (fn [n h]
             (try
-              (h message)
+              (run #(h message))
               (catch Exception e
                 (log/warn e "realtime service subscriber threw")))
             (inc n))
@@ -54,8 +54,11 @@
 
    The count includes service handlers. A topic with three handlers and no open
    sockets returns 3, not 0 — `publish-to-topic` returning zero while three
-   subscribers ran would describe something other than what happened."
-  [registry pubsub-manager]
+   subscribers ran would describe something other than what happened.
+
+   `run`, (fn [f]), runs each handler; the service gives each its own clean
+   error context with it (BOU-848)."
+  [registry pubsub-manager & [run]]
   (fn [{:keys [message] :as envelope}]
     (let [adapters (adapters-for registry pubsub-manager envelope)
           sockets  (reduce
@@ -75,4 +78,4 @@
                     0
                     adapters)]
       (+ sockets
-         (deliver-to-handlers! (service-handlers-for pubsub-manager envelope) message)))))
+         (deliver-to-handlers! (or run (fn [f] (f))) (service-handlers-for pubsub-manager envelope) message)))))

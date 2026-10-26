@@ -43,20 +43,20 @@ Add to your `resources/conf/{env}/config.edn`:
 {:provider   :openstreetmap
  :user-agent "MyApp/1.0 (contact@example.com)"
  :cache-ttl  86400
- :db         #ig/ref :wagoe/db}
+ :db-ctx     #ig/ref :wagoe/db-context}
 
 ;; PDOK Locatieserver (Dutch addresses from postcode + house number, no key)
 :wagoe/geo-service
 {:provider  :pdok
  :cache-ttl 86400
- :db        #ig/ref :wagoe/db}
+ :db-ctx    #ig/ref :wagoe/db-context}
 
 ;; Google Maps with DB cache
 :wagoe/geo-service
 {:provider  :google
  :api-key   #env WAG_GEO_API_KEY
  :cache-ttl 86400
- :db        #ig/ref :wagoe/db}
+ :db-ctx    #ig/ref :wagoe/db-context}
 
 ;; Fallback chain: try OSM first, fall back to Google
 :wagoe/geo-service
@@ -64,7 +64,7 @@ Add to your `resources/conf/{env}/config.edn`:
  :api-key    #env WAG_GEO_API_KEY
  :cache-ttl  86400
  :rate-limit 1
- :db         #ig/ref :wagoe/db}
+ :db-ctx     #ig/ref :wagoe/db-context}
 ```
 
 Require the wiring namespace in your system config loader:

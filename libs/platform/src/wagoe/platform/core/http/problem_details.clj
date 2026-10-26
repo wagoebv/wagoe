@@ -30,7 +30,13 @@
    :rate-limit-exceeded       [429 "Too Many Requests"]
    :business-rule-violation   [400 "Business Rule Violation"]
    :deletion-not-allowed      [403 "Deletion Not Allowed"]
-   :hard-deletion-not-allowed [403 "Hard Deletion Not Allowed"]})
+   :hard-deletion-not-allowed [403 "Hard Deletion Not Allowed"]
+   ;; The user service's refusals. Unmapped, the service pipeline took each
+   ;; for a 500 and reported it (BOU-840).
+   :session-invalid           [401 "Unauthorized"]
+   :invalid-current-password  [400 "Invalid Current Password"]
+   :password-policy-violation [400 "Password Policy Violation"]
+   :account-locked            [429 "Too Many Requests"]})
 
 ;; =============================================================================
 ;; Error Body Construction

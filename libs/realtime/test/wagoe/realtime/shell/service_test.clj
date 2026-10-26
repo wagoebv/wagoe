@@ -10,7 +10,10 @@
             [wagoe.realtime.shell.adapters.websocket-adapter :as ws]
             [wagoe.realtime.shell.adapters.jwt-adapter :as jwt]
             [wagoe.realtime.shell.pubsub-manager :as pubsub-mgr]
-            [wagoe.realtime.ports :as ports]))
+            [wagoe.realtime.ports :as ports]
+            [wagoe.observability.errors.ports :as error-ports]
+            [wagoe.observability.errors.shell.adapters.sentry :as sentry-adapter]
+            [sentry-clj.core :as sentry]))
 
 ;; =============================================================================
 ;; Test Fixtures
@@ -436,3 +439,30 @@
         (testing "timestamp added to published message"
           (let [sent-msg (first @(:sent-messages ws-adapter))]
             (is (some? (:timestamp sent-msg)))))))))
+
+(deftest ^:integration a-service-handler-reports-nothing-from-the-one-before-it
+  ;; The in-memory bus delivers on the publisher's thread, so the publisher's
+  ;; own context must come back after (BOU-848).
+  (let [sent (atom [])]
+    (with-redefs [sentry/init!      (fn [& _] nil)
+                  sentry/send-event #(swap! sent conj %)]
+      (let [reporter (sentry-adapter/create-sentry-error-reporting-component
+                      {:dsn "https://key@sentry.invalid/1"})
+            mgr      (pubsub-mgr/create-pubsub-manager)
+            svc      (service/create-realtime-service
+                      (registry/create-in-memory-registry)
+                      (jwt/create-test-jwt-adapter {:expected-token "t"})
+                      :pubsub-manager mgr
+                      :error-reporter reporter)]
+        (ports/subscribe-service mgr "a" (fn [_] (error-ports/set-user! reporter {:id "user-a"})))
+        (ports/subscribe-service mgr "b" (fn [_] (error-ports/capture-message reporter "from b" :error)))
+        (error-ports/set-tags! reporter {:caller "publisher"})
+        (ports/publish-to-topic svc "a" {:type :ping})
+        (ports/publish-to-topic svc "b" {:type :ping})
+        (testing "the publisher gets its own context back"
+          (is (= {:caller "publisher"} (:tags (error-ports/current-context reporter)))))
+        (error-ports/reset-context! reporter)))
+    (is (= 1 (count @sent)))
+    (let [text (pr-str (first @sent))]
+      (doseq [a ["user-a" "publisher"]]
+        (is (not (.contains text a)) a)))))

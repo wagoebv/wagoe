@@ -13,6 +13,7 @@
    the adapters interchangeable."
   (:require [wagoe.events.core.event :as event]
             [wagoe.events.ports :as ports]
+            [wagoe.observability.errors.ports :as errors]
             [clojure.tools.logging :as log])
   (:import (java.util.concurrent Executors ExecutorService TimeUnit)))
 
@@ -23,9 +24,10 @@
   1000)
 
 (defn- deliver-to
-  [handler event]
+  [error-reporter handler event]
   (try
-    (handler event)
+    ;; The delivery thread holds the previous handler's error context (BOU-848).
+    (errors/with-clean-context error-reporter #(handler event))
     (catch Throwable t
       ;; Logged and swallowed. A throwing handler must not take down the
       ;; delivery thread — the next event, and every other subscriber, would
@@ -34,7 +36,7 @@
 
 (defrecord InMemoryEventBus [state ^ExecutorService executor history-limit]
   ports/IEventPublisher
-  (publish! [_ topic event]
+  (publish! [this topic event]
     (if-let [problem (or (event/topic-problem topic) (event/event-problem event))]
       {:error {:type :events/invalid :message problem}}
       (let [topic (keyword topic)]
@@ -45,7 +47,7 @@
                       vec)))
         (doseq [[_ {:keys [topic' handler]}] (:subscriptions @state)
                 :when (= topic' topic)]
-          (.submit executor ^Runnable (fn [] (deliver-to handler event))))
+          (.submit executor ^Runnable (fn [] (deliver-to (:error-reporter this) handler event))))
         (:id event))))
 
   ports/IEventSubscriber
@@ -74,11 +76,12 @@
 (defn create-in-memory-bus
   "An event bus confined to this process.
 
-   `opts` may carry `:history-limit` (default 1000)."
-  [& [{:keys [history-limit]}]]
-  (->InMemoryEventBus (atom {:history {} :subscriptions {}})
-                      (Executors/newSingleThreadExecutor)
-                      (or history-limit default-history-limit)))
+   `opts` may carry `:history-limit` (default 1000) and `:error-reporter`."
+  [& [{:keys [history-limit error-reporter]}]]
+  (cond-> (->InMemoryEventBus (atom {:history {} :subscriptions {}})
+                              (Executors/newSingleThreadExecutor)
+                              (or history-limit default-history-limit))
+    error-reporter (assoc :error-reporter error-reporter)))
 
 (defn drain!
   "Wait until every accepted event has reached its subscribers, then return

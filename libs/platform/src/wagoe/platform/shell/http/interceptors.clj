@@ -46,6 +46,7 @@
             [wagoe.observability.metrics.ports :as metrics-ports]
             [wagoe.observability.tracing.ports :as tracing-ports]
             [wagoe.observability.errors.core :as error-reporting]
+            [wagoe.observability.errors.ports :as error-ports]
             [wagoe.observability.core.sql-redaction :as redaction]
             [wagoe.platform.core.csrf :as csrf]
             [wagoe.platform.core.http.access :as access]
@@ -1166,25 +1167,7 @@
 ;; HTTP Interceptor Runner
 ;; ==============================================================================
 
-(defn run-http-interceptors
-  "Runs an HTTP interceptor pipeline around a Ring handler.
-   
-   Args:
-     handler: Ring handler function (request → response)
-     interceptors: Vector of interceptor maps
-     request: Ring request map
-     system: Map containing observability services
-   
-   Returns:
-     Ring response map
-   
-   Pipeline execution:
-   1. Create HTTP context from request
-   2. Run :enter phase on all interceptors
-   3. If successful, call handler and set :response in context
-   4. Run :leave phase on all interceptors (reverse order)
-   5. If exception occurs, run :error phase to produce safe response
-   6. Extract and return final Ring response"
+(defn- run-pipeline-around
   [handler interceptors request system]
   (let [;; Create initial HTTP context
         initial-ctx (create-http-context request system)
@@ -1209,6 +1192,36 @@
 
     ;; Extract and return the Ring response
     (extract-response final-ctx)))
+
+(defn run-http-interceptors
+  "Runs an HTTP interceptor pipeline around a Ring handler.
+   
+   Args:
+     handler: Ring handler function (request → response)
+     interceptors: Vector of interceptor maps
+     request: Ring request map
+     system: Map containing observability services
+   
+   Returns:
+     Ring response map
+   
+   Pipeline execution:
+   1. Create HTTP context from request
+   2. Run :enter phase on all interceptors
+   3. If successful, call handler and set :response in context
+   4. Run :leave phase on all interceptors (reverse order)
+   5. If exception occurs, run :error phase to produce safe response
+   6. Extract and return final Ring response"
+  [handler interceptors request system]
+  (if-let [reporter (and (not (::error-context-reset request)) (:error-reporter system))]
+    ;; A pooled thread holds the previous request's error context. Scoped here
+    ;; when the router has not already done it (BOU-843, BOU-848). Reset too,
+    ;; for a context that implements only IErrorContextReset.
+    (do (error-ports/reset-context! reporter)
+        (error-ports/with-clean-context
+          reporter
+          #(run-pipeline-around handler interceptors (assoc request ::error-context-reset true) system)))
+    (run-pipeline-around handler interceptors request system)))
 
 ;; ==============================================================================
 ;; Ring Middleware Wrapper

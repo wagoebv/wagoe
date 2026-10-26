@@ -15,6 +15,7 @@
             [wagoe.jobs.shell.outcomes :as outcomes]
             [wagoe.jobs.shell.adapters.redis :as redis-adapter]
             [wagoe.observability.core.sql-redaction :as redaction]
+            [wagoe.observability.errors.ports :as errors]
             ;; Loaded for its effect: `log/error e` below is written redacted.
             [wagoe.observability.logging.shell.redacting-factory]
             [wagoe.observability.tracing.ports :as tracing-ports]
@@ -368,12 +369,15 @@
                   (ports/ack-job! queue (:queue-name worker-state) (:id worker-state) job-id)
                   (reset! (:current-job worker-state) nil)
                   (reset! (:last-heartbeat worker-state) (Instant/now))))))]
-      ;; Emit a span per job execution when a tracer is configured (no-op safe).
-      (if tracer
-        (tracing-ports/with-span* tracer (str "job " job-type)
-          {:job.id (str job-id) :job.type (str job-type)}
-          (fn [_span] (run-job!)))
-        (run-job!))
+      ;; A worker thread holds the previous job's error context (BOU-848).
+      (errors/with-clean-context
+       (:error-reporter config)
+       ;; Emit a span per job execution when a tracer is configured (no-op safe).
+       #(if tracer
+          (tracing-ports/with-span* tracer (str "job " job-type)
+            {:job.id (str job-id) :job.type (str job-type)}
+            (fn [_span] (run-job!)))
+          (run-job!)))
       true)))
 
 ;; =============================================================================
@@ -512,7 +516,8 @@
     (let [_job-id (:id job)
           job-type (:job-type job)]
       (if-let [handler-fn (ports/get-handler registry job-type)]
-        (run-handler config handler-fn job)
+        (errors/with-clean-context (:error-reporter config)
+                                   #(run-handler config handler-fn job))
         {:success? false
          :error {:message (str "No handler registered for job type: " job-type)
                  :type :no-handler}})))

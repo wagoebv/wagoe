@@ -2,7 +2,10 @@
   (:require [wagoe.events.shell.adapters.in-memory :as in-memory]
             [wagoe.events.shell.publisher :as publisher]
             [wagoe.events.ports :as ports]
-            [clojure.test :refer [deftest is testing]]))
+            [wagoe.observability.errors.ports :as error-ports]
+            [wagoe.observability.errors.shell.adapters.sentry :as sentry-adapter]
+            [clojure.test :refer [deftest is testing]]
+            [sentry-clj.core :as sentry]))
 
 (defn- wait-for
   "Poll `f` until it is truthy or the timeout passes.
@@ -152,3 +155,26 @@
         (is (= 3 (count kept)))
         (is (= [7 8 9] (map (comp :n :payload) kept)) "the most recent, not the first"))
       (finally (in-memory/stop! bus)))))
+
+(deftest ^:unit a-handler-reports-nothing-from-the-one-before-it
+  ;; One delivery thread runs both (BOU-848).
+  (let [sent (atom [])]
+    (with-redefs [sentry/init!      (fn [& _] nil)
+                  sentry/send-event #(swap! sent conj %)]
+      (let [reporter (sentry-adapter/create-sentry-error-reporting-component
+                      {:dsn "https://key@sentry.invalid/1"})
+            bus      (in-memory/create-in-memory-bus {:error-reporter reporter})]
+        (try
+          (ports/subscribe! bus :a (fn [_]
+                                     (error-ports/set-user! reporter {:id "user-a"})
+                                     (error-ports/add-breadcrumb! reporter {:message "crumb-a"})))
+          (ports/subscribe! bus :b (fn [_]
+                                     (error-ports/capture-message reporter "from b" :error)))
+          (publisher/emit! bus :a :thing/a :tests {})
+          (publisher/emit! bus :b :thing/b :tests {})
+          (in-memory/drain! bus :b)
+          (finally (in-memory/stop! bus)))))
+    (is (= 1 (count @sent)))
+    (let [text (pr-str (first @sent))]
+      (doseq [a ["user-a" "crumb-a"]]
+        (is (not (.contains text a)) a)))))

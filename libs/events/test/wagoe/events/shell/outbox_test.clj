@@ -162,7 +162,8 @@
     (is (= 500 (get-in c [:wagoe/events-outbox :poll-ms])))
     (is (= (ig/ref :wagoe/events) (get-in c [:wagoe/events-outbox :bus])))
     (is (= (ig/ref :wagoe/db-context) (get-in c [:wagoe/events-outbox :db-ctx])))
-    (is (= (ig/ref :wagoe/events-outbox) (get-in c [:wagoe/events-relay :outbox]))))
+    (is (= (ig/ref :wagoe/events-outbox) (get-in c [:wagoe/events-relay :outbox])))
+    (is (= (ig/ref :wagoe/error-reporting) (get-in c [:wagoe/events :error-reporter]))))
   (testing ":relay? false writes to the outbox without relaying"
     (is (= #{:wagoe/events :wagoe/events-outbox}
            (set (keys (:components (wiring/ig-config {:provider :memory :outbox {:relay? false}} {}))))))))
