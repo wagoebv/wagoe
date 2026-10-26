@@ -878,6 +878,7 @@ document.addEventListener('alpine:init', function () {
     }
     var dialog = el('dialog', 'modal');
     dialog.setAttribute('role', 'alertdialog');
+    dialog.setAttribute('aria-label', opts.title || 'Confirm Delete');
     var box = el('div', 'modal-box');
     box.appendChild(el('h3', 'text-lg font-bold', opts.title || 'Confirm Delete'));
     box.appendChild(el('p', 'py-4',
@@ -893,7 +894,9 @@ document.addEventListener('alpine:init', function () {
     box.appendChild(actions);
     var backdrop = el('form', 'modal-backdrop');
     backdrop.method = 'dialog';
-    backdrop.appendChild(el('button', null, opts.cancelLabel || 'Cancel'));
+    var outside = el('button', null, opts.cancelLabel || 'Cancel');
+    outside.tabIndex = -1;
+    backdrop.appendChild(outside);
     dialog.append(box, backdrop);
     dialog.addEventListener('close', function () {
       dialog.remove();
