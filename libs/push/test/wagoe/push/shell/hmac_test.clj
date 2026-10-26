@@ -110,3 +110,9 @@
     (is (not= (:provider-message-id a) (:provider-message-id b)))
     (is (= :bound (at a "device-a")))
     (is (nil? (at a "device-b")))))
+
+(deftest ^:unit with-callback-replaces-a-string-keyed-app-value
+  ;; Left in, both keys reach the device and either may be the one it reads.
+  (let [data (:data (service/with-callback {:data {"callback-token" "mine" "k" "v"}}
+                      :n secret {:token "device-a" :platform :fcm}))]
+    (is (= #{:notification-id :provider-message-id :callback-token "k"} (set (keys data))))))

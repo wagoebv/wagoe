@@ -81,9 +81,10 @@
   [notification notification-id callback-secret mint-token]
   (if (empty? callback-secret)
     notification
-    (let [callback-id (str (random-uuid))]
-      (update notification :data merge
-              (callback/callback-data notification-id callback-id (mint-token callback-id))))))
+    (let [callback-id (str (random-uuid))
+          data        (callback/callback-data notification-id callback-id (mint-token callback-id))]
+      ;; A string key of the same name would reach the device beside ours.
+      (update notification :data #(merge (apply dissoc % (map name (keys data))) data)))))
 
 (defn with-callback
   "The notification with what `device` posts back to `/push/callback`: a

@@ -170,7 +170,7 @@ Two job types registered under `:wagoe.push/job-handlers`:
 1. Look up push-def from registry (throws `:not-found` if missing)
 2. `get-user-devices` → filter `:active? true` → group by platform
 3. `build-notification` (locale fallback → template render)
-4. `deliver-to-platform!` per platform group
+4. Per platform group: `deliver-each!`, one payload per device, with a `:callback-secret`; `deliver-to-platform!` without
 5. `record-send!` per result; `mark-token-invalid!` when `:token-invalid?` is true
 
 **`:push/broadcast`** args: `{:notification-id kw :data map :platform kw :app-id str :locale kw}`
