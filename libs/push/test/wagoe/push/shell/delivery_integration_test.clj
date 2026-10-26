@@ -6,6 +6,7 @@
             [wagoe.push.shell.adapters.mock :as mock]
             [wagoe.push.shell.persistence :as p]
             [wagoe.push.shell.persistence-test :as pt]
+            [wagoe.push.shell.handlers :as handlers]
             [wagoe.push.shell.jobs :as jobs]
             [wagoe.push.shell.registry :as registry]
             [wagoe.push.ports :as ports]))
@@ -149,3 +150,54 @@
                              {:notification-id :token-log-test :data {} :user-id user-id :locale :en})
       (is (log-test/logged? 'wagoe.push.shell.jobs :info #"marking invalid token fcm-se…"))
       (is (not-any? #(str/includes? (str (:message %)) "TOKENBODY") (log-test/the-log))))))
+
+;; --- callback round trip ---
+
+(deftest ^:integration a-sent-push-carries-the-token-its-callback-needs
+  ;; Nothing called generate-callback-token, so every callback was refused (BOU-844).
+  (registry/register-push! {:id :orders/shipped :title "Hi" :body "There" :channels #{:fcm :apns}})
+  (let [device-store    (p/->DeviceTokenStore pt/*db*)
+        analytics-store (p/->PushAnalyticsStore pt/*db*)
+        user-id         (random-uuid)
+        apns-token      (apply str (repeat 64 "b"))
+        sent            (atom {})
+        fcm             (reify ports/IFCMProvider
+                          (fcm-send! [_ _])
+                          (fcm-validate-token [_ _])
+                          (fcm-send-multicast! [_ payload tokens]
+                            (swap! sent assoc :fcm (get-in payload [:message :data]))
+                            (ports/fcm-send-multicast! (mock/->MockFCMProvider) payload tokens)))
+        apns            (reify ports/IAPNsProvider
+                          (apns-send! [_ _ _])
+                          (apns-send-batch! [_ payload tokens]
+                            (swap! sent assoc :apns (:data payload))
+                            (ports/apns-send-batch! (mock/->MockAPNsProvider) payload tokens)))
+        secret          "test-callback-secret-32chars!!!"]
+    (ports/register-device! device-store user-id {:token "fcm-cb" :platform :fcm :app-id "com.test"})
+    (ports/register-device! device-store user-id {:token apns-token :platform :apns :app-id "com.test"})
+    (jobs/handle-send-push {:device-store    device-store
+                            :analytics-store analytics-store
+                            :fcm-provider    fcm
+                            :apns-provider   apns
+                            :callback-secret secret}
+                           {:notification-id :orders/shipped :data {:k "v"} :user-id user-id :locale :en})
+    ;; FCM data travels as strings, APNs data as JSON: both arrive as strings.
+    (doseq [[platform device-token data] [[:fcm "fcm-cb" (update-keys (:fcm @sent) keyword)]
+                                          [:apns apns-token (:apns @sent)]]]
+      (is (= "v" (:k data)))
+      (is (= 204 (:status (handlers/analytics-callback-handler
+                           {:analytics-store analytics-store :callback-secret secret}
+                           {:body-params {:device-token        device-token
+                                          :provider-message-id (:provider-message-id data)
+                                          :callback-token      (:callback-token data)
+                                          :notification-id     (:notification-id data)
+                                          :event-type          "delivered"
+                                          :platform            (name platform)}})))
+          (name platform)))
+    (is (= {:sent 2 :delivered 2}
+           (select-keys (ports/get-push-stats analytics-store :orders/shipped {}) [:sent :delivered])))))
+
+(deftest ^:unit without-a-secret-a-push-carries-no-callback-token
+  (let [notification {:title "Hi" :data {:k "v"}}]
+    (doseq [secret [nil ""]]
+      (is (= notification (service/with-callback notification :n secret)) (pr-str secret)))))

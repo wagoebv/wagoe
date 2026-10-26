@@ -10,7 +10,7 @@
 (defn handle-send-push
   "Job handler for :push/send. Resolves notification, fans out to devices, delivers."
   [{:keys [device-store fcm-provider apns-provider
-           analytics-store]}
+           analytics-store callback-secret]}
    {:keys [notification-id data user-id locale]}]
   (let [push-def (registry/get-push notification-id)]
     (when-not push-def
@@ -18,7 +18,8 @@
                       {:type :not-found :notification-id notification-id})))
     (let [devices   (ports/get-user-devices device-store user-id)
           active    (filter :active? devices)
-          rendered  (notif/build-notification push-def data (or locale :en))
+          rendered  (-> (notif/build-notification push-def data (or locale :en))
+                        (service/with-callback notification-id callback-secret))
           grouped   (delivery/group-devices-by-platform active)]
       (log/infof "Push: delivering %s to %d devices for user %s"
                  notification-id (count active) user-id)
@@ -41,7 +42,8 @@
   [{:keys [device-store] :as deps}
    {:keys [notification-id data platform _app-id locale]}]
   (let [push-def  (registry/get-push notification-id)
-        rendered  (notif/build-notification push-def data (or locale :en))]
+        rendered  (-> (notif/build-notification push-def data (or locale :en))
+                      (service/with-callback notification-id (:callback-secret deps)))]
     (log/infof "Push: broadcasting %s to platform %s" notification-id platform)
     (loop [after-id nil]
       (let [devices (ports/get-devices-by-platform device-store platform

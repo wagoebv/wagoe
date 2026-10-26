@@ -40,6 +40,9 @@
   [_ {:keys [device-store analytics-store fcm-provider apns-provider
              job-queue queue-name callback-secret]}]
   (log/info "Push: initializing push service" {:queue (or queue-name :default)})
+  (when (str/blank? callback-secret)
+    (log/warn "Push: no :callback-secret in :wagoe/push. Pushes carry no callback token,"
+              "and every POST to /push/callback is refused with 403."))
   (service/->PushService device-store analytics-store fcm-provider apns-provider
                          job-queue (or queue-name :default) callback-secret))
 

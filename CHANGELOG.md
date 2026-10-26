@@ -318,6 +318,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Pushes carry the callback token, so `POST /api/v1/push/callback` records analytics** (BOU-844). Set
+  `:callback-secret` in `:wagoe/push`; push warns at boot without one.
 - **Push serves its device, callback and stats routes under `/api/v1/push`** (BOU-838); they were never mounted.
   Point clients at `/api/v1/push`.
 - **A group grant can no longer hand out a code role** (BOU-836): `add-group-grant` and an import's `:grants` take only

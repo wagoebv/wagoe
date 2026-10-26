@@ -264,7 +264,7 @@
    :version             "1.0.1"
    :category            :optional
    :tier                :stable
-   :config-snippet      "  :wagoe/push\n  {:fcm-credentials  {:project-id       #env WAG_PUSH_FCM_PROJECT_ID\n                     :credentials-path #env WAG_PUSH_FCM_CREDENTIALS_PATH}\n   :apns-credentials {:team-id   #env WAG_PUSH_APNS_TEAM_ID\n                      :key-id    #env WAG_PUSH_APNS_KEY_ID\n                      :key-path  #env WAG_PUSH_APNS_KEY_PATH\n                      :bundle-id #env WAG_PUSH_APNS_BUNDLE_ID}}\n"
+   :config-snippet      "  :wagoe/push\n  {:fcm-credentials  {:project-id       #env WAG_PUSH_FCM_PROJECT_ID\n                     :credentials-path #env WAG_PUSH_FCM_CREDENTIALS_PATH}\n   :apns-credentials {:team-id   #env WAG_PUSH_APNS_TEAM_ID\n                      :key-id    #env WAG_PUSH_APNS_KEY_ID\n                      :key-path  #env WAG_PUSH_APNS_KEY_PATH\n                      :bundle-id #env WAG_PUSH_APNS_BUNDLE_ID}\n   :callback-secret  #env WAG_PUSH_CALLBACK_SECRET}\n"
    :test-config-snippet "  :wagoe/push\n  {:provider :mock}\n"
    :add-command         "wagoe add push"
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/push/AGENTS.md"}
