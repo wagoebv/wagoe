@@ -221,6 +221,12 @@
                         (throw (ex-info (str ":dashboard-extra-cards must be a vector of Hiccup cards, not "
                                              (pr-str extra-cards))
                                         {:type :configuration-error :key :dashboard-extra-cards})))
+        ;; One card not wrapped in a vector is the likely slip. It booted before,
+        ;; so it warns rather than fails.
+        _             (when-not (and (sequential? extra-cards) (every? vector? extra-cards))
+                        (when (some? extra-cards)
+                          (log/warn (str ":dashboard-extra-cards should be a vector of Hiccup cards, not "
+                                         (pr-str extra-cards)))))
         _             (when (seq extra-cards)
                         (log/warn (str "DEPRECATED :dashboard-extra-cards — shown on the admin dashboard until 2.0."
                                        " Give a module's nav item a :description instead.")))

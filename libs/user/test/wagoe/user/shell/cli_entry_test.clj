@@ -11,6 +11,7 @@
    well-formed vector, which is exactly why calling it directly in a test
    missed this."
   (:require [clojure.test :refer [deftest is testing]]
+            [integrant.core :as ig]
             [wagoe.observability.errors.ports :as error-ports]
             [wagoe.observability.logging.ports :as log-ports]
             [wagoe.user.shell.cli-entry :as cli-entry]
@@ -50,7 +51,10 @@
   ;; It was built with no logger, so a CLI command recorded nothing.
   (let [obs (cli-entry/cli-observability {:active {:wagoe/logging {:provider :slf4j}}})
         svc (user-service/create-user-service nil nil nil {} nil obs)]
-    (is (satisfies? log-ports/ILogger (:logger svc)))
-    (is (satisfies? error-ports/IErrorReporter (:error-reporter svc)))
-    (is (some? (:metrics-emitter svc)))
-    (is (= (:logger obs) (:logger (user-service/interceptor-system svc))))))
+    (try
+      (is (satisfies? log-ports/ILogger (:logger svc)))
+      (is (satisfies? error-ports/IErrorReporter (:error-reporter svc)))
+      (is (some? (:metrics-emitter svc)))
+      (is (= (:logger obs) (:logger (user-service/interceptor-system svc))))
+      ;; :slf4j sets Logback's levels; put them back for the tests after this one.
+      (finally (ig/halt-key! :wagoe/logging (:logger obs))))))

@@ -70,10 +70,12 @@
 
 (defn get-device-handler
   [{:keys [device-store]} request]
-  (let [devices (user-devices-with-token device-store
+  (let [app-id  (get-in request [:query-params "app-id"])
+        ;; A repeated ?app-id= arrives as a vector, which SQL cannot compare to.
+        devices (user-devices-with-token device-store
                                          (get-in request [:user :id])
                                          (get-in request [:path-params :token])
-                                         (not-empty (get-in request [:query-params "app-id"])))]
+                                         (when (string? app-id) (not-empty app-id)))]
     (case (count devices)
       0 (error-response 404 "not-found" "Device not found")
       1 (resp/response (first devices))
