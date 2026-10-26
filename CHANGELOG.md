@@ -322,6 +322,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Pushes carry the callback token, so `POST /api/v1/push/callback` records analytics** (BOU-844). Set
+  `:callback-secret` in `:wagoe/push`; push warns at boot without one.
 - **An unversioned `/api/...` redirect points at the requested path, query string kept** (BOU-846); Location was the
   route template, e.g. `/api/v1/push/devices/:token`. Nothing to change.
 - **Push serves its device, callback and stats routes under `/api/v1/push`** (BOU-838); they were never mounted.

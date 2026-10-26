@@ -31,6 +31,19 @@
       (.getBytes ^String (hmac-sha256 callback-secret provider-message-id) StandardCharsets/UTF_8)
       (.getBytes ^String callback-token StandardCharsets/UTF_8)))))
 
+(defn with-callback
+  "The notification with what a device posts back to `/push/callback`. The
+   provider's message id arrives only after the send, so the token signs an id
+   minted here. Unchanged without a secret: no token could verify."
+  [notification notification-id callback-secret]
+  (if (empty? callback-secret)
+    notification
+    (let [message-id (str (random-uuid))]
+      (update notification :data merge
+              {:notification-id     (str (symbol notification-id))
+               :provider-message-id message-id
+               :callback-token      (generate-callback-token callback-secret message-id)}))))
+
 (defn deliver-to-platform!
   "Internal: send notification to devices on a specific platform.
    Returns vector of results, or empty vector if no devices."

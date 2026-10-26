@@ -3,6 +3,8 @@
    writes, ig-config passes, and the init-key destructures (BOU-346 — three
    disagreeing shapes meant configured FCM threw at boot, always)."
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.tools.logging.test :as log-test]
+            [integrant.core :as ig]
             [wagoe.push.shell.module-wiring :as wiring]))
 
 (deftest ^:unit fcm-settings-reach-the-init-key-in-its-own-shape
@@ -64,3 +66,12 @@
                                       (wiring/ig-config {settings-key partial*} {})))]
             (is (= [omitted] (:missing (ex-data ex)))
                 (str "the refusal does not name " omitted))))))))
+
+(deftest ^:unit a-missing-callback-secret-warns-at-boot
+  ;; Without one every callback is refused, and nothing said so (BOU-844).
+  (doseq [secret [nil "" "s3cret"]]
+    (log-test/with-log
+      (ig/init-key :wagoe.push/service {:callback-secret secret})
+      (is (= (not= "s3cret" secret)
+             (log-test/logged? 'wagoe.push.shell.module-wiring :warn #"callback-secret"))
+          (pr-str secret)))))

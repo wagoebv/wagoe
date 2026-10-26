@@ -191,12 +191,12 @@ Built by the `:wagoe.push/route-contribution` Integrant key and contributed as `
 
 ## HMAC Callback Flow
 
-Mobile app receives push payload including `callback-token` (HMAC of the `provider-message-id`). On delivery or open, mobile POSTs to `/api/v1/push/callback`:
+Every push's data carries `notification-id`, `provider-message-id` and `callback-token`; the app posts them back to `/api/v1/push/callback` on delivery or open. The id is minted at send time, because the provider's arrives only after the send. Without `:callback-secret` pushes carry none of the three, every callback gets 403, and the service warns at boot.
 
 ```clojure
-;; Server generates callback-token at send time:
-(service/generate-callback-token callback-secret provider-message-id)
-;; → HmacSHA256(callback-secret, provider-message-id) as hex string
+;; Added to the push data at send time:
+(service/with-callback notification notification-id callback-secret)
+;; → callback-token = HmacSHA256(callback-secret, provider-message-id) as hex string
 
 ;; Callback handler verifies:
 (service/verify-callback-token callback-secret provider-message-id callback-token)
@@ -296,7 +296,7 @@ block, not an Integrant key.
 
 1. **FCM tokens rotate** — always handle `UNREGISTERED` by marking token invalid; adapters set `:token-invalid? true` automatically
 2. **APNs sandbox vs production** — different hosts (`api.sandbox.push.apple.com` vs `api.push.apple.com`), set `:sandbox?` correctly per environment
-3. **Callback HMAC** — mobile apps must send back `callback-token` computed from `provider-message-id` included in push data payload; callback handler returns 403 on mismatch
+3. **Callback HMAC** — mobile apps send back the `provider-message-id` and `callback-token` from the push data; the handler returns 403 on mismatch, and always without `:callback-secret`
 4. **Template variables** — `{{var}}` syntax; missing vars left as-is (not stripped)
 5. **Locale fallback** — requested → `:en` → first available
 6. **`push_send_log` is legacy** — migration creates the table but current persistence shell writes to `push_analytics_events` only
