@@ -197,6 +197,23 @@
       (page/wait-for-selector pg "#toasts .alert" {:state :detached :timeout 10000.0})
       (is (zero? (loc/count-elements (page/locator pg "#toasts .alert")))))))
 
+(deftest ^:integration ^:e2e deprecated-toast-api-and-flash-banner-still-toast
+  (spel/with-testing-page [pg]
+    (admin/login-as-admin! pg fx/*seed*)
+    (page/navigate pg (admin/admin-url "/users"))
+    (page/wait-for-load-state pg)
+    (testing "AdminUX.showToast puts a toast in the region"
+      (page/evaluate pg "window.AdminUX.showToast({type: 'success', title: 'Saved', message: 'Via the old API'})")
+      (page/wait-for-selector pg "#toasts .alert.alert-success" {:timeout 10000.0})
+      (is (str/includes? (loc/text-content (page/locator pg "#toasts .alert.alert-success")) "Via the old API")))
+    (testing "a .flash-messages banner a swap brings in becomes a toast"
+      (page/evaluate pg (str "(() => { const d = document.createElement('div');"
+                             " d.innerHTML = '<div class=\"flash-messages\"><div class=\"alert alert-warning\">Old flash</div></div>';"
+                             " document.body.appendChild(d);"
+                             " document.dispatchEvent(new CustomEvent('htmx:afterSwap', {detail: {target: d}})); })()"))
+      (page/wait-for-selector pg "#toasts .alert.alert-warning" {:timeout 10000.0})
+      (is (str/includes? (loc/text-content (page/locator pg "#toasts .alert.alert-warning")) "Old flash")))))
+
 (deftest ^:integration ^:e2e timezone-is-picked-from-the-zones
   (testing "The timezone is a combobox over the IANA zones; the one picked is saved"
     (spel/with-testing-page [pg]

@@ -817,6 +817,41 @@ document.addEventListener('alpine:init', function () {
     document.dispatchEvent(new CustomEvent('showToast', { detail: { type: 'error', message: message } }));
   }
 
+  // Deprecated until 2.0: the toast API and .flash-messages banners from
+  // before the shared toast region. Both now feed that region.
+  var deprecationWarned = {};
+  function warnDeprecated(what, instead) {
+    if (deprecationWarned[what]) return;
+    deprecationWarned[what] = true;
+    console.warn(what + ' is deprecated and goes in 2.0. ' + instead);
+  }
+
+  function showToast(opts) {
+    warnDeprecated('AdminUX.showToast',
+      'Send HX-Trigger {"showToast": {"type": ..., "message": ...}} or dispatch a showToast event.');
+    opts = opts || {};
+    document.dispatchEvent(new CustomEvent('showToast', {
+      detail: { type: opts.type || 'info', message: opts.message || opts.title || '' }
+    }));
+  }
+
+  function convertFlashMessages(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll('.flash-messages .alert').forEach(function (el) {
+      if (el.dataset.toastConverted === '1') return;
+      el.dataset.toastConverted = '1';
+      warnDeprecated('.flash-messages', 'Render flashes with shared-ui toast/with-toast.');
+      var type = 'info';
+      if (el.classList.contains('alert-success')) type = 'success';
+      else if (el.classList.contains('alert-error') || el.classList.contains('alert-danger')) type = 'error';
+      else if (el.classList.contains('alert-warning')) type = 'warning';
+      document.dispatchEvent(new CustomEvent('showToast', {
+        detail: { type: type, message: el.textContent.trim() }
+      }));
+      el.style.display = 'none';
+    });
+  }
+
   // =========================================================================
   // Initialization
   // =========================================================================
@@ -879,6 +914,11 @@ document.addEventListener('alpine:init', function () {
     // Clickable rows
     initClickableRows();
 
+    convertFlashMessages();
+    document.addEventListener('htmx:afterSwap', function (event) {
+      convertFlashMessages(event.detail && event.detail.target);
+    });
+
     // Expose public API
     window.AdminUX = {
       closeDrawer: closeDrawer,
@@ -888,7 +928,8 @@ document.addEventListener('alpine:init', function () {
       editCursorRow: editCursorRow,
       openFilters: openFilters,
       toggleCursorRow: toggleCursorRow,
-      createSkeletonRows: createSkeletonRows
+      createSkeletonRows: createSkeletonRows,
+      showToast: showToast
     };
   }
 

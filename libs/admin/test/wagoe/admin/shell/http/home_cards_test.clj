@@ -34,8 +34,8 @@
 
 (defn- home
   "The dashboard's body for `user`. `opts`: :count-of (fn [entity] n), :configs
-   {entity config}, :overview (fn [entity] overview), :user-service."
-  [config user & [entities {:keys [count-of configs overview user-service]}]]
+   {entity config}, :overview (fn [entity] overview), :user-service, :admin-config."
+  [config user & [entities {:keys [count-of configs overview user-service admin-config]}]]
   (let [schema  (reify admin-ports/ISchemaProvider
                   (fetch-table-metadata [_ _] nil)
                   (get-entity-config [_ e] (get configs e {:label (name e)}))
@@ -52,7 +52,7 @@
                   (count-entities [_ e _] (counted e))
                   admin-ports/IListOverview
                   (list-overview [_ e _ _] (when overview (overview e))))
-        handler (list-handlers/admin-home-handler service schema {} user-service)]
+        handler (list-handlers/admin-home-handler service schema (or admin-config {}) user-service)]
     ;; Through the pipeline every route runs, which binds what is mounted,
     ;; inside the navigation the platform binds.
     (str (:body ((interceptors/wrap-nav
@@ -123,6 +123,11 @@
     ;; Without a locale bound the markers render as their keys
     (is (= 1 (count (re-seq #"class=\"entity-card-count\">entity-card-count<" body))) "the other count")
     (is (= 1 (count (re-seq #"title=\"dashboard-count-failed\">—<" body))) "the failed one")))
+
+(deftest ^:unit deprecated-extra-cards-follow-the-sections
+  (let [body (home nil nil [:orders] {:admin-config {:dashboard-extra-cards [[:div.my-card "Reports"]]}})]
+    (is (re-find #"(?s)/web/admin/orders.*<div class=\"my-card\">Reports</div>" body)))
+  (is (not (str/includes? (home nil nil [:orders]) "admin-home-extra")) "none configured, no section"))
 
 (deftest ^:unit a-tile-shows-the-entity-summary
   (let [body (home nil nil [:orders]

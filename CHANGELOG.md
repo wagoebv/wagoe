@@ -304,13 +304,13 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Admin `render-field-value` and `render-inline-edit-cell`** (BOU-799): no page renders through them. Use
   `cells/cell` and `field-cell`; they go in 2.0.
+- **`:dashboard-extra-cards`** (BOU-765, BOU-841): its cards show on the admin dashboard, with a boot warning, until
+  2.0. Give a module's nav item a `:description` instead.
+- **`window.AdminUX.showToast` and the `.flash-messages` banner** (BOU-755, BOU-841): both feed the toast region until
+  2.0; `title` is no longer shown. Send `HX-Trigger: {"showToast": {"type": ..., "message": ...}}` or an OOB toast.
 
 ### Removed
 
-- **`:dashboard-extra-cards`** (BOU-765): the page it extended is gone. For a dashboard card, give a module's nav
-  item a `:description`.
-- **`window.AdminUX.showToast` and the `.flash-messages` banner** (BOU-755): send `HX-Trigger: {"showToast": {"type": ..., "message": ...}}`
-  or a toast out of band instead; `title` is no longer shown.
 - **The `:base` CSS bundle: pico, open-props, `tokens-openprops.css`, `base-css`** (BOU-458): `(bundle :base)` serves `:pilot` and warns.
   Use `pilot-css` and restyle pages that relied on pico with daisy classes.
 

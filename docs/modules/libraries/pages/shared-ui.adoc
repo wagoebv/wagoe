@@ -42,7 +42,8 @@ covers them as such.
 | `modal` on a native `<dialog>`
 
 | `wagoe.shared.ui.core.toast`
-| `toast` and the `toast-region` every layout renders
+| `toast` and the `toast-region` every layout renders. `window.AdminUX.showToast`
+  and `.flash-messages` banners still feed the region, deprecated until 2.0.
 
 | `wagoe.shared.ui.core.combobox`
 | Typeahead input that asks the server for options
