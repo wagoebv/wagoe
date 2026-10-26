@@ -17,14 +17,16 @@
      {:provider   :google
       :api-key    #env WAG_GEO_API_KEY
       :cache-ttl  86400
-      :db         #ig/ref :wagoe/db}
+      :db-ctx     #ig/ref :wagoe/db-context}
 
    Example (fallback chain):
      :wagoe/geo-service
      {:provider   [:openstreetmap :google]
       :api-key    #env WAG_GEO_API_KEY
       :cache-ttl  86400
-      :db         #ig/ref :wagoe/db}
+      :db-ctx     #ig/ref :wagoe/db-context}
+
+   :db-ctx caches lookups in the geo_cache table.
 
    :timeout-ms (default 3000) bounds each provider's connect and read.
    The component is a service/GeoService; a call can keep to some of the
@@ -73,13 +75,28 @@
 ;; Integrant lifecycle
 ;; =============================================================================
 
+(defn- cache-datasource
+  "The datasource to cache in, from :db-ctx. Fails at boot rather than on the
+   first lookup. :db, a bare datasource, is read until 2.0."
+  [{:keys [db-ctx db]}]
+  (cond
+    db-ctx
+    (or (:datasource db-ctx)
+        (throw (ex-info ":wagoe/geo-service :db-ctx has no :datasource"
+                        {:type :wagoe/geo-config-error})))
+
+    db
+    (do (log/warn ":wagoe/geo-service :db is deprecated and goes in 2.0; use :db-ctx #ig/ref :wagoe/db-context")
+        (or (:datasource db) db))))
+
 (defmethod ig/init-key :wagoe/geo-service
-  [_ {:keys [provider db cache-ttl] :as config}]
+  [_ {:keys [provider cache-ttl] :as config}]
   (log/info "Initializing geo service" {:provider provider})
   (let [names     (provider-names provider)
         providers (mapv #(build-provider % config) names)
-        geo-cache (when db
-                    (cache/create-db-geo-cache db (or cache-ttl 86400)))]
+        ds        (cache-datasource config)
+        geo-cache (when ds
+                    (cache/create-db-geo-cache ds (or cache-ttl 86400)))]
     (log/info "Geo service initialized"
               {:providers names :cache? (boolean geo-cache)})
     (service/map->GeoService {:providers      providers
