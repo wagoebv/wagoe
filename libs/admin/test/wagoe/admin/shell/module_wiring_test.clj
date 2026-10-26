@@ -177,6 +177,16 @@
     (is (not (contains? (get-in (wiring/ig-config {} {}) [:components :wagoe/admin-service :config]) :require-role))
         "the defaults do not bring it back")))
 
+(deftest ^:unit dashboard-extra-cards-reach-the-dashboard-and-are-deprecated
+  (let [cards [[:div.card "Reports"]]]
+    (log-test/with-log
+      (is (= cards (-> (wiring/ig-config {} {:config {:dashboard-extra-cards cards}})
+                       (get-in [:components :wagoe/admin-routes :config :dashboard-extra-cards]))))
+      (is (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #"DEPRECATED :dashboard-extra-cards.*2\.0"))))
+  (log-test/with-log
+    (is (not (contains? (routes-config {} {}) :dashboard-extra-cards)))
+    (is (not (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #":dashboard-extra-cards")))))
+
 (defn order-domain
   "A relation condition, named by symbol as config.edn would."
   [ids]

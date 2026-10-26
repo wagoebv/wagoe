@@ -215,11 +215,17 @@
         ;; builds the port only when both are on (BOU-563).
         workflows?    (contains? (:enabled ctx) :wagoe/workflow)
         app-settings  (get-in ctx [:config :active :wagoe/settings])
-        routes-config (-> (merge (select-keys app-settings [:date-format :date-time-format :time-zone])
-                                 settings)
-                          (check-date-patterns)
-                          (check-time-zone)
-                          (assoc :authorization-mode mode))]
+        ;; Top level of the config, where the user module's old dashboard read it
+        extra-cards   (get-in ctx [:config :dashboard-extra-cards])
+        _             (when (seq extra-cards)
+                        (log/warn (str "DEPRECATED :dashboard-extra-cards — shown on the admin dashboard until 2.0."
+                                       " Give a module's nav item a :description instead.")))
+        routes-config (cond-> (-> (merge (select-keys app-settings [:date-format :date-time-format :time-zone])
+                                         settings)
+                                  (check-date-patterns)
+                                  (check-time-zone)
+                                  (assoc :authorization-mode mode))
+                        (seq extra-cards) (assoc :dashboard-extra-cards extra-cards))]
     {:components
      {:wagoe/admin-schema-provider {:db-ctx (ig/ref :wagoe/db-context)
                                     :config settings}
