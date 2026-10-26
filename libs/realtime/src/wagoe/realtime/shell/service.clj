@@ -54,6 +54,15 @@
               {:connection-id connection-id :user-id user-id :email email :roles roles})
     connection-id))
 
+(defn with-clean-error-context
+  "Run `f` with the error context of `svc`'s `:error-reporter` empty, then put
+   back what was there (BOU-848). Resolved on use: realtime does not depend on
+   observability, and an error reporter exists only when it is loaded."
+  [svc f]
+  (if-let [reporter (:error-reporter svc)]
+    ((requiring-resolve 'wagoe.observability.errors.ports/with-clean-context) reporter f)
+    (f)))
+
 ;; =============================================================================
 ;; Realtime Service (Shell Layer)
 ;; =============================================================================
@@ -169,7 +178,9 @@
         svc (->RealtimeService connection-registry jwt-verifier
                                pubsub-manager logger error-reporter bus
                                {:open (AtomicInteger.) :limit (or max-streams 32)})]
-    (ports/start-subscriber! bus (delivery/make-delivery-fn connection-registry pubsub-manager))
+    (let [deliver! (delivery/make-delivery-fn connection-registry pubsub-manager)]
+      ;; Its service handlers run on a bus thread, or inside the publisher's request.
+      (ports/start-subscriber! bus (fn [envelope] (with-clean-error-context svc #(deliver! envelope)))))
     svc))
 
 (defn acquire-stream!

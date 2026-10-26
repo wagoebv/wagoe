@@ -7,6 +7,8 @@
         redis.clients/jedis {:mvn/version "8.0.1"}
         ;; Transactional outbox (wagoe.events.shell.outbox, BOU-448)
         wagoe/platform {:local/root "../platform"}
+        ;; Each handler runs with a clean error context (BOU-848).
+        wagoe/observability {:local/root "../observability"}
         com.github.seancorfield/next.jdbc {:mvn/version "1.3.1118"}}
 
  :aliases

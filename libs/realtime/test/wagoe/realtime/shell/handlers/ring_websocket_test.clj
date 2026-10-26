@@ -7,7 +7,10 @@
             [wagoe.realtime.shell.connection-registry :as registry]
             [wagoe.realtime.shell.adapters.jwt-adapter :as jwt]
             [wagoe.realtime.ports :as ports]
-            [ring.websocket.protocols :as ws-protocols]))
+            [ring.websocket.protocols :as ws-protocols]
+            [wagoe.observability.errors.ports :as error-ports]
+            [wagoe.observability.errors.shell.adapters.sentry :as sentry-adapter]
+            [sentry-clj.core :as sentry]))
 
 (def test-user-id #uuid "550e8400-e29b-41d4-a716-446655440000")
 
@@ -125,3 +128,30 @@
       (reset! open? false)
       ((:on-error listener) socket (Exception. "test error"))
       (is (= 0 (ports/connection-count registry))))))
+
+(deftest ^:contract a-message-reports-nothing-from-the-one-before-it
+  ;; One socket thread runs both (BOU-848).
+  (let [sent (atom [])]
+    (with-redefs [sentry/init!      (fn [& _] nil)
+                  sentry/send-event #(swap! sent conj %)]
+      (let [reporter (sentry-adapter/create-sentry-error-reporting-component
+                      {:dsn "https://key@sentry.invalid/1"})
+            svc      (service/create-realtime-service
+                      (registry/create-in-memory-registry)
+                      (jwt/create-test-jwt-adapter {:expected-token "valid-token"
+                                                    :user-id test-user-id
+                                                    :roles #{:admin}})
+                      :error-reporter reporter)
+            handler  (ws-handler/websocket-handler
+                      svc :on-message (fn [_ msg]
+                                        (if (= "a" msg)
+                                          (error-ports/set-user! reporter {:id "user-a"})
+                                          (error-ports/capture-message reporter "from b" :error))))
+            listener (:ring.websocket/listener (handler {:query-params {"token" "valid-token"}}))
+            {:keys [socket]} (mock-ring-socket)]
+        ((:on-open listener) socket)
+        ((:on-message listener) socket "a")
+        ((:on-message listener) socket "b")
+        (is (empty? (error-ports/current-context reporter)) "the thread keeps nothing")))
+    (is (= 1 (count @sent)))
+    (is (not (.contains (pr-str (first @sent)) "user-a")))))

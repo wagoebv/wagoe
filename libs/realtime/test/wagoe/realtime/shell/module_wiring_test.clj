@@ -53,3 +53,8 @@
       (is (instance? clojure.lang.ExceptionInfo e))
       (is (= :unknown-provider (:type (ex-data e))))
       (is (= [:memory :redis] (:known (ex-data e)))))))
+
+(deftest ^:unit the-service-gets-the-error-reporter
+  ;; Its handlers run with a clean error context (BOU-848).
+  (is (= (ig/ref :wagoe/error-reporting)
+         (get-in (wiring/ig-config {:provider :memory} {}) [:components :wagoe/realtime :error-reporter]))))

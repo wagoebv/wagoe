@@ -60,8 +60,8 @@
 (defn- store
   "Per thread. A component's reporter and context get their own, so two
    components with different caps do not trim each other's breadcrumbs (BOU-843).
-   An HTTP request runs synchronously on one thread and the router resets this
-   as it starts, so there it is per request. Nothing resets it between jobs."
+   Requests, jobs, event and realtime handlers each run inside
+   `with-clean-context`, so there it is per run (BOU-848)."
   ^ThreadLocal [config]
   (or (::store config) default-store))
 
@@ -261,7 +261,16 @@
   ports/IErrorContextReset
   (reset-context! [_this]
     (.remove (store config))
-    nil))
+    nil)
+
+  (with-clean-context [_this f]
+    (let [s     (store config)
+          saved (get-thread-context s)]
+      (.remove s)
+      (try
+        (f)
+        (finally
+          (if saved (.set s saved) (.remove s)))))))
 
 ;; =============================================================================
 ;; Sentry Error Filter Implementation
@@ -482,6 +491,9 @@
   ports/IErrorContextReset
   (reset-context! [_this]
     (ports/reset-context! error-context))
+
+  (with-clean-context [_this f]
+    (ports/with-clean-context error-context f))
 
   ports/IErrorFilter
   (should-report? [_this exception context]

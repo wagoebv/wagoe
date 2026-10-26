@@ -488,11 +488,6 @@
   {:name :http-error-reporting
    :enter (fn [{:keys [request system correlation-id] :as ctx}]
             (when-let [error-reporter (:error-reporter system)]
-              ;; A pooled thread still holds the previous request's context.
-              ;; Not when the router already reset it: that would drop what
-              ;; route middleware added for this request (BOU-843).
-              (when-not (::error-context-reset request)
-                (error-ports/reset-context! error-reporter))
               (error-reporting/add-breadcrumb
                error-reporter
                "HTTP request started"
@@ -1172,25 +1167,7 @@
 ;; HTTP Interceptor Runner
 ;; ==============================================================================
 
-(defn run-http-interceptors
-  "Runs an HTTP interceptor pipeline around a Ring handler.
-   
-   Args:
-     handler: Ring handler function (request → response)
-     interceptors: Vector of interceptor maps
-     request: Ring request map
-     system: Map containing observability services
-   
-   Returns:
-     Ring response map
-   
-   Pipeline execution:
-   1. Create HTTP context from request
-   2. Run :enter phase on all interceptors
-   3. If successful, call handler and set :response in context
-   4. Run :leave phase on all interceptors (reverse order)
-   5. If exception occurs, run :error phase to produce safe response
-   6. Extract and return final Ring response"
+(defn- run-pipeline-around
   [handler interceptors request system]
   (let [;; Create initial HTTP context
         initial-ctx (create-http-context request system)
@@ -1215,6 +1192,34 @@
 
     ;; Extract and return the Ring response
     (extract-response final-ctx)))
+
+(defn run-http-interceptors
+  "Runs an HTTP interceptor pipeline around a Ring handler.
+   
+   Args:
+     handler: Ring handler function (request → response)
+     interceptors: Vector of interceptor maps
+     request: Ring request map
+     system: Map containing observability services
+   
+   Returns:
+     Ring response map
+   
+   Pipeline execution:
+   1. Create HTTP context from request
+   2. Run :enter phase on all interceptors
+   3. If successful, call handler and set :response in context
+   4. Run :leave phase on all interceptors (reverse order)
+   5. If exception occurs, run :error phase to produce safe response
+   6. Extract and return final Ring response"
+  [handler interceptors request system]
+  (if-let [reporter (and (not (::error-context-reset request)) (:error-reporter system))]
+    ;; A pooled thread holds the previous request's error context. Scoped here
+    ;; when the router has not already done it (BOU-843, BOU-848).
+    (error-ports/with-clean-context
+     reporter
+     #(run-pipeline-around handler interceptors (assoc request ::error-context-reset true) system))
+    (run-pipeline-around handler interceptors request system)))
 
 ;; ==============================================================================
 ;; Ring Middleware Wrapper

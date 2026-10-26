@@ -167,11 +167,26 @@
     "Drop all context on the current thread: breadcrumbs, user, tags, extra.
 
      Returns:
-       nil (side effect only)"))
+       nil (side effect only)")
+
+  (with-clean-context [this f]
+    "Run `f` with this thread's context empty, then put back what was there,
+     for an entry point on a pooled thread: a request, job, event or realtime
+     handler. Restored rather than cleared after, because one entry point can
+     run inside another: the in-memory realtime bus delivers on the publishing
+     request's thread (BOU-848).
+
+     Returns:
+       What `f` returns"))
 
 (extend-protocol IErrorContextReset
+  nil
+  (reset-context! [_] nil)
+  (with-clean-context [_ f] (f))
+
   Object
-  (reset-context! [_] nil))
+  (reset-context! [_] nil)
+  (with-clean-context [_ f] (f)))
 
 ;; =============================================================================
 ;; Error Filtering Protocol
