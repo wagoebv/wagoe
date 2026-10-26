@@ -19,8 +19,7 @@
               (parse (.get future) token)
               (catch Exception e
                 (log/warnf "%s async send failed for %s: %s"
-                           (if (= :fcm platform) "FCM" "APNs")
-                           (device/token-preview token) (.getMessage e))
+                           (name platform) (device/token-preview token) (.getMessage e))
                 {:success?     false
                  :device-token token
                  :platform     platform

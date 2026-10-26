@@ -101,7 +101,7 @@
   "The notification with what `device` posts back to `/push/callback`: a
    minted id, and a token for this notification on this device that expires.
    The provider's message id arrives only after the send, so the id is minted
-   here. The token verifies for `ttl-seconds`, seven days by default. Unchanged
+   here. The token verifies for `ttl-seconds`, seven days when nil. Unchanged
    without a secret: no token could verify.
 
    Without `device`, deprecated: one id and a token over it alone, which goes
@@ -110,9 +110,9 @@
    (attach-callback notification notification-id callback-secret
                     #(hmac-sha256 callback-secret %)))
   ([notification notification-id callback-secret device]
-   (with-callback notification notification-id callback-secret device callback/token-ttl-seconds))
+   (with-callback notification notification-id callback-secret device nil))
   ([notification notification-id callback-secret {:keys [token platform]} ttl-seconds]
-   (let [expires-at (+ (.getEpochSecond (Instant/now)) ttl-seconds)]
+   (let [expires-at (+ (.getEpochSecond (Instant/now)) (or ttl-seconds callback/token-ttl-seconds))]
      (attach-callback notification notification-id callback-secret
                       #(callback-token callback-secret {:callback-id     %
                                                         :notification-id notification-id

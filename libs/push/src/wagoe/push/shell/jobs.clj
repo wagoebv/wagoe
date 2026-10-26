@@ -24,10 +24,10 @@
   [{:keys [callback-secret callback-token-ttl-seconds] :as deps} platform notification-id rendered devices]
   (if (empty? callback-secret)
     (service/deliver-to-platform! deps platform rendered devices)
-    (let [ttl   (or callback-token-ttl-seconds callback/token-ttl-seconds)
-          sends (mapv (fn [device]
+    (let [sends (mapv (fn [device]
                         [(:token device)
-                         (service/with-callback rendered notification-id callback-secret device ttl)])
+                         (service/with-callback rendered notification-id callback-secret device
+                                                callback-token-ttl-seconds)])
                       devices)]
       (mapv (fn [[_ sent] result]
               (assoc result :callback-id (get-in sent [:data :provider-message-id])))

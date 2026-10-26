@@ -57,28 +57,21 @@
              (not (and (seq providers) (every? #{:mock} (vals providers)))))
     (log/warn "Push: no :callback-secret in :wagoe/push. Pushes carry no callback token,"
               "and every POST to /push/callback is refused with 403."))
-  (service/map->PushService
-   (cond-> {:device-store    device-store
-            :analytics-store analytics-store
-            :fcm-provider    fcm-provider
-            :apns-provider   apns-provider
-            :job-queue       job-queue
-            :queue-name      (or queue-name :default)
-            :callback-secret callback-secret}
-     callback-token-ttl-seconds (assoc :callback-token-ttl-seconds callback-token-ttl-seconds))))
+  (service/map->PushService {:device-store               device-store
+                             :analytics-store            analytics-store
+                             :fcm-provider               fcm-provider
+                             :apns-provider              apns-provider
+                             :job-queue                  job-queue
+                             :queue-name                 (or queue-name :default)
+                             :callback-secret            callback-secret
+                             :callback-token-ttl-seconds callback-token-ttl-seconds}))
 
 (defmethod ig/init-key :wagoe.push/job-handlers
   [_ {:keys [push-service _job-registry]}]
-  (let [deps {:push-service    push-service
-              :device-store    (:device-store push-service)
-              :fcm-provider    (:fcm-provider push-service)
-              :apns-provider   (:apns-provider push-service)
-              :analytics-store (:analytics-store push-service)
-              :callback-secret (:callback-secret push-service)
-              :callback-token-ttl-seconds (:callback-token-ttl-seconds push-service)}]
-    (log/info "Push: registering job handlers")
-    {:push/send      (partial jobs/handle-send-push deps)
-     :push/broadcast (partial jobs/handle-broadcast deps)}))
+  ;; The service carries every key the handlers read.
+  (log/info "Push: registering job handlers")
+  {:push/send      (partial jobs/handle-send-push push-service)
+   :push/broadcast (partial jobs/handle-broadcast push-service)})
 
 ;; Deprecated: the `/api/push` vector apps mounted by hand before the module
 ;; contributed `:wagoe.push/route-contribution`. Still built, so they boot.
@@ -138,11 +131,10 @@
                                       [:project-id :credentials-path])
         apns       (provider-settings :apns "APNs" (:apns-credentials settings)
                                       [:team-id :key-id :key-path :bundle-id])
-        route-deps (cond-> {:device-store    (ig/ref :wagoe.push/device-store)
-                            :analytics-store (ig/ref :wagoe.push/analytics-store)
-                            :callback-secret (:callback-secret settings)}
-                     (:refuse-legacy-callback-tokens? settings)
-                     (assoc :refuse-legacy-callback-tokens? true))]
+        route-deps {:device-store                   (ig/ref :wagoe.push/device-store)
+                    :analytics-store                (ig/ref :wagoe.push/analytics-store)
+                    :callback-secret                (:callback-secret settings)
+                    :refuse-legacy-callback-tokens? (:refuse-legacy-callback-tokens? settings)}]
     (cond-> {:components
              ;; Credentials are all-or-nothing. A map of unset `#env` values
              ;; is a present map, so "are credentials configured" cannot mean
@@ -164,11 +156,9 @@
                                                    :fcm-provider    (ig/ref :wagoe.push/fcm-provider)
                                                    :apns-provider   (ig/ref :wagoe.push/apns-provider)
                                                    :callback-secret (:callback-secret settings)
+                                                   :callback-token-ttl-seconds (:callback-token-ttl-seconds settings)
                                                    :providers       {:fcm  (:provider fcm)
                                                                      :apns (:provider apns)}}
-                                            (:callback-token-ttl-seconds settings)
-                                            (assoc :callback-token-ttl-seconds
-                                                   (:callback-token-ttl-seconds settings))
                                             jobs?
                                             (assoc :job-queue  (ig/ref :wagoe/job-queue)
                                                    ;; :default, because that is
