@@ -322,6 +322,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **An unversioned `/api/...` redirect points at the requested path, query string kept** (BOU-846); Location was the
+  route template, e.g. `/api/v1/push/devices/:token`. Nothing to change.
 - **Push serves its device, callback and stats routes under `/api/v1/push`** (BOU-838); they were never mounted.
   Point clients at `/api/v1/push`.
 - **User service operations log, emit metrics and report errors** (BOU-840); they had no logger, emitter or reporter.
