@@ -7,6 +7,12 @@
             [wagoe.push.ports :as ports]
             [clojure.tools.logging :as log]))
 
+(defn- render
+  "The notification as sent: rendered for `locale`, carrying its callback token."
+  [push-def notification-id data locale callback-secret]
+  (-> (notif/build-notification push-def data (or locale :en))
+      (service/with-callback notification-id callback-secret)))
+
 (defn handle-send-push
   "Job handler for :push/send. Resolves notification, fans out to devices, delivers."
   [{:keys [device-store fcm-provider apns-provider
@@ -18,8 +24,7 @@
                       {:type :not-found :notification-id notification-id})))
     (let [devices   (ports/get-user-devices device-store user-id)
           active    (filter :active? devices)
-          rendered  (-> (notif/build-notification push-def data (or locale :en))
-                        (service/with-callback notification-id callback-secret))
+          rendered  (render push-def notification-id data locale callback-secret)
           grouped   (delivery/group-devices-by-platform active)]
       (log/infof "Push: delivering %s to %d devices for user %s"
                  notification-id (count active) user-id)
@@ -39,11 +44,10 @@
 
 (defn handle-broadcast
   "Job handler for :push/broadcast. Paginated send to all devices on platform."
-  [{:keys [device-store] :as deps}
+  [{:keys [device-store callback-secret] :as deps}
    {:keys [notification-id data platform _app-id locale]}]
   (let [push-def  (registry/get-push notification-id)
-        rendered  (-> (notif/build-notification push-def data (or locale :en))
-                      (service/with-callback notification-id (:callback-secret deps)))]
+        rendered  (render push-def notification-id data locale callback-secret)]
     (log/infof "Push: broadcasting %s to platform %s" notification-id platform)
     (loop [after-id nil]
       (let [devices (ports/get-devices-by-platform device-store platform

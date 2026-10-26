@@ -72,6 +72,6 @@
   (doseq [secret [nil "" "s3cret"]]
     (log-test/with-log
       (ig/init-key :wagoe.push/service {:callback-secret secret})
-      (is (= (nil? (#{"s3cret"} secret))
+      (is (= (not= "s3cret" secret)
              (log-test/logged? 'wagoe.push.shell.module-wiring :warn #"callback-secret"))
           (pr-str secret)))))

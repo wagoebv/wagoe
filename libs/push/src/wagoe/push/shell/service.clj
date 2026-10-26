@@ -3,7 +3,6 @@
             [wagoe.push.core.delivery :as delivery]
             [wagoe.jobs.core.job :as job]
             [wagoe.jobs.ports :as job-ports]
-            [clojure.string :as str]
             [clojure.tools.logging :as log])
   (:import [javax.crypto Mac]
            [javax.crypto.spec SecretKeySpec]
@@ -37,7 +36,7 @@
    provider's message id arrives only after the send, so the token signs an id
    minted here. Unchanged without a secret: no token could verify."
   [notification notification-id callback-secret]
-  (if (str/blank? callback-secret)
+  (if (empty? callback-secret)
     notification
     (let [message-id (str (random-uuid))]
       (update notification :data merge
