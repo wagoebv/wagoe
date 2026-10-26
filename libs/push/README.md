@@ -85,15 +85,15 @@ Wired by hand, add these to `resources/conf/{env}/config.edn` and require `wagoe
 
 :wagoe.push/job-handlers {:push-service #ig/ref :wagoe.push/service}
 
-:wagoe.push/routes {:device-store    #ig/ref :wagoe.push/device-store
-                       :analytics-store #ig/ref :wagoe.push/analytics-store
-                       :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
+:wagoe.push/route-contribution {:device-store    #ig/ref :wagoe.push/device-store
+                                :analytics-store #ig/ref :wagoe.push/analytics-store
+                                :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
 ```
 
 Use `:provider :mock` for FCM and APNs in dev/test environments. With `:wagoe/push`
-the module contributes `:wagoe.push/routes` to the HTTP handler, under `/api/v1/push`;
-wired by hand, add `#ig/ref :wagoe.push/routes` to `:wagoe/http-handler :module-routes`
-(see [AGENTS.md](AGENTS.md)).
+the module contributes `:wagoe.push/route-contribution` to the HTTP handler, under
+`/api/v1/push`; wired by hand, add its ref to `:wagoe/http-handler :module-routes`
+(see [AGENTS.md](AGENTS.md)). `:wagoe.push/routes`, the `/api/push` vector, is deprecated.
 
 ---
 

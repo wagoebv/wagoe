@@ -66,18 +66,30 @@
 
 (def ^:dynamic *handler* nil)
 
+(defmethod ig/init-key ::hand-mounted [_ {:keys [routes]}]
+  {:static [routes]})
+
+(defn- with-hand-mounted
+  "`ig-cfg` with `routes-key`'s routes mounted as an app's `:static` ones."
+  [ig-cfg routes-key]
+  (-> ig-cfg
+      (assoc ::hand-mounted {:routes (ig/ref routes-key)})
+      (update-in [:wagoe/http-handler :module-routes] (fnil conj []) (ig/ref ::hand-mounted))))
+
 (defn system-fixture
   "A :once fixture that boots every module on its own H2 database `db` and
-   binds `*handler*` to the HTTP handler."
-  [db]
-  (fn [f]
-    (let [ig-cfg (-> (sys-config/ig-config (every-module-config db))
-                     (dissoc :wagoe/http-server))
-          system (ig/init ig-cfg)]
-      (try
-        (binding [*handler* (:wagoe/http-handler system)]
-          (f))
-        (finally (ig/halt! system))))))
+   binds `*handler*` to the HTTP handler. `:mount-by-hand` names a routes
+   component to mount as `:static` too, as an app that wired it itself does."
+  ([db] (system-fixture db {}))
+  ([db {:keys [mount-by-hand]}]
+   (fn [f]
+     (let [ig-cfg (cond-> (dissoc (sys-config/ig-config (every-module-config db)) :wagoe/http-server)
+                    mount-by-hand (with-hand-mounted mount-by-hand))
+           system (ig/init ig-cfg)]
+       (try
+         (binding [*handler* (:wagoe/http-handler system)]
+           (f))
+         (finally (ig/halt! system)))))))
 
 (def http-methods [:get :head :post :put :patch :delete])
 

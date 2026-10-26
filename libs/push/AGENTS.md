@@ -179,7 +179,7 @@ Two job types registered under `:wagoe.push/job-handlers`:
 
 ## HTTP Routes
 
-Built by the `:wagoe.push/routes` Integrant key and contributed as `:api`, so the platform mounts them under `/api/v1`. Every route but the callback requires a signed-in user; the platform refuses anyone else, and the handlers read `[:user :id]`. The callback is `:public true`: its HMAC is the credential (BOU-568). The device routes say `:authorization :self` and the stats `:permission :push/read`, so `:wagoe/authorization :enforce` does not refuse them.
+Built by the `:wagoe.push/route-contribution` Integrant key and contributed as `:api`, so the platform mounts them under `/api/v1`. `:wagoe.push/routes` still builds the old `/api/push` vector for apps that mounted it by hand; it is deprecated, and where it is mounted the platform drops the unversioned redirects it would collide with. Every route but the callback requires a signed-in user; the platform refuses anyone else, and the handlers read `[:user :id]`. The callback is `:public true`: its HMAC is the credential (BOU-568). The device routes say `:authorization :self` and the stats `:permission :push/read`, so `:wagoe/authorization :enforce` does not refuse them.
 
 | Method | Path | Handler |
 |--------|------|---------|
@@ -280,10 +280,10 @@ Three migrations under `libs/push/resources/wagoe/push/migrations/` create the t
 :wagoe.push/job-handlers {:push-service #ig/ref :wagoe.push/service}
 
 ;; Routes — contributed by the module under :wagoe/push; wired by hand,
-;; add #ig/ref :wagoe.push/routes to :wagoe/http-handler :module-routes
-:wagoe.push/routes {:device-store    #ig/ref :wagoe.push/device-store
-                       :analytics-store #ig/ref :wagoe.push/analytics-store
-                       :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
+;; add #ig/ref :wagoe.push/route-contribution to :wagoe/http-handler :module-routes
+:wagoe.push/route-contribution {:device-store    #ig/ref :wagoe.push/device-store
+                                :analytics-store #ig/ref :wagoe.push/analytics-store
+                                :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
 ```
 
 Require `wagoe.push.shell.module-wiring` at system start to load the `defmethod` definitions.

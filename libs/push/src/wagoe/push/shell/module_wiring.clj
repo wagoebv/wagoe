@@ -55,11 +55,15 @@
     {:push/send      (partial jobs/handle-send-push deps)
      :push/broadcast (partial jobs/handle-broadcast deps)}))
 
+;; Deprecated: the `/api/push` vector apps mounted by hand before the module
+;; contributed `:wagoe.push/route-contribution`. Still built, so they boot.
 (defmethod ig/init-key :wagoe.push/routes
-  [_ {:keys [device-store analytics-store callback-secret]}]
-  {:api    (handlers/push-routes {:device-store    device-store
-                                  :analytics-store analytics-store
-                                  :callback-secret callback-secret})
+  [_ deps]
+  (handlers/push-routes (select-keys deps [:device-store :analytics-store :callback-secret])))
+
+(defmethod ig/init-key :wagoe.push/route-contribution
+  [_ deps]
+  {:api    (handlers/api-routes (select-keys deps [:device-store :analytics-store :callback-secret]))
    :web    []
    :static []})
 
@@ -101,7 +105,10 @@
    handlers had no registry to land in, so a scheduled push disappeared without
    an error (BOU-418)."
   [settings {:keys [enabled]}]
-  (let [jobs? (contains? (or enabled #{}) :wagoe/jobs)]
+  (let [jobs?      (contains? (or enabled #{}) :wagoe/jobs)
+        route-deps {:device-store    (ig/ref :wagoe.push/device-store)
+                    :analytics-store (ig/ref :wagoe.push/analytics-store)
+                    :callback-secret (:callback-secret settings)}]
     (cond-> {:components
              ;; Credentials are all-or-nothing. A map of unset `#env` values
              ;; is a present map, so "are credentials configured" cannot mean
@@ -138,10 +145,9 @@
                                                    ;; jobs' :workers :queues to
                                                    ;; get that isolation back.
                                                    :queue-name (:queue settings :default)))
-              :wagoe.push/routes          {:device-store    (ig/ref :wagoe.push/device-store)
-                                           :analytics-store (ig/ref :wagoe.push/analytics-store)
-                                           :callback-secret (:callback-secret settings)}}
-             :routes [(ig/ref :wagoe.push/routes)]}
+              :wagoe.push/routes          route-deps
+              :wagoe.push/route-contribution route-deps}
+             :routes [(ig/ref :wagoe.push/route-contribution)]}
 
       jobs?
       (-> (assoc-in [:components :wagoe.push/job-handlers]

@@ -118,7 +118,7 @@
 (deftest ^:unit only-the-callback-is-public
   ;; The platform refuses every route that is not :public true. The callback is
   ;; posted by a device, and its HMAC is the credential (BOU-568).
-  (let [public (for [[path data] (handlers/push-routes {})
+  (let [public (for [[path data] (handlers/api-routes {})
                      [method endpoint] data
                      :when (:public endpoint)]
                  [path method])]
@@ -133,4 +133,10 @@
           ["/push/callback" :post]              [:public []]
           ["/push/stats/:notification-id" :get] [:permission [:push/read]]}
          (into {} (map (juxt (juxt :path :method) (juxt :rule :permissions)))
-               (authorization/route-report (handlers/push-routes {}))))))
+               (authorization/route-report (handlers/api-routes {}))))))
+
+(deftest ^:unit the-deprecated-vector-keeps-its-paths
+  (let [[root & children] (handlers/push-routes {})]
+    (is (= "/api/push" root))
+    (is (= ["/devices" "/devices/:token" "/callback" "/stats/:notification-id"]
+           (map first children)))))

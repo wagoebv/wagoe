@@ -520,6 +520,18 @@
       (remove root? platform-routes)
       platform-routes)))
 
+(defn- redirect-route? [[_ data]]
+  (and (map? data) (some #(and (map? %) (:wagoe/redirect-to %)) (vals data))))
+
+(defn- without-claimed-redirects
+  "`api-routes` minus the unversioned `/api/...` redirects whose path a
+   `:static` or `:web` route serves: an app that mounted a module's routes
+   there itself keeps them, and does not fail to boot on the conflict."
+  [api-routes served]
+  (let [taken (into #{} (map first)
+                    (reitit.core/routes (reitit.core/router (vec served) {:conflicts nil})))]
+    (remove #(and (redirect-route? %) (taken (first %))) api-routes)))
+
 (defn- platform-routes
   "The endpoints every Wagoe application serves, whoever it is.
 
@@ -622,7 +634,8 @@
         all-routes (concat (without-claimed-root platform-routes module-static)
                            module-static
                            module-web
-                           versioned-api-routes
+                           (without-claimed-redirects versioned-api-routes
+                                                      (concat module-static module-web))
                            (or test-reset-routes []))
 
         {csrf-config :csrf

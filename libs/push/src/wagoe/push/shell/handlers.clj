@@ -83,7 +83,7 @@
         stats    (ports/get-push-stats analytics-store notif-id {})]
     (resp/response (analytics/calculate-rates stats))))
 
-(defn push-routes
+(defn api-routes
   "Every route but the callback requires a signed-in user, which the platform
    enforces. The callback is public: a device posts it, and the HMAC in its body
    is the credential (BOU-568). The device routes act on the caller's own
@@ -103,3 +103,11 @@
                                     :openapi {:parameters [{:name "notification-id" :in "path" :required true
                                                             :schema {:type "string"}}]}
                                     :get {:handler (partial push-stats-handler deps)}}]])
+
+(defn push-routes
+  "Deprecated: the module mounts `api-routes` itself. The same routes as one
+   `/api/push` vector, for apps that mounted it by hand."
+  [deps]
+  (into ["/api/push"]
+        (map (fn [[path data]] [(subs path (count "/push")) data]))
+        (api-routes deps)))
