@@ -291,6 +291,10 @@ document.addEventListener('alpine:init', function () {
 (function () {
   'use strict';
 
+  // A swap of the whole body runs this script again: wire it once
+  if (window.wagoeAdminUxWired) return;
+  window.wagoeAdminUxWired = true;
+
   // =========================================================================
   // 1. Progress Bar
   // =========================================================================
@@ -304,7 +308,8 @@ document.addEventListener('alpine:init', function () {
   }
 
   function showProgress() {
-    if (!progressBar) createProgressBar();
+    // A swap of the whole body takes it out of the page
+    if (!progressBar || !progressBar.isConnected) createProgressBar();
     progressBar.classList.remove('done');
     // Force reflow to restart animation
     progressBar.offsetWidth;
@@ -859,6 +864,46 @@ document.addEventListener('alpine:init', function () {
     });
   }
 
+  // The old confirm API, on a <dialog> shaped like shared-ui's confirm-modal.
+  // onConfirm runs only on the confirm button; the dialog is removed on close.
+  function showConfirmModal(opts) {
+    warnDeprecated('AdminUX.showConfirmModal',
+      'Render shared-ui modal/confirm-modal and put confirm-attrs on the element.');
+    opts = opts || {};
+    function el(tag, cls, text) {
+      var e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text) e.textContent = text;
+      return e;
+    }
+    var dialog = el('dialog', 'modal');
+    dialog.setAttribute('role', 'alertdialog');
+    var box = el('div', 'modal-box');
+    box.appendChild(el('h3', 'text-lg font-bold', opts.title || 'Confirm Delete'));
+    box.appendChild(el('p', 'py-4',
+      opts.message || 'Are you sure you want to delete this item? This action cannot be undone.'));
+    if (opts.detail) box.appendChild(el('div', 'confirm-detail', opts.detail));
+    var actions = el('form', 'modal-action');
+    actions.method = 'dialog';
+    var cancel = el('button', 'btn', opts.cancelLabel || 'Cancel');
+    cancel.value = 'cancel';
+    var confirm = el('button', 'btn btn-error', opts.confirmLabel || 'Delete');
+    confirm.value = 'confirm';
+    actions.append(cancel, confirm);
+    box.appendChild(actions);
+    var backdrop = el('form', 'modal-backdrop');
+    backdrop.method = 'dialog';
+    backdrop.appendChild(el('button', null, opts.cancelLabel || 'Cancel'));
+    dialog.append(box, backdrop);
+    dialog.addEventListener('close', function () {
+      dialog.remove();
+      if (dialog.returnValue === 'confirm' && opts.onConfirm) opts.onConfirm();
+    }, { once: true });
+    document.body.appendChild(dialog);
+    dialog.showModal();
+    cancel.focus();
+  }
+
   // =========================================================================
   // Initialization
   // =========================================================================
@@ -935,7 +980,8 @@ document.addEventListener('alpine:init', function () {
       openFilters: openFilters,
       toggleCursorRow: toggleCursorRow,
       createSkeletonRows: createSkeletonRows,
-      showToast: showToast
+      showToast: showToast,
+      showConfirmModal: showConfirmModal
     };
   }
 

@@ -215,7 +215,18 @@
                              " document.body.appendChild(d);"
                              " document.dispatchEvent(new CustomEvent('htmx:afterSwap', {detail: {target: d}})); })()"))
       (page/wait-for-selector pg "#toasts .alert.alert-warning" {:timeout 10000.0})
-      (is (str/includes? (loc/text-content (page/locator pg "#toasts .alert.alert-warning")) "Old flash")))))
+      (is (str/includes? (loc/text-content (page/locator pg "#toasts .alert.alert-warning")) "Old flash")))
+    (testing "AdminUX.showConfirmModal calls onConfirm on confirm only"
+      (page/evaluate pg (str "window.AdminUX.showConfirmModal({title: 'Old confirm', confirmLabel: 'Go',"
+                             " onConfirm: () => { window.confirmed = (window.confirmed || 0) + 1; }})"))
+      (loc/click (page/locator pg "dialog[open] button[value='cancel']"))
+      ;; Closing is a task away; wait for the dialog to be gone
+      (is (not (map? (page/wait-for-function pg "!document.querySelector('dialog.modal:not([id])')" {:timeout 5000.0})))
+          "removed on close")
+      (is (nil? (page/evaluate pg "window.confirmed")))
+      (page/evaluate pg "window.AdminUX.showConfirmModal({onConfirm: () => { window.confirmed = 1; }})")
+      (loc/click (page/locator pg "dialog[open] button[value='confirm']"))
+      (is (not (map? (page/wait-for-function pg "window.confirmed === 1" {:timeout 5000.0})))))))
 
 (deftest ^:integration ^:e2e timezone-is-picked-from-the-zones
   (testing "The timezone is a combobox over the IANA zones; the one picked is saved"

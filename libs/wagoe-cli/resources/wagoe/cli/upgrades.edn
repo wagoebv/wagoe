@@ -100,4 +100,9 @@
  {:ticket "BOU-755"
   :since  "1.0.2"
   :note   "window.AdminUX.showToast and .flash-messages banners. Both feed the shared-ui toast region until 2.0."
-  :manual "Send HX-Trigger {\"showToast\": {\"type\": ..., \"message\": ...}} or a shared-ui toast out of band. The rewrites do not touch JavaScript or markup."}]
+  :manual "Send HX-Trigger {\"showToast\": {\"type\": ..., \"message\": ...}} or a shared-ui toast out of band. The rewrites do not touch JavaScript or markup."}
+
+ {:ticket "BOU-753"
+  :since  "1.0.2"
+  :note   "window.AdminUX.showConfirmModal. It opens a native <dialog> until 2.0."
+  :manual "Render wagoe.shared.ui.core.modal/confirm-modal and put confirm-attrs on the element that sends the request. The rewrites do not touch JavaScript."}]

@@ -39,7 +39,8 @@ covers them as such.
 | The admin shell (sidebar, topbar) and the signed-in user's menu
 
 | `wagoe.shared.ui.core.modal`
-| `modal` on a native `<dialog>`
+| `modal` on a native `<dialog>`, and `confirm-modal` with `confirm-attrs`.
+  `window.AdminUX.showConfirmModal` still opens one, deprecated until 2.0.
 
 | `wagoe.shared.ui.core.toast`
 | `toast` and the `toast-region` every layout renders. `window.AdminUX.showToast`

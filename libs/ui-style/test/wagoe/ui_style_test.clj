@@ -51,4 +51,5 @@
   (let [js (slurp (io/resource "public/js/admin-ux.js"))]
     (is (some #{"/js/admin-ux.js"} sut/admin-pilot-js))
     (is (re-find #"\bshowToast\s*[:,]" js))
+    (is (re-find #"\bshowConfirmModal\s*[:,]" js))
     (is (str/includes? js ".flash-messages"))))
