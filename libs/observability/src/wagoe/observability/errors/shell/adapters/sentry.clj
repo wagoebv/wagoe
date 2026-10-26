@@ -271,7 +271,7 @@
       (try
         (f)
         (finally
-          (set-thread-context! s saved))))))
+          (if (some? saved) (set-thread-context! s saved) (.remove s)))))))
 
 ;; =============================================================================
 ;; Sentry Error Filter Implementation

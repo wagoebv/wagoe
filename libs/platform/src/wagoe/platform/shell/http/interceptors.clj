@@ -1215,10 +1215,12 @@
   [handler interceptors request system]
   (if-let [reporter (and (not (::error-context-reset request)) (:error-reporter system))]
     ;; A pooled thread holds the previous request's error context. Scoped here
-    ;; when the router has not already done it (BOU-843, BOU-848).
-    (error-ports/with-clean-context
-     reporter
-     #(run-pipeline-around handler interceptors (assoc request ::error-context-reset true) system))
+    ;; when the router has not already done it (BOU-843, BOU-848). Reset too,
+    ;; for a context that implements only IErrorContextReset.
+    (do (error-ports/reset-context! reporter)
+        (error-ports/with-clean-context
+          reporter
+          #(run-pipeline-around handler interceptors (assoc request ::error-context-reset true) system)))
     (run-pipeline-around handler interceptors request system)))
 
 ;; ==============================================================================

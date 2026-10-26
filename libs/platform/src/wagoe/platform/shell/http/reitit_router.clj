@@ -356,9 +356,11 @@
     (fn [handler]
       (if error-reporter
         (fn [request]
+          ;; For a context that implements only IErrorContextReset (BOU-843).
+          (error-ports/reset-context! error-reporter)
           (error-ports/with-clean-context
-           error-reporter
-           #(handler (assoc request ::http-interceptors/error-context-reset true))))
+            error-reporter
+            #(handler (assoc request ::http-interceptors/error-context-reset true))))
         handler))))
 
 (defn- create-default-middleware

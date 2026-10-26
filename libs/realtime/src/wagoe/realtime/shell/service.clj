@@ -182,9 +182,9 @@
         svc (->RealtimeService connection-registry jwt-verifier
                                pubsub-manager logger error-reporter bus
                                {:open (AtomicInteger.) :limit (or max-streams 32)})]
-    (let [deliver! (delivery/make-delivery-fn connection-registry pubsub-manager)]
-      ;; Its service handlers run on a bus thread, or inside the publisher's request.
-      (ports/start-subscriber! bus (fn [envelope] (with-clean-error-context svc #(deliver! envelope)))))
+    ;; Service handlers run on a bus thread, or inside the publisher's request.
+    (ports/start-subscriber! bus (delivery/make-delivery-fn connection-registry pubsub-manager
+                                                            #(with-clean-error-context svc %)))
     svc))
 
 (defn acquire-stream!
