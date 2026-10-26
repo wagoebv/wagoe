@@ -58,12 +58,10 @@
       (not (schema/valid-callback? body))
       (invalid-body (callback-payload-explainer body))
 
-      ;; No secret configured: no token can be valid, and the HMAC would throw.
-      (not (and callback-secret
-                (service/verify-callback-token
-                 callback-secret
-                 (:provider-message-id body)
-                 (:callback-token body))))
+      (not (service/verify-callback-token
+            callback-secret
+            (:provider-message-id body)
+            (:callback-token body)))
       (error-response 403 "forbidden" "Invalid callback token")
 
       :else

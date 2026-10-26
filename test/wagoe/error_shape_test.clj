@@ -7,7 +7,8 @@
    method no route takes and a path nobody serves. A client needs one parser;
    a producer that answers in a shape of its own fails here, named. So does a
    5xx or an escaped exception: every call is a client's mistake."
-  (:require [clojure.string :as str]
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.user.shell.auth :as auth]
@@ -152,3 +153,17 @@
       (let [r (rt/call :get "/web/admin/no-such-entity" (:empty rt/bodies) (assoc browser "hx-request" "true"))]
         (is (= 404 (:status r)))
         (is (str/includes? (str (get-in r [:headers "HX-Trigger"])) "showToast"))))))
+
+(deftest ^:integration push-serves-its-routes-under-api-v1
+  ;; Mounted by the module itself, and a JSON body's enum strings decode.
+  (let [device  {:token "device-token-1" :platform "fcm" :app-id "com.example"}
+        created (rt/call :post "/api/v1/push/devices" (json/generate-string device) (:user callers))
+        listed  (rt/call :get "/api/v1/push/devices" "" (:user callers))]
+    (is (= 201 (:status created)) (pr-str (rt/decoded created)))
+    (is (= ["device-token-1"] (map :token (:devices (rt/decoded listed))))))
+  (testing "the callback reaches its HMAC check anonymously"
+    (let [payload {:device-token "device-token-1" :provider-message-id "msg-1"
+                   :event-type "delivered" :callback-token "not-the-hmac"
+                   :notification-id "order-shipped" :platform "fcm"}]
+      (is (= 403 (:status (rt/call :post "/api/v1/push/callback"
+                                   (json/generate-string payload))))))))

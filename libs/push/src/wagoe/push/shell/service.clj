@@ -21,12 +21,14 @@
   (hmac-sha256 callback-secret provider-message-id))
 
 (defn verify-callback-token
-  "Verify HMAC callback token. Constant-time comparison."
+  "Verify HMAC callback token. Constant-time comparison. False when no secret
+   is configured: no token can be valid then."
   [callback-secret provider-message-id callback-token]
-  (let [expected (hmac-sha256 callback-secret provider-message-id)]
-    (java.security.MessageDigest/isEqual
-     (.getBytes ^String expected StandardCharsets/UTF_8)
-     (.getBytes ^String callback-token StandardCharsets/UTF_8))))
+  (boolean
+   (when callback-secret
+     (java.security.MessageDigest/isEqual
+      (.getBytes ^String (hmac-sha256 callback-secret provider-message-id) StandardCharsets/UTF_8)
+      (.getBytes ^String callback-token StandardCharsets/UTF_8)))))
 
 (defn deliver-to-platform!
   "Internal: send notification to devices on a specific platform.
