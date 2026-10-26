@@ -18,6 +18,9 @@
             (try
               (parse (.get future) token)
               (catch Exception e
+                ;; Kept set, so a worker shutting down still sees it.
+                (when (instance? InterruptedException e)
+                  (.interrupt (Thread/currentThread)))
                 (log/warnf "%s async send failed for %s: %s"
                            (name platform) (device/token-preview token) (.getMessage e))
                 {:success?     false

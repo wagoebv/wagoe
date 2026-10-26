@@ -103,9 +103,17 @@
       (is (nil? (get-in components [:wagoe.push/route-contribution :refuse-legacy-callback-tokens?])))
       (is (nil? (:callback-token-ttl-seconds (ig/init-key :wagoe.push/service
                                                           (:wagoe.push/service components)))))))
+  (testing "an unset #env is the default"
+    (is (map? (wiring/ig-config {:callback-token-ttl-seconds     nil
+                                 :refuse-legacy-callback-tokens? nil} {}))))
   (doseq [bad [{:callback-token-ttl-seconds 0} {:callback-token-ttl-seconds "7d"}
+               {:callback-token-ttl-seconds (* 101 365 24 60 60)}
                {:refuse-legacy-callback-tokens? "yes"}]]
     (let [ex (is (thrown? clojure.lang.ExceptionInfo (wiring/ig-config bad {})) (pr-str bad))]
+      (is (= :configuration-error (:type (ex-data ex))))))
+  (testing "a hand-wired service is checked too"
+    (let [ex (is (thrown? clojure.lang.ExceptionInfo
+                          (ig/init-key :wagoe.push/service {:callback-token-ttl-seconds "604800"})))]
       (is (= :configuration-error (:type (ex-data ex)))))))
 
 (deftest ^:unit stores-take-the-db-context-as-db-ctx

@@ -48,9 +48,21 @@
   (log/info "Push: initializing analytics store")
   (persistence/->PushAnalyticsStore (db-ctx k config)))
 
+(def ^:private settings-explainer (m/explainer schema/PushSettings))
+
+(defn- check-settings!
+  "Fails at boot, naming the bad keys, rather than in the first push job."
+  [settings]
+  (when-let [errors (some-> (settings-explainer (or settings {})) me/humanize)]
+    (throw (ex-info (str "Invalid :wagoe/push settings: " (pr-str errors))
+                    {:type :configuration-error :errors errors}))))
+
 (defmethod ig/init-key :wagoe.push/service
   [_ {:keys [device-store analytics-store fcm-provider apns-provider
-             job-queue queue-name callback-secret callback-token-ttl-seconds providers]}]
+             job-queue queue-name callback-secret callback-token-ttl-seconds providers]
+      :as config}]
+  ;; Again here: a hand-wired service never passes through `ig-config`.
+  (check-settings! config)
   (log/info "Push: initializing push service" {:queue (or queue-name :default)})
   ;; With mock providers nothing reaches a device, so nothing calls back.
   (when (and (empty? callback-secret)
@@ -123,9 +135,7 @@
    handlers had no registry to land in, so a scheduled push disappeared without
    an error (BOU-418)."
   [settings {:keys [enabled]}]
-  (when-let [explanation (m/explain schema/PushSettings (or settings {}))]
-    (throw (ex-info (str "Invalid :wagoe/push settings: " (pr-str (me/humanize explanation)))
-                    {:type :configuration-error :errors (me/humanize explanation)})))
+  (check-settings! settings)
   (let [jobs?      (contains? (or enabled #{}) :wagoe/jobs)
         fcm        (provider-settings :fcm "FCM" (:fcm-credentials settings)
                                       [:project-id :credentials-path])
