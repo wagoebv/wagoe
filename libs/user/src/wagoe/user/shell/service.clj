@@ -272,9 +272,12 @@
                           (or (:ip-address session) (:ip_address session))
                           (or (:user-agent session) (:user_agent session)))))))
 
-;; Wiring assocs these onto the service; execute-service-operation reads them.
+;; Wiring assocs these onto the service; the interceptors read them. Keyword
+;; lookups, not select-keys: a handler may get any IUserService, a reify too.
 (defn- observability [user-service]
-  (select-keys user-service [:logger :metrics-emitter :error-reporter]))
+  {:logger          (:logger user-service)
+   :metrics-emitter (:metrics-emitter user-service)
+   :error-reporter  (:error-reporter user-service)})
 
 (defrecord UserService [user-repository session-repository audit-repository validation-config auth-service]
 
@@ -543,7 +546,8 @@
                           to-write
                           session)
                       :user (user-core/without-credentials user)))))))
-     (observability this)))
+     ;; Runs on every authenticated request: metrics, but no three log lines.
+     (dissoc (observability this) :logger)))
 
   (logout-user [this session-token]
     (service-interceptors/execute-service-operation
@@ -914,8 +918,6 @@
   (->UserService user-repository session-repository audit-repository validation-config auth-service))
 
 (defn interceptor-system
-  "The interceptor :system for a user operation. Wiring puts the metrics
-   emitter on the service; the platform op-metrics interceptor reads it."
+  "The interceptor :system for a user HTTP or CLI handler."
   [user-service]
-  {:user-service    user-service
-   :metrics-emitter (:metrics-emitter user-service)})
+  (assoc (observability user-service) :user-service user-service))

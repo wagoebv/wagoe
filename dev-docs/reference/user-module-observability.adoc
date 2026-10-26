@@ -11,7 +11,8 @@ operation.
 `wagoe.platform.shell.interceptors` (`create-http-pipeline`,
 `create-cli-pipeline`). The context's `:system` comes from
 `wagoe.user.shell.service/interceptor-system`, which carries the
-`:metrics-emitter` that `:wagoe/user-service` is wired with.
+`:logger`, `:metrics-emitter` and `:error-reporter` that `:wagoe/user-service`
+is wired with.
 
 Per operation (`op`), `op-metrics` records:
 
@@ -64,7 +65,8 @@ Everything logged or attached to a breadcrumb goes through
 Each interceptor acts only when the `:system` map it is given holds a
 `:logger`, `:metrics-emitter` or `:error-reporter`. `:wagoe/user-service` is
 wired with `:wagoe/logging`, `:wagoe/metrics` and `:wagoe/error-reporting`, and
-passes those three on to every operation.
+passes those three on to every operation. `:validate-session` runs on every
+authenticated request and gets no logger.
 
 === Persistence pipeline
 
