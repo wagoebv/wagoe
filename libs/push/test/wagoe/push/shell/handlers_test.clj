@@ -103,7 +103,7 @@
         deps      {:analytics-store analytics :callback-secret test-secret}
         msg-id    "provider-msg-123"
         token     #_{:clj-kondo/ignore [:deprecated-var]}
-                  (service/generate-callback-token test-secret msg-id)
+        (service/generate-callback-token test-secret msg-id)
         request   {:body-params {:device-token        "device-abc"
                                  :provider-message-id msg-id
                                  :event-type          :delivered
@@ -114,6 +114,18 @@
     (is (= 204 (:status response)))
     (let [stats (ports/get-push-stats analytics :order-shipped {})]
       (is (= 1 (:delivered stats))))))
+
+(deftest ^:unit ^:security a-legacy-token-is-refused-when-configured
+  (let [request {:body-params {:device-token        "device-abc"
+                               :provider-message-id "msg-1"
+                               :event-type          :delivered
+                               :callback-token      #_{:clj-kondo/ignore [:deprecated-var]}
+                               (service/generate-callback-token test-secret "msg-1")
+                               :notification-id     :order-shipped
+                               :platform            :fcm}}]
+    (is (= 403 (:status (handlers/analytics-callback-handler
+                         {:callback-secret test-secret :refuse-legacy-callback-tokens? true}
+                         request))))))
 
 (defn- bound-callback
   "A callback body for a bound token over `fields`, with `changes` applied."

@@ -92,6 +92,15 @@
    [:platform [:enum :fcm :apns]]
    [:timestamp {:optional true} inst?]])
 
+;; --- Settings ---
+;; The `:wagoe/push` keys checked at boot; the map stays open for the rest.
+;; nil is an unset `#env`, so the default. The TTL is capped at a century: an
+;; expiry past 12 digits is a token `core.callback/parse-token` refuses.
+(def PushSettings
+  [:map
+   [:callback-token-ttl-seconds {:optional true} [:maybe [:int {:min 1 :max (* 100 365 24 60 60)}]]]
+   [:refuse-legacy-callback-tokens? {:optional true} [:maybe :boolean]]])
+
 ;; --- Validators ---
 (def ^:private push-definition-validator (m/validator PushDefinition))
 (def ^:private push-definition-explainer (m/explainer PushDefinition))

@@ -1,13 +1,12 @@
 (ns wagoe.push.shell.adapters.fcm
-  (:require [wagoe.push.core.device :as device]
-            [wagoe.push.ports :as ports]
+  (:require [wagoe.push.ports :as ports]
+            [wagoe.push.shell.adapters.concurrent :as concurrent]
             [cheshire.core :as json]
             [clojure.tools.logging :as log])
   (:import [java.net URI]
            [java.net.http HttpClient HttpRequest HttpRequest$BodyPublishers HttpResponse$BodyHandlers]
            [java.nio.charset StandardCharsets]
            [java.time Duration]
-           [java.util.concurrent CompletableFuture]
            [com.google.auth.oauth2 GoogleCredentials]
            [java.io FileInputStream]))
 
@@ -53,26 +52,12 @@
          :token-invalid? (contains? #{"UNREGISTERED" "INVALID_ARGUMENT"} error-code)}))))
 
 (defn- send-all
-  "Each `[token payload]` sent concurrently; per-token results, in order."
   [project-id credentials http-client sends]
   (let [access-token (get-access-token credentials)
-        url          (fcm-url project-id)
-        futures      (mapv (fn [[token payload]]
-                             {:token  token
-                              :future (.sendAsync ^HttpClient http-client
-                                                  (build-request url payload access-token)
-                                                  (HttpResponse$BodyHandlers/ofString))})
-                           sends)]
-    (mapv (fn [{:keys [token future]}]
-            (try
-              (parse-response (.get ^CompletableFuture future) token)
-              (catch Exception e
-                (log/warnf "FCM async send failed for %s: %s" (device/token-preview token) (.getMessage e))
-                {:success?     false
-                 :device-token token
-                 :platform     :fcm
-                 :error        {:type :push-send-failed :message (.getMessage e)}})))
-          futures)))
+        url          (fcm-url project-id)]
+    (concurrent/send-all http-client :fcm
+                         (fn [_token payload] (build-request url payload access-token))
+                         parse-response sends)))
 
 (defrecord FCMProvider [project-id credentials http-client]
   ports/IFCMProvider

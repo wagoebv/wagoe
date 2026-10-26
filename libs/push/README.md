@@ -59,6 +59,11 @@ below are assembled; providers without credentials fall back to the mock:
              :callback-secret  #env WAG_PUSH_CALLBACK_SECRET}
 ```
 
+Two optional keys tune the callback token. `:callback-token-ttl-seconds` is how
+long it verifies, seven days by default; raise it when a push's own TTL is longer.
+`:refuse-legacy-callback-tokens? true` refuses tokens in the 1.0 form, which name
+no device and never expire; it is off by default.
+
 Wired by hand, add these to `resources/conf/{env}/config.edn` and require `wagoe.push.shell.module-wiring` at system start:
 
 ```edn

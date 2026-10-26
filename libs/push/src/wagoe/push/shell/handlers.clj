@@ -95,11 +95,12 @@
     (resp/response {:devices devices})))
 
 (defn analytics-callback-handler
-  [{:keys [analytics-store callback-secret]} request]
+  [{:keys [analytics-store callback-secret refuse-legacy-callback-tokens?]} request]
   (let [[body invalid] (request-body request decode-callback-payload callback-payload-explainer)
         verdict        (when-not invalid
                          (service/callback-verdict callback-secret body
-                                                   (.getEpochSecond (java.time.Instant/now))))]
+                                                   (.getEpochSecond (java.time.Instant/now))
+                                                   {:refuse-legacy? refuse-legacy-callback-tokens?}))]
     (cond
       invalid
       (invalid-body invalid)

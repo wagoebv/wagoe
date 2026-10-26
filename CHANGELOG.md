@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Push `:callback-token-ttl-seconds` and `:refuse-legacy-callback-tokens?`** (BOU-850): the token lifetime, 7 days by
+  default, and an opt-in refusal of 1.0-form tokens. Set the second once no app version holds such tokens.
 - **Geo `:cache? true`** (BOU-847): the module wires `:wagoe/db-context` for its cache itself, and a config that does
   not match `GeoConfig` fails at boot, naming the keys. Use it in place of `:db-ctx #ig/ref :wagoe/db-context`.
 - **A handler reuses the rights the authorization middleware read** (BOU-837): they ride on the request as
