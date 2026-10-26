@@ -525,12 +525,13 @@
    `:static` or `:web` route serves: an app that mounted a module's routes
    there itself keeps them, and does not fail to boot on the conflict."
   [api-routes served]
-  (if-let [under-api (seq (filter #(str/starts-with? (first %) "/api") served))]
-    ;; Flattened, because an app mounts nested vectors: ["/api/push" ["/devices" ..]].
-    (let [taken (into #{} (map first)
-                      (reitit.core/routes (reitit.core/router (vec under-api) {:conflicts nil})))]
-      (remove #(and (http-versioning/redirect-route? %) (taken (first %))) api-routes))
-    api-routes))
+  ;; Flattened by Reitit, as the real router reads them: nested vectors, a
+  ;; "" root and nil entries all mount, so none of them may throw here.
+  (let [taken (into #{} (comp (map first) (filter #(str/starts-with? % "/api")))
+                    (reitit.core/routes (reitit.core/router (vec (remove nil? served)) {:conflicts nil})))]
+    (if (seq taken)
+      (remove #(and (http-versioning/redirect-route? %) (taken (first %))) api-routes)
+      api-routes)))
 
 (defn- platform-routes
   "The endpoints every Wagoe application serves, whoever it is.

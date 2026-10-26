@@ -281,6 +281,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **`:wagoe.push/routes`** (BOU-838): the module mounts push itself; an app that mounts the vector by hand keeps
+  `/api/push` too; goes in 2.0. Drop it from your wiring.
 - **`wagoe.platform.shell.database.migrations/create-config`** (BOU-813): `create-migration` no longer calls
   migratus/create, so nothing needs it; goes in 2.0. Call `create-migration`.
 - **`:require-role` in the admin config** (BOU-774): nothing reads it; boot warns outside `:off`, and it goes in 2.0.
@@ -317,7 +319,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Fixed
 
 - **Push serves its device, callback and stats routes under `/api/v1/push`** (BOU-838); they were never mounted.
-  `:wagoe.push/routes` is deprecated; an app that mounts it by hand keeps `/api/push` too.
+  Point clients at `/api/v1/push`.
 - **A group grant can no longer hand out a code role** (BOU-836): `add-group-grant` and an import's `:grants` take only
   a permission a module declares, unless `:wagoe/user :groups :permissions` is set, and never a code role's name. Such a
   stored grant is no longer migrated to that role; boot logs it. Assign the role instead.
