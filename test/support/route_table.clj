@@ -12,7 +12,8 @@
             [wagoe.config :as config]
             [wagoe.main]
             [wagoe.platform.shell.modules :as modules]
-            [wagoe.system-config :as sys-config]))
+            [wagoe.system-config :as sys-config]
+            [wagoe.user.shell.auth :as auth]))
 
 (defn- catalogue []
   (edn/read-string {:readers {'ig/ref ig/ref}}
@@ -90,6 +91,12 @@
          (binding [*handler* (:wagoe/http-handler system)]
            (f))
          (finally (ig/halt! system)))))))
+
+(defn bearer
+  "Headers that sign a request in as `user`, a map of `:id`, `:email`, `:role`."
+  [{:keys [id email role]}]
+  {"authorization"
+   (str "Bearer " (auth/create-jwt-token {:id id :email email :role (keyword role)} 1))})
 
 (def http-methods [:get :head :post :put :patch :delete])
 

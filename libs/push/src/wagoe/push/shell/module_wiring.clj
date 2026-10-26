@@ -59,11 +59,11 @@
 ;; contributed `:wagoe.push/route-contribution`. Still built, so they boot.
 (defmethod ig/init-key :wagoe.push/routes
   [_ deps]
-  (handlers/push-routes (select-keys deps [:device-store :analytics-store :callback-secret])))
+  (handlers/push-routes deps))
 
 (defmethod ig/init-key :wagoe.push/route-contribution
   [_ deps]
-  {:api    (handlers/api-routes (select-keys deps [:device-store :analytics-store :callback-secret]))
+  {:api    (handlers/api-routes deps)
    :web    []
    :static []})
 

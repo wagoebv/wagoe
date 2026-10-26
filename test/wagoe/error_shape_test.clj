@@ -12,12 +12,7 @@
             [clojure.test :refer [deftest is testing use-fixtures]]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.push.shell.service :as push-service]
-            [wagoe.user.shell.auth :as auth]
             [support.route-table :as rt]))
-
-(defn- bearer [{:keys [id email role]}]
-  {"authorization"
-   (str "Bearer " (auth/create-jwt-token {:id id :email email :role role} 1))})
 
 (def ^:dynamic ^:private callers
   "Bound by `with-seeded-callers`: anonymous, the seeded user and admin — real
@@ -29,9 +24,9 @@
   (let [seeded (get-in (rt/decoded (rt/call :post "/test/reset" "{}")) [:seeded])]
     (assert (get-in seeded [:admin :id]) (str "/test/reset seeded no admin: " (pr-str seeded)))
     (binding [callers {:anonymous {}
-                       :user      (bearer (update (:user seeded) :role keyword))
-                       :admin     (bearer (update (:admin seeded) :role keyword))
-                       :deleted   (bearer {:id (random-uuid) :email "gone@error-shape.test" :role :user})}]
+                       :user      (rt/bearer (:user seeded))
+                       :admin     (rt/bearer (:admin seeded))
+                       :deleted   (rt/bearer {:id (random-uuid) :email "gone@error-shape.test" :role :user})}]
       (f))))
 
 (use-fixtures :once (rt/system-fixture "error-shape") with-seeded-callers)
