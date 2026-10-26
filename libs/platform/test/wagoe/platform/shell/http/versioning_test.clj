@@ -211,7 +211,7 @@
           response (handler {:uri "/api/users/123"})]
       (is (map? (:body response)))
       (is (= "Please use versioned API endpoint" (:message (:body response))))
-      (is (= "/api/v1/users/:id" (:location (:body response))))
+      (is (= "/api/v1/users/123" (:location (:body response))))
       (is (= "v1" (:version (:body response))))))
 
   (testing "All HTTP methods use same redirect handler"
@@ -224,6 +224,22 @@
       (is (= 307 (:status post-response)))
       (is (= "/api/v2/items" (get-in get-response [:headers "Location"])))
       (is (= "/api/v2/items" (get-in post-response [:headers "Location"]))))))
+
+(deftest ^:unit redirect-location-is-the-requested-path-versioned
+  ;; Not the route template: /api/v1/users/:id would 404 or hit the wrong row (BOU-846).
+  (let [route    (versioning/create-redirect-route "/users/:id" :v1)
+        location (fn [method request]
+                   (get-in ((get-in (second route) [method :handler]) request)
+                           [:headers "Location"]))]
+    (testing "path parameters are the request's values"
+      (is (= "/api/v1/users/42" (location :get {:uri "/api/users/42"}))))
+    (testing "the query string is kept"
+      (is (= "/api/v1/users/42?x=1&y=a%20b"
+             (location :post {:uri "/api/users/42" :query-string "x=1&y=a%20b"}))))
+    (testing "URL-encoded segments stay encoded"
+      (is (= "/api/v1/users/a%2Fb%20c" (location :get {:uri "/api/users/a%2Fb%20c"}))))
+    (testing "authz-report still names the template"
+      (is (= "/api/v1/users/:id" (get-in (second route) [:get :wagoe/redirect-to]))))))
 
 (deftest ^:unit create-backward-compatibility-routes-test
   (testing "Create redirects for versioned routes"
@@ -439,7 +455,7 @@
       (is (= "/api/users/:id/orders/:order_id" (versioning/route-path route)))
       (let [handler (get-in (second route) [:get :handler])
             response (handler {:uri "/api/users/123/orders/456"})]
-        (is (= "/api/v1/users/:id/orders/:order_id"
+        (is (= "/api/v1/users/123/orders/456"
                (get-in response [:headers "Location"]))))))
 
   (testing "Multiple deprecated versions"
