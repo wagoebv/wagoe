@@ -7,15 +7,12 @@
    method no route takes and a path nobody serves. A client needs one parser;
    a producer that answers in a shape of its own fails here, named. So does a
    5xx or an escaped exception: every call is a client's mistake."
-  (:require [clojure.string :as str]
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [wagoe.platform.core.http.errors :as errors]
-            [wagoe.user.shell.auth :as auth]
+            [wagoe.push.shell.service :as push-service]
             [support.route-table :as rt]))
-
-(defn- bearer [{:keys [id email role]}]
-  {"authorization"
-   (str "Bearer " (auth/create-jwt-token {:id id :email email :role role} 1))})
 
 (def ^:dynamic ^:private callers
   "Bound by `with-seeded-callers`: anonymous, the seeded user and admin — real
@@ -27,9 +24,9 @@
   (let [seeded (get-in (rt/decoded (rt/call :post "/test/reset" "{}")) [:seeded])]
     (assert (get-in seeded [:admin :id]) (str "/test/reset seeded no admin: " (pr-str seeded)))
     (binding [callers {:anonymous {}
-                       :user      (bearer (update (:user seeded) :role keyword))
-                       :admin     (bearer (update (:admin seeded) :role keyword))
-                       :deleted   (bearer {:id (random-uuid) :email "gone@error-shape.test" :role :user})}]
+                       :user      (rt/bearer (:user seeded))
+                       :admin     (rt/bearer (:admin seeded))
+                       :deleted   (rt/bearer {:id (random-uuid) :email "gone@error-shape.test" :role :user})}]
       (f))))
 
 (use-fixtures :once (rt/system-fixture "error-shape") with-seeded-callers)
@@ -121,7 +118,7 @@
                                 r   (rt/call m uri (:empty rt/bodies) hdrs)]
                          :when (= "missing-error-type" (get-in (rt/decoded r) [:error :type]))]
                      [(name who) (str/upper-case (name m)) uri])
-                    distinct sort)]
+                   distinct sort)]
     (is (empty? found) (str/join "\n" (map #(str/join " " %) found)))))
 
 (deftest ^:integration an-unknown-admin-entity-is-a-404
@@ -152,3 +149,18 @@
       (let [r (rt/call :get "/web/admin/no-such-entity" (:empty rt/bodies) (assoc browser "hx-request" "true"))]
         (is (= 404 (:status r)))
         (is (str/includes? (str (get-in r [:headers "HX-Trigger"])) "showToast"))))))
+
+(deftest ^:integration push-serves-its-routes-under-api-v1
+  ;; Mounted by the module itself, and a JSON body's enum strings decode.
+  (let [device  {:token "device-token-1" :platform "fcm" :app-id "com.example"}
+        created (rt/call :post "/api/v1/push/devices" (json/generate-string device) (:user callers))
+        listed  (rt/call :get "/api/v1/push/devices" "" (:user callers))]
+    (is (= 201 (:status created)) (pr-str (rt/decoded created)))
+    (is (= ["device-token-1"] (map :token (:devices (rt/decoded listed))))))
+  (testing "the callback is checked by its HMAC, anonymously"
+    (let [payload {:device-token "device-token-1" :provider-message-id "msg-1"
+                   :event-type "delivered" :notification-id "order-shipped" :platform "fcm"}
+          post    #(rt/call :post "/api/v1/push/callback"
+                            (json/generate-string (assoc payload :callback-token %)))]
+      (is (= 403 (:status (post "not-the-hmac"))))
+      (is (= 204 (:status (post (push-service/generate-callback-token rt/callback-secret "msg-1"))))))))

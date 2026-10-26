@@ -5,10 +5,15 @@
             [wagoe.push.core.analytics :as analytics]
             [malli.core :as m]
             [malli.error :as me]
+            [malli.transform :as mt]
             [ring.util.response :as resp]))
 
 (def ^:private device-info-explainer (m/explainer schema/DeviceInfo))
 (def ^:private callback-payload-explainer (m/explainer schema/CallbackPayload))
+
+;; A JSON body carries its enums as strings; the schemas want keywords.
+(def ^:private decode-device-info (m/decoder schema/DeviceInfo mt/json-transformer))
+(def ^:private decode-callback-payload (m/decoder schema/CallbackPayload mt/json-transformer))
 
 (defn- error-response
   "The framework's one error body (BOU-586), written out: push does not
@@ -26,11 +31,11 @@
 (defn register-device-handler
   [{:keys [device-store]} request]
   (let [user-id (get-in request [:user :id])
-        body    (:body-params request)]
+        body    (decode-device-info (:body-params request))]
     (if-not (schema/valid-device-info? body)
       (invalid-body (device-info-explainer body))
       (let [device (ports/register-device! device-store user-id body)]
-        (-> (resp/created (str "/api/push/devices/" (:id device)) device)
+        (-> (resp/created (str "/api/v1/push/devices/" (:id device)) device)
             (resp/content-type "application/json"))))))
 
 (defn unregister-device-handler
@@ -48,7 +53,7 @@
 
 (defn analytics-callback-handler
   [{:keys [analytics-store callback-secret]} request]
-  (let [body (:body-params request)]
+  (let [body (decode-callback-payload (:body-params request))]
     (cond
       (not (schema/valid-callback? body))
       (invalid-body (callback-payload-explainer body))
@@ -78,19 +83,31 @@
         stats    (ports/get-push-stats analytics-store notif-id {})]
     (resp/response (analytics/calculate-rates stats))))
 
-(defn push-routes
+(defn api-routes
   "Every route but the callback requires a signed-in user, which the platform
    enforces. The callback is public: a device posts it, and the HMAC in its body
    is the credential (BOU-568). The device routes act on the caller's own
-   devices; the stats ask `:push/read`."
+   devices; the stats ask `:push/read`. Contributed as `:api`, so served under
+   `/api/v1`; flat, so each path gets its unversioned redirect."
   [deps]
-  ["/api/push"
-   ["/devices"      {:authorization :self
-                     :post   {:handler (partial register-device-handler deps)}
-                     :get    {:handler (partial list-devices-handler deps)}}]
-   ["/devices/:token" {:authorization :self
-                       :delete {:handler (partial unregister-device-handler deps)}}]
-   ["/callback"      {:post   {:handler (partial analytics-callback-handler deps)
-                               :public  true}}]
-   ["/stats/:notification-id" {:permission :push/read
-                               :get {:handler (partial push-stats-handler deps)}}]])
+  [["/push/devices" {:authorization :self
+                     :post {:handler (partial register-device-handler deps)}
+                     :get  {:handler (partial list-devices-handler deps)}}]
+   ["/push/devices/:token" {:authorization :self
+                            :openapi {:parameters [{:name "token" :in "path" :required true
+                                                    :schema {:type "string"}}]}
+                            :delete {:handler (partial unregister-device-handler deps)}}]
+   ["/push/callback" {:post {:handler (partial analytics-callback-handler deps)
+                             :public  true}}]
+   ["/push/stats/:notification-id" {:permission :push/read
+                                    :openapi {:parameters [{:name "notification-id" :in "path" :required true
+                                                            :schema {:type "string"}}]}
+                                    :get {:handler (partial push-stats-handler deps)}}]])
+
+(defn push-routes
+  "Deprecated: the module mounts `api-routes` itself. The same routes as one
+   `/api/push` vector, for apps that mounted it by hand."
+  [deps]
+  (into ["/api/push"]
+        (map (fn [[path data]] [(subs path (count "/push")) data]))
+        (api-routes deps)))

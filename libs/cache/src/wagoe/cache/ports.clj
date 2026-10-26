@@ -234,7 +234,7 @@
         :size - Number of keys in cache
         :hits - Cache hit count (if tracked)
         :misses - Cache miss count (if tracked)
-        :hit-rate - Hit rate percentage (if tracked)
+        :hit-rate - Fraction of lookups that hit, 0.0 to 1.0 (if tracked)
         :memory-usage - Memory usage in bytes (if available)")
 
   (clear-stats! [this]

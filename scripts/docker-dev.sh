@@ -295,7 +295,7 @@ run_tests() {
     done
     
     # Run tests
-    $DOCKER_COMPOSE run --rm dev-tools clojure -X:test
+    $DOCKER_COMPOSE run --rm -e WAG_ENV=test -e JWT_SECRET="${JWT_SECRET:-dev-secret-at-least-32-characters-long}" dev-tools clojure -M:test:test/all
     
     log_success "Tests completed"
 }

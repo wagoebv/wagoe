@@ -258,7 +258,7 @@
     :boolean]
    [:base-path {:description "Base URL path for admin interface (e.g., '/web/admin')"}
     :string]
-   [:require-role {:description "User role required to access admin (e.g., :admin)"}
+   [:require-role {:optional true :description "Deprecated: read by nothing, removed in 2.0"}
     [:enum :admin :user :viewer]]
    [:entity-discovery {:description "Entity discovery and filtering configuration"}
     EntityDiscoveryConfig]
@@ -552,7 +552,6 @@
   "Default admin configuration values."
   {:enabled? false
    :base-path "/web/admin"
-   :require-role :admin
    :entity-discovery {:mode :allowlist
                       :allowlist #{}}
    :pagination {:default-page-size 20

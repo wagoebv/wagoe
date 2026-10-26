@@ -156,7 +156,6 @@
   :wagoe/admin
   {:enabled?         true
    :base-path        "/web/admin"
-   :require-role     :admin
    :entity-discovery {:mode      :allowlist
                       :allowlist #{:users :tenants}}
    :entities         #merge [#include "admin/users.edn"
