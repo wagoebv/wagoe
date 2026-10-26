@@ -49,20 +49,20 @@ Add to `resources/conf/{env}/config.edn` and require `wagoe.geo.shell.module-wir
 {:provider   :openstreetmap
  :user-agent "MyApp/1.0 (contact@example.com)"
  :cache-ttl  86400
- :db         #ig/ref :wagoe/db}
+ :db-ctx     #ig/ref :wagoe/db-context}
 
 ;; PDOK Locatieserver (Dutch addresses, free, no key)
 :wagoe/geo-service
 {:provider  :pdok
  :cache-ttl 86400
- :db        #ig/ref :wagoe/db}
+ :db-ctx    #ig/ref :wagoe/db-context}
 
 ;; Google Maps
 :wagoe/geo-service
 {:provider  :google
  :api-key   #env WAG_GEO_API_KEY
  :cache-ttl 86400
- :db        #ig/ref :wagoe/db}
+ :db-ctx    #ig/ref :wagoe/db-context}
 
 ;; Fallback chain (try OSM first, then Google)
 :wagoe/geo-service
@@ -70,7 +70,7 @@ Add to `resources/conf/{env}/config.edn` and require `wagoe.geo.shell.module-wir
  :api-key    #env WAG_GEO_API_KEY
  :cache-ttl  86400
  :rate-limit 1
- :db         #ig/ref :wagoe/db}
+ :db-ctx     #ig/ref :wagoe/db-context}
 ```
 
 `:timeout-ms` (default 3000) bounds each provider call's connect and read. A

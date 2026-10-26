@@ -60,13 +60,13 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
 {:provider   :openstreetmap
  :user-agent "MyApp/1.0 (contact@example.com)"
  :cache-ttl  86400   ; 24 hours
- :db         #ig/ref :wagoe/db}
+ :db-ctx     #ig/ref :wagoe/db-context}
 
 ;; PDOK: street, city and point from postcode + house number (no API key)
 :wagoe/geo-service
 {:provider  :pdok
  :cache-ttl 86400
- :db        #ig/ref :wagoe/db}
+ :db-ctx    #ig/ref :wagoe/db-context}
 
 ;; Fallback chain: OSM first, then Google
 :wagoe/geo-service
@@ -74,7 +74,7 @@ DB-backed caching, per-provider rate limiting, and Haversine distance calculatio
  :api-key    #env WAG_GEO_API_KEY
  :user-agent "MyApp/1.0"
  :cache-ttl  86400
- :db         #ig/ref :wagoe/db}
+ :db-ctx     #ig/ref :wagoe/db-context}
 ----
 
 == Usage
