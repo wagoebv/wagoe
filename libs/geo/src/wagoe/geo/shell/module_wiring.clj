@@ -26,8 +26,7 @@
       :cache-ttl  86400
       :db-ctx     #ig/ref :wagoe/db-context}
 
-   :db-ctx caches lookups in the geo_cache table; :db takes a bare
-   next.jdbc datasource instead.
+   :db-ctx caches lookups in the geo_cache table.
 
    :timeout-ms (default 3000) bounds each provider's connect and read.
    The component is a service/GeoService; a call can keep to some of the
@@ -77,13 +76,19 @@
 ;; =============================================================================
 
 (defn- cache-datasource
-  "The datasource to cache in: :db-ctx's, or :db as given."
-  [{:keys [db-ctx db]}]
-  (if db-ctx
-    (or (:datasource db-ctx)
-        (throw (ex-info ":wagoe/geo-service :db-ctx has no :datasource"
-                        {:type :wagoe/geo-no-datasource})))
-    db))
+  "The datasource to cache in, from :db-ctx. Fails at boot rather than on the
+   first lookup."
+  [{:keys [db-ctx] :as config}]
+  (cond
+    (contains? config :db)
+    (throw (ex-info ":wagoe/geo-service takes :db-ctx #ig/ref :wagoe/db-context, not :db"
+                    {:type :wagoe/geo-config-error}))
+
+    (and db-ctx (not (:datasource db-ctx)))
+    (throw (ex-info ":wagoe/geo-service :db-ctx has no :datasource"
+                    {:type :wagoe/geo-config-error}))
+
+    :else (:datasource db-ctx)))
 
 (defmethod ig/init-key :wagoe/geo-service
   [_ {:keys [provider cache-ttl] :as config}]

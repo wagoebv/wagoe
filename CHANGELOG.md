@@ -317,7 +317,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Fixed
 
 - **The geo cache boots from its documented config** (BOU-839): `:wagoe/geo-service` takes
-  `:db-ctx #ig/ref :wagoe/db-context`. Replace `:db #ig/ref :wagoe/db`, which never resolved.
+  `:db-ctx #ig/ref :wagoe/db-context`; `:db` now fails at boot. Replace `:db` with `:db-ctx`.
 - **A group grant can no longer hand out a code role** (BOU-836): `add-group-grant` and an import's `:grants` take only
   a permission a module declares, unless `:wagoe/user :groups :permissions` is set, and never a code role's name. Such a
   stored grant is no longer migrated to that role; boot logs it. Assign the role instead.
