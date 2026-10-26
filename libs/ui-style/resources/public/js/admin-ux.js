@@ -291,6 +291,10 @@ document.addEventListener('alpine:init', function () {
 (function () {
   'use strict';
 
+  // A swap of the whole body runs this script again: wire it once
+  if (window.wagoeAdminUxWired) return;
+  window.wagoeAdminUxWired = true;
+
   // =========================================================================
   // 1. Progress Bar
   // =========================================================================
@@ -304,7 +308,8 @@ document.addEventListener('alpine:init', function () {
   }
 
   function showProgress() {
-    if (!progressBar) createProgressBar();
+    // A swap of the whole body takes it out of the page
+    if (!progressBar || !progressBar.isConnected) createProgressBar();
     progressBar.classList.remove('done');
     // Force reflow to restart animation
     progressBar.offsetWidth;
@@ -798,6 +803,11 @@ document.addEventListener('alpine:init', function () {
     return Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 14);
   }
 
+  // components.js renders it into the toast region
+  function toast(type, message) {
+    document.dispatchEvent(new CustomEvent('showToast', { detail: { type: type, message: message } }));
+  }
+
   // A failed request shows a toast, unless its response asked for one or its
   // element is marked data-quiet-failure: an enhancement the page reads fine
   // without, such as a label lookup.
@@ -814,7 +824,97 @@ document.addEventListener('alpine:init', function () {
     var id = xhr.getResponseHeader('X-Correlation-ID') || headers['X-Correlation-ID'];
     var message = region.dataset.errorMessage;
     if (id) message += ' ' + region.dataset.errorReference + ' ' + id;
-    document.dispatchEvent(new CustomEvent('showToast', { detail: { type: 'error', message: message } }));
+    toast('error', message);
+  }
+
+  // Deprecated until 2.0: the toast and confirm APIs and .flash-messages
+  // banners from before shared-ui's toast region and confirm-modal.
+  var deprecationWarned = {};
+  function warnDeprecated(what, instead) {
+    if (deprecationWarned[what]) return;
+    deprecationWarned[what] = true;
+    console.warn(what + ' is deprecated and goes in 2.0. ' + instead);
+  }
+
+  function showToast(opts) {
+    warnDeprecated('AdminUX.showToast',
+      'Send HX-Trigger {"showToast": {"type": ..., "message": ...}} or dispatch a showToast event.');
+    opts = opts || {};
+    var region = document.getElementById('toasts');
+    var before = region && region.lastElementChild;
+    toast(opts.type || 'info', opts.message || opts.title || '');
+    var el = region && region.lastElementChild;
+    if (!el || el === before) return undefined;
+    // The old API's duration, 0 to stay; set before Alpine initialises the toast
+    if (typeof opts.duration === 'number') el.setAttribute('x-data', 'toast(' + opts.duration + ')');
+    return el;
+  }
+
+  function convertFlashMessages() {
+    document.querySelectorAll('.flash-messages .alert').forEach(function (el) {
+      if (el.dataset.toastConverted === '1') return;
+      el.dataset.toastConverted = '1';
+      warnDeprecated('.flash-messages', 'Render flashes with shared-ui toast/with-toast.');
+      var type = 'info';
+      if (el.classList.contains('alert-success')) type = 'success';
+      else if (el.classList.contains('alert-error') || el.classList.contains('alert-danger')) type = 'error';
+      else if (el.classList.contains('alert-warning')) type = 'warning';
+      toast(type, el.textContent.trim());
+      el.style.display = 'none';
+    });
+  }
+
+  // The old confirm API, on a <dialog> shaped like shared-ui's confirm-modal.
+  // onConfirm runs only on the confirm button; the dialog is removed on close.
+  var confirmCount = 0;
+  function showConfirmModal(opts) {
+    warnDeprecated('AdminUX.showConfirmModal',
+      'Render shared-ui modal/confirm-modal and put confirm-attrs on the element.');
+    openConfirmModal(opts);
+  }
+
+  function openConfirmModal(opts) {
+    opts = opts || {};
+    function el(tag, cls, text) {
+      var e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text) e.textContent = text;
+      return e;
+    }
+    var id = 'admin-ux-confirm-' + (++confirmCount);
+    var dialog = el('dialog', 'modal');
+    dialog.setAttribute('role', 'alertdialog');
+    dialog.setAttribute('aria-labelledby', id + '-title');
+    dialog.setAttribute('aria-describedby', id + '-message');
+    var box = el('div', 'modal-box');
+    var title = el('h3', 'text-lg font-bold', opts.title || 'Confirm Delete');
+    title.id = id + '-title';
+    var message = el('p', 'py-4',
+      opts.message || 'Are you sure you want to delete this item? This action cannot be undone.');
+    message.id = id + '-message';
+    box.append(title, message);
+    if (opts.detail) box.appendChild(el('div', 'alert alert-error text-sm', opts.detail));
+    var actions = el('form', 'modal-action');
+    actions.method = 'dialog';
+    var cancel = el('button', 'btn', opts.cancelLabel || 'Cancel');
+    cancel.value = 'cancel';
+    var confirm = el('button', 'btn btn-error', opts.confirmLabel || 'Delete');
+    confirm.value = 'confirm';
+    actions.append(cancel, confirm);
+    box.appendChild(actions);
+    var backdrop = el('form', 'modal-backdrop');
+    backdrop.method = 'dialog';
+    var outside = el('button', null, opts.cancelLabel || 'Cancel');
+    outside.tabIndex = -1;
+    backdrop.appendChild(outside);
+    dialog.append(box, backdrop);
+    dialog.addEventListener('close', function () {
+      dialog.remove();
+      if (dialog.returnValue === 'confirm' && opts.onConfirm) opts.onConfirm();
+    }, { once: true });
+    document.body.appendChild(dialog);
+    dialog.showModal();
+    cancel.focus();
   }
 
   // =========================================================================
@@ -879,6 +979,29 @@ document.addEventListener('alpine:init', function () {
     // Clickable rows
     initClickableRows();
 
+    convertFlashMessages();
+    // The whole page: an outerHTML swap's target is the element it replaced
+    document.addEventListener('htmx:afterSwap', function () { convertFlashMessages(); });
+
+    // Deprecated: hx-confirm on a delete asks in the styled modal, with the
+    // data-confirm-title/-label/-cancel labels. confirm-attrs elements are components.js's.
+    document.addEventListener('htmx:confirm', function (event) {
+      var elt = event.detail.elt;
+      if (!elt || !event.detail.question || elt.hasAttribute('data-confirm-modal')) return;
+      if (!(elt.hasAttribute('hx-delete') || elt.classList.contains('danger') ||
+            elt.getAttribute('value') === 'delete')) return;
+      event.preventDefault();
+      warnDeprecated('hx-confirm on a delete',
+        'Render shared-ui modal/confirm-modal and put confirm-attrs on the element.');
+      openConfirmModal({
+        title: elt.getAttribute('data-confirm-title') || undefined,
+        message: event.detail.question,
+        cancelLabel: elt.getAttribute('data-confirm-cancel') || undefined,
+        confirmLabel: elt.getAttribute('data-confirm-label') || undefined,
+        onConfirm: function () { event.detail.issueRequest(true); }
+      });
+    });
+
     // Expose public API
     window.AdminUX = {
       closeDrawer: closeDrawer,
@@ -888,7 +1011,9 @@ document.addEventListener('alpine:init', function () {
       editCursorRow: editCursorRow,
       openFilters: openFilters,
       toggleCursorRow: toggleCursorRow,
-      createSkeletonRows: createSkeletonRows
+      createSkeletonRows: createSkeletonRows,
+      showToast: showToast,
+      showConfirmModal: showConfirmModal
     };
   }
 

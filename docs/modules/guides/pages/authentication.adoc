@@ -255,6 +255,10 @@ function or a `wagoe.user.ports/ILoginRedirect`, the same way as `:mfa-required?
 function that returns nil or a path off this site sends the user to the default. It applies to password login, the MFA step, OpenID Connect sign-in and
 `/web` for someone already signed in, unless `:landing` is set. A `return-to` on this site still wins.
 
+A top-level `:dashboard-extra-cards`, a vector of Hiccup cards, still shows after the
+dashboard's sections, deprecated until 2.0. Give a module's nav item a `:description`
+instead.
+
 `:dashboard false` leaves `/web/dashboard` to the application; `{:handler sym}` serves
 that Ring handler there instead, behind the same sign-in check. Either way, users then
 land on `/web/dashboard`.

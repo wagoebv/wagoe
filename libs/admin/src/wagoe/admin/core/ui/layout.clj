@@ -136,10 +136,11 @@
    sidebar's, see `dashboard-groups`), an entity as a tile, any other page as
    a compact link. `stats` maps an entity to {:count n :summary [..]}; a nil
    count shows \"—\". `opts`: :activity for the recent-activity panel (see
-   `activity-panel`), and :entity-configs, :display and :now to format
-   summaries and times."
+   `activity-panel`), :extra-cards, Hiccup cards after the sections (the
+   deprecated `:dashboard-extra-cards`), and :entity-configs, :display and
+   :now to format summaries and times."
   ([groups stats] (dashboard groups stats {}))
-  ([groups stats {:keys [activity] :as opts}]
+  ([groups stats {:keys [activity extra-cards] :as opts}]
    [:div.admin-home
     [:header.admin-home-header
      [:h1 [:t :admin/page-heading]]]
@@ -156,7 +157,10 @@
          [:div.entity-grid
           (for [item tiles]
             (dashboard-tile item stats opts))
-          (map dashboard-link links)]])]
+          (map dashboard-link links)]])
+      (when (seq extra-cards)
+        [:section.admin-home-section.admin-home-extra
+         [:div.entity-grid (seq extra-cards)]])]
      (when activity
        (activity-panel activity opts))]]))
 

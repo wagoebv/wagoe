@@ -368,6 +368,11 @@ serve it or point the redirect elsewhere. `:home` is bound per request
 layouts read it without a config argument; `/web`, its fallback, sends a
 signed-in user on to their landing path, or to `:landing` when that is set.
 
+`:dashboard-extra-cards` at the top of the config is deprecated until 2.0: the
+admin dashboard shows its Hiccup cards after its sections, and boot warns.
+Without the admin module they show nowhere. Give
+a module's nav item a `:description` instead.
+
 `:landing` must be served by a route marked `:public true`, or a signed-out
 visitor is sent to log in. The user module contributes `/` as a `:static`
 route for it; the platform drops its own `/` whenever a module's `:static`
