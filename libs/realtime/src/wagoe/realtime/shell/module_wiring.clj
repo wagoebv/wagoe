@@ -47,7 +47,7 @@
     provider))
 
 (defmethod ig/init-key :wagoe/realtime
-  [_ {:keys [provider jwt-verifier] :as config}]
+  [_ {:keys [provider jwt-verifier error-reporter] :as config}]
   (log/info "Initializing realtime component" {:provider provider})
   (let [provider (normalize-provider provider)
         conn-registry (registry/create-in-memory-registry)
@@ -76,6 +76,7 @@
         svc (service/create-realtime-service conn-registry jwt-verifier
                                              :pubsub-manager pubsub-manager
                                              :bus bus
+                                             :error-reporter error-reporter
                                              :max-streams (:max-streams config))]
     (log/info "Realtime component initialized" {:provider provider})
     {:service svc :registry conn-registry :pubsub-manager pubsub-manager
@@ -99,3 +100,9 @@
         (ports/stop-subscriber! bus))
       (catch Exception e (log/warn e "realtime bus shutdown failed"))))
   (when pool (try (.close pool) (catch Exception e (log/warn e "pool close failed")))))
+
+(defn ig-config
+  "`:wagoe/realtime` with the app's error reporter, so handlers run with a
+   clean error context (BOU-848)."
+  [settings _ctx]
+  {:components {:wagoe/realtime (assoc settings :error-reporter (ig/ref :wagoe/error-reporting))}})

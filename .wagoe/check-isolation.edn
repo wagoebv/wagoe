@@ -66,6 +66,12 @@
          reaches past the jobs ports into its core — a layering question on top of
          the dependency one. jobs should expose what workflow needs on its port."}
 
+  {:lib "realtime"  :namespace "wagoe.observability.errors.ports"
+   :why "BY DESIGN. Optional companion: handlers get a clean error context only
+         when an :error-reporter is passed, which needs observability loaded.
+         Declaring it would put the Sentry and OpenTelemetry SDKs under every
+         realtime user (BOU-848). Documented at the call site in service.clj."}
+
   {:lib "devtools"  :namespace "wagoe.admin.ports"
    :why "BY DESIGN. Optional companion: (explain-entity) in project_repl.clj reads the
          admin's schema provider, and says the admin is absent when it is."}

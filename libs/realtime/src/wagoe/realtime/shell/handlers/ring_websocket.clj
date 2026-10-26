@@ -10,6 +10,7 @@
      ;; In your route definitions
      [\"/ws\" {:get {:handler (ws-handler/websocket-handler realtime-service)}}]"
   (:require [wagoe.realtime.ports :as realtime-ports]
+            [wagoe.realtime.shell.service :as service]
             [wagoe.realtime.shell.adapters.websocket-adapter :as ws-adapter]
             [clojure.tools.logging :as log]
             [ring.websocket :as ring-ws])
@@ -68,7 +69,7 @@
                   (log/debug "WebSocket connected" {:connection-id connection-id})
                   (when on-open
                     (try
-                      (on-open connection-id)
+                      (service/with-clean-error-context realtime-service #(on-open connection-id))
                       (catch Exception e
                         (log/warn e "on-open callback failed"
                                   {:connection-id connection-id})))))
@@ -78,7 +79,9 @@
 
             :on-message
             (if on-message
-              (fn [ws-socket msg] (on-message ws-socket msg))
+              ;; A socket thread holds the previous message's error context (BOU-848).
+              (fn [ws-socket msg]
+                (service/with-clean-error-context realtime-service #(on-message ws-socket msg)))
               (fn [_ws-socket _msg] nil))
 
             :on-close

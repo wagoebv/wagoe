@@ -62,9 +62,9 @@
                               ;; five attempts — the documentation and the
                               ;; behaviour disagreeing, with nothing to say so.
                       (select-keys config [:prefix :group :max-len
-                                           :max-deliveries :min-idle-ms]))
+                                           :max-deliveries :min-idle-ms :error-reporter]))
               :memory (in-memory/create-in-memory-bus
-                       (select-keys config [:history-limit]))
+                       (select-keys config [:history-limit :error-reporter]))
               (throw (ex-info (str "Unknown event bus provider: " (pr-str provider))
                               {:type     :unknown-provider
                                :provider provider
@@ -129,7 +129,7 @@
   [settings _ctx]
   (let [outbox (:outbox settings)]
     {:components
-     (cond-> {:wagoe/events settings}
+     (cond-> {:wagoe/events (assoc settings :error-reporter (ig/ref :wagoe/error-reporting))}
        outbox
        (assoc :wagoe/events-outbox (merge outbox
                                           {:bus    (ig/ref :wagoe/events)

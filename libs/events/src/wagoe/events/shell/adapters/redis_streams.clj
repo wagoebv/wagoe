@@ -15,6 +15,7 @@
    redeliveries, unlike the stream entry id."
   (:require [wagoe.events.core.event :as event]
             [wagoe.events.ports :as ports]
+            [wagoe.observability.errors.ports :as errors]
             [wagoe.platform.transit :as transit]
             [clojure.tools.logging :as log])
   (:import (java.util.concurrent Executors ExecutorService TimeUnit)
@@ -241,11 +242,14 @@
           {:error {:type :events/publish-failed :message (.getMessage e)}}))))
 
   ports/IEventSubscriber
-  (subscribe! [_ topic handler]
+  (subscribe! [this topic handler]
     (if-let [problem (event/topic-problem topic)]
       {:error {:type :events/invalid :message problem}}
-      (let [stream (stream-key prefix topic)
-            id     (str (random-uuid))]
+      (let [stream   (stream-key prefix topic)
+            id       (str (random-uuid))
+            ;; The poller thread holds the previous handler's error context (BOU-848).
+            reporter (:error-reporter this)
+            scoped   (fn [event] (errors/with-clean-context reporter #(handler event)))]
         (ensure-group! pool stream group)
         ;; One Redis consumer per topic, fanning out to every local handler.
         ;;
@@ -265,9 +269,9 @@
         (let [[before after] (swap-vals! subscriptions update stream
                                          (fn [{:keys [handlers] :as existing}]
                                            (if existing
-                                             (assoc existing :handlers (assoc handlers id handler))
+                                             (assoc existing :handlers (assoc handlers id scoped))
                                              {:running  (atom true)
-                                              :handlers {id handler}})))
+                                              :handlers {id scoped}})))
               first?  (nil? (get before stream))
               running (:running (get after stream))]
           (when first?
@@ -362,18 +366,20 @@
                              (default 5; nil retries forever, which stalls the
                              topic behind a poison message)
             :min-idle-ms     how long an entry must be untouched before this
-                             consumer reclaims it from another (default 30000)"
-  [pool & [{:keys [prefix group max-len max-deliveries min-idle-ms] :as opts}]]
-  (->RedisStreamsEventBus pool
-                          (or prefix "wagoe:events:")
-                          (or group "wagoe")
-                          (Executors/newCachedThreadPool)
-                          (atom {})
-                          (or max-len 10000)
-                          ;; `contains?` and not `or`: an explicit nil means retry forever,
-                          ;; which is a choice, and `or` would silently override it.
-                          (if (contains? opts :max-deliveries) max-deliveries 5)
-                          (or min-idle-ms 30000)))
+                             consumer reclaims it from another (default 30000)
+            :error-reporter  gives each handler a clean error context"
+  [pool & [{:keys [prefix group max-len max-deliveries min-idle-ms error-reporter] :as opts}]]
+  (cond-> (->RedisStreamsEventBus pool
+                                  (or prefix "wagoe:events:")
+                                  (or group "wagoe")
+                                  (Executors/newCachedThreadPool)
+                                  (atom {})
+                                  (or max-len 10000)
+                                  ;; `contains?` and not `or`: an explicit nil means retry forever,
+                                  ;; which is a choice, and `or` would silently override it.
+                                  (if (contains? opts :max-deliveries) max-deliveries 5)
+                                  (or min-idle-ms 30000))
+    error-reporter (assoc :error-reporter error-reporter)))
 
 (defn stop!
   "Stop every subscription and release the threads.
