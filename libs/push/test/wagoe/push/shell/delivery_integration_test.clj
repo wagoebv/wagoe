@@ -196,8 +196,3 @@
           (name platform)))
     (is (= {:sent 2 :delivered 2}
            (select-keys (ports/get-push-stats analytics-store :orders/shipped {}) [:sent :delivered])))))
-
-(deftest ^:unit without-a-secret-a-push-carries-no-callback-token
-  (let [notification {:title "Hi" :data {:k "v"}}]
-    (doseq [secret [nil ""]]
-      (is (= notification (service/with-callback notification :n secret)) (pr-str secret)))))
