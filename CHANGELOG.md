@@ -322,6 +322,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Push registration's `Location` names `GET /api/v1/push/devices/:token`, a route that now exists** (BOU-845).
+  Push bodies are declared, so they appear in `/openapi.json` and a bad one gets the platform's 400.
 - **Pushes carry the callback token, so `POST /api/v1/push/callback` records analytics** (BOU-844). Set
   `:callback-secret` in `:wagoe/push`; push warns at boot without one.
 - **An unversioned `/api/...` redirect points at the requested path, query string kept** (BOU-846); Location was the

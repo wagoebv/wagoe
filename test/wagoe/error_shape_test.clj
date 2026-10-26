@@ -154,9 +154,21 @@
   ;; Mounted by the module itself, and a JSON body's enum strings decode.
   (let [device  {:token "device-token-1" :platform "fcm" :app-id "com.example"}
         created (rt/call :post "/api/v1/push/devices" (json/generate-string device) (:user callers))
-        listed  (rt/call :get "/api/v1/push/devices" "" (:user callers))]
+        listed  (rt/call :get "/api/v1/push/devices" "" (:user callers))
+        located (rt/call :get (get-in created [:headers "Location"]) "" (:user callers))]
     (is (= 201 (:status created)) (pr-str (rt/decoded created)))
-    (is (= ["device-token-1"] (map :token (:devices (rt/decoded listed))))))
+    (is (= ["device-token-1"] (map :token (:devices (rt/decoded listed)))))
+    (is (= "device-token-1" (:token (rt/decoded located))) "Location names a resource that answers"))
+  (testing "a body the route declares is refused in the platform's shape"
+    (let [r     (rt/call :post "/api/v1/push/devices" (json/generate-string {:platform "fcm"}) (:user callers))
+          error (:error (rt/decoded r))]
+      (is (= 400 (:status r)))
+      (is (= "validation-error" (:type error)))
+      (is (contains? (:details error) :token) (pr-str error))))
+  (testing "and appears in the OpenAPI document"
+    (let [paths (:paths (rt/decoded (rt/call :get "/openapi.json")))]
+      (doseq [path ["/api/v1/push/devices" "/api/v1/push/callback"]]
+        (is (some? (get-in paths [(keyword path) :post :requestBody])) path))))
   (testing "the callback is checked by its HMAC, anonymously"
     (let [payload {:device-token "device-token-1" :provider-message-id "msg-1"
                    :event-type "delivered" :notification-id "order-shipped" :platform "fcm"}

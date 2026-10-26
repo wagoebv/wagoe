@@ -17,10 +17,31 @@
   (let [deps    {:device-store (p/->DeviceTokenStore pt/*db*)}
         user-id (random-uuid)
         request {:user        {:id user-id}
-                 :body-params {:token "fcm-token-1" :platform :fcm :app-id "com.test"}}
+                 :uri         "/api/v1/push/devices"
+                 :body-params {:token "fcm:token-1" :platform :fcm :app-id "com.test"}}
         response (handlers/register-device-handler deps request)]
     (is (= 201 (:status response)))
-    (is (string? (get-in response [:headers "Location"])))))
+    ;; The path GET and DELETE answer on, not the id nothing serves (BOU-845).
+    (is (= "/api/v1/push/devices/fcm%3Atoken-1" (get-in response [:headers "Location"])))))
+
+(deftest ^:integration register-device-reads-the-coerced-body
+  (let [store   (p/->DeviceTokenStore pt/*db*)
+        user-id (random-uuid)
+        request {:user       {:id user-id}
+                 :uri        "/api/v1/push/devices"
+                 :parameters {:body {:token "coerced" :platform :fcm :app-id "com.test"}}}]
+    (is (= 201 (:status (handlers/register-device-handler {:device-store store} request))))
+    (is (= ["coerced"] (map :token (ports/get-user-devices store user-id))))))
+
+(deftest ^:integration get-device-handler-test
+  (let [store   (p/->DeviceTokenStore pt/*db*)
+        deps    {:device-store store}
+        user-id (random-uuid)
+        fetch   #(handlers/get-device-handler deps {:user {:id %1} :path-params {:token %2}})]
+    (ports/register-device! store user-id {:token "mine" :platform :fcm :app-id "com.test"})
+    (is (= "mine" (get-in (fetch user-id "mine") [:body :token])))
+    (is (= 404 (:status (fetch user-id "missing"))))
+    (is (= 404 (:status (fetch (random-uuid) "mine"))) "another user's device")))
 
 (deftest ^:integration register-device-invalid-body-test
   (let [deps    {:device-store (p/->DeviceTokenStore pt/*db*)}
@@ -129,6 +150,7 @@
   ;; for :push/read or :push/write, which no ordinary user holds.
   (is (= {["/push/devices" :get]                [:self []]
           ["/push/devices" :post]               [:self []]
+          ["/push/devices/:token" :get]         [:self []]
           ["/push/devices/:token" :delete]      [:self []]
           ["/push/callback" :post]              [:public []]
           ["/push/stats/:notification-id" :get] [:permission [:push/read]]}
@@ -139,4 +161,6 @@
   (let [[root & children] (handlers/push-routes {})]
     (is (= "/api/push" root))
     (is (= ["/devices" "/devices/:token" "/callback" "/stats/:notification-id"]
-           (map first children)))))
+           (map first children)))
+    (is (not-any? :parameters (mapcat (comp (juxt :get :post :delete) second) children))
+        "an app's own router may not coerce with malli")))

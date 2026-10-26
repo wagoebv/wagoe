@@ -6,6 +6,7 @@
             [malli.core :as m]
             [malli.error :as me]
             [malli.transform :as mt]
+            [ring.util.codec :as codec]
             [ring.util.response :as resp]))
 
 (def ^:private device-info-explainer (m/explainer schema/DeviceInfo))
@@ -28,15 +29,35 @@
   (error-response 400 "validation-error" "Request validation failed"
                   (me/humanize explanation)))
 
+(defn- request-body
+  "[body explanation]: the body the router coerced against the route's
+   `:parameters`, or, where nothing did (the deprecated vector under a router
+   without coercion, a handler called directly), decoded and explained here.
+   The explanation is nil for a valid body."
+  [request decode explain]
+  (if-let [body (get-in request [:parameters :body])]
+    [body nil]
+    (let [body (decode (:body-params request))]
+      [body (explain body)])))
+
 (defn register-device-handler
   [{:keys [device-store]} request]
-  (let [user-id (get-in request [:user :id])
-        body    (decode-device-info (:body-params request))]
-    (if-not (schema/valid-device-info? body)
-      (invalid-body (device-info-explainer body))
+  (let [user-id        (get-in request [:user :id])
+        [body invalid] (request-body request decode-device-info device-info-explainer)]
+    (if invalid
+      (invalid-body invalid)
       (let [device (ports/register-device! device-store user-id body)]
-        (-> (resp/created (str "/api/v1/push/devices/" (:id device)) device)
+        ;; The device's own path, under whichever prefix this was posted to.
+        (-> (resp/created (str (:uri request) "/" (codec/url-encode (:token device))) device)
             (resp/content-type "application/json"))))))
+
+(defn get-device-handler
+  [{:keys [device-store]} request]
+  (let [token (get-in request [:path-params :token])]
+    (if-let [device (->> (ports/get-user-devices device-store (get-in request [:user :id]))
+                         (some #(when (= token (:token %)) %)))]
+      (resp/response device)
+      (error-response 404 "not-found" "Device not found"))))
 
 (defn unregister-device-handler
   [{:keys [device-store]} request]
@@ -53,10 +74,10 @@
 
 (defn analytics-callback-handler
   [{:keys [analytics-store callback-secret]} request]
-  (let [body (decode-callback-payload (:body-params request))]
+  (let [[body invalid] (request-body request decode-callback-payload callback-payload-explainer)]
     (cond
-      (not (schema/valid-callback? body))
-      (invalid-body (callback-payload-explainer body))
+      invalid
+      (invalid-body invalid)
 
       (not (service/verify-callback-token
             callback-secret
@@ -91,23 +112,34 @@
    `/api/v1`; flat, so each path gets its unversioned redirect."
   [deps]
   [["/push/devices" {:authorization :self
-                     :post {:handler (partial register-device-handler deps)}
+                     :post {:handler    (partial register-device-handler deps)
+                            :parameters {:body schema/DeviceInfo}}
                      :get  {:handler (partial list-devices-handler deps)}}]
    ["/push/devices/:token" {:authorization :self
                             :openapi {:parameters [{:name "token" :in "path" :required true
                                                     :schema {:type "string"}}]}
+                            :get    {:handler (partial get-device-handler deps)}
                             :delete {:handler (partial unregister-device-handler deps)}}]
-   ["/push/callback" {:post {:handler (partial analytics-callback-handler deps)
-                             :public  true}}]
+   ["/push/callback" {:post {:handler    (partial analytics-callback-handler deps)
+                             :parameters {:body schema/CallbackPayload}
+                             :public     true}}]
    ["/push/stats/:notification-id" {:permission :push/read
                                     :openapi {:parameters [{:name "notification-id" :in "path" :required true
                                                             :schema {:type "string"}}]}
                                     :get {:handler (partial push-stats-handler deps)}}]])
+
+(defn- without-body-parameters
+  "Route data with no `:parameters` on its methods: an app's own router may
+   coerce with something else, and the handlers check the body themselves."
+  [data]
+  (reduce (fn [d method] (cond-> d (map? (get d method)) (update method dissoc :parameters)))
+          data
+          [:get :post :delete]))
 
 (defn push-routes
   "Deprecated: the module mounts `api-routes` itself. The same routes as one
    `/api/push` vector, for apps that mounted it by hand."
   [deps]
   (into ["/api/push"]
-        (map (fn [[path data]] [(subs path (count "/push")) data]))
+        (map (fn [[path data]] [(subs path (count "/push")) (without-body-parameters data)]))
         (api-routes deps)))
