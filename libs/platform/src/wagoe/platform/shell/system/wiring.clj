@@ -511,17 +511,20 @@
 
     {:csrf csrf-config :rate-limit rate-limit-config :trusted-proxies cidrs}))
 
+(defn- served-paths
+  "Every path `routes` serves, flattened by Reitit as the real router reads
+   them: nested vectors, a \"\" root and nil entries all mount, so none of
+   them may throw here."
+  [routes]
+  (into #{} (map first)
+        (reitit.core/routes (reitit.core/router (vec (remove nil? routes)) {:conflicts nil}))))
+
 (defn- without-claimed
-  "`routes` minus the ones `default?` picks whose path a route in `served`
-   already serves: an app's own route wins over a platform default, and the
-   boot does not fail on the conflict. Used for the `/` redirect and the
-   unversioned `/api/...` redirects."
-  [routes default? served]
-  ;; Flattened by Reitit, as the real router reads them: nested vectors, a
-  ;; "" root and nil entries all mount, so none of them may throw here.
-  (let [taken (into #{} (map first)
-                    (reitit.core/routes (reitit.core/router (vec (remove nil? served)) {:conflicts nil})))]
-    (remove #(and (default? %) (taken (first %))) routes)))
+  "`routes` minus the ones `default?` picks whose path is in `taken`: an app's
+   own route wins over a platform default, and the boot does not fail on the
+   conflict. Used for the `/` redirect and the unversioned `/api/...` redirects."
+  [routes default? taken]
+  (remove #(and (default? %) (taken (first %))) routes))
 
 (defn- platform-routes
   "The endpoints every Wagoe application serves, whoever it is.
@@ -621,12 +624,14 @@
                             :tenant-service tenant-service
                             :db-context     db-context})
 
+        static-paths (served-paths module-static)
+
         ;; Combine all routes: platform, static, web, and versioned API
-        all-routes (concat (without-claimed platform-routes #(= "/" (first %)) module-static)
+        all-routes (concat (without-claimed platform-routes #(= "/" (first %)) static-paths)
                            module-static
                            module-web
                            (without-claimed versioned-api-routes http-versioning/redirect-route?
-                                            (concat module-static module-web))
+                                            (into static-paths (served-paths module-web)))
                            (or test-reset-routes []))
 
         {csrf-config :csrf
