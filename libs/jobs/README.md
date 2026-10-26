@@ -7,7 +7,7 @@
 
 **Asynchronous job processing for Wagoe Framework**
 
-Redis-backed background job processing with:
+Background job processing on Redis, your SQL database, or in memory, with:
 
 - ✅ Distributed job queuing (Redis-backed)
 - ✅ Priority queues (critical, high, normal, low)
@@ -18,7 +18,7 @@ Redis-backed background job processing with:
 - ✅ Dead letter queue for failed jobs
 - ✅ Job monitoring and statistics
 - ✅ Pure functional core (FC/IS pattern)
-- ✅ Pluggable adapters (Redis, in-memory)
+- ✅ Pluggable adapters (Redis, database, in-memory)
 
 ---
 
@@ -37,12 +37,16 @@ Redis-backed background job processing with:
 
 ## Quick Start
 
-### 1. Add Redis Dependency
+### 1. Add the Dependency
 
 ```clojure
-;; deps.edn
-{:deps {redis.clients/jedis {:mvn/version "5.2.0"}}}
+;; deps.edn — brings Jedis with it
+{:deps {com.wagoe/wagoe-jobs {:mvn/version "1.0.1"}}}
 ```
+
+In a Wagoe application, enabling `:wagoe/jobs` builds the queue, store, registry
+and workers for you (see [AGENTS.md](AGENTS.md)). The steps below use the
+library directly.
 
 ### 2. Create Job Queue
 
@@ -81,8 +85,9 @@ Redis-backed background job processing with:
                :type (.getName (.getClass e))}})))
 
 ;; Register handler
-(def job-registry (atom {}))
-(swap! job-registry assoc :send-email send-email-handler)
+(require '[wagoe.jobs.shell.worker :as worker])
+(def job-registry (worker/create-job-registry))
+(ports/register-handler! job-registry :send-email send-email-handler)
 ```
 
 ### 4. Enqueue Jobs
@@ -96,7 +101,7 @@ Redis-backed background job processing with:
                         :subject "Welcome!"
                         :body "Thanks for signing up."}
                  :priority :high}
-      new-job (job/create-job job-input (java.util.UUID/randomUUID))]
+      new-job (job/create-job job-input (java.util.UUID/randomUUID) (java.time.Instant/now))]
 
   (ports/enqueue-job! job-queue :default new-job))
 
@@ -105,7 +110,7 @@ Redis-backed background job processing with:
                  :args {:user-id "123"}
                  :priority :normal}
       execute-at (.plusSeconds (java.time.Instant/now) 3600)  ; 1 hour from now
-      new-job (job/schedule-job job-input (java.util.UUID/randomUUID) execute-at)]
+      new-job (job/schedule-job job-input (java.util.UUID/randomUUID) execute-at (java.time.Instant/now))]
 
   (ports/enqueue-job! job-queue :default new-job))
 ```
@@ -113,30 +118,12 @@ Redis-backed background job processing with:
 ### 5. Process Jobs
 
 ```clojure
-(defn process-next-job!
-  "Process one job from queue."
-  [job-queue job-store job-registry]
-  (when-let [job (ports/dequeue-job! job-queue :default worker-id)]
-    (let [handler (get @job-registry (:job-type job))]
-      (if handler
-        (let [started-job (job/start-job job)
-              _ (ports/save-job! job-store started-job)
-              result (handler (:args job))]
+;; Workers dequeue, run the handler, ack, retry and dead-letter
+(def workers (worker/create-worker-pool
+               {:queue-name :default :worker-count 2}
+               job-queue job-store job-registry))
 
-          (if (:success? result)
-            (let [completed-job (job/complete-job started-job (:result result))]
-              (ports/save-job! job-store completed-job))
-            (let [failed-job (job/fail-job started-job (:error result))]
-              (ports/save-job! job-store failed-job))))
-
-        (println "No handler registered for" (:job-type job))))))
-
-;; Process jobs in a loop
-(future
-  (loop []
-    (process-next-job! job-queue job-store job-registry)
-    (Thread/sleep 1000)  ; Poll every second
-    (recur)))
+(worker/stop-worker-pool! workers)
 ```
 
 ---
@@ -217,8 +204,6 @@ unless the job type and `key` were seen before; it returns nil for a duplicate.
 
 ## Multi-Tenancy Support
 
-**Status**: ✅ Production Ready (Added: Phase 8 Part 5, Task 4)
-
 The jobs module provides first-class support for multi-tenant applications with automatic tenant context propagation and schema isolation.
 
 ### Key Features
@@ -248,41 +233,22 @@ The jobs module provides first-class support for multi-tenant applications with 
 
 ### Processing Tenant Jobs
 
-Jobs are automatically processed in the correct tenant schema:
+With `:wagoe/tenant` on, the `:wagoe/jobs` wiring gives each worker a
+`:tenant-runner`: a job whose `:metadata` carries `:tenant-id` runs its ordinary
+`(fn [args])` handler in one transaction on that tenant's schema, with
+`db/*tenant-id*` bound. Without a runner such a job fails rather than run against
+public. Outside the wiring, build one with
+`(tenant-jobs/tenant-runner db-ctx tenant-service tenant-schema-provider)` and
+pass it as `:tenant-runner` to `worker/create-worker-pool`.
+
+`process-tenant-job!` runs a single job the same way, for a handler that wants
+the database context as its second argument:
 
 ```clojure
-(require '[wagoe.jobs.shell.tenant-context :as tenant-jobs]
-         '[wagoe.jobs.ports :as job-ports])
-
-(defn send-email-handler
-  "Job handler - receives tenant-scoped database context."
-  [db-ctx job-args]
-  (let [{:keys [to subject body]} job-args]
-    ;; db-ctx is already in tenant schema!
-    ;; Queries run in tenant_123 schema automatically
-    (jdbc/execute! db-ctx 
-                   ["INSERT INTO email_log (recipient, subject) VALUES (?, ?)"
-                    to subject])
-    {:success? true
-     :result {:sent-at (java.time.Instant/now)}}))
-
-;; Worker loop with tenant context
-(defn process-tenant-jobs! []
-  (loop []
-    (when-let [job (job-ports/dequeue-job! job-queue :default worker-id)]
-      ;; Extract tenant context from job metadata
-      (let [tenant-context (tenant-jobs/extract-tenant-context job tenant-service)]
-        (if tenant-context
-          ;; Process with automatic schema switching
-          (tenant-jobs/process-tenant-job! 
-            job 
-            tenant-service 
-            db-ctx 
-            send-email-handler)
-          ;; No tenant context - process in public schema
-          (process-regular-job! job))))
-    (Thread/sleep 1000)
-    (recur)))
+(tenant-jobs/process-tenant-job!
+  job
+  (fn [args db-ctx] {:success? true})   ; db-ctx carries the transaction as :tx
+  db-ctx tenant-service tenant-schema-provider)
 ```
 
 ### How Schema Switching Works
@@ -294,17 +260,18 @@ Jobs are automatically processed in the correct tenant schema:
 (tenant-jobs/enqueue-tenant-job! job-queue "acme-corp" :send-email {...})
 
 ;; Worker processes job
-(tenant-jobs/process-tenant-job! job tenant-service db-ctx handler)
+(tenant-jobs/process-tenant-job! job handler db-ctx tenant-service tenant-schema-provider)
 ;; → Executes: SET search_path TO tenant_acme_corp
 ;; → Handler runs in tenant schema
 ;; → After completion: SET search_path TO public
 ```
 
-**Non-PostgreSQL**: Tenant context available via `(:tenant-id job)`:
+**Non-PostgreSQL**: `process-tenant-job!` runs the handler in public, with the
+tenant id in the job's `:metadata`; the worker's tenant runner refuses the job instead:
 
 ```clojure
-(defn handler [db-ctx job-args]
-  (let [tenant-id (:tenant-id job)]  ; Available for manual filtering
+(defn handler [job-args db-ctx]
+  (let [tenant-id (get-in job [:metadata :tenant-id])]  ; Available for manual filtering
     (jdbc/execute! db-ctx 
                    ["SELECT * FROM users WHERE tenant_id = ?" tenant-id])))
 ```
@@ -315,7 +282,8 @@ Jobs are automatically processed in the correct tenant schema:
 ;; Extracted tenant context
 {:tenant-id "uuid-123"              ; Tenant UUID
  :tenant-slug "acme-corp"           ; Human-readable slug
- :tenant-schema "tenant_acme_corp"} ; PostgreSQL schema name
+ :tenant-schema "tenant_acme_corp"  ; PostgreSQL schema name
+ :tenant-entity {...}}              ; The tenant itself
 ```
 
 ### Use Cases
@@ -332,7 +300,7 @@ Jobs are automatically processed in the correct tenant schema:
      :recipients :all-users}))
 
 ;; Handler automatically queries tenant's users table
-(defn notification-handler [db-ctx job-args]
+(defn notification-handler [job-args db-ctx]
   (let [users (jdbc/execute! db-ctx ["SELECT email FROM users WHERE active = true"])]
     ;; Only returns users from tenant's schema
     (doseq [user users]
@@ -347,7 +315,7 @@ Jobs are automatically processed in the correct tenant schema:
         job-input {:job-type :generate-report
                    :args {:report-type :monthly-summary}
                    :metadata {:tenant-id tenant-id}}
-        job (job/schedule-job job-input (java.util.UUID/randomUUID) tomorrow)]
+        job (job/schedule-job job-input (java.util.UUID/randomUUID) tomorrow (java.time.Instant/now))]
     (job-ports/enqueue-job! job-queue :reports job)))
 ```
 
@@ -363,7 +331,7 @@ Jobs without tenant metadata continue to work unchanged:
 
 ```clojure
 ;; Old-style job (no tenant context)
-(let [job (job/create-job {:job-type :send-email :args {...}})]
+(let [job (job/create-job {:job-type :send-email :args {...}} (random-uuid) (java.time.Instant/now))]
   (job-ports/enqueue-job! job-queue :default job))
 
 ;; Worker detects no tenant-id, processes in public schema
@@ -380,8 +348,6 @@ Comprehensive tests verify tenant isolation:
 ```bash
 # Run tenant-context integration tests
 clojure -M:test :jobs --focus wagoe.jobs.shell.tenant-context-test
-
-# Results: 10 tests, 80 assertions, 0 failures
 ```
 
 ### Migration Guide
@@ -398,7 +364,7 @@ clojure -M:test :jobs --focus wagoe.jobs.shell.tenant-context-test
 **After (With Tenant Jobs Module)**:
 
 ```clojure
-(defn handler [db-ctx job-args]
+(defn handler [job-args db-ctx]
   ;; db-ctx is already tenant-scoped!
   (jdbc/execute! db-ctx ["SELECT * FROM users"]))
 
@@ -410,10 +376,11 @@ clojure -M:test :jobs --focus wagoe.jobs.shell.tenant-context-test
 
 **`wagoe.jobs.shell.tenant-context`**
 
-- `(enqueue-tenant-job! job-queue tenant-id job-type args)` - Enqueue job with tenant context
-- `(extract-tenant-context job tenant-service)` - Extract tenant metadata from job
-- `(process-tenant-job! job tenant-service db-ctx handler)` - Process job with schema switching
-- `(with-tenant-schema db-ctx tenant-context f)` - Execute function in tenant schema
+- `(enqueue-tenant-job! job-queue tenant-id job-type args [opts])` - Enqueue job with tenant context; returns the job id
+- `(extract-tenant-context job tenant-service)` - Extract tenant metadata from job; throws when the tenant is gone
+- `(process-tenant-job! job handler db-ctx tenant-service tenant-schema-provider)` - Process job with schema switching
+- `(wrap-handler-with-tenant-context handler db-ctx tenant-service tenant-schema-provider)` - Same, as a `(fn [job])`
+- `(tenant-runner db-ctx tenant-service tenant-schema-provider)` - The worker's `:tenant-runner`
 
 ---
 
@@ -432,7 +399,7 @@ clojure -M:test :jobs --focus wagoe.jobs.shell.tenant-context-test
                           :template :welcome}
                    :priority :high
                    :metadata {:user-id (:id user)}}
-        new-job (job/create-job job-input (java.util.UUID/randomUUID))]
+        new-job (job/create-job job-input (java.util.UUID/randomUUID) (java.time.Instant/now))]
 
     (ports/enqueue-job! job-queue :emails new-job)))
 ```
@@ -449,7 +416,7 @@ clojure -M:test :jobs --focus wagoe.jobs.shell.tenant-context-test
                           :sizes [:thumbnail :medium :large]}
                    :priority :normal
                    :max-retries 5}  ; Retry up to 5 times
-        new-job (job/create-job job-input (java.util.UUID/randomUUID))]
+        new-job (job/create-job job-input (java.util.UUID/randomUUID) (java.time.Instant/now))]
 
     (ports/enqueue-job! job-queue :media new-job)))
 ```
@@ -470,7 +437,7 @@ clojure -M:test :jobs --focus wagoe.jobs.shell.tenant-context-test
                    :args {:report-type :daily-summary
                           :recipients ["admin@example.com"]}
                    :priority :normal}
-        new-job (job/schedule-job job-input (java.util.UUID/randomUUID) tomorrow-8am)]
+        new-job (job/schedule-job job-input (java.util.UUID/randomUUID) tomorrow-8am (java.time.Instant/now))]
 
     (ports/enqueue-job! job-queue :reports new-job)))
 ```
@@ -488,7 +455,7 @@ clojure -M:test :jobs --focus wagoe.jobs.shell.tenant-context-test
                           :email-when-done true}
                    :priority :low  ; Low priority for bulk operations
                    :max-retries 1}  ; Don't retry long-running jobs
-        new-job (job/create-job job-input (java.util.UUID/randomUUID))]
+        new-job (job/create-job job-input (java.util.UUID/randomUUID) (java.time.Instant/now))]
 
     (ports/enqueue-job! job-queue :bulk-operations new-job)))
 ```
@@ -516,24 +483,18 @@ clojure -M:test :jobs --focus wagoe.jobs.shell.tenant-context-test
 ### Production Configuration
 
 ```clojure
-;; config/prod.edn
-{:wagoe/jobs
- {:redis {:host #env REDIS_HOST
-          :port #long #env [REDIS_PORT 6379]
-          :password #env REDIS_PASSWORD
-          :max-total 50
-          :max-idle 20}
-
-  :workers {:count 5                  ; Number of worker processes
-            :queues [:critical        ; Queues to process (in order)
-                     :default
-                     :low-priority]
-            :poll-interval 1000       ; Poll interval in ms
-            :shutdown-timeout 30000}  ; Graceful shutdown timeout
-
-  :scheduled-processor
-  {:enabled true
-   :interval 5000}}}  ; Check for scheduled jobs every 5 seconds
+;; resources/conf/prod/config.edn
+:wagoe/jobs
+{:provider :redis
+ :redis    {:host     #env REDIS_HOST
+            :port     #long #or [#env REDIS_PORT 6379]
+            :password #env REDIS_PASSWORD
+            :max-total 50
+            :max-idle  20}
+ :workers  {:count  5                     ; workers per queue
+            :queues [:default :emails]    ; one pool per queue; a queue not named here is never processed
+            :poll-interval-ms 1000
+            :scheduled-interval-ms 5000}}  ; how often due scheduled jobs are moved to their queue
 ```
 
 ---
@@ -682,52 +643,10 @@ clojure -M:test :jobs --focus wagoe.jobs.shell.tenant-context-test
 
 ### 1. Start Workers
 
-```clojure
-(ns my-app.workers
-  (:require [wagoe.jobs.shell.adapters.redis :as redis-jobs]
-            [wagoe.jobs.ports :as ports]
-            [integrant.core :as ig]))
-
-(defmethod ig/init-key :my-app/job-workers
-  [_ config]
-  (let [pool (redis-jobs/create-redis-pool (:redis config))
-        job-queue (redis-jobs/create-redis-job-queue pool)
-        job-store (redis-jobs/create-redis-job-store pool)
-        job-registry (atom {})
-        worker-count (:worker-count config 5)
-
-        ;; Register all job handlers
-        _ (do
-            (swap! job-registry assoc :send-email send-email-handler)
-            (swap! job-registry assoc :process-image process-image-handler)
-            (swap! job-registry assoc :generate-report generate-report-handler))
-
-        ;; Start worker threads
-        workers (doall
-                 (for [i (range worker-count)]
-                   (future
-                     (loop []
-                       (try
-                         (process-next-job! job-queue job-store job-registry)
-                         (Thread/sleep (:poll-interval config 1000))
-                         (catch Exception e
-                           (log/error e "Worker error")))
-                       (recur)))))]
-
-    {:pool pool
-     :queue job-queue
-     :store job-store
-     :registry job-registry
-     :workers workers}))
-
-(defmethod ig/halt-key! :my-app/job-workers
-  [_ {:keys [pool workers]}]
-  ;; Gracefully shutdown workers
-  (doseq [worker workers]
-    (future-cancel worker))
-  ;; Close Redis pool
-  (redis-jobs/close-redis-pool! pool))
-```
+`:wagoe/jobs` starts `:wagoe/job-workers` and closes the pool on halt; modules
+contribute handlers through `:job-handlers` (see [AGENTS.md](AGENTS.md)). Run the
+same jar on every node and set `:workers {:count 0}` on web nodes that should only
+enqueue. The framework's own uberjar also has a `worker` mode that serves no HTTP.
 
 ### 2. Monitor with HTTP Endpoints
 
@@ -770,10 +689,10 @@ WORKDIR /app
 COPY . .
 
 # Build uberjar
-RUN clojure -T:build jar
+RUN clojure -T:build uber
 
-# Run workers
-CMD ["java", "-jar", "target/app-standalone.jar", "workers"]
+# Run workers (the jar your build.clj writes; :workers in config decides what it processes)
+CMD ["java", "-jar", "target/app.jar"]
 ```
 
 **docker-compose.yml:**
@@ -811,14 +730,14 @@ volumes:
 
 **wagoe.jobs.core.job**
 
-- `(create-job job-input job-id)` - Create new job
-- `(schedule-job job-input job-id execute-at)` - Create scheduled job
-- `(start-job job)` - Mark job as running
-- `(complete-job job result)` - Mark job as completed
-- `(fail-job job error)` - Mark job as failed
-- `(cancel-job job)` - Cancel job
-- `(calculate-retry-delay retry-count config)` - Calculate retry delay
-- `(prepare-retry job retry-config)` - Prepare job for retry
+- `(create-job job-input job-id now)` - Create new job
+- `(schedule-job job-input job-id execute-at now)` - Create scheduled job
+- `(start-job job now)` - Mark job as running
+- `(complete-job job result now)` - Mark job as completed
+- `(fail-job job error now)` - Mark job as failed
+- `(cancel-job job now)` - Cancel job
+- `(calculate-retry-delay retry-count config jitter-ms)` - Calculate retry delay
+- `(prepare-retry job retry-config now jitter-ms)` - Prepare job for retry
 
 ### Ports (Protocols)
 
@@ -925,11 +844,11 @@ redis-cli ping
 
 **Limit concurrent jobs:**
 ```clojure
-;; Reduce worker count
-{:worker-count 2}  ; Instead of 10
+;; Reduce worker count, under :wagoe/jobs
+{:workers {:count 2}}  ; Instead of 10
 
 ;; Increase poll interval
-{:poll-interval 5000}  ; 5 seconds instead of 1
+{:workers {:poll-interval-ms 5000}}  ; 5 seconds instead of 1
 ```
 
 ---

@@ -10,16 +10,16 @@ Internationalisation for Wagoe apps: marker-based translation, locale chain reso
 | Namespace | Purpose
 
 | `wagoe.i18n.core.translate`
-| Pure `t/3` function: locale chain lookup, interpolation, pluralisation
+| Pure `t` function: locale chain lookup, interpolation, pluralisation
 
 | `wagoe.i18n.ports`
-| `ICatalogue` protocol with `lookup` method
+| `ICatalogue` protocol: `lookup`, `available-locales`
 
 | `wagoe.i18n.shell.catalogue`
 | `load-catalogue` from classpath EDN files; `MapCatalogue` implementation
 
 | `wagoe.i18n.shell.middleware`
-| `wrap-i18n`: injects `:i18n/locale-chain` and `:i18n/t` into Ring request
+| `wrap-i18n`: injects `:i18n/locale-chain` and `:i18n/t` into Ring request; `resolve-t-fn` for after authentication
 
 | `wagoe.i18n.shell.render`
 | `resolve-markers` and `render`: postwalk resolving `[:t :key]` in Hiccup
@@ -48,8 +48,8 @@ Markers are resolved by `wagoe.i18n.shell.render/resolve-markers` during `render
 
 `wrap-i18n` builds an ordered locale chain from the Ring request:
 
-. User locale — `[:session :user :language]`
-. Tenant locale — `[:tenant :settings :language]`
+. User locale — `[:user :language]`, else `[:session :user :language]`
+. Tenant locale — `[:tenant :settings :language]`, else `[:tenant :default-language]`
 . Default locale from Integrant config
 . Hard fallback: `:en`
 
@@ -72,12 +72,16 @@ Key namespacing conventions: `:common/*` for shared UI strings, `:user/*`, `:adm
 [source,edn]
 ----
 ;; config.edn
-:wagoe/i18n {:catalogue-path "wagoe/i18n/translations"
-                :default-locale :en
-                :dev?           true}   ; omit or false in production
+:wagoe/i18n {:catalogue-paths ["wagoe/i18n/translations"
+                                 "my_app/i18n/translations"]  ; or one :catalogue-path
+             :default-locale  :en}
 ----
 
-The component is injected into `:wagoe/http-handler` as `:i18n`. With `:dev? true`, resolved markers are wrapped in `[:span {:data-i18n "..."}]` for browser inspection.
+Without a `:wagoe/i18n` entry the component loads the framework's catalogue
+with `:en` as default. `:wagoe/i18n-http-middleware` builds `wrap-i18n` from it,
+and the HTTP handler applies it. Pass `{:dev? true}` to `render` or
+`resolve-markers` to wrap resolved markers in `[:span {:data-i18n "..."}]` for
+browser inspection; `:dev?` on the component only logs each request's locale chain.
 
 == Middleware
 
@@ -106,7 +110,8 @@ The component is injected into `:wagoe/http-handler` as `:i18n`. With `:dev? tru
 == Adding a locale
 
 . Add `libs/i18n/resources/wagoe/i18n/translations/fr.edn`.
-. Update `load-catalogue` default locales or pass it explicitly from config.
+. Add the locale to `load-catalogue`'s default `[:en :nl]`: the component
+  passes no locale list, so other files are not loaded.
 . Run `bb i18n:missing` to see which keys need translating.
 
 == Babashka tooling

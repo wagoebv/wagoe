@@ -13,7 +13,7 @@ predicate pipeline.
 | Namespace | Purpose
 
 | `wagoe.audience.shell.registry`
-| Pure: segment definition registry and the `defaudience` macro
+| In-process segment definition registry and the `defaudience` macro (mutable state, so shell)
 
 | `wagoe.audience.core.filter`
 | Pure: built-in filter types and the `filter->sql` / `filter->predicate` multimethods
@@ -65,8 +65,8 @@ Define new methods on both multimethods to add custom filter types.
 
 == Composition
 
-Segments compose with AND / OR / NOT. Circular references between
-composed segments are detected and rejected at definition time.
+Segments compose with AND / OR / NOT. A composition tree is checked before it
+is evaluated: circular, unknown or invalid references are rejected then.
 
 == Dynamic segments
 

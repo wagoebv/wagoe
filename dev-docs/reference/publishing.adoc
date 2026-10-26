@@ -55,36 +55,39 @@ the code is right. A previous version of this table listed 22 libraries and gave
 |===
 |Library |Artifact ID |Depends on
 
-|*tools*         |`com.wagoe/wagoe-tools`         |—
 |*config*        |`com.wagoe/wagoe-config`        |—
 |*core*          |`com.wagoe/wagoe-core`          |—
 |*observability* |`com.wagoe/wagoe-observability` |core
-|*audience*      |`com.wagoe/wagoe-audience`      |—
+|*audience*      |`com.wagoe/wagoe-audience`      |core
 |*i18n*          |`com.wagoe/wagoe-i18n`          |—
 |*scaffolder*    |`com.wagoe/wagoe-scaffolder`    |core
 |*cache*         |`com.wagoe/wagoe-cache`         |—
-|*realtime*      |`com.wagoe/wagoe-realtime`      |—
-|*payments*      |`com.wagoe/wagoe-payments`      |—
-|*platform*      |`com.wagoe/wagoe-platform`      |cache, core, i18n, observability, payments, realtime
-|*storage*       |`com.wagoe/wagoe-storage`       |observability, platform
+|*platform*      |`com.wagoe/wagoe-platform`      |cache, config, core, observability
+|*storage*       |`com.wagoe/wagoe-storage`       |core, observability, platform
+|*events*        |`com.wagoe/wagoe-events`        |platform
+|*realtime*      |`com.wagoe/wagoe-realtime`      |i18n
 |*tenant*        |`com.wagoe/wagoe-tenant`        |core, platform
-|*jobs*          |`com.wagoe/wagoe-jobs`          |observability, tenant
-|*push*          |`com.wagoe/wagoe-push`          |core, jobs
-|*external*      |`com.wagoe/wagoe-external`      |platform
+|*jobs*          |`com.wagoe/wagoe-jobs`          |core, observability, platform, tenant
+|*webhooks*      |`com.wagoe/wagoe-webhooks`      |core, events, jobs, platform
+|*push*          |`com.wagoe/wagoe-push`          |core, jobs, platform
+|*external*      |`com.wagoe/wagoe-external`      |core, platform
 |*email*         |`com.wagoe/wagoe-email`         |external
-|*geo*           |`com.wagoe/wagoe-geo`           |—
-|*reports*       |`com.wagoe/wagoe-reports`       |—
-|*ai*            |`com.wagoe/wagoe-ai`            |—
+|*payments*      |`com.wagoe/wagoe-payments`      |core
+|*geo*           |`com.wagoe/wagoe-geo`           |core
+|*reports*       |`com.wagoe/wagoe-reports`       |core
+|*ai*            |`com.wagoe/wagoe-ai`            |config, core
 |*ui-style*      |`com.wagoe/wagoe-ui-style`      |—
-|*shared-ui*     |`com.wagoe/wagoe-shared-ui`     |platform, ui-style
-|*user*          |`com.wagoe/wagoe-user`          |cache, core, email, external, i18n, observability, platform, shared-ui, tenant
-|*calendar*      |`com.wagoe/wagoe-calendar`      |shared-ui
-|*admin*         |`com.wagoe/wagoe-admin`         |core, i18n, platform, shared-ui, ui-style, user
-|*workflow*      |`com.wagoe/wagoe-workflow`      |admin, i18n, platform, shared-ui, user
-|*search*        |`com.wagoe/wagoe-search`        |admin, i18n, platform, shared-ui
+|*shared-ui*     |`com.wagoe/wagoe-shared-ui`     |core, platform, ui-style
+|*user*          |`com.wagoe/wagoe-user`          |config, core, email, external, i18n, observability, platform, shared-ui, tenant
+|*calendar*      |`com.wagoe/wagoe-calendar`      |core, shared-ui
+|*admin*         |`com.wagoe/wagoe-admin`         |core, events, i18n, platform, shared-ui, ui-style, user
+|*workflow*      |`com.wagoe/wagoe-workflow`      |admin, core, i18n, platform, shared-ui, user
+|*search*        |`com.wagoe/wagoe-search`        |admin, core, i18n, platform, shared-ui
+|*test*          |`com.wagoe/wagoe-test`          |config, events, jobs, platform, realtime, tenant, user
 |*wagoe-cli*     |`com.wagoe/wagoe-cli`           |—
-|*devtools*      |`com.wagoe/wagoe-devtools`      |core, jobs, platform, scaffolder, ui-style, user
-|*wagoe-mcp*     |`com.wagoe/wagoe-mcp`           |ai, devtools, scaffolder, tools
+|*tools*         |`com.wagoe/wagoe-tools`         |wagoe-cli
+|*devtools*      |`com.wagoe/wagoe-devtools`      |config, core, jobs, platform, scaffolder, ui-style, user
+|*wagoe-mcp*     |`com.wagoe/wagoe-mcp`           |ai, core, devtools, scaffolder, tools
 |===
 
 `libs/e2e` is the only directory under `libs/` that is not published — it is an
@@ -107,14 +110,10 @@ publish time.
 
 [source,bash]
 ----
-# From the repository root — update every build.clj under libs/.
-# Do not hand-maintain a list of library names here: the previous version of
-# this command named 22 of them and would have left 7 artifacts on the old
-# version, silently.
-sed -i '' 's/(def version "OLD")/(def version "NEW")/' libs/*/build.clj
-
-# Verify
-grep "^(def version" libs/*/build.clj
+# Rewrites the version in every location bb check:versions governs — every
+# build.clj and the documentation — then verifies the result.
+bb bump NEW               # no leading "v"
+bb bump NEW --dry-run     # list the files it would change
 ----
 
 === Version format
@@ -143,8 +142,9 @@ Always bump the version before deploying — you cannot re-deploy the same versi
 bb deploy --all
 ----
 
-This deploys all 33 publishable artifacts in dependency
-order with a 30-second pause between artifacts to allow Clojars indexing.
+This deploys all 33 publishable artifacts in dependency order. There is no
+pause between them: each library is installed into `~/.m2` first, so the next
+one never waits on Clojars indexing.
 
 === Only libraries not yet on Clojars
 
@@ -177,8 +177,7 @@ After deploying, check that the artifacts are visible on Clojars:
 
 [source,bash]
 ----
-# Quick check — expects HTTP 200 for each library
-bb deploy --missing   # libraries not yet published will be listed
+bb deploy --verify    # fails unless every artifact is on Clojars at this version
 ----
 
 Or open in a browser: https://clojars.org/com.wagoe/wagoe-core
@@ -234,20 +233,18 @@ This is the normal release flow:
 
 [source,bash]
 ----
-# 1. Bump versions in all build.clj files. OLD is the version currently in
-#    source, NEW the one you are releasing — both without a leading "v".
-sed -i '' "s/(def version \"OLD\")/(def version \"NEW\")/" libs/*/build.clj
-sed -i '' "s/(def version \"OLD\")/(def version \"NEW\")/" libs/tools/build.clj
+# 1. Bump the version everywhere. NEW has no leading "v": the workflow
+#    triggers on unprefixed semver tags (1.0.1, 1.1.0-alpha-1).
+bb bump NEW
 
 # 2. Confirm every hard-coded copy of the version agrees before tagging
 bb check:versions
 
 # 3. Commit and tag
-git add libs/*/build.clj libs/tools/build.clj
-git commit -m "Bump version to NEW"
-git tag -a vNEW -m "Release NEW"
+git commit -am "Bump version to NEW"
+git tag -a NEW -m "Release NEW"
 git push origin main
-git push origin vNEW
+git push origin NEW
 ----
 
 GitHub Actions will:
@@ -255,8 +252,10 @@ GitHub Actions will:
 . **Wait for approval** — see <<approval-gate>> below; nothing runs until a maintainer approves
 . **Require green CI on the tagged commit** — see <<ci-gate>> below; the release aborts in seconds if the commit was never tested
 . Build the Tailwind CSS bundle (required for the `ui-style` jar)
-. Run `bb deploy --all` with the Clojars credentials
-. Create a GitHub Release marked as pre-release for alpha/beta versions
+. Check that every `build.clj` carries the release version (`bb deploy --check-versions`)
+. Run `bb deploy --missing` with the Clojars credentials, so a re-run skips what already landed
+. Check every artifact is on Clojars (`bb deploy --verify`)
+. Create a GitHub Release, never marked pre-release: `scripts/install.sh` resolves `/releases/latest`, which skips pre-releases
 
 === Trigger: manual dispatch
 
@@ -264,7 +263,7 @@ For deploying without a tag (e.g. re-running after a partial failure):
 
 . Go to *GitHub → Actions → Publish to Clojars*
 . Click *Run workflow*
-. Optionally enter a version label for the release notes
+. Optionally enter the version to publish (defaults to the one in `libs/core/build.clj`)
 
 [#approval-gate]
 === The approval gate
@@ -311,7 +310,8 @@ context branch protection requires to merge. Anything else aborts the run:
 
 * **no run at all** — the commit never went through CI, so nothing has tested the
   source about to be published;
-* **a run that failed, or is still going** — pending is not green.
+* **a run that failed** — and a run still going is waited for, up to 25
+  minutes, then the release aborts: pending is not green.
 
 Why this matters more here than anywhere else: Clojars coordinates are
 *immutable*. A bad release cannot be recalled, overwritten or yanked; the only
@@ -338,13 +338,13 @@ no-API trade the rest of that gate makes.
 ----
 - Setup Clojure + Babashka       # DeLaGuardo/setup-clojure with bb: latest
 - Cache ~/.m2 and ~/.gitlibs     # Speeds up subsequent runs
-- npm ci + npm run build:css        # Builds Tailwind CSS for ui-style jar
-- bb deploy --all                # Deploys all 33 artifacts in order, 30s between each
-- Create GitHub Release          # Only on tag pushes; pre-release for alpha/beta
+- Guard: CI passed on the commit # Waits up to 25 min for "All Tests Passed"
+- npm ci + npm run build:css     # Builds Tailwind CSS for ui-style jar
+- bb deploy --check-versions NEW # Every build.clj carries the release version
+- bb deploy --missing            # Deploys what is not yet on Clojars, in order
+- bb deploy --verify             # Every artifact landed
+- Create GitHub Release          # Only on tag pushes; never pre-release
 ----
-
-The indexing pauses alone account for roughly 15 minutes (33 artifacts × 30s), so
-budget approximately 20–25 minutes in total once the build is included.
 
 ---
 
@@ -354,12 +354,10 @@ Before pushing a release tag:
 
 * [ ] All tests pass: `bb test:all` (not just `clojure -M:test` — see AGENTS.md on test surfaces)
 * [ ] No lint errors: `clojure -M:clj-kondo --lint src test libs/*/src libs/*/test`
-* [ ] All quality gates pass: `bb check --ci` — the `--ci` is load-bearing.
-  Without it, `wagoe.tools.check/-main` prints the failures and still exits 0
-  (`libs/tools/src/wagoe/tools/check.clj:225`), so a release script gating on
-  exit status sails past failing gates
+* [ ] All quality gates pass: `bb check` (a failing gate always exits non-zero;
+  `--ci` is accepted but no longer needed)
 * [ ] `CHANGELOG.md` updated
-* [ ] Version bumped in all relevant `build.clj` files, including `libs/tools/build.clj` for a full tagged release
+* [ ] Version bumped with `bb bump NEW`, and `bb check:versions` passes
 * [ ] Changes committed and pushed to `main`
 * [ ] Local deploy works: `bb deploy core` (quick smoke check)
 * [ ] *First-run matrix passes* — see below
@@ -432,8 +430,8 @@ See <<_prerequisites>> for how to generate one.
 ==== 2. GitHub secret missing or empty
 
 The CI log masks any set value as `***` — even an empty string.
-Verify both secrets exist and are non-empty:
-*GitHub → Settings → Secrets and variables → Actions*
+Verify both secrets exist and are non-empty on the `release` environment:
+*GitHub → Settings → Environments → `release`*
 
 ==== 3. Group `com.wagoe` not verified
 
@@ -450,7 +448,7 @@ https://github.com/clojars/clojars-web/wiki/Verified-Group-Names[Clojars: Verifi
 Error: version 1.0.0-alpha already exists on clojars
 ----
 
-Bump the version in all `build.clj` files and redeploy.
+Bump the version (`bb bump NEW`) and redeploy.
 Deleting an existing version on Clojars is only possible within 24 hours of upload.
 
 === Dependency not found after deploy

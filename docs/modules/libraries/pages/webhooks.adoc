@@ -23,7 +23,7 @@ Incubating: see xref:ROOT:stability.adoc[Stability].
  :encryption-key     #env WEBHOOK_ENCRYPTION_KEY} ; default: JWT_SECRET
 ----
 
-HTTPS is required outside the `dev` and `test` profiles; `:require-https?`
+HTTPS is required outside the `dev`, `test` and `local` profiles; `:require-https?`
 overrides that. Retry delays come from the jobs worker's `:retry-config`.
 
 The tables are created by `migrate up`, and at boot when it has not run.

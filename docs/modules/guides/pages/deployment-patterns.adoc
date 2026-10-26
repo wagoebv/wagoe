@@ -18,8 +18,10 @@ Run migrations before starting the server:
 
 [source,bash]
 ----
-java -jar target/wagoe-*.jar migrate up
+clojure -M:migrate up
 ----
+
+The jar has no migrate command.
 
 == Environment Variables
 
@@ -32,12 +34,12 @@ All deployments need these variables. See `resources/deploy/systemd/wagoe.env.ex
 | `WAG_ENV` | Yes | `production` (or `acc` for staging)
 | `JWT_SECRET` | Yes | 32+ character signing secret
 | `POSTGRES_HOST` | Yes | Database hostname
-| `POSTGRES_PORT` | Yes | Database port (default 5432)
+| `POSTGRES_PORT` | No | Database port (default 5432)
 | `POSTGRES_DB` | Yes | Database name
 | `POSTGRES_USER` | Yes | Database user
 | `POSTGRES_PASSWORD` | Yes | Database password
-| `HTTP_PORT` | No | App listen port (default 3000)
-| `SENTRY_DSN` | No | Error reporting DSN
+| `HTTP_PORT` | No | Read by the dev and test profiles only; prod listens on 3000
+| `SENTRY_DSN` | Yes, unless `ERROR_REPORTING_PROVIDER=no-op` | The prod profile reports errors to Sentry and refuses to boot without a DSN
 | `REDIS_HOST` | No | Required if cache/jobs enabled
 | `REDIS_PASSWORD` | No | Redis auth password
 |===
@@ -79,7 +81,7 @@ sudo journalctl -u wagoe -f     # Tail logs
 sudo systemctl restart wagoe    # Restart after deploy
 ----
 
-The unit file runs migrations via `ExecStartPre` before starting the server. On failure it restarts after 10 seconds, with a maximum of 5 retries per minute.
+The unit file does not migrate: run `clojure -M:migrate up` before each deploy. On failure it restarts after 10 seconds, with a maximum of 5 retries per minute.
 
 === JVM Tuning
 
@@ -124,7 +126,6 @@ The config includes:
 - HTTP -> HTTPS redirect
 - WebSocket upgrade support for `/ws` (realtime library)
 - Suppressed access logs on `/health`
-- 30-day cache for static assets
 - Connection keepalive to the app
 
 === Client address behind a proxy

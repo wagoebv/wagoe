@@ -1,7 +1,8 @@
 = Testing Strategy
 :description: How Wagoe tests are structured across unit, integration, and contract levels.
 
-Wagoe uses Kaocha as the test runner with H2 in-memory database for all test suites.
+Wagoe uses Kaocha as the test runner. Most suites run on in-memory H2; the admin, platform,
+scaffolder, tenant and workflow suites also start an embedded PostgreSQL (`:test/pg`).
 
 == Three test levels
 
@@ -26,7 +27,10 @@ Wagoe uses Kaocha as the test runner with H2 in-memory database for all test sui
 
 [source,bash]
 ----
-# All tests
+# Every test surface, including the standalone libs and Babashka tooling
+bb test:all
+
+# Every tests.edn suite
 clojure -M:test:test/all
 
 # Single library
@@ -89,19 +93,21 @@ Contract tests use a real H2 database with applied migrations:
 
 == Test suite configuration
 
-Test suites are defined in `tests.edn`. Each library has its own `:id`:
+Test suites are defined in `tests.edn`. Each library has its own `:id`;
+the source paths are shared by all suites:
 
 [source,clojure]
 ----
-{:kaocha/tests
- [{:kaocha.testable/id :core
-   :kaocha/source-paths ["libs/core/src"]
-   :kaocha/test-paths   ["libs/core/test"]}
-  {:kaocha.testable/id :user
-   :kaocha/source-paths ["libs/user/src"]
-   :kaocha/test-paths   ["libs/user/test"]}
-  ;; ...
-  ]}
+#kaocha/v1
+{:kaocha/source-paths ["src" "libs/core/src" "libs/user/src" ...]
+ :tests [{:id :core
+          :test-paths  ["libs/core/test"]
+          :ns-patterns ["wagoe.core.*-test"]}
+         {:id :user
+          :test-paths  ["libs/user/test"]
+          :ns-patterns ["wagoe.user.*-test"]}
+         ;; ...
+         ]}
 ----
 
 == Custom reporter

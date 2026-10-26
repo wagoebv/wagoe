@@ -13,7 +13,7 @@ Wagoe is opinionated on purpose. This guide takes you from installation to a run
 | Get Java 21+, the Clojure CLI, and Babashka.
 
 | 2. Bootstrap
-| Run `wagoe new <app>` and answer the setup prompts.
+| Run `wagoe new <app>`, then `bb quickstart` to configure and migrate it.
 
 | 3. Run
 | Start the REPL-backed system and open the app in your browser.

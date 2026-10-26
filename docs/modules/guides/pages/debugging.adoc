@@ -10,7 +10,7 @@ Don't debug through the full stack when you can isolate the issue.
 
 [source,bash]
 ----
-tail -100 logs/app.log | grep -A 10 "ERROR"
+tail -100 logs/wagoe.log | grep -A 10 "ERROR"
 ----
 
 Errors are logged with stack traces. Look for the first non-Wagoe frame in the trace.
@@ -32,7 +32,7 @@ Bypass the HTTP layer and call services directly:
 [source,clojure]
 ----
 (def user-svc (get integrant.repl.state/system :wagoe/user-service))
-(ports/find-user-by-email user-svc "alice@example.com")
+(ports/get-user-by-email user-svc "alice@example.com")
 ----
 
 == 4. Inspect HTTP requests
@@ -143,7 +143,7 @@ limiter.
 clj-paren-repair <file-with-issue>
 ----
 
-=== Auth tests fail with "JWT secret not found"
+=== Auth tests fail with "JWT_SECRET environment variable not configured"
 
 *Fix*:
 [source,bash]

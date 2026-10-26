@@ -7,7 +7,7 @@ Use this checklist before merging documentation changes to keep docs concise, ac
 
 == Pre-Merge Checks
 
-1. Run `clojure -M:docs-lint` and confirm zero warnings.
+1. Run `bb docs:lint` (CI runs `clojure -M:docs-lint`). It must pass, and your change should add no new warnings to `build/docs-lint/report.txt`.
 2. Run `bb check-links` and confirm zero broken links.
 3. Validate any command examples you changed.
 4. Verify module paths use the library-split layout:
@@ -27,10 +27,9 @@ Use this checklist before merging documentation changes to keep docs concise, ac
 
 1. Prefer stable relative docs links for internal navigation.
 2. For GitHub source links, use `libs/...` paths (not legacy `src/wagoe/...` unless documenting migration history).
-3. If a file moved, update all high-traffic guides (`quickstart`, `add-entity`, `add-rest-endpoint`, `implement-port-adapter`).
+3. If a file moved, update the high-traffic guides (`getting-started/quickstart`, `getting-started/your-first-module`, `guides/create-module`).
 
 == Release/PR Readiness
 
 1. Summarize docs impact by area (architecture, guides, reference).
 2. Include validation evidence (`docs-lint`, AGENTS links) in PR description.
-3. Update `PROJECT_STATUS.adoc` when a major docs milestone is completed.

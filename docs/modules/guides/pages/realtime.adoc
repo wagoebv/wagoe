@@ -7,7 +7,7 @@ with JWT authentication, message routing, and topic-based pub/sub.
 == Connection lifecycle
 
 1. Client connects with JWT: `ws://host/ws?token=<jwt>`
-2. Server verifies JWT via `IJWTVerifier` adapter
+2. Server verifies JWT via the `IJWTVerifier` the application supplies
 3. Connection record created and registered
 4. Client sends and receives messages
 5. On disconnect: cleanup registry, unsubscribe from all topics
@@ -42,7 +42,7 @@ with JWT authentication, message routing, and topic-based pub/sub.
 (require '[wagoe.realtime.ports :as ports])
 
 ;; Broadcast to all
-(ports/send-to-all service {:type :announcement :text "System maintenance in 5 minutes"})
+(ports/broadcast service {:type :announcement :text "System maintenance in 5 minutes"})
 
 ;; Send to specific user
 (ports/send-to-user service user-id {:type :notification :data {...}})
@@ -128,9 +128,12 @@ keeps a sliding session alive.
 
 [source,clojure]
 ----
-:wagoe/realtime-service
-{:jwt-verifier #ig/ref :wagoe/jwt-verifier
- :db           #ig/ref :wagoe/db}   ; optional, for persistence
+:wagoe/realtime
+{:provider     :memory              ; or :redis, to share topics across replicas
+ :max-streams  32                   ; SSE streams per node
+ :jwt-verifier #ig/ref :my-app/jwt-verifier} ; your IJWTVerifier; realtime ships none
+
+;; :redis also takes :host, :port, :password, :database, :channel and :key-prefix
 ----
 
 See xref:libraries:realtime.adoc[realtime library] for the full reference.

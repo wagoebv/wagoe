@@ -32,6 +32,9 @@ communication channels (SMTP, IMAP, Twilio) but not payments.
 ## Protocol — `IPaymentProvider`
 
 ```clojure
+(provider-name [this])
+;; Returns: :mock | :mollie | :stripe
+
 (create-checkout-session [this opts])
 ;; opts: {:amount-cents pos-int
 ;;        :currency     "EUR"        ; ISO 4217
@@ -143,7 +146,7 @@ Which id appears where:
 - Webhook: form-POST with `id=<payment-id>` (no HMAC signing)
 - `verify-webhook-signature` → always `true`; real verification happens via `get-payment-status`
 - Status mapping: `"paid"` → `:payment.paid`, `"failed"` → `:payment.failed`, `"canceled"/"cancelled"` → `:payment.cancelled`, `"expired"` → `:payment.expired`
-- Requires `:api-key` and `:webhook-base-url`
+- Requires `:api-key`; `:webhook-base-url` builds the default webhook URL (`<base>/api/v1/payments/webhook`) when a call passes no `:webhook-url`
 - **Mandates**: `create-checkout-session` with `:setup-future-usage` sends `sequenceType=first` with a `customerId` — `:provider-customer-id`, or a customer created from `:customer-email`. Once paid, `get-payment-status` returns `:provider-customer-id` (`cst_…`) and `:provider-payment-method-id` (the mandate, `mdt_…`)
 - **Off-session**: `POST /v2/payments` with `sequenceType=recurring`, `customerId` and optional `mandateId`; `:idempotency-key` goes in the `Idempotency-Key` header, which Mollie remembers for about an hour (Stripe: 24 hours) — a later retry charges again. Usually `:pending` (SEPA settles later, via the webhook). A 422 (no valid mandate) throws `{:type :internal-error}`
 - **Expire**: `DELETE /v2/payments/<id>` cancels the open payment; a payment Mollie will not cancel throws
@@ -199,6 +202,8 @@ Which id appears where:
 ```
 
 Only one key, one provider at a time. Switch providers by changing `:provider` — no code changes.
+There is no default: a missing `:provider` fails the boot, and `:mock`, which accepts
+any webhook as paid, is refused outside the dev and test profiles (BOU-564).
 
 ### Boot-time credential validation (BOU-77)
 
@@ -223,7 +228,7 @@ Stripe payment provider configured but :api-key, :webhook-secret nil/blank —
 set STRIPE_API_KEY, STRIPE_WEBHOOK_SECRET (see resources/conf/<env>/config.edn)
 ```
 
-`:provider` itself unknown still throws `{:type :internal-error}` (unchanged).
+An unknown `:provider` throws `{:type :unknown-provider}`.
 
 ---
 

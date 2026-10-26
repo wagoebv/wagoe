@@ -36,25 +36,31 @@ Each ADR describes the context, the decision, and its consequences.
 * link:adr/ADR-018-admin-belongs-to-widget.adoc[ADR-018: Admin :belongs-to Widget]
 * link:adr/ADR-019-shared-payments-library.adoc[ADR-019: Shared Payments Library]
 * link:adr/ADR-020-tenant-database-scope.adoc[ADR-020: PostgreSQL-Only Tenant Provisioning]
-
-=== Change Reports
-
-Post-implementation analyses and migration reports documenting completed refactoring efforts.
-
-* FC/IS Compliance Analysis
-* FC/IS Refactoring Complete
-* Pedestal Adapter Abandonment
-* Service Method Renaming Migration
+* link:adr/ADR-021-fcis-boundary-rules.adoc[ADR-021: FC/IS Boundary Rules]
+* link:adr/ADR-022-error-handling-conventions.adoc[ADR-022: Error Handling Conventions]
+* link:adr/ADR-023-multi-database-adapter-support.adoc[ADR-023: Multi-Database Adapter Support]
+* link:adr/ADR-024-devtools-guidance-engine.adoc[ADR-024: Devtools Library & Guidance Engine]
+* link:adr/ADR-025-zero-friction-onboarding.adoc[ADR-025: Zero-Friction Onboarding]
+* link:adr/ADR-026-repl-command-center.adoc[ADR-026: REPL as Command Center]
+* link:adr/ADR-027-dev-dashboard.adoc[ADR-027: Dev Dashboard]
+* link:adr/ADR-028-error-experience.adoc[ADR-028: Error Experience & Auto-Recovery]
+* link:adr/ADR-029-discoverability-progressive-learning.adoc[ADR-029: Discoverability & Progressive Learning]
+* link:adr/ADR-030-audience-segmentation.adoc[ADR-030: Audience Segmentation Library]
+* link:adr/ADR-031-mcp-security-model.adoc[ADR-031: MCP Server Security Model — Threat Model & Capability/Context Gating]
+* link:adr/ADR-032-mcp-guardrail-error-payload.adoc[ADR-032: MCP Guardrail Error Payload — "Guardrail, Not Straitjacket"]
+* link:adr/ADR-033-mcp-reflective-resources.adoc[ADR-033: Reflective MCP Resources — Ground Truth from the Running Project]
+* link:adr/ADR-034-mcp-tier1-verify-loop.adoc[ADR-034: Tier 1 Generate Tools + Closed Verify Loop — the Moat]
+* link:adr/ADR-035-realtime-redis-scaling.adoc[ADR-035: Realtime Redis-backed Pub/Sub and Multi-Replica Scaling]
+* link:adr/ADR-036-error-convention.adoc[ADR-036: One Error Convention — Extending ADR-022 to Return Values]
+* link:adr/ADR-037-reitit-routes-directly.adoc[ADR-037: Modules Emit Reitit Route Data]
+* link:adr/ADR-038-htmx-version-policy.adoc[ADR-038: Stay on htmx 2.x]
+* link:adr/ADR-039-database-adapter-contract.adoc[ADR-039: The database adapter contract]
+* link:adr/ADR-040-admin-overview-contract.adoc[ADR-040: The admin overview contract]
+* link:adr/ADR-041-authorization-roles-groups.adoc[ADR-041: Authorization through roles on groups]
 
 === link:presentations/[Presentations]
 
 Presentation slides and speaker notes for conference talks and internal knowledge sharing.
-
-=== link:implementation/[Implementation Notes]
-
-Detailed implementation notes and internal technical documentation.
-
-* link:implementation/user-module-implementation.adoc[User Module Implementation]
 
 === Babashka Developer Tooling
 
@@ -76,7 +82,8 @@ Key tools:
 * link:DECISIONS.adoc[DECISIONS] — Key project decisions log
 * link:DOCKER_DEVELOPMENT.adoc[Docker Development] — Docker-based development setup
 * link:DOCS_LINT.adoc[Docs Lint] — Documentation linting tooling and rules
-* link:alpha-release-checklist.adoc[Alpha Release Checklist] — Pre-release checklist
+* link:scaling-guide.adoc[Scaling Guide] — Vertical and horizontal scaling
+* link:security-checklist.adoc[Security Checklist] — Security review checklist
 * link:roadmap.adoc[Roadmap] — moved; the roadmap is published under `docs/`
 
 === link:reference/[Internal Reference]

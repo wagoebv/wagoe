@@ -27,13 +27,28 @@ covers them as such.
 | `wagoe.shared.ui.core.components`
 | Form controls and inline feedback: `text-input`, `email-input`,
   `password-input`, `textarea`, `select-field`, `checkbox`, `form-field`,
-  `button`, `submit-button`, `link-button`, `badge`, `success-message`,
-  `error-message`
+  `button`, `submit-button`, `link-button`, `badge`, `tone-badge`, `tabs`,
+  `success-message`, `error-message`, `info-message`, `validation-errors`
 
 | `wagoe.shared.ui.core.layout`
 | Page scaffolding: `page-layout`, `pilot-page-layout`,
   `admin-pilot-page-layout`, `error-layout`, `main-navigation`, `sidebar`,
-  `breadcrumbs`, `modal`, `card`, `render-error-page`
+  `breadcrumbs`, `card`, `render-error-page`
+
+| `wagoe.shared.ui.core.shell`, `wagoe.shared.ui.core.user-menu`
+| The admin shell (sidebar, topbar) and the signed-in user's menu
+
+| `wagoe.shared.ui.core.modal`
+| `modal` on a native `<dialog>`
+
+| `wagoe.shared.ui.core.toast`
+| `toast` and the `toast-region` every layout renders
+
+| `wagoe.shared.ui.core.combobox`
+| Typeahead input that asks the server for options
+
+| `wagoe.shared.ui.core.form`
+| Form attributes, decoding and errors from a Malli map schema
 
 | `wagoe.shared.ui.core.table`
 | `data-table` (sortable headers, filter inputs, infinite scroll),
@@ -67,10 +82,10 @@ else.
          '[wagoe.shared.ui.core.layout :as layout])
 
 (layout/page-layout
-  {:title "Products"}
+  "Products"
   [:div
-   (ui/text-input {:name "name" :label "Product name" :value ""})
-   (ui/submit-button {:label "Save"})])
+   (ui/text-input :name "" {:placeholder "Product name"})
+   (ui/submit-button "Save")])
 ----
 
 Because every function is pure, they are straightforward to test — call one and

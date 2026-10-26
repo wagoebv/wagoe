@@ -43,12 +43,12 @@ Each library under `libs/` follows the same pattern:
 [source]
 ----
 libs/{library}/
-├── src/{library}/
+├── src/wagoe/{library}/
 │   ├── core/              ← Pure functions
 │   ├── shell/             ← Side effects
 │   ├── ports.clj          ← Protocol definitions
 │   └── schema.clj         ← Malli schemas
-├── test/{library}/
+├── test/wagoe/{library}/
 │   ├── core/              ← Unit tests (^:unit)
 │   └── shell/             ← Integration + contract tests
 └── AGENTS.md              ← Library-specific dev guide
@@ -64,7 +64,7 @@ libs/{library}/
 | Foundation: validation, utilities, interceptor pipeline, feature flags
 
 | xref:libraries:observability.adoc[observability]
-| Logging, metrics, error reporting (Datadog, Sentry)
+| Logging, metrics, tracing, error reporting (Datadog, Prometheus, OTLP, Sentry)
 
 | xref:libraries:platform.adoc[platform]
 | HTTP, database, CLI infrastructure
@@ -103,10 +103,10 @@ libs/{library}/
 | Internationalisation: marker-based translation, locale chain, EDN catalogues
 
 | xref:libraries:external.adoc[external]
-| External service adapters: Stripe, Twilio, IMAP
+| External service adapters: SMTP, IMAP, Twilio, FTPS, SOAP
 
 | xref:libraries:reports.adoc[reports]
-| PDF, Excel, Word generation via `defreport` macro
+| PDF, CSV, Excel and Word export via the `defreport` macro
 
 | xref:libraries:calendar.adoc[calendar]
 | Recurring events, iCal export/import, conflict detection
@@ -122,6 +122,42 @@ libs/{library}/
 
 | xref:libraries:ai.adoc[ai]
 | Framework-aware AI tooling: NL scaffolding, error explainer, test generator
+
+| xref:libraries:config.adoc[config]
+| Aero config loading and the typed accessors libraries read through
+
+| xref:libraries:audience.adoc[audience]
+| Rule-based audience segmentation: SQL plus predicate evaluation
+
+| xref:libraries:events.adoc[events]
+| Cross-process event bus: in-memory and Redis Streams
+
+| xref:libraries:webhooks.adoc[webhooks]
+| Outbound webhooks: signed, retried, per-tenant delivery of bus events
+
+| xref:libraries:push.adoc[push]
+| Push notifications via FCM and APNs
+
+| xref:libraries:payments.adoc[payments]
+| Payment provider abstraction: Stripe, Mollie, Mock
+
+| xref:libraries:shared-ui.adoc[shared-ui]
+| Shared Hiccup UI primitives: forms, tables, layouts
+
+| xref:libraries:test.adoc[test]
+| Test kit for apps: test system, Ring client, deterministic jobs and events
+
+| xref:libraries:devtools.adoc[devtools]
+| Development only: error pipeline with WGE codes, dev dashboard, REPL helpers
+
+| xref:libraries:tools.adoc[tools]
+| Babashka developer tooling: scaffolding, doctor, quality gates, deploy
+
+| xref:libraries:cli.adoc[wagoe-cli]
+| The `wagoe` command: `wagoe new`, module installer
+
+| xref:libraries:mcp.adoc[wagoe-mcp]
+| MCP server for AI coding agents working in a Wagoe project
 |===
 
 == Running tests per library

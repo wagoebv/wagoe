@@ -12,23 +12,16 @@ HTTP-API assertions in a single ecosystem — **no Node.js, npm, or TypeScript**
 
 ## Layout
 
-All code lives under `test/` (a placeholder empty `src/` is kept only so
+All code lives under `test/` (`src/` holds only a placeholder README, so
 monorepo tooling that assumes the standard library layout doesn't choke):
 
 ```
 libs/e2e/test/wagoe/e2e/
 ├── fixtures.clj          # Shared setup (server handle, browser, auth helpers)
 ├── smoke_test.clj        # Minimal up-and-running check
-├── html/                 # Browser (Playwright) flows
-│   ├── web_login_test.clj
-│   ├── web_register_test.clj
-│   ├── admin_users_test.clj
-│   └── admin_tenants_test.clj
-└── api/                  # HTTP-API flows
-    ├── auth_login_test.clj
-    ├── auth_register_test.clj
-    ├── auth_sessions_test.clj
-    └── auth_mfa_test.clj
+├── helpers/              # Admin, users, cookies, TOTP, POST /test/reset
+├── html/                 # Browser (Playwright) flows: web_*_test.clj, admin_*_test.clj
+└── api/                  # HTTP-API flows: auth_*_test.clj, error_shape_test.clj
 ```
 
 ## Running

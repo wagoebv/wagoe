@@ -19,8 +19,8 @@ This produces `target/wagoe-*.jar`.
 ----
 export JWT_SECRET="your-production-secret-min-32-chars"
 export WAG_ENV="production"
-export DB_URL="jdbc:postgresql://host:5432/myapp"
-export DB_PASSWORD="..."
+export POSTGRES_HOST="db.example.com" POSTGRES_DB="myapp" POSTGRES_USER="myapp"
+export POSTGRES_PASSWORD="..."
 
 java -jar target/wagoe-*.jar server
 ----
@@ -39,17 +39,17 @@ java -jar target/wagoe-*.jar server
 | Yes
 | `development`, `test`, `acc`, or `production`.
 
-| `DB_URL`
+| `POSTGRES_HOST`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
 | Production
-| JDBC connection string.
+| PostgreSQL connection. `POSTGRES_PORT` defaults to 5432.
 
-| `DB_PASSWORD`
-| Production
-| Database password.
+| `SENTRY_DSN`
+| Production, unless `ERROR_REPORTING_PROVIDER=no-op`
+| The prod profile reports errors to Sentry and refuses to boot without a DSN.
 
-| `REDIS_URL`
-| When using cache/jobs
-| Redis connection URL.
+| `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`
+| When using Redis
+| Redis connection.
 |===
 
 == Database migrations
@@ -59,11 +59,12 @@ java -jar target/wagoe-*.jar server
 clojure -M:migrate up
 ----
 
-Run migrations before starting the server in production.
+Run migrations before starting the server in production; the prod profile does
+not migrate on start, and the jar has no migrate command.
 
 == Docker
 
-A Dockerfile is included in the starter:
+`wagoe new` writes a Dockerfile:
 
 [source,bash]
 ----
@@ -79,14 +80,15 @@ The production config uses environment variables for all secrets:
 [source,clojure]
 ----
 ;; resources/conf/prod/config.edn
-:wagoe/db
-{:url      #env DB_URL
- :password #env DB_PASSWORD
- :pool-size 20}
-
-:wagoe/jwt
-{:secret #env JWT_SECRET}
+:wagoe/postgresql
+{:host     #env "POSTGRES_HOST"
+ :port     #long #or [#env "POSTGRES_PORT" 5432]
+ :dbname   #env "POSTGRES_DB"
+ :user     #env "POSTGRES_USER"
+ :password #env "POSTGRES_PASSWORD"}
 ----
+
+`JWT_SECRET` is read from the environment directly, not from the config.
 
 To read secrets that Docker or Kubernetes mount as files, use `#secret`:
 `#secret [:file "db-password"]` reads `/run/secrets/db-password`. See
@@ -94,8 +96,8 @@ xref:libraries:config.adoc#_secrets[config] for the sources and how to add one.
 
 == Database recommendations
 
-Wagoe 1.0 supports PostgreSQL and SQLite, and H2 for tests. MySQL is not
-supported yet: it is planned after 1.0.
+Wagoe supports PostgreSQL, SQLite and MySQL 8, and H2 for tests. Switch a
+generated app with `bb setup --database mysql`.
 
 [cols="1,1",options="header"]
 |===
@@ -111,6 +113,7 @@ supported yet: it is planned after 1.0.
 | PostgreSQL (recommended)
 |===
 
-PostgreSQL is required for multi-tenancy (`wagoe-tenant`) and full-text search (`wagoe-search`).
-On SQLite or H2, an application with `:wagoe/tenant` in its config refuses to boot;
+PostgreSQL is required for multi-tenancy (`wagoe-tenant`). Search (`wagoe-search`) uses
+PostgreSQL full-text search there and a `LIKE` match elsewhere.
+On SQLite, MySQL or H2, an application with `:wagoe/tenant` in its config refuses to boot;
 a test profile on H2 sets `:allow-h2? true` under `:wagoe/tenant`.

@@ -56,18 +56,12 @@ Complete user management and authentication system with MFA support, session man
 ### Configuration
 
 ```clojure
-;; config.edn
-{:wagoe/user-service
- {:jwt-secret #env JWT_SECRET
-  :jwt-expiration-hours 24
-  :session-expiration-hours 168  ; 7 days
-  :password-min-length 8
-  :lockout-threshold 5
-  :lockout-duration-minutes 15
-  :mfa-enabled? true}
- 
- :wagoe/user-repository
- {:db-context #ig/ref :wagoe/db-context}}
+;; config.edn, under :active. JWT_SECRET (≥ 32 chars) comes from the environment.
+{:wagoe/user
+ {:auth {:default-session-hours      24
+         :max-failed-attempts        5
+         :lockout-duration-minutes   15
+         :mfa-reset-enrolment-hours  72}}}
 ```
 
 ### User Service API
@@ -77,19 +71,19 @@ Complete user management and authentication system with MFA support, session man
   (:require [wagoe.user.ports :as user-ports]))
 
 ;; Create user
-(user-ports/create-user user-service
+(user-ports/register-user user-service
   {:email "john@example.com"
    :password "SecureP@ss123"
    :name "John Doe"})
 
 ;; Authenticate
-(user-ports/authenticate user-service
+(user-ports/authenticate-user user-service
   {:email "john@example.com"
    :password "SecureP@ss123"})
-;; => {:token "eyJhbG..." :user {...}}
+;; => {:authenticated true :user {...} :session {...} :session-token "..." :jwt-token "eyJhbG..."}
 
 ;; Authenticate with MFA
-(user-ports/authenticate user-service
+(user-ports/authenticate-user user-service
   {:email "john@example.com"
    :password "SecureP@ss123"
    :mfa-code "123456"})
@@ -98,32 +92,27 @@ Complete user management and authentication system with MFA support, session man
 ### MFA Setup
 
 ```clojure
-;; Generate MFA secret and QR code
-(user-ports/setup-mfa user-service user-id)
-;; => {:secret "JBSWY3DPEHPK3PXP" :qr-code-url "otpauth://..."}
+(require '[wagoe.user.shell.mfa :as mfa])   ; mfa-service is :wagoe/mfa-service
+
+;; Generate MFA secret, QR code and backup codes
+(mfa/setup-mfa mfa-service user-id)
 
 ;; Enable MFA (requires verification)
-(user-ports/enable-mfa user-service user-id
-  {:secret "JBSWY3DPEHPK3PXP"
-   :verification-code "123456"})
+(mfa/enable-mfa mfa-service user-id secret backup-codes "123456")
 
-;; Disable MFA
-(user-ports/disable-mfa user-service user-id)
+;; Disable MFA: proof is {:password ...} or {:code ...}
+(mfa/disable-mfa mfa-service user-id {:password "..."} {:ip-address ip :user-agent ua})
 ```
 
 ### Session Management
 
 ```clojure
-;; Create session
-(user-ports/create-session session-service user-id {:ip "192.168.1.1"})
-;; => {:session-id "..." :expires-at #inst "..."}
+;; Sessions are created by authenticate-user. Validate one:
+(user-ports/validate-session user-service session-token)
+;; => the session with its :user, or nil for an unknown token
 
-;; Validate session
-(user-ports/validate-session session-service session-id)
-;; => {:valid? true :user-id "..."}
-
-;; Revoke session
-(user-ports/revoke-session session-service session-id)
+;; Revoke it
+(user-ports/logout-user user-service session-token)
 ```
 
 ### Pre-built Web Routes
@@ -138,24 +127,26 @@ The module registers these routes automatically:
 | `/web/register` | GET | Registration page (not mounted with `:registration false`) |
 | `/web/register` | POST | Registration action (not mounted with `:registration false`) |
 | `/web/profile` | GET | User profile page |
-| `/web/profile` | PUT | Update profile |
-| `/web/mfa/setup` | GET | MFA setup page |
-| `/web/mfa/enable` | POST | Enable MFA |
-| `/web/mfa/disable` | POST | Disable MFA |
+| `/web/profile` | POST | Update profile |
+| `/web/profile/mfa/setup` | GET, POST | MFA setup page; start setup |
+| `/web/profile/mfa/verify` | POST | Verify the code and enable MFA |
+| `/web/profile/mfa/disable` | GET, POST | Disable MFA |
 
 ### API Routes
 
 | Path | Method | Description |
 |------|--------|-------------|
-| `/api/auth/login` | POST | Authenticate user |
-| `/api/auth/logout` | POST | Invalidate session |
-| `/api/auth/refresh` | POST | Refresh JWT token |
-| `/api/auth/mfa/setup` | POST | Generate MFA secret |
-| `/api/auth/mfa/enable` | POST | Enable MFA |
-| `/api/auth/mfa/disable` | POST | Disable MFA; needs `password` or a TOTP/backup `code` |
-| `/api/users` | GET | List users (admin) |
-| `/api/users/:id` | GET | Get user |
-| `/api/users/:id` | PUT | Update user |
+| `/api/v1/auth/login` | POST | Authenticate user |
+| `/api/v1/sessions` | POST | Create session (same as login) |
+| `/api/v1/sessions/:token` | GET | Validate session |
+| `/api/v1/sessions/:token` | DELETE | Invalidate session (logout) |
+| `/api/v1/auth/mfa/setup` | POST | Generate MFA secret |
+| `/api/v1/auth/mfa/enable` | POST | Enable MFA |
+| `/api/v1/auth/mfa/disable` | POST | Disable MFA; needs `password` or a TOTP/backup `code` |
+| `/api/v1/auth/mfa/status` | GET | MFA status |
+| `/api/v1/users` | GET, POST | List or create users (admin) |
+| `/api/v1/users/:id` | GET | Get user (self or admin) |
+| `/api/v1/users/:id` | PUT, DELETE | Update or soft-delete user (admin) |
 
 ## Module Structure
 
@@ -165,6 +156,7 @@ libs/user/src/wagoe/user/
 │   ├── user.clj             # User business logic (pure)
 │   ├── authentication.clj   # Auth logic (pure)
 │   ├── mfa.clj              # MFA logic (pure)
+│   ├── group.clj            # Groups, roles, rights (pure)
 │   └── session.clj          # Session logic (pure)
 ├── ports.clj                # Service protocols
 ├── schema.clj               # Malli schemas
@@ -172,7 +164,7 @@ libs/user/src/wagoe/user/
     ├── service.clj          # User service implementation
     ├── http.clj             # HTTP handlers
     ├── persistence.clj      # Database adapter
-    └── module-wiring.clj    # Integrant config
+    └── module_wiring.clj    # Integrant config
 ```
 
 ## Dependencies
@@ -182,37 +174,17 @@ libs/user/src/wagoe/user/
 | `wagoe/platform` | 1.0.1 | HTTP, database |
 | `buddy-hashers` | 2.0.167 | Password hashing |
 | `buddy-sign` | 3.6.1-359 | JWT tokens |
-| `one-time` | 0.8.0 | TOTP generation |
+| `one-time` | 0.9.0 | TOTP generation |
 | `hiccup` | 2.0.0 | HTML templates |
 
 ## Database Schema
 
-```sql
-CREATE TABLE users (
-  id TEXT PRIMARY KEY,
-  email TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  name TEXT,
-  role TEXT DEFAULT 'user',
-  mfa_enabled BOOLEAN DEFAULT FALSE,
-  mfa_secret TEXT,
-  failed_login_count INTEGER DEFAULT 0,
-  lockout_until TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  deleted_at TEXT
-);
-
-CREATE TABLE sessions (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL REFERENCES users(id),
-  token_hash TEXT NOT NULL,
-  ip_address TEXT,
-  user_agent TEXT,
-  expires_at TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-```
+`initialize-user-schema!` (`shell/persistence.clj`) creates the tables from the
+Malli schemas: `auth_users` (credentials, MFA, lockout), `users` (profiles),
+`user_sessions` (SHA-256 of each token), `user_audit_log`, `user_identities`
+(OIDC), and the group tables `user_groups`, `user_group_members`, `user_roles`,
+`user_group_roles`, `user_group_grants`. It runs as a library migration
+(`resources/wagoe/user/migrations/`).
 
 ## Relationship to Other Libraries
 
@@ -236,12 +208,11 @@ CREATE TABLE sessions (
 ## Development
 
 ```bash
-# Run tests
-cd libs/user
-clojure -M:test
+# Run tests (from the monorepo root)
+clojure -M:test :user
 
 # Lint
-clojure -M:clj-kondo --lint src test
+clojure -M:clj-kondo --lint libs/user/src libs/user/test
 ```
 
 ## License

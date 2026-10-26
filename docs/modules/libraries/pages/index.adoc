@@ -11,6 +11,9 @@ Every library follows the same FC/IS structure, making the codebase instantly fa
 |===
 | Library | Purpose
 
+| xref:config.adoc[config]
+| Aero config loading per profile and the typed accessors libraries read settings through.
+
 | xref:core.adoc[core]
 | Foundation: validation framework, case/type conversion utilities, interceptor pipeline, feature flags. No shell layer — entirely pure functions.
 
@@ -43,7 +46,7 @@ Every library follows the same FC/IS structure, making the codebase instantly fa
 | Auto-generated CRUD admin UI from schema. Hiccup + HTMX, no frontend build step.
 
 | xref:storage.adoc[storage]
-| File storage: local filesystem and AWS S3 / S3-compatible backends.
+| File storage: local filesystem, AWS S3 / S3-compatible and Google Cloud Storage backends.
 
 | xref:scaffolder.adoc[scaffolder]
 | Interactive module code generator. Generates FC/IS modules with tests and migrations.
@@ -74,7 +77,7 @@ Every library follows the same FC/IS structure, making the codebase instantly fa
 | Library | Purpose
 
 | xref:external.adoc[external]
-| External service adapters: Twilio SMS/WhatsApp, SMTP/IMAP.
+| External service adapters: Twilio SMS/WhatsApp, SMTP/IMAP, FTPS, SOAP.
 
 | xref:payments.adoc[payments]
 | Payment provider abstraction: Stripe, Mollie, and Mock adapters with checkout-session flow and webhook verification.
@@ -86,7 +89,7 @@ Every library follows the same FC/IS structure, making the codebase instantly fa
 | Full-text search: PostgreSQL FTS with LIKE fallback for H2/SQLite.
 
 | xref:reports.adoc[reports]
-| PDF, Excel (XLSX), and Word (DOCX) generation via `defreport` macro.
+| PDF, Excel (XLSX), Word (DOCX) and CSV generation via `defreport` macro.
 
 | xref:calendar.adoc[calendar]
 | Recurring events, RRULE recurrence (DST-aware), iCal export/import, conflict detection.
@@ -122,6 +125,9 @@ from application code.
 
 | xref:tools.adoc[tools]
 | Dev-only: deploy to Clojars, config doctor, setup wizard, scaffolder integration, quality checks, i18n management.
+
+| xref:test.adoc[test]
+| Test kit for applications: boots the app's own system on in-process adapters, a Ring client with session and CSRF, deterministic jobs, events and realtime.
 
 | xref:cli.adoc[wagoe-cli]
 | The `wagoe` command: `wagoe new` to create a project, `wagoe add` to wire in an optional module, `wagoe list modules`.

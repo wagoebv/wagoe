@@ -241,7 +241,7 @@ adapter (`store-file`, `retrieve-file`, `file-exists?`, `delete-file`,
 
 ## HTTP endpoints (`storage-routes`)
 
-`(http-handlers/storage-routes svc {:base-path "/storage"})` returns the
+`(http-handlers/storage-routes svc {:base-path "/storage"})` returns
 the module's **`:api` contribution** — a vector of Reitit route data. Paths
 carry NO `/api` prefix (versioning adds `/api/v1`). Mount via the module route
 mechanism (`:wagoe/storage-routes`). Every endpoint requires a signed-in user,
@@ -252,11 +252,13 @@ stays behind login:
 
 | Method | Path | Handler |
 |--------|------|---------|
-| POST | `/upload` | multipart `file` + `path`/`visibility`; query `max-size`, `allowed-types`, `allowed-extensions` |
-| POST | `/upload/image` | multipart `file` + `create-thumbnail`, `thumbnail-size` |
-| GET | `/download/:file-key` | streams bytes with `Content-Disposition: attachment` |
-| DELETE | `/delete/:file-key` | 204 on success, 404 otherwise |
-| GET | `/url/:file-key` | query `expiration` (default 3600) → JSON `{:url :expiration-seconds}` |
+| POST | `/storage/upload` | multipart `file` + `path`/`visibility`; query `max-size`, `allowed-types`, `allowed-extensions` |
+| POST | `/storage/upload/image` | multipart `file` + `create-thumbnail`, `thumbnail-size` |
+| GET | `/storage/download/{*file-key}` | streams bytes with `Content-Disposition: attachment` |
+| DELETE | `/storage/delete/{*file-key}` | 204 on success, 404 otherwise |
+| GET | `/storage/url/{*file-key}` | query `expiration` (default 3600) → JSON `{:url :expiration-seconds}` |
+
+`/storage` is the default `:base-path` (`:http-base-path` in config). `{*file-key}` matches the whole key, slashes included.
 
 Errors are the framework's one JSON error body, `{"error": {"type" "message" "details"}}`,
 built by `wagoe.platform.core.http.problem-details`.

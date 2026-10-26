@@ -30,13 +30,15 @@ Adapters for external services: Twilio SMS/WhatsApp, SMTP transport, IMAP mailbo
 (ns myapp.notifications
   (:require [wagoe.external.shell.adapters.smtp :as smtp]))
 
-;; Create an SMTP provider via Integrant config:
-;; {:wagoe/smtp-provider {:host "smtp.example.com"
-;;                           :port 587
-;;                           :username "user"
-;;                           :password "pass"}}
+;; Create an SMTP provider via Integrant config (add to :active):
+;; {:wagoe.external/smtp {:host "smtp.example.com"
+;;                        :port 587
+;;                        :username "user"
+;;                        :password "pass"
+;;                        :tls? true
+;;                        :from "noreply@example.com"}}
 
-;; Then use the IExternalEmailProvider protocol to send emails
+;; Then send through the wagoe.external.ports/ISmtpProvider protocol (send-email!)
 ```
 
 ## License

@@ -16,7 +16,8 @@ Simple, robust email delivery with:
 - ✅ Synchronous and asynchronous sending
 - ✅ Optional background job integration
 - ✅ Pure functional core (FC/IS pattern)
-- ✅ Pluggable adapters (SMTP, future: SendGrid API, etc.)
+- ✅ Pluggable adapters (SMTP, and a logging sender for dev)
+- ✅ In-memory queued sending (`:wagoe/email-queue`)
 
 ---
 
@@ -70,7 +71,9 @@ Simple, robust email delivery with:
     {:to "user@example.com"
      :from "no-reply@myapp.com"
      :subject "Welcome to MyApp!"
-     :body "Thanks for signing up. We're excited to have you!"}))
+     :body "Thanks for signing up. We're excited to have you!"}
+    (random-uuid)                ; the shell supplies the id
+    (java.time.Instant/now)))    ; and the timestamp
 
 ;; Send email (I/O operation)
 (def result (ports/send-email! email-sender prepared-email))
@@ -94,7 +97,7 @@ Simple, robust email delivery with:
 
 **Email Flow:**
 - **Input**: User provides email data (to, from, subject, body)
-- **Prepare**: `prepare-email` validates and normalizes (pure function)
+- **Prepare**: `prepare-email` normalizes (pure function); `validate-email` checks it
 - **Send**: SMTP adapter sends via network (side effect)
 - **Result**: Returns `{:success? true :message-id "..."}` or `{:success? false :error {...}}`
 
@@ -113,7 +116,7 @@ This module follows the FC/IS pattern:
 
 ```clojure
 ;; Prepared email (after calling prepare-email)
-{:id #uuid "..."                    ; Auto-generated UUID
+{:id #uuid "..."                    ; email-id passed by the caller
  :to ["user@example.com"]           ; Normalized to vector
  :from "no-reply@myapp.com"
  :subject "Welcome!"
@@ -142,7 +145,8 @@ This module follows the FC/IS pattern:
                                     "Best regards,\n"
                                     "The MyApp Team")
                           :metadata {:user-id (:id user)
-                                    :email-type :welcome}})
+                                    :email-type :welcome}}
+                         (random-uuid) (java.time.Instant/now))
         result (ports/send-email! email-sender prepared-email)]
     
     (if (:success? result)
@@ -165,7 +169,8 @@ This module follows the FC/IS pattern:
                          {:to team-emails  ; Vector of email addresses
                           :from "notifications@myapp.com"
                           :subject "Team Update"
-                          :body message})
+                          :body message}
+                         (random-uuid) (java.time.Instant/now))
         result (ports/send-email! email-sender prepared-email)]
     
     (if (:success? result)
@@ -183,7 +188,8 @@ This module follows the FC/IS pattern:
                      {:to customer-email
                       :from "billing@myapp.com"
                       :subject (str "Invoice #" (:invoice-number invoice))
-                      :body (format-invoice-body invoice)})
+                      :body (format-invoice-body invoice)}
+                     (random-uuid) (java.time.Instant/now))
         
         ;; Add CC and BCC using helper functions
         email-with-cc (email-core/add-cc base-email "accounting@myapp.com")
@@ -212,7 +218,8 @@ This module follows the FC/IS pattern:
                                 "If you didn't request this, please ignore this email.")
                       :metadata {:user-id (:id user)
                                 :email-type :password-reset
-                                :reset-token reset-token}})
+                                :reset-token reset-token}}
+                     (random-uuid) (java.time.Instant/now))
         
         ;; Add Reply-To for support
         email-with-reply-to (email-core/add-reply-to base-email "support@myapp.com")
@@ -242,7 +249,8 @@ This module follows the FC/IS pattern:
                                             :subject "System Notification"
                                             :body (str "Hi " (:name user) ",\n\n"
                                                       notification-message)
-                                            :metadata {:user-id (:id user)}})
+                                            :metadata {:user-id (:id user)}}
+                                           (random-uuid) (java.time.Instant/now))
                           result (ports/send-email! email-sender prepared-email)]
                       
                       {:user-id (:id user)
@@ -349,7 +357,8 @@ docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
                                 {:to "test@example.com"
                                  :from "dev@myapp.com"
                                  :subject "Test Email"
-                                 :body "This is a test."}))
+                                 :body "This is a test."}
+                                (random-uuid) (java.time.Instant/now)))
 
 ;; View in browser: http://localhost:8025
 ```
@@ -448,7 +457,7 @@ export SMTP_FROM="no-reply@myapp.com"
 - Horizontal scaling (multiple workers)
 
 **Cons:**
-- Requires Redis
+- Needs a durable jobs backend (Redis or the database) for restart safety
 - More complex setup
 - Delayed error reporting
 
@@ -465,23 +474,24 @@ For high-volume email sending with automatic retries and monitoring, integrate w
 ```clojure
 ;; deps.edn
 {:deps {com.wagoe/wagoe-email {:mvn/version "1.0.1"}
-        com.wagoe/wagoe-jobs {:mvn/version "1.0.1"}
-        redis.clients/jedis {:mvn/version "5.2.0"}}}
+        com.wagoe/wagoe-jobs {:mvn/version "1.0.1"}}}   ; brings Jedis
 ```
 
 ### 2. Setup Job Queue
 
 ```clojure
 (require '[wagoe.jobs.shell.adapters.redis :as redis-jobs]
+         '[wagoe.jobs.shell.worker :as worker]
          '[wagoe.email.shell.jobs-integration :as email-jobs])
 
-;; Create Redis job queue
+;; Create Redis job queue and store
 (def redis-pool (redis-jobs/create-redis-pool
                   {:host "localhost"
                    :port 6379}))
 
 (def job-queue (redis-jobs/create-redis-job-queue redis-pool))
-(def job-registry (atom {}))
+(def job-store (redis-jobs/create-redis-job-store redis-pool))
+(def job-registry (worker/create-job-registry))
 
 ;; Register email job handler
 (email-jobs/register-email-job-handler! job-registry)
@@ -493,7 +503,7 @@ For high-volume email sending with automatic retries and monitoring, integrate w
 (defn send-email-async!
   "Queue email for background processing."
   [job-queue email-sender email-input]
-  (let [prepared-email (email-core/prepare-email email-input)]
+  (let [prepared-email (email-core/prepare-email email-input (random-uuid) (java.time.Instant/now))]
     
     ;; Queue email job (returns immediately)
     (email-jobs/queue-email-job! job-queue email-sender prepared-email)
@@ -514,33 +524,13 @@ For high-volume email sending with automatic retries and monitoring, integrate w
 ### 4. Start Job Workers
 
 ```clojure
-(defn start-email-workers!
-  "Start background workers to process email jobs."
-  [job-queue job-registry worker-count]
-  (log/info "Starting email workers" {:count worker-count})
-  
-  (doall
-    (for [i (range worker-count)]
-      (future
-        (loop []
-          (try
-            ;; Process one job from :emails queue
-            (when-let [job (ports/dequeue-job! job-queue :emails)]
-              (let [handler (get @job-registry (:job-type job))]
-                (when handler
-                  (let [result (handler (:args job))]
-                    (if (:success? result)
-                      (log/info "Email job completed" {:email-id (get-in job [:metadata :email-id])})
-                      (log/error "Email job failed" {:email-id (get-in job [:metadata :email-id])
-                                                     :error (:error result)}))))))
-            
-            (Thread/sleep 1000)  ; Poll every second
-            (catch Exception e
-              (log/error e "Email worker error")))
-          (recur))))))
+;; 5 workers on the :emails queue; each runs the registered :send-email handler
+(def workers
+  (worker/create-worker-pool {:queue-name :emails :worker-count 5}
+                             job-queue job-store job-registry))
 
-;; Start 5 workers
-(start-email-workers! job-queue job-registry 5)
+;; On shutdown
+(worker/stop-worker-pool! workers)
 ```
 
 ### 5. Benefits of Jobs Integration
@@ -593,10 +583,11 @@ For high-volume email sending with automatic retries and monitoring, integrate w
 
 #### `prepare-email`
 
-Prepare email for sending (pure function, no side effects).
+Prepare email for sending (pure function, no side effects). The caller
+supplies the id and timestamp, so the core stays pure.
 
 ```clojure
-(prepare-email email-input)
+(prepare-email email-input email-id now)
 ```
 
 **Args:**
@@ -606,21 +597,26 @@ Prepare email for sending (pure function, no side effects).
   - `:subject` - Subject string (required)
   - `:body` - Body string (required)
   - `:headers` - Headers map (optional, e.g., `{:reply-to "..."}`)
+  - `:attachments` - Vector of attachment maps (optional)
   - `:metadata` - Metadata map (optional, for tracking)
+- `email-id` - UUID, generated by the caller
+- `now` - creation timestamp, supplied by the caller
 
 **Returns:** Email map with:
-- `:id` - Generated UUID
+- `:id` - `email-id`
 - `:to` - Normalized vector of recipients
 - `:from`, `:subject`, `:body` - As provided
-- `:headers`, `:metadata` - If provided
-- `:created-at` - Timestamp
+- `:headers`, `:attachments`, `:metadata` - If provided
+- `:created-at` - `now`
 
 **Example:**
 ```clojure
 (prepare-email {:to "user@example.com"
                 :from "no-reply@myapp.com"
                 :subject "Welcome!"
-                :body "Thanks for signing up."})
+                :body "Thanks for signing up."}
+               (random-uuid)
+               (java.time.Instant/now))
 ;; => {:id #uuid "..."
 ;;     :to ["user@example.com"]
 ;;     :from "no-reply@myapp.com"
@@ -900,7 +896,8 @@ Register email job handler with jobs module.
                 (prepare-email {:to "your-email@example.com"
                                :from "your-email@example.com"
                                :subject "Test"
-                               :body "Test"}))
+                               :body "Test"}
+                               (random-uuid) (java.time.Instant/now)))
    ```
 
 2. **Check error message:**
@@ -1030,7 +1027,7 @@ Always validate email addresses before attempting to send:
 (defn send-email-safe!
   "Send email with validation."
   [email-sender email-input]
-  (let [prepared-email (email-core/prepare-email email-input)
+  (let [prepared-email (email-core/prepare-email email-input (random-uuid) (java.time.Instant/now))
         validation (email-core/validate-email prepared-email)]
     
     (if (:valid? validation)
@@ -1045,9 +1042,9 @@ Always validate email addresses before attempting to send:
 Set Reply-To header so users can respond:
 
 ```clojure
-(-> (prepare-email email-input)
-    (add-reply-to "support@myapp.com")
-    (send-email! email-sender))
+(ports/send-email! email-sender
+                   (-> (prepare-email email-input (random-uuid) (java.time.Instant/now))
+                       (add-reply-to "support@myapp.com")))
 ```
 
 ### 3. Log Email Activity
@@ -1151,7 +1148,8 @@ Add metadata for debugging and analytics:
                 :metadata {:user-id "123"
                           :email-type :welcome
                           :campaign-id "onboarding-2024"
-                          :ab-test-variant "b"}})
+                          :ab-test-variant "b"}}
+               (random-uuid) (java.time.Instant/now))
 ```
 
 ### 8. Test with Local SMTP Server

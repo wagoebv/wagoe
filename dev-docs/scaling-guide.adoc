@@ -59,7 +59,7 @@ When running in Docker or Kubernetes, always set:
 - Explicit `-Xmx` matching your container memory limit minus ~25%
 - CPU limits: JDK auto-detects cgroup CPU limits for thread pools
 
-The included `Dockerfile` already sets these via `JAVA_OPTS`.
+The included `Dockerfile` sets `JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"`, which sizes the heap from the container limit; override `JAVA_OPTS` to tune it.
 
 == Database Connection Pool (HikariCP)
 
@@ -91,8 +91,7 @@ Configure in `resources/conf/prod/config.edn`:
         :maximum-pool-size 25
         :connection-timeout-ms 30000   ;; Wait 30s for a connection
         :idle-timeout-ms 600000        ;; Close idle connections after 10min
-        :max-lifetime-ms 1800000       ;; Recycle connections every 30min
-        :leak-detection-threshold-ms 60000}}  ;; Warn if connection held >60s
+        :max-lifetime-ms 1800000}}     ;; Recycle connections every 30min
 ----
 
 === Monitoring Pool Health
@@ -100,7 +99,6 @@ Configure in `resources/conf/prod/config.edn`:
 Watch for these symptoms:
 
 - **Connection timeouts** → Increase `maximum-pool-size` or optimise slow queries
-- **Leak detection warnings** → Find and fix unclosed connections (missing `with-open`)
 - **Idle connections at maximum** → Decrease `minimum-idle`
 
 The `/health/ready` endpoint checks database connectivity — integrate with your monitoring to detect pool exhaustion.
@@ -158,28 +156,22 @@ Set TTL based on staleness tolerance:
 
 === Thread Pool
 
-Jetty uses a default thread pool of 200 threads. For most Wagoe apps this is sufficient. If you need to tune:
+Jetty uses its default thread pool of 200 threads, and `:wagoe/http` has no setting to resize it. The one knob is virtual threads, which serve each request on its own virtual thread (Jetty still caps concurrent tasks at 200):
 
 [source,clojure]
 ----
-;; In config.edn
-:wagoe/http
-{:port 3000
- :host "0.0.0.0"
- :min-threads 10      ;; Minimum threads
- :max-threads 200     ;; Maximum threads
- :idle-timeout 60000} ;; Idle thread timeout (ms)
+:wagoe/http {:virtual-threads? true}
 ----
 
-Rule of thumb: `max-threads` should be 2-4x your expected concurrent connections.
+See the Virtual threads section of `docs/modules/architecture/pages/scaling.adoc` before turning it on.
 
 === Gzip Compression
 
-Gzip is enabled by default for responses >1KB. This reduces bandwidth 60-80% for JSON/HTML.
+Gzip is on by default: String and byte-array response bodies are compressed for clients that send `Accept-Encoding: gzip`. This reduces bandwidth 60-80% for JSON/HTML.
 
 === Static Asset Caching
 
-The nginx reference config (`resources/deploy/nginx/wagoe.conf`) sets 30-day cache headers on CSS/JS/images. For the built-in static serving, cache headers are set by the platform interceptors.
+The platform answers static assets with `Cache-Control: no-cache` and an ETag, so a reuse is a 304; a URL carrying `?v=<digest>` gets `immutable`. The nginx reference config (`resources/deploy/nginx/wagoe.conf`) deliberately adds no cache headers of its own.
 
 == Horizontal Scaling
 
@@ -204,10 +196,10 @@ Wagoe applications are stateless by design — scale horizontally by adding inst
 | Use S3 or shared storage (`libs/storage`), not local disk.
 
 | Background jobs
-| The jobs module (`libs/jobs`) uses Redis for coordination. Multiple workers can process jobs concurrently without conflicts.
+| Set `:provider :redis` on `:wagoe/jobs` (the default `:memory` is per process). Multiple workers can then process jobs concurrently without conflicts.
 
 | WebSockets
-| If using `libs/realtime`, add Redis pub/sub for cross-instance message delivery.
+| If using `libs/realtime`, set `:provider :redis` on `:wagoe/realtime` for cross-instance message delivery.
 |===
 
 === Scaling Pattern
@@ -251,8 +243,8 @@ The migration best practices guide covers index creation patterns: link:../docs/
 Wagoe uses HoneySQL, which generates parameterised queries. Performance tips:
 
 - **Use pagination** — never `SELECT *` without `LIMIT`. The pagination config (`default-limit`, `max-limit`) prevents unbounded queries.
-- **Batch inserts** — use `insert-batch!` for bulk operations instead of individual inserts.
-- **Window functions** — for count + data queries, use `COUNT(*) OVER()` (already used in Wagoe's pagination layer).
+- **Batch inserts** — use `execute-batch!` for bulk operations instead of individual inserts.
+- **Window functions** — for count + data queries, consider `COUNT(*) OVER()` instead of a second count query.
 - **Connection reuse** — HikariCP handles this. Avoid creating ad-hoc datasources.
 
 == Benchmarking

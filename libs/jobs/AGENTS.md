@@ -12,7 +12,7 @@ Background job processing with priority queues, scheduled execution, automatic r
 |-----------|---------|
 | `wagoe.jobs.core.job` | Pure functions: job creation, state transitions, retry logic |
 | `wagoe.jobs.core.cron` | Pure cron parsing, `next-run`, `latest-run`, `due-tick` |
-| `wagoe.jobs.ports` | Protocols: IJobQueue, IJobStore, IJobStats, IJobOutcomes, IJobWorker, IJobRegistry |
+| `wagoe.jobs.ports` | Protocols: IJobQueue, IJobStore, IJobStats, IJobOutcomes, IJobWorker, IJobRegistry, ITransactionalJobQueue, ILeasedJobQueue, IDeadLetterRetention, IIdempotencyStore, IRecurringState |
 | `wagoe.jobs.core.outcome` | Pure: a run's outcome, a job type's record, the error-tracker throttle |
 | `wagoe.jobs.shell.outcomes` | Where outcomes go: store, `:wagoe/metrics`, `:wagoe/error-reporting`, `:on-outcome` |
 | `wagoe.jobs.schema` | Malli schemas: job states, priorities, retry config |
@@ -52,6 +52,7 @@ several slots.
 | `:wagoe/job-store` | `IJobStore` — job history and the dead-letter queue |
 | `:wagoe/job-stats` | `IJobStats` — what the devtools dashboard reads. nil under `:provider :db` |
 | `:wagoe/job-registry` | The handlers every enabled module contributed |
+| `:wagoe/job-tenant-runner` | Runs a job carrying `:tenant-id` in its tenant's schema; wired only when `:wagoe/tenant` is on |
 | `:wagoe/job-workers` | One pool of `:count` workers per queue in `:queues` |
 | `:wagoe/job-scheduler` | The recurring-job ticker; `recurring/schedule-recurring!` takes it |
 | `:wagoe/idempotency-store` | `IIdempotencyStore` on the provider's backend, for any module |
@@ -272,7 +273,8 @@ handed keywords back as strings; a job written then still decodes, with its
                                 :args {:to "user@example.com"}
                                 :priority :high
                                 :max-retries 3}
-                               (java.util.UUID/randomUUID))]
+                               (java.util.UUID/randomUUID)
+                               (java.time.Instant/now))]
   (ports/enqueue-job! job-queue :default new-job))
 
 ;; Start worker
@@ -299,7 +301,7 @@ running → retrying → pending → running → ...
 
 - Default max-retries: 3
 - Exponential backoff: `delay = initial-delay * 2^retry-count`
-- Capped at 60 seconds with random jitter (±10%)
+- Initial delay 1 s, capped at 60 s, plus 0–99 ms of random jitter
 - Dead letter queue after max retries exhausted
 - Tune with `:workers {:retry-config {:initial-delay-ms … :max-delay-ms … :jitter false}}`
 

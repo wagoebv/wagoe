@@ -3,7 +3,7 @@
 
 This page states what you can rely on, what you cannot, and how a change that
 breaks you will reach you. It describes the framework as it is today — Wagoe is
-at `1.0.0`, and the surface below is the one it promises.
+at `1.0.1`, and the surface below is the one it promises.
 
 == Current status
 
@@ -159,11 +159,11 @@ design, and the rule above still applies — only the file layout differs.
 | Library | Where its contract lives
 
 | `platform`
-| `wagoe.platform.ports.*` — a directory rather than one file. Today it holds
-  `ports.http` (`IHttpServer`; routing is not a port, see ADR-037). Its `DBAdapter`
-  and `IFileSystemAdapter` protocols currently sit under
-  `shell.adapters.*.protocols`; they are supported surface despite the
-  location, and moving them under `ports` is tracked work
+| `wagoe.platform.ports.*` — a directory rather than one file: `ports.http`
+  (`IHttpServer`; routing is not a port, see ADR-037), `ports.database`
+  (`DBAdapter`, `EngineInfo`, …), `ports.authorization` and `ports.privacy`.
+  `IFileSystemAdapter` still sits under `shell.adapters.filesystem.protocols`;
+  it is supported surface despite the location
 
 | `observability`
 | One `ports.clj` per concern: `wagoe.observability.{metrics,tracing,errors,logging}.ports`
@@ -411,6 +411,27 @@ the xref:roadmap.adoc#_after_1_0_0[roadmap].
 
 | `wagoe.shared.ui.core.alpine/sidebar-attrs`
 | Nothing — the sidebar no longer expands on hover, and the var returns `{}`.
+
+| `wagoe.platform.shell.database.migrations/create-config`
+| `create-migration`, which no longer needs it.
+
+| `:require-role` in the admin config
+| Nothing reads it; drop it. Boot warns outside `:off`.
+
+| Group grants, `:role :user` and OIDC `:default-role`
+| Managed roles: `add-group-role`, and `:roles` on import. `:user` means no role.
+
+| `wagoe.search.shell.registry` and its `defsearch`
+| Definitions handed to `:wagoe/search`. The registry is still read and warns once.
+
+| The 3-arity `DBAdapter/like`, with a hand-built pattern
+| Pass a mode and the raw value, so `%` and `_` in user input match literally.
+
+| `jwt-authentication-middleware` and `protect-with-jwt` without a user service
+| Pass the user service first, so a deactivated user is refused. The 1-arity warns once.
+
+| Admin `render-field-value` and `render-inline-edit-cell`
+| `cells/cell` and `field-cell`.
 |===
 
 === Removed in 1.x
@@ -443,7 +464,7 @@ an unannounced break gets a fix or a revert, not a workaround.
 
 == See also
 
-* xref:roadmap.adoc[Roadmap] — what is left before `1.0.0`, and what comes after
+* xref:roadmap.adoc[Roadmap] — what comes after `1.0`
 * xref:architecture:fc-is.adoc[Functional Core / Imperative Shell] — why the
   `core/` ↔ `shell/` split is the stability boundary
 * https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md[CHANGELOG]

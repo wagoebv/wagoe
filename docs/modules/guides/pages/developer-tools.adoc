@@ -65,6 +65,7 @@ Navigate to `http://localhost:9999/dashboard/errors` to see all recent WGE-coded
 | WGE-5xx | Interceptor pipeline (missing interceptors, execution errors)
 | WGE-6xx | FC/IS violations (core importing shell, side effects in core)
 | WGE-7xx | Tooling (circular library deps, admin entity config, wiring issues)
+| WGE-8xx | MCP guardrails (`wagoe-mcp`)
 |===
 
 Use `bb guide error WGE-xxx` to look up any code with its full explanation and fix.
@@ -82,60 +83,46 @@ View all registered routes with their interceptor chains:
 ;; Or visit http://localhost:9999/dashboard/routes
 ----
 
-You can add temporary routes for testing without restarting:
+In this monorepo's REPL you can add temporary routes without restarting:
 
 [source,clojure]
 ----
-(require '[wagoe.devtools.core.router :as router])
+;; Add a live route; (remove-route! :get "/test") takes it out
+(defroute! :get "/test" (fn [_req] {:status 200 :body {:hello "world"}}))
 
-;; Add a test route
-(router/add-route {:path "/test" :method :get :handler my-handler})
-
-;; Inject a tap interceptor to debug a specific route
-(router/inject-tap-interceptor :my-route)
+;; Tap a handler's interceptor chain; active after the next (reset)
+(tap-handler! :create-user (fn [ctx] (println (:request ctx)) ctx))
 ----
 
 == Recording Requests
 
-Capture HTTP request/response pairs for debugging:
+Capture HTTP request/response pairs for debugging, from this monorepo's REPL:
 
 [source,clojure]
 ----
-(require '[wagoe.devtools.core.recording :as rec])
-
-;; Create a recording session
-(def session (rec/create-session))
+(recording :start)
 
 ;; ... make requests to the application ...
 
-;; View captured entries
-(rec/format-entry-table session)
-;; =>  # | Method | Path         | Status | Duration
-;;     0 | GET    | /api/v1/users | 200   | 12ms
-;;     1 | POST   | /api/v1/users | 201   | 45ms
-
-;; Compare two entries
-(rec/diff-entries session 0 1)
-
-;; Save for later
-(spit "debug-session.edn" (rec/serialize-session session))
+(recording :list)            ; the captured entries
+(recording :diff 0 1)        ; compare two entries
+(recording :replay 0)        ; send entry 0 again
+(recording :save "debug")    ; save for later; (recording :load "debug")
+(recording :stop)
 ----
 
 == Exploring Schemas
 
-Browse Malli schemas from the REPL or dashboard:
+Browse Malli schemas from this monorepo's REPL or the dashboard. The helpers
+take a schema, not a name:
 
 [source,clojure]
 ----
-;; Schema tree view
-(schema-tree :user/CreateUser)
+(require '[wagoe.user.schema :as us])
 
-;; Generate example data
-(schema-example :user/CreateUser)
-;; => {:email "alice@example.com" :name "Alice" :password "secret123"}
-
-;; Diff two schemas
-(schema-diff :user/CreateUser :user/UpdateUser)
+(schema us/CreateUserRequest)                          ; tree view
+(generate us/CreateUserRequest)                        ; example data
+(schema-diff us/CreateUserRequest us/UpdateUserRequest)
 ----
 
 Or visit `http://localhost:9999/dashboard/schemas` for a browsable schema explorer with example generation.
@@ -178,7 +165,8 @@ Three AI commands are available when an AI provider is configured (see xref:libr
 (ai/refactor-fcis 'wagoe.product.core.validation)
 ----
 
-All three degrade gracefully when no AI service is configured — they print a message and return `nil`.
+`(go)` binds them to `:wagoe/ai-service`. Without one in the system they throw a
+`:configuration-error` saying so.
 
 == Config Doctor
 
@@ -196,7 +184,10 @@ bb doctor --env all
 bb doctor --ci
 ----
 
-The doctor runs 6 checks: env var references, provider validity, JWT secret, admin config parity, production placeholders, and wiring completeness.
+The doctor runs 10 checks: config loadable, env var references, secret references,
+provider validity, JWT secret, admin config parity, production placeholders, the
+reset-endpoint flag, rate limiting needing a cache, and stale framework wiring.
+`bb doctor --help` lists them.
 
 == Quick Reference
 
@@ -210,8 +201,8 @@ The doctor runs 6 checks: env var references, provider validity, JWT secret, adm
 | View routes | `(routes)` or dashboard `/routes`
 | View config | `(config :database)` or dashboard `/config`
 | List helpers | `(commands)`
-| Record requests | `(recording/create-session)` (this monorepo; downstream call `wagoe.devtools.shell.recording` directly)
-| Explore schemas | `(schema-tree :user/CreateUser)` (this monorepo; downstream `wagoe.devtools.core.schema-tools`)
+| Record requests | `(recording :start)` (this monorepo; downstream call `wagoe.devtools.shell.recording` directly)
+| Explore schemas | `(schema us/CreateUserRequest)` (this monorepo; downstream `wagoe.devtools.core.schema-tools`)
 | AI code review | `(ai/review "path/to/file.clj")` (this monorepo)
 | Validate config | `bb doctor`
 | Scaffold + wire | `bb scaffold generate` then `bb scaffold integrate <module>`

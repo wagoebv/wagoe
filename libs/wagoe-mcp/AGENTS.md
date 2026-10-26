@@ -14,8 +14,8 @@ later tools reuse.
 ## Run
 
 ```bash
-cd libs/wagoe-mcp
 clojure -M:mcp        # stdio MCP server, from the monorepo root (isolated classpath)
+cd libs/wagoe-mcp
 clojure -M:run        # same server, from libs/wagoe-mcp (cwd = the lib, so the
                       # reflective resources report :unavailable)
 clojure -M:test       # kaocha unit tests
@@ -60,7 +60,8 @@ src/wagoe/mcp/
     ├── migrator.clj   # default injected migrator for `run-migration`: shell out to :migrate (BOU-102)
     ├── dispatch.clj   # shell dispatch: resources/read + tools/call (gate+encode)
     ├── stdio.clj      # newline-delimited stdin/stdout loop; logs to stderr
-    └── server.clj     # -main: resolve context, audit start, boot serve loop
+    ├── server.clj     # -main: claim stdout, then load boot (requires nothing)
+    └── boot.clj       # composition root: resolve context, audit start, serve loop
 ```
 
 **Core is pure** — no JSON, no I/O. The shell owns cheshire and stdin/stdout.
@@ -284,6 +285,8 @@ code run, the SQL, the migration direction) so the trail names what executed.
 
 ## Adding tools / resources (BOU-99 / BOU-100 / BOU-101 / BOU-102)
 
-Register definitions into the registry data and add a dispatch case (or a
-`tools/call` / `resources/read` handler) in `core/handlers.clj`. Gate it per
+Add the definition to the catalog (`core/tools` or `core/resources`); `shell/boot`
+seeds the registry from it. Pure methods dispatch in `core/handlers.clj`;
+`tools/call` and `resources/read` dispatch in `shell/dispatch.clj`, a tool's
+executor lives in `shell/tools.clj`. Gate it per
 the Security section above. The stdio transport stays unchanged.

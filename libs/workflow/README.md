@@ -162,7 +162,7 @@ so `bb migrate up` creates them with no boot. `:wagoe/workflow-db-schema` create
 them at boot for installations that do not migrate. Timestamps are
 `TIMESTAMP WITH TIME ZONE`; tables created before BOU-502 stored them as TEXT and
 are converted by the second migration, which only `migrate up` runs. Workflow
-supports PostgreSQL, H2 and SQLite, not MySQL.
+supports PostgreSQL, MySQL, H2 and SQLite.
 
 ---
 

@@ -56,15 +56,20 @@ The default HTTP stack (`wagoe.platform.shell.http.interceptors/default-http-int
 is applied to every route unless the route opts out with `:skip-interceptors? true`
 (used only for internal endpoints such as health checks). In `:enter`/`:leave` order:
 
+* `http-web-error-pages` — renders an error on a `/web` route as a page, or a toast for htmx
 * `http-request-logging` — request entry/completion logging with timing
+* `http-request-tracing` — a tracing span per request (no-op without a tracer)
 * `http-request-metrics` — timing and status-code metrics
 * `http-error-reporting` — captures exceptions to the error-tracking service
 * `http-correlation-header` — adds `X-Correlation-ID` to the response
+* `http-rate-limit-protection` — fixed-window limit from `:wagoe/http :rate-limit`
+  (`:enabled?`, default false; `:limit` 100; `:window-ms` 60000), shared across
+  replicas through `:wagoe/cache`
 * `http-csrf-protection` — validates/issues CSRF tokens (see <<csrf-protection>>)
 * `http-security-headers` — CSP, HSTS, `X-Frame-Options`, `X-Content-Type-Options`, …
 * `http-error-handler` — maps an exception's `:type` to an HTTP status
 
-`http-rate-limit` (fixed-window, optionally Redis-backed) is available to attach per route.
+`(http-rate-limit limit window-ms cache)` builds a fixed limit to attach per route.
 
 NOTE: `:skip-interceptors?` is independent of `:no-doc`. `:no-doc` only excludes a
 route from the OpenAPI document; it does **not** affect interceptors. All `/web` routes are

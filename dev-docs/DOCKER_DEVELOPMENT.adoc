@@ -32,8 +32,7 @@ development tools integration.
 [[wrench-development-optimization]]
 ==== 🔧 Development Optimization
 
-* *Live reload support*: Changes reflected without rebuilds
-* *Volume mounting*: Source code mounted for development
+* *Volume mounting*: Source and config mounted read-only into the app container
 * *Non-root user*: Security best practices
 * *Development tools*: Pre-installed utilities and Clojure CLI
 * *Debug support*: JVM debug ports exposed when needed
@@ -240,11 +239,12 @@ psql -U postgres -d wagoe_dev
 
 [source,bash]
 ----
-# Start with live reload
-./scripts/docker-dev.sh start dev
+# The app container runs the uberjar built into its image, so a source
+# change needs a rebuild and restart
+./scripts/docker-dev.sh build
+./scripts/docker-dev.sh restart dev
 
-# Code changes in ./src are automatically reflected
-# No container restart needed for source changes
+# For a REPL-driven loop, use the dev-tools container (full profile)
 ----
 
 ==== Testing
@@ -256,7 +256,7 @@ psql -U postgres -d wagoe_dev
 
 # Run specific test namespace
 ./scripts/docker-dev.sh shell dev-tools
-clojure -X:test :ns-patterns '["wagoe.user.*"]'
+clojure -M:test :user
 ----
 
 === Debugging
@@ -452,11 +452,8 @@ docker system prune
 
 ==== Non-Root Containers
 
-All services run as non-root users:
-
-* *App container*: `wagoe` user (UID 1001)
-* *Database*: `postgres` user
-* *Docs*: `node` user
+The app and dev-tools containers run as the `wagoe` user (UID 1001). The
+database and docs containers use their images' defaults.
 
 ==== Network Isolation
 
@@ -478,7 +475,7 @@ considerations:
 ==== Image Optimization
 
 * *Multi-stage builds*: Only runtime dependencies in final image
-* *Alpine base*: Smaller image size
+* *JRE base*: the runtime stage is `eclipse-temurin:21-jre`, without the build tools
 * *Security updates*: Regular base image updates
 
 ==== Configuration Management
@@ -491,7 +488,7 @@ considerations:
 
 * *Health endpoints*: All services expose health checks
 * *Metrics*: Prometheus-compatible metrics endpoints
-* *Logging*: Structured JSON logging for log aggregation
+* *Logging*: Logback console and rolling file appenders (`resources/logback.xml`)
 
 === Related Documentation
 

@@ -12,14 +12,14 @@ For communication channels (email, SMS), see the `external` library.
 
 [cols="1,3"]
 |===
-| `:mock`   | Auto-approves all payments. No network calls. Use in development and tests.
+| `:mock`   | Accepts any webhook as paid. No network calls. Boots only in the `dev` and `test` profiles.
 | `:mollie` | Mollie REST API. Webhook via form-POST. No HMAC signing.
 | `:stripe` | Stripe Checkout Sessions. Webhook verified with HMAC-SHA256.
 |===
 
 == Step 1 — Configure Integrant
 
-Add one key to your `config.edn`:
+Add one key to your `config.edn`. There is no default `:provider`; boot fails without one, and with a blank API key or Stripe webhook secret:
 
 [source,clojure]
 ----
@@ -56,7 +56,7 @@ Inject it wherever payment operations are needed:
 (require '[wagoe.payments.ports :as psp])
 
 (defn initiate-payment! [payment-provider order]
-  (let [{:keys [checkout-url provider-checkout-id]}
+  (let [{:keys [checkout-url provider-checkout-id correlation-id]}
         (psp/create-checkout-session payment-provider
           {:amount-cents  (:total-cents order)
            :currency      "EUR"
@@ -64,8 +64,9 @@ Inject it wherever payment operations are needed:
            :redirect-url  (str base-url "/orders/" (:id order) "/confirmation")
            :webhook-url   (str base-url "/api/v1/payments/webhook")
            :metadata      {:order-id (str (:id order))}})]
-    ;; Store provider-checkout-id on the order so you can look it up later
-    (save-checkout-id! order provider-checkout-id)
+    ;; Store both on the order: the webhook echoes correlation-id,
+    ;; get-payment-status takes provider-checkout-id
+    (save-checkout-ids! order provider-checkout-id correlation-id)
     ;; Redirect the user to the PSP
     checkout-url))
 ----
@@ -86,23 +87,24 @@ Inject it wherever payment operations are needed:
   (let [raw-body (slurp (:body request))
         headers  (:headers request)]
     (if (psp/verify-webhook-signature payment-provider raw-body headers)
-      (let [{:keys [event-type provider-checkout-id]}
+      (let [{:keys [event-type correlation-id]}
             (psp/process-webhook payment-provider raw-body headers)]
         (case event-type
-          :payment.paid      (activate-order! provider-checkout-id)
-          :payment.failed    (mark-order-failed! provider-checkout-id)
-          :payment.cancelled (cancel-order! provider-checkout-id)
+          :payment.paid      (activate-order! correlation-id)
+          :payment.failed    (mark-order-failed! correlation-id)
+          :payment.cancelled (cancel-order! correlation-id)
           nil) ; ignore unrecognized events
         {:status 200 :body ""})
       {:status 400 :body "Invalid signature"})))
 ----
 
-Route definition:
+Route definition. The PSP has no session, so the route is `:public`:
 
 [source,clojure]
 ----
 ["/payments/webhook"
- {:post {:handler   payment-webhook-handler
+ {:post {:handler   #(payment-webhook-handler % payment-provider)
+         :public    true
          :summary   "PSP webhook receiver"}}]
 ----
 
@@ -117,7 +119,11 @@ Stripe computes the HMAC over the raw request body. Parsing it first invalidates
 | `:payment.authorized` | Authorized but not yet captured
 | `:payment.failed`     | Payment attempt failed
 | `:payment.cancelled`  | Cancelled by user or PSP
+| `:payment.expired`    | Checkout expired before payment
+| `nil`                 | A verified event with no payment outcome (Stripe disputes, `checkout.session.*`); acknowledge it
 |===
+
+Correlate on the `:correlation-id` that `create-checkout-session` returned; `:provider-checkout-id` is in the webhook only when the payload carries it.
 
 == Step 4 — Check payment status
 
@@ -131,7 +137,7 @@ Use `get-payment-status` to poll a payment (e.g. on the confirmation page):
     :paid      (render-success-page order)
     :pending   (render-pending-page order)
     :failed    (render-failure-page order)
-    :cancelled (render-cancelled-page order)))
+    (:cancelled :expired :chargeback) (render-cancelled-page order)))
 ----
 
 == Provider notes
@@ -150,14 +156,14 @@ GET /web/payment/mock-return?checkout-id=<uuid>
 ----
 ;; In tests
 (require '[wagoe.payments.shell.adapters.mock :as mock])
-(def test-provider (mock/->MockPaymentProvider))
+(def test-provider (mock/make-mock-provider))
 ----
 
 === Mollie
 
 * Mollie does NOT sign webhooks with HMAC — `verify-webhook-signature` always returns `true`.
-* Verify by calling `get-payment-status` with the payment ID received in the webhook body.
-* `:webhook-base-url` is your application's public base URL; the adapter appends `/api/v1/payments/webhook`.
+* `process-webhook` fetches the payment by the id in the body, so the outcome comes from Mollie's API, not the request. An id this account does not know is acknowledged with a `nil` event.
+* `:webhook-base-url` is your application's public base URL; the adapter appends `/api/v1/payments/webhook` unless the checkout passes `:webhook-url`.
 * Recurring billing: a checkout with `:setup-future-usage` is Mollie's first payment and stores a mandate.
   `create-off-session-payment` charges it later, usually as `:pending` until SEPA settles.
 * `expire-checkout-session` cancels the open payment; the webhook reports `:payment.cancelled`.
@@ -193,7 +199,7 @@ Always use the mock provider in tests:
 (require '[wagoe.payments.shell.adapters.mock :as mock])
 
 (deftest checkout-test
-  (let [provider (mock/->MockPaymentProvider)
+  (let [provider (mock/make-mock-provider)
         result   (psp/create-checkout-session provider
                    {:amount-cents 4900
                     :currency     "EUR"

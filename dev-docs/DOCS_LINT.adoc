@@ -15,13 +15,13 @@ The Wagoe repository includes a documentation linter that detects drift between 
 |References to pre-library-split paths (e.g., `src/wagoe/user/` instead of `libs/user/src/wagoe/user/`)
 
 |`unknown-namespace`
-|Namespace references that don't match known wagoe module prefixes
+|`wagoe.*` namespace references that match no namespace in the repository's source
 
-|`stale-github-link`
-|GitHub links to wagoe repo that use outdated paths
+|`unknown-alias`
+|A documented `clojure -M:…` command naming a deps.edn alias that does not exist. Fails the run.
 
-|`invalid-lib-path`
-|Library paths that reference non-existent libraries
+|`ticket-ref`
+|A private tracker id (`BOU-123`) on a page under `docs/modules/`, which the public site renders. Fails the run.
 |===
 
 == Running Locally
@@ -34,8 +34,12 @@ The Wagoe repository includes a documentation linter that detects drift between 
 
 [source,bash]
 ----
+bb docs:lint
+# or
 bb scripts/docs_lint.clj
 ----
+
+Both run the implementation in `dev/wagoe/tools/docs_lint.clj`; CI runs the same one with `clojure -M:docs-lint`.
 
 === Verbose Mode
 
@@ -60,9 +64,9 @@ The linter generates two reports in `build/docs-lint/`:
 
 == CI Integration
 
-The linter runs automatically on every push and pull request via GitHub Actions. See `.github/workflows/ci.yml`.
+The `docs-lint` job in `.github/workflows/ci.yml` runs it on every push and pull request and uploads the reports as artifacts.
 
-The job is **warn-only** - it never fails the build, but uploads reports as artifacts for review.
+It fails on `unknown-alias` and `ticket-ref`. Every other finding is a warning.
 
 == Interpreting Warnings
 
@@ -90,29 +94,17 @@ libs/user/src/wagoe/user/core/user.clj
 
 === `unknown-namespace`
 
-A namespace reference doesn't match any known module prefix.
+A `wagoe.*` reference is neither a namespace declared in the repository's Clojure source nor a prefix of one.
 
-**Valid prefixes:**
-* `wagoe.core.*`
-* `wagoe.shared.*`
-* `wagoe.observability.*`
-* `wagoe.platform.*`
-* `wagoe.user.*`
-* `wagoe.admin.*`
-* `wagoe.storage.*`
-* `wagoe.cache.*`
-* `wagoe.jobs.*`
-* `wagoe.email.*`
-* `wagoe.realtime.*`
-* `wagoe.tenant.*`
-* `wagoe.external.*`
-* `wagoe.scaffolder.*`
+**Fix:** Use the namespace's current name, or drop the reference if the namespace is gone.
 
-=== `stale-github-link`
+=== `unknown-alias`
 
-A GitHub link to the wagoe repository uses an outdated path structure.
+**Fix:** Fix the command, or add the alias to `deps.edn`.
 
-**Fix:** Update the path in the GitHub URL to use the new `libs/` structure.
+=== `ticket-ref`
+
+**Fix:** Cite the pull request instead; GitHub resolves it for readers.
 
 == Known Limitations
 

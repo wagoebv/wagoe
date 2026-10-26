@@ -350,23 +350,18 @@ Extract tenant context from HTTP requests:
 ```clojure
 (require '[wagoe.cache.shell.tenant-cache :as tenant-cache])
 
-(defn extract-tenant-cache
+(defn wrap-tenant-cache
   "Ring middleware to add tenant-scoped cache to request."
   [handler base-cache]
   (fn [request]
-    (if-let [tenant-id (get-in request [:tenant :id])]
-      ;; Create tenant-scoped cache for this request
-      (let [tenant-cache (tenant-cache/create-tenant-cache base-cache tenant-id)
-            request (assoc request :cache tenant-cache)]
-        (handler request))
-      ;; No tenant context - use base cache
-      (handler (assoc request :cache base-cache)))))
+    ;; Scoped by [:tenant :id] or :tenant-id; the base cache when neither is set
+    (handler (assoc request :cache (tenant-cache/extract-tenant-cache base-cache request)))))
 
-;; Apply middleware
+;; Apply middleware (the outermost wrapper runs first)
 (def app
   (-> routes
-      (tenant-middleware/wrap-tenant-resolver tenant-service)  ; Add :tenant to request
-      (extract-tenant-cache base-cache)))                      ; Add tenant cache
+      (wrap-tenant-cache base-cache)                              ; Add tenant cache
+      (tenant-middleware/wrap-tenant-resolution tenant-service))) ; Add :tenant to request
 
 ;; Handler receives tenant-scoped cache
 (defn get-user-handler [request]
@@ -543,8 +538,6 @@ Comprehensive tests verify tenant isolation:
 ```bash
 # Run tenant-cache integration tests
 clojure -M:test :cache --focus wagoe.cache.shell.tenant-cache-test
-
-# Results: 20 tests, 182 assertions, 0 failures
 ```
 
 ### API Reference
@@ -552,7 +545,7 @@ clojure -M:test :cache --focus wagoe.cache.shell.tenant-cache-test
 **`wagoe.cache.shell.tenant-cache`**
 
 - `(create-tenant-cache base-cache tenant-id)` - Create tenant-scoped cache
-- `(extract-tenant-cache handler base-cache)` - Ring middleware for tenant caching
+- `(extract-tenant-cache base-cache request)` - Tenant-scoped cache for the request's `[:tenant :id]` or `:tenant-id`; the base cache when neither is set
 - All `wagoe.cache.ports` operations supported transparently
 
 ---
@@ -676,8 +669,8 @@ clojure -M:test :cache --focus wagoe.cache.shell.tenant-cache-test
 The module includes comprehensive tests covering all operations:
 
 ```bash
-# Run cache tests
-clojure -X:test :dirs '["test"]' :patterns '["wagoe.cache.*"]'
+# Run cache tests (from the repo root)
+clojure -M:test :cache
 ```
 
 ## Production Checklist

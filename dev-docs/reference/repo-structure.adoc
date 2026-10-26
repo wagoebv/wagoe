@@ -5,7 +5,7 @@
 [[overview]]
 == Overview
 
-Wagoe uses a **monorepo with modular libraries** architecture. After the library split (v2.2.0), all domain and infrastructure code lives in the `libs/` directory, with each library owning its complete functionality stack.
+Wagoe uses a **monorepo with modular libraries** architecture. After the library split, all domain and infrastructure code lives in the `libs/` directory, with each library owning its complete functionality stack.
 
 This document is the **canonical reference** for repository structure and paths after the library split.
 
@@ -66,7 +66,7 @@ This document is the **canonical reference** for repository structure and paths 
 
 |`libs/external`
 |External service adapters: raw transport and third-party APIs
-|SMTP transport (Jakarta Mail), IMAP mailbox, Twilio SMS / WhatsApp
+|SMTP transport (Jakarta Mail), IMAP mailbox, Twilio SMS / WhatsApp, FTPS, SOAP
 
 |`libs/payments`
 |Payment Service Provider abstraction
@@ -102,11 +102,51 @@ This document is the **canonical reference** for repository structure and paths 
 
 |`libs/ui-style`
 |Shared UI style bundles
-|CSS/JS assets, design tokens, Tailwind/DaisyUI builds (`:base`, `:pilot`, `:admin-pilot`)
+|CSS/JS assets, design tokens, Tailwind/DaisyUI builds (`:pilot`, `:admin-pilot`)
+
+|`libs/config`
+|Configuration loading
+|Aero profile resolution, `#secret` reader, typed accessors
+
+|`libs/events`
+|Event bus
+|Publisher/subscriber ports, in-memory and Redis Streams adapters
+
+|`libs/webhooks`
+|Outbound webhooks
+|Signed, retried, per-tenant delivery of bus events
+
+|`libs/push`
+|Push notifications
+|FCM and APNs adapters, `defpush` definitions
+
+|`libs/audience`
+|Audience segmentation
+|Rule-based segments, SQL plus predicate evaluation (`defaudience`)
+
+|`libs/shared-ui`
+|Shared Hiccup UI primitives
+|Forms, tables, layouts, modals, icons (`wagoe.shared.ui.*`)
+
+|`libs/devtools`
+|Development-only tooling
+|Error pipeline with WGE codes, dev dashboard, REPL helpers
+
+|`libs/test`
+|Test kit for applications
+|Test system, Ring client with session and CSRF, deterministic jobs/events/realtime
+
+|`libs/wagoe-cli`
+|The `wagoe` command
+|`wagoe new`, module installer, project templates
+
+|`libs/wagoe-mcp`
+|MCP server for coding agents
+|Tool/resource registry, JSON-RPC over stdio (`wagoe.mcp.*`)
 
 |`libs/tools/`
 |Babashka developer tooling (published as `com.wagoe/wagoe-tools`)
-|Scaffolding, AI CLI, config doctor, setup wizard, deploy, i18n tools
+|Scaffolding, AI CLI, config doctor, setup wizard, deploy, i18n tools, quality gates
 |===
 
 [[canonical-paths]]
@@ -141,18 +181,17 @@ libs/{library}/
 [[shared-namespace]]
 === Shared Namespace
 
-Cross-cutting utilities live under `wagoe.shared` within the appropriate library:
+Cross-cutting utilities live in `libs/core` under `wagoe.core.utils`:
 
 [source]
 ----
-libs/core/src/wagoe/shared/
-├── core/
-│   └── utils/
-│       ├── case_conversion.clj   # kebab-case <-> snake_case
-│       └── type_conversion.clj   # Instant, BigDecimal, etc.
-└── shell/
-    └── interceptors.clj          # Observability interceptors
+libs/core/src/wagoe/core/utils/
+├── case_conversion.clj   # kebab-case <-> snake_case / camelCase
+└── type_conversion.clj   # Instant, BigDecimal, etc.
 ----
+
+Shared Hiccup UI primitives are a library of their own, `libs/shared-ui`
+(`wagoe.shared.ui.*`).
 
 [[example-library-structure]]
 === Example: User Library
@@ -181,7 +220,7 @@ libs/user/
     └── wagoe/
         └── user/
             ├── core/
-            │   ├── user_test.clj
+            │   ├── user_validation_test.clj
             │   └── user_validation_snapshot_test.clj
             └── shell/
                 ├── service_test.clj
@@ -216,7 +255,9 @@ wagoe/
 │   ├── geo/                     # Multi-provider geocoding
 │   ├── ai/                      # Multi-provider AI tooling
 │   ├── i18n/                    # Internationalisation
-│   └── ui-style/                # Shared UI style bundles
+│   ├── ui-style/                # Shared UI style bundles
+│   ├── ...                      # config, events, webhooks, push, audience, shared-ui,
+│   │                            # devtools, test, wagoe-cli, wagoe-mcp, e2e
 │   └── tools/                   # Babashka developer tooling (bb tasks; published as wagoe-tools)
 │       ├── src/wagoe/tools/  # scaffold, ai, doctor, setup, deploy, etc.
 │       └── test/wagoe/tools/ # Unit tests (bb test:tools)
@@ -229,11 +270,14 @@ wagoe/
 │   │   ├── prod/
 │   │   └── acc/
 │   ├── public/                  # Static assets (css, js)
-│   └── migrations/              # Database migrations
+│   ├── migrations/              # Database migrations
+│   └── migrations-tenant/       # Per-tenant schema migrations
+├── deploy/                      # Reference topologies: compose files, k8s manifests
+├── examples/                    # shop (generated app) and todo (FC/IS, no framework)
 ├── docs/                        # Antora documentation site
 │   └── modules/                 # getting-started, architecture, guides, libraries
 ├── dev-docs/                    # Internal developer documentation
-│   ├── adr/                     # Architecture Decision Records (ADR-001..020)
+│   ├── adr/                     # Architecture Decision Records (ADR-001..041)
 │   └── reference/               # Commands, repo structure, publishing
 ├── scripts/                     # Tooling scripts
 │   └── docs_lint.clj
@@ -254,46 +298,43 @@ wagoe/
 
 Libraries have explicit dependency relationships:
 
+Each library's `deps.edn` declares its Wagoe dependencies. The full graph, in
+publish order, is the table in link:publishing.adoc[Publishing Libraries]. In
+short:
+
 [source]
 ----
+;; No internal deps
+config, core, i18n, cache, ui-style, wagoe-cli
+
 ;; Foundation
-platform --> core
-platform --> observability
+observability --> core
+platform      --> cache, config, core, observability
 
 ;; Infrastructure
-external --> platform
-cache    --> platform
-jobs     --> platform
-storage  --> core, platform
+tenant   --> core, platform
+jobs     --> core, observability, platform, tenant
+events   --> platform
+external --> core, platform
+email    --> external
+realtime --> i18n
+storage  --> core, observability, platform
 
 ;; Domain modules
-user     --> core, platform, observability
-admin    --> core, platform, user, ui-style
-tenant   --> platform, user
-email    --> platform, external
-realtime --> platform
-payments --> (standalone, no internal deps)
-workflow --> platform
-search   --> platform
-reports  --> platform
-calendar --> platform
-geo      --> platform
-ai       --> platform
-
-;; Standalone
-i18n      --> (standalone, no internal deps)
-ui-style  --> (standalone, no internal deps)
-scaffolder --> core
+user     --> config, core, email, external, i18n, observability, platform, shared-ui, tenant
+admin    --> core, events, i18n, platform, shared-ui, ui-style, user
+workflow --> admin, core, i18n, platform, shared-ui, user
+search   --> admin, core, i18n, platform, shared-ui
+payments, geo, reports, audience, scaffolder --> core
 ----
 
 **Rules:**
 
-* Libraries can only depend on libraries above them in the hierarchy
+* No cycles: `bb check:deps` fails on any cycle between libraries
 * `core` has no internal dependencies (foundation layer)
 * `platform` provides infrastructure that other modules consume
-* Domain libraries (`user`, `admin`, `tenant`, `cache`, `jobs`, `realtime`, etc.) depend on platform
-* `email` delegates raw SMTP transport to `external`; `external` sits at the platform level
-* `payments`, `i18n`, and `ui-style` are standalone — no internal Wagoe deps
+* `email` delegates raw SMTP transport to `external`
+* `config`, `i18n`, `cache` and `ui-style` have no internal Wagoe deps
 * `wagoe-tools` is consumed via `{:local/root "libs/tools"}` in `bb.edn`, not as a library dependency
 
 [[configuration]]
@@ -310,6 +351,8 @@ resources/conf/
 │       └── users.edn           # User entity admin config
 ├── test/
 │   └── config.edn              # Test configuration
+├── acc/
+│   └── config.edn              # Acceptance configuration
 └── prod/
     └── config.edn              # Production configuration
 ----

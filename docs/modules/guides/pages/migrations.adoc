@@ -169,7 +169,7 @@ On PostgreSQL, `CREATE INDEX` locks the table. Use `CONCURRENTLY` for large tabl
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_email ON orders (email);
 ----
 
-NOTE: `CONCURRENTLY` cannot run inside a transaction. Migratus runs each statement separately when split by `--;;`, so this works.
+NOTE: `CONCURRENTLY` cannot run inside a transaction, and Migratus runs each migration file in one. Start the file with `-- :disable-transaction` and give the index a migration of its own.
 
 === Foreign keys — order matters
 
@@ -228,9 +228,9 @@ The key principle: **schema changes and code changes deploy separately**. The da
 When using `wagoe-tenant` (schema-per-tenant), migrations run in two scopes:
 
 . **Shared schema** (`public`) — tenant registry, shared tables. Use `migrations/` as normal.
-. **Per-tenant schema** — tenant-specific tables. The tenant library applies these automatically during provisioning.
+. **Per-tenant schema** — tenant-specific tables, in `migrations-tenant/`. The tenant library runs these into a new tenant's schema when it is provisioned, and into every existing tenant schema at startup.
 
-For per-tenant migrations, prefix table names with the schema:
+Per-tenant migrations run with `search_path` set to the tenant's schema, so table names need no schema prefix:
 
 [source,sql]
 ----

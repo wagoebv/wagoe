@@ -6,7 +6,8 @@ Multi-platform push notification delivery for FCM (Firebase) and APNs (Apple). D
 
 | Namespace | Layer | Purpose |
 |-----------|-------|---------|
-| `wagoe.push.core.notification` | Core | `defpush` macro, registry, template rendering |
+| `wagoe.push.core.notification` | Core | Template rendering, `build-notification` |
+| `wagoe.push.shell.registry` | Shell | `defpush` macro and the definition registry |
 | `wagoe.push.core.delivery` | Core | Payload building (FCM/APNs), error classification, retry calc |
 | `wagoe.push.core.device` | Core | Token validation, platform detection, staleness |
 | `wagoe.push.core.analytics` | Core | Rate calculations |
@@ -23,7 +24,7 @@ Multi-platform push notification delivery for FCM (Firebase) and APNs (Apple). D
 
 ## Migrations
 
-Three, under `resources/wagoe/push/migrations/`, revealed to the runner by
+Six, under `resources/wagoe/push/migrations/`, revealed to the runner by
 `resources/wagoe/migration-paths/push.edn`. Without that manifest the directory is never read —
 `bb migrate up` reports nothing pending and the first query fails on a missing table, which
 is how push shipped until BOU-423. `libs/tools/test/.../migration_manifests_test.clj` fails
@@ -178,7 +179,7 @@ Two job types registered under `:wagoe.push/job-handlers`:
 
 ## HTTP Routes
 
-Registered via `:wagoe.push/routes` Integrant key. Every route but the callback requires a signed-in user; the platform refuses anyone else, and the handlers read `[:user :id]`. The callback is `:public true`: its HMAC is the credential (BOU-568). The device routes say `:authorization :self` and the stats `:permission :push/read`, so `:wagoe/authorization :enforce` does not refuse them.
+Built by the `:wagoe.push/routes` Integrant key as a plain route vector; nothing mounts it for you. Contribute it yourself, e.g. as `{:static [routes]}` in `:wagoe/http-handler :module-routes` (as `test/support/route_table.clj` does), which keeps the paths below as written. Every route but the callback requires a signed-in user; the platform refuses anyone else, and the handlers read `[:user :id]`. The callback is `:public true`: its HMAC is the credential (BOU-568). The device routes say `:authorization :self` and the stats `:permission :push/read`, so `:wagoe/authorization :enforce` does not refuse them.
 
 | Method | Path | Handler |
 |--------|------|---------|
@@ -231,11 +232,11 @@ Both adapters also set `:token-invalid? true` on the result map for `:token-inva
 
 ## DB Tables
 
-Three migrations under `libs/push/resources/wagoe/push/migrations/`:
+Three migrations under `libs/push/resources/wagoe/push/migrations/` create the tables; three later ones give timestamps a zone, index `(platform, id)` for broadcast paging (BOU-683) and put `token` in a binary collation on MySQL:
 
 **`push_device_tokens`** (migration `20260524000000`)
 - `(token, app_id)` UNIQUE constraint drives upsert behaviour
-- Indexed on `(user_id, active)` and `(platform, active)`
+- Indexed on `(user_id, active)` and `(platform, active)`, later `(platform, id)`
 
 **`push_send_log`** (migration `20260524000001`)
 - Snapshot of each outbound attempt: title, body, priority, status, sent_at

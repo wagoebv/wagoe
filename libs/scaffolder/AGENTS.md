@@ -13,7 +13,8 @@ Generates new Wagoe modules with FC/IS structure, tests, and migrations. Produce
 | `wagoe.scaffolder.shell.cli-entry` | CLI entrypoint — dispatches commands |
 | `wagoe.scaffolder.cli` | Command definitions, option specs, wizard structure |
 | `wagoe.scaffolder.core.generators` | Pure generation logic (schemas, ports, handlers) |
-| `wagoe.scaffolder.shell.templates.*` | File templates and output orchestration |
+| `wagoe.scaffolder.core.template` | Pure template rendering (names, schemas, code strings) |
+| `wagoe.scaffolder.shell.service` | Orchestrates rendering and writes the files |
 
 ---
 
@@ -24,7 +25,7 @@ Generates new Wagoe modules with FC/IS structure, tests, and migrations. Produce
 bb scaffold
 
 # Show available commands
-bb scaffold help
+bb scaffold --help
 
 # AI-powered scaffolding from natural language
 bb scaffold ai "product module with name, price, stock, active status"
@@ -268,10 +269,10 @@ Fields are specified as `name:type[:values=a,b,c][:references=entity][:on-delete
 
 | Type | Maps to Malli | Notes |
 |------|--------------|-------|
-| `string` | `[:string {:min 1 :max 255}]` | |
+| `string` | `:string` | `VARCHAR(255)` |
 | `text` | `:string` | No length limit |
 | `integer` / `int` | `:int` | |
-| `decimal` | `:double` | |
+| `decimal` | `decimal?` | `DECIMAL(19,4)`; a BigDecimal, not a double |
 | `boolean` | `:boolean` | |
 | `email` | `[:re email-regex]` | |
 | `uuid` | `:uuid` | |
@@ -337,76 +338,79 @@ Examples:
 
 ## Generated File Structure
 
-Running `bb scaffold generate --module-name product --entity Product --field name:string:required --field price:decimal:required` creates:
+Running `bb scaffold generate --module-name product --entity Product --field name:string:required --field price:decimal:required` in a project whose namespace is `my-app` creates:
 
 ```
-libs/product/
-├── src/wagoe/product/
-│   ├── core/
-│   │   ├── product.clj      # Pure business logic
-│   │   └── validation.clj   # Validation rules
-│   ├── shell/
-│   │   ├── http.clj         # HTTP handlers & routes
-│   │   ├── persistence.clj  # Database adapter (implements IProductRepository)
-│   │   └── service.clj      # Shell orchestration (UserService record)
-│   ├── ports.clj            # IProductRepository, IProductService protocols
-│   └── schema.clj           # Malli schemas: Product, CreateProductRequest, etc.
-├── test/wagoe/product/
-│   ├── core/
-│   │   └── product_test.clj # Unit tests (^:unit metadata)
-│   ├── shell/
-│   │   ├── service_test.clj # Integration tests (^:integration metadata)
-│   │   └── persistence_contract_test.clj # Contract tests (^:contract metadata)
-└── resources/wagoe/product/migrations/
-    └── 001-create-product.sql
+src/my_app/product/
+├── core/
+│   ├── product.clj          # Pure business logic
+│   └── ui.clj               # Web UI (unless --no-web)
+├── shell/
+│   ├── http.clj             # HTTP handlers & routes (unless --no-http)
+│   ├── module_wiring.clj    # Integrant keys for the module
+│   ├── persistence.clj      # Database adapter (implements IProductRepository)
+│   ├── service.clj          # Shell orchestration
+│   └── web_handlers.clj     # Web UI handlers (unless --no-web)
+├── ports.clj                # IProductRepository, IProductService protocols
+└── schema.clj               # Malli schemas: Product, CreateProductRequest, …
+test/my_app/product/
+├── core/product_test.clj
+└── shell/
+    ├── product_repository_test.clj
+    └── service_test.clj
+migrations/
+├── <id>-create-products.up.sql
+└── <id>-create-products.down.sql
 ```
+
+`--base-ns` puts it under another namespace. With `--workflow` it adds
+`shell/product_workflow.clj` and its test; with the admin module on, an admin
+entity file per profile.
 
 ### Sample Generated schema.clj
 
 ```clojure
-(ns wagoe.product.schema
+(ns my-app.product.schema
   (:require [malli.core :as m]))
 
 (def Product
-  [:map {:closed true}
+  [:map {:title "Product"}
    [:id :uuid]
-   [:name [:string {:min 1 :max 255}]]
-   [:price :double]
+   [:name :string]
+   [:price decimal?]
    [:created-at inst?]
-   [:updated-at [:maybe inst?]]])
+   [:updated-at {:optional true} [:maybe inst?]]
+   [:deleted-at {:optional true} [:maybe inst?]]])
 
 (def CreateProductRequest
-  [:map {:closed true}
-   [:name [:string {:min 1 :max 255}]]
-   [:price :double]])
+  [:map {:title "Create Product Request"}
+   [:name :string]
+   [:price decimal?]])
 
 (def UpdateProductRequest
-  [:map {:closed true}
-   [:name {:optional true} [:string {:min 1 :max 255}]]
-   [:price {:optional true} :double]])
+  [:map {:title "Update Product Request"}
+   [:name {:optional true} :string]
+   [:price {:optional true} decimal?]])
 
-(defn validate-create [data]
-  (m/validate CreateProductRequest data))
-
-(defn explain-create [data]
-  (m/explain CreateProductRequest data))
+(defn validate-product [product-data] …)
+(defn explain-product [product-data] …)
 ```
 
 ### Sample Generated ports.clj
 
 ```clojure
-(ns wagoe.product.ports)
+(ns my-app.product.ports)
 
 (defprotocol IProductRepository
-  (find-by-id   [this id])
-  (find-all     [this params])
-  (create!      [this entity])
-  (update!      [this entity])
-  (delete!      [this id]))
+  (find-by-id    [this id])
+  (find-all      [this options])
+  (create        [this entity])
+  (update-entity [this entity])
+  (delete        [this id]))
 
 (defprotocol IProductService
   (get-product    [this id])
-  (list-products  [this params])
+  (list-products  [this options])
   (create-product [this data])
   (update-product [this id data])
   (delete-product [this id]))
@@ -416,56 +420,13 @@ libs/product/
 
 ## Post-Generation Integration Steps
 
-After running `bb scaffold generate`, wire the new module into the system:
-
-### 1. Add to `deps.edn`
-
-```clojure
-;; In root deps.edn, add to :paths or as a local lib:
-{:deps {wagoe/product {:local/root "libs/product"}}}
-```
-
-### 2. Add to `tests.edn`
-
-```clojure
-;; Add a test suite entry
-{:kaocha/tests
- [{:id :product
-   :kaocha.testable/aliases [:product]
-   :kaocha/source-paths ["libs/product/src"]
-   :kaocha/test-paths   ["libs/product/test"]}]}
-```
-
-### 3. Wire into Integrant System Config
-
-```clojure
-;; In resources/conf/dev/config.edn
-{:wagoe/product-service
- {:user-repository #ig/ref :wagoe/user-repository
-  :db-context      #ig/ref :wagoe/db-context}}
-```
-
-### 4. Add Routes
-
-```clojure
-;; In src/wagoe/system.clj or your router config
-(require '[wagoe.product.shell.http :as product-http])
-
-(defn all-routes [config]
-  (concat
-    (user-http/user-routes config)
-    (product-http/product-routes config)))   ; Add this
-```
-
-### 5. Run the Migration
+The module is under `src/`, so it is already on the classpath and in the test
+suites; nothing goes into `deps.edn` or `tests.edn`. Its routes are mounted by
+its `module_wiring.clj`.
 
 ```bash
-clojure -M:migrate up
-```
-
-### 6. Run the Tests
-
-```bash
+bb scaffold integrate product   # writes :wagoe/product into each profile's config.edn
+bb migrate up
 clojure -M:test :{module-name}
 ```
 
@@ -488,7 +449,7 @@ The AI mode calls the configured LLM (Anthropic/OpenAI/Ollama) to:
 3. Run `bb scaffold generate` for the first entity, then `bb scaffold entity`
    for each further one
 
-Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `OLLAMA_URL`.
+Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `REPLICATE_API_TOKEN`, or `OLLAMA_URL`.
 
 ---
 
@@ -503,6 +464,7 @@ Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_A
 | `--[no-]http` | true | Generate the HTTP (REST API) routes |
 | `--[no-]web` | true | Generate the Web UI — a list page and a create form validated per field — in `core/ui.clj`, `shell/web_handlers.clj`, and the module's `:web` route contribution |
 | `--public-api` | false | API routes and web page open to anyone; by default they require a signed-in user |
+| `--base-ns` | the project's namespace | Namespace and path the module goes under |
 | `--output-dir` | `.` | Output directory |
 | `--force` | false | Overwrite existing files |
 | `--dry-run` | false | Preview without writing |
@@ -514,7 +476,7 @@ Configure the provider via environment variables: `ANTHROPIC_API_KEY`, `OPENAI_A
 - Regenerating a module that already exists is refused, and the files it would replace are listed. Pass `--force` to overwrite them.
 - Generated field names are always kebab-case internally; only converted at HTTP/DB boundaries.
 - AI mode requires a configured LLM provider. Ollama works offline: set `OLLAMA_URL`.
-- After scaffolding, always add the library to `deps.edn` and `tests.edn` — the scaffolder doesn't modify these.
+- After scaffolding, run `bb scaffold integrate <module>` to write its config key.
 - Template drift: if templates change after generation, run `bb ai gen-tests <file>` to regenerate tests.
 
 ---

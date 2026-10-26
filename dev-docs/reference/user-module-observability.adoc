@@ -1,394 +1,80 @@
 == User Module Observability Reference
 
-[[toc]]
-[[toctitle]]
-Table of Contents
+How the user module logs, counts and reports errors. There is no manual
+instrumentation in the module: two interceptor pipelines from `libs/platform`
+do it, one around each HTTP or CLI handler and one around each service
+operation.
 
-* link:#_overview[Overview]
-** link:#_integration_approaches[Integration Approaches]
-*** link:#_modern_approach_interceptor_pattern[Modern Approach: Interceptor Pattern ⭐]
-*** link:#_legacy_approach_manual_integration[Legacy Approach: Manual Integration]
-* link:#_logging[Logging]
-** link:#_business_and_audit_events[Business and Audit Events]
-* link:#_metrics[Metrics]
-** link:#_modern_approach_automatic_metrics_via_interceptors[Modern Approach: Automatic Metrics via Interceptors]
-** link:#_legacy_approach_manual_metrics_integration[Legacy Approach: Manual Metrics Integration]
-** link:#_user_lifecycle_counters[User Lifecycle Counters]
-** link:#_session_lifecycle_counters[Session Lifecycle Counters]
-** link:#_validation_and_error_metrics[Validation and Error Metrics]
-** link:#_gauge_metrics[Gauge Metrics]
-** link:#_metric_tags[Metric Tags]
-* link:#_error_reporting[Error Reporting]
-** link:#_modern_approach_automatic_error_reporting_via_interceptors[Modern Approach: Automatic Error Reporting via Interceptors]
-** link:#_legacy_approach_manual_error_reporting_integration[Legacy Approach: Manual Error Reporting Integration]
-** link:#_exception_reporting[Exception Reporting]
-** link:#_breadcrumbs[Breadcrumbs]
-** link:#_error_tags[Error Tags]
-* link:#_integration_examples[Integration Examples]
-** link:#_modern_approach_interceptor_based_integration[Modern Approach: Interceptor-Based Integration]
-** link:#_legacy_approach_manual_integration_example[Legacy Approach: Manual Integration Example]
-* link:#_see_also[See Also]
+=== Handler pipeline
 
-[[preamble]]
-This document describes the observability integration in the user module, acting as the primary reference for end-to-end observability integration in Wagoe.
+`wagoe.user.shell.http` and `wagoe.user.shell.cli` run each request through
+`wagoe.platform.shell.interceptors` (`create-http-pipeline`,
+`create-cli-pipeline`). The context's `:system` comes from
+`wagoe.user.shell.service/interceptor-system`, which carries the
+`:metrics-emitter` that `:wagoe/user-service` is wired with.
 
-[width="100%",cols="50%,50%",]
+Per operation (`op`), `op-metrics` records:
+
+* `<op>.latency.seconds` – duration
+* `<op>.success` / `<op>.error` – how the operation ended
+* `<op>.failure` – an exception was thrown
+
+`error-capture` reports a thrown exception to the error reporter once, with
+`:operation` and `:correlation-id`, after redacting it.
+
+=== Service pipeline
+
+Every `IUserService` method in `wagoe.user.shell.service` runs its body through
+`wagoe.platform.shell.service-interceptors/execute-service-operation`, keyed by
+operation (`:register-user`, `:authenticate-user`, `:validate-session`,
+`:logout-user`, `:logout-user-everywhere`, `:get-user-by-id`, `:list-users`,
+`:update-user-profile`, `:deactivate-user`, `:permanently-delete-user`,
+`:change-password`, ...). The base pipeline:
+
+[cols="1,3"]
 |===
-|__ a|
-*🎯 Multi-Layer Interceptor Pattern Achievement*
+|Interceptor |Does
 
-The User module has been *fully converted* to use Wagoe’s multi-layer interceptor pattern, representing a major framework evolution achievement:
+|`service-operation-start`
+|Breadcrumb `Starting <op>`, starts the timer
 
-*Conversion Results:* - ✅ *31/31 methods* converted across service and persistence layers - ✅ *48-64% code reduction* through boilerplate elimination - ✅ *200{plus} manual observability calls* replaced with automatic integration - ✅ *100% business logic preservation* - core functions remain pure
+|`service-operation-logging`
+|Logs start, completion and failure. A typed 4xx is logged below error level
 
-*Modern Implementation*: All user operations now benefit from automatic observability via interceptors, with business logic focused purely on domain concerns.
+|`service-operation-metrics`
+|`<op>-attempted`, `<op>-successful`, `<op>-failed` (tag `:reason`), and the
+`service-operation-duration` histogram (tag `:operation-type`). No user or
+tenant id in the labels
 
-*Legacy Documentation*: The comprehensive manual integration examples below are maintained for reference and advanced customization scenarios.
+|`service-error-handling`
+|Reports 5xx failures once, with tags `:component "service"` and `:operation`. A
+typed 4xx is the caller's error and is not reported
 
+|`service-audit-logging`
+|Business event `<op>-completed`, and an audit entry when the params carry a
+`:user-id`
+
+|`service-success-breadcrumb`
+|Breadcrumb `Service operation successful: <op>`
 |===
 
-[[_overview]]
-=== link:#_overview[]Overview
-
-The user module combines logging, metrics, and error reporting across REST, CLI, and shell services. It serves as a production-ready example of how feature modules should integrate observability capabilities.
-
-[[_integration_approaches]]
-==== link:#_integration_approaches[]Integration Approaches
-
-[[_modern_approach_interceptor_pattern]]
-===== link:#_modern_approach_interceptor_pattern[]Modern Approach: Interceptor Pattern ⭐
-
-*Current implementation in production*
-
-The user module now uses Wagoe’s multi-layer interceptor pattern for seamless observability integration:
-
-[source,highlightjs,highlight]
-----
-;; Service layer - Pure business logic
-(defn register-user-service [deps user-data]
-  ;; Interceptors automatically handle:
-  ;; - Entry/exit logging with correlation IDs
-  ;; - Success/failure metrics (user-registrations-attempted/successful/failed)
-  ;; - Exception reporting with rich context
-  ;; - Business event logging (user-registered)
-  ;; - Performance timing (user-operation-duration histogram)
-  (validate-user-data user-data)
-  (create-user-record deps user-data))
-
-;; Persistence layer - Pure data access
-(defn save-user-persistence [deps user]
-  ;; Interceptors automatically handle:
-  ;; - Database operation timing
-  ;; - Connection pool metrics
-  ;; - Query logging with sanitized parameters
-  ;; - Database exception reporting
-  (sql/insert! (:database deps) :users user))
-----
-
-*Key Benefits:* - *Zero Boilerplate*: No manual observability calls in business logic - *Automatic Context*: Correlation IDs, user context, user context flow seamlessly - *Consistent Patterns*: Standardized observability across all operations - *Pure Functions*: Business logic remains focused on domain concerns
-
-[[_legacy_approach_manual_integration]]
-===== link:#_legacy_approach_manual_integration[]Legacy Approach: Manual Integration
-
-*Historical reference and advanced customization*
-
-The comprehensive manual integration patterns documented below demonstrate the observability capabilities that are now handled automatically by interceptors.
-
-[[_logging]]
-=== link:#_logging[]Logging
-
-*Service namespace:* `wagoe.user.shell.service`
-
-All key operations log structured events using `wagoe.logging.core`:
-
-* `register-user` – registration attempts, duplicates, and success events
-* `authenticate-user` – session creation and login pathway
-* `validate-session` – session validity checks and expiry
-* `logout-user` – single-session logout
-* `logout-user-everywhere` – global logout across all sessions
-* `get-user-by-id`, `get-user-by-email`, `list-users`, `update-user-profile`, `deactivate-user`, `permanently-delete-user`
-
-[[_business_and_audit_events]]
-==== link:#_business_and_audit_events[]Business and Audit Events
-
-Business / audit events (via `log-business-event` and `audit-user-action`):
-
-* `user-registered`, `user-session-started`, `user-session-ended`
-* User lifecycle actions: `deactivate`, `hard-delete`, `logout`, `logout-everywhere`
-
-[[_metrics]]
-=== link:#_metrics[]Metrics
-
-[[_modern_approach_automatic_metrics_via_interceptors]]
-==== link:#_modern_approach_automatic_metrics_via_interceptors[]Modern Approach: Automatic Metrics via Interceptors
-
-With the interceptor pattern, all metrics are automatically collected without manual instrumentation:
-
-[source,highlightjs,highlight]
-----
-;; Configuration enables automatic metrics collection
-{:observability {:interceptors {:service-layer true
-                               :persistence-layer true}}}
-
-;; Functions automatically emit metrics - no manual calls needed
-(defn register-user [deps user-data]
-  ;; Automatically tracked:
-  ;; - user-registrations-attempted (on entry)
-  ;; - user-registrations-successful (on success)
-  ;; - user-registrations-failed (on exception)
-  ;; - user-operation-duration (timing histogram)
-  ;; - active-sessions-total (gauge updates)
-  (validate-user user-data)
-  (save-user deps user-data))
-----
-
-[[_legacy_approach_manual_metrics_integration]]
-==== link:#_legacy_approach_manual_metrics_integration[]Legacy Approach: Manual Metrics Integration
-
-The user service historically emitted metrics via `wagoe.metrics.core` (using counters, histograms, and gauges).
-
-[[_user_lifecycle_counters]]
-==== link:#_user_lifecycle_counters[]User Lifecycle Counters
-
-* `user-registrations-attempted` / `user-registrations-successful` / `user-registrations-failed`
-* `user-deactivations-attempted` / `user-deactivations-successful` / `user-deactivations-failed`
-* `user-deletions-attempted` / `user-deletions-successful` / `user-deletions-failed`
-* `user-logout-everywhere-attempted` / `user-logout-everywhere-successful` / `user-logout-everywhere-failed`
-
-[[_session_lifecycle_counters]]
-==== link:#_session_lifecycle_counters[]Session Lifecycle Counters
-
-* `user-authentications-attempted` / `user-authentications-successful` / `user-authentications-failed`
-* `session-creations`
-* `session-validations-attempted` / `session-validations-successful` / `session-validations-failed`
-* `session-invalidations-attempted` / `session-invalidations-successful` / `session-invalidations-failed`
-* `user-sessions-invalidated` – total sessions invalidated by `logout-user-everywhere`
-
-[[_validation_and_error_metrics]]
-==== link:#_validation_and_error_metrics[]Validation and Error Metrics
-
-* `validation-errors` with tags such as `:operation`, `:error-code`
-
-[[_gauge_metrics]]
-==== link:#_gauge_metrics[]Gauge Metrics
-
-* `active-sessions-total` – total number of active sessions
-* `active-sessions-by-user` – active sessions per user (`:user-id` tag)
-
-[[_metric_tags]]
-==== link:#_metric_tags[]Metric Tags
-
-All metrics are tagged where applicable with values such as:
-
-* `:user-id` – user identifier
-* `:user-id` – user identifier
-* `:operation` – operation name
-* `:reason` – failure reason (e.g. `"user-exists"`, `"system-error"`, `"expired"`, `"not-found"`)
-
-[[_error_reporting]]
-=== link:#_error_reporting[]Error Reporting
-
-[[_modern_approach_automatic_error_reporting_via_interceptors]]
-==== link:#_modern_approach_automatic_error_reporting_via_interceptors[]Modern Approach: Automatic Error Reporting via Interceptors
-
-With interceptors, error reporting is handled automatically with rich context:
-
-[source,highlightjs,highlight]
-----
-;; Any exception automatically triggers error reporting
-(defn authenticate-user [deps credentials]
-  ;; If validation or database operations throw:
-  ;; Interceptors automatically:
-  ;; - Report exception with full context
-  ;; - Include breadcrumbs from operation lifecycle
-  ;; - Add operation tags (component, operation, user-id)
-  ;; - Sanitize sensitive data (passwords, tokens)
-  ;; - Track error metrics
-  (validate-credentials credentials)
-  (find-user-by-email deps (:email credentials)))
-----
-
-[[_legacy_approach_manual_error_reporting_integration]]
-==== link:#_legacy_approach_manual_error_reporting_integration[]Legacy Approach: Manual Error Reporting Integration
-
-The user service historically used `wagoe.error-reporting.core` to provide rich error context.
-
-[[_exception_reporting]]
-==== link:#_exception_reporting[]Exception Reporting
-
-`report-application-error` wraps all major shell operations to capture unexpected exceptions:
-
-* `register-user`
-* `authenticate-user`
-* `validate-session`
-* `logout-user`
-* `deactivate-user`
-* `permanently-delete-user`
-* `logout-user-everywhere`
-* All read operations
-
-[[_breadcrumbs]]
-==== link:#_breadcrumbs[]Breadcrumbs
-
-Breadcrumbs (via `add-breadcrumb`) document key lifecycle events:
-
-* "Starting user registration", "User validation failed", "Duplicate user detected"
-* "User authentication successful", "Session validation failed - expired"
-* "User logout successful", "Session validation failed - not found"
-
-[[_error_tags]]
-==== link:#_error_tags[]Error Tags
-
-Error tags consistently include:
-
-* `:component` – `"service.user"`
-* `:operation` – shell operation name (e.g. `"register-user"`)
-* `:user-id` – user IDentifier
-* `:user-id` – user identifier
-* `:session-token` – masked session token (where appropriate)
-
-[[_integration_examples]]
-=== link:#_integration_examples[]Integration Examples
-
-[[_modern_approach_interceptor_based_integration]]
-==== link:#_modern_approach_interceptor_based_integration[]Modern Approach: Interceptor-Based Integration
-
-With interceptors enabled, the user service focuses purely on business logic:
-
-[source,highlightjs,highlight]
-----
-;; Clean, focused service implementation
-(defrecord UserService [user-repository session-repository]
-  ports/IUserService
-
-  (register-user [this user-data]
-    ;; Pure business logic - interceptors handle all observability
-    (validate-user-data user-data)
-    (check-user-uniqueness user-repository user-data)
-    (create-user-record user-repository user-data))
-
-  (authenticate-user [this credentials]
-    ;; Pure authentication logic - interceptors handle all observability
-    (validate-credentials credentials)
-    (let [user (find-user-by-email user-repository (:email credentials))]
-      (verify-password user (:password credentials))
-      (create-session session-repository user)))
-
-  (validate-session [this session-token]
-    ;; Pure validation logic - interceptors handle all observability
-    (find-active-session session-repository session-token))
-
-  (logout-user [this session-token]
-    ;; Pure logout logic - interceptors handle all observability
-    (invalidate-session session-repository session-token)))
-
-;; Interceptor configuration handles all observability automatically
-{:observability
- {:interceptors
-  {:service-layer {:enabled true
-                   :metrics {:track-timing true
-                            :track-counts true
-                            :track-errors true}
-                   :logging {:log-entries true
-                            :log-exits true
-                            :log-errors true}
-                   :error-reporting {:enabled true
-                                    :include-context true
-                                    :sanitize-data true}}
-   :persistence-layer {:enabled true
-                      :metrics {:track-db-timing true
-                               :track-connection-pool true}
-                      :logging {:log-queries true
-                               :sanitize-parameters true}}}}}
-----
-
-[[_legacy_approach_manual_integration_example]]
-==== link:#_legacy_approach_manual_integration_example[]Legacy Approach: Manual Integration Example
-
-[source,highlightjs,highlight]
-----
-;; User service with observability
-(defrecord UserService [user-repository
-                        session-repository
-                        logger
-                        metrics-emitter
-                        error-reporter]
-
-  ports/IUserService
-
-  (register-user [this user-data]
-    (let [context {:operation "register-user"
-                   :user-id (:user-id user-data)}]
-      ;; Add breadcrumb
-      (error-reporting/add-breadcrumb
-        error-reporter
-        "Starting user registration"
-        "service.user"
-        :info
-        {:user-id (:user-id user-data)})
-
-      ;; Time operation with histogram
-      (metrics/time-with-histogram
-        metrics-emitter
-        "user-operation-duration"
-        {:operation-type "register"
-         :user-id (:user-id user-data)}
-        (fn []
-          ;; Log with function logging wrapper
-          (logging/with-function-logging
-            logger
-            "register-user"
-            context
-            (fn []
-              ;; Track attempt
-              (metrics/increment-counter
-                metrics-emitter
-                "user-registrations-attempted"
-                {:user-id (:user-id user-data)})
-
-              (try
-                ;; Business logic...
-                (let [created-user (create-user! user-data)]
-                  ;; Log business event
-                  (logging/log-business-event
-                    logger
-                    "user-registered"
-                    "user"
-                    context
-                    {:user-id (:id created-user)})
-
-                  ;; Track success
-                  (metrics/increment-counter
-                    metrics-emitter
-                    "user-registrations-successful"
-                    {:user-id (:user-id user-data)})
-
-                  created-user)
-
-                (catch Exception e
-                  ;; Report error
-                  (error-reporting/report-application-error
-                    error-reporter
-                    e
-                    "User registration failed"
-                    {:extra {:operation "register-user"
-                             :user-id (:user-id user-data)}
-                     :tags {:component "service.user"
-                            :operation "register-user"}})
-
-                  ;; Track failure
-                  (metrics/increment-counter
-                    metrics-emitter
-                    "user-registrations-failed"
-                    {:user-id (:user-id user-data)
-                     :reason "system-error"})
-
-                  (throw e)))))))))
-----
-
-[[_see_also]]
-=== link:#_see_also[]See Also
+Everything logged or attached to a breadcrumb goes through
+`wagoe.core.utils.pii-redaction/redact-for-log` first.
+
+Each interceptor acts only when the `:system` map it is given holds a
+`:logger`, `:metrics-emitter` or `:error-reporter`. The user service passes its
+repositories there, so check what reaches it before relying on the service-level
+metrics.
+
+=== Persistence pipeline
+
+`wagoe.user.shell.auth-persistence` wraps its repository calls in
+`wagoe.platform.shell.persistence-interceptors/execute-persistence-operation`
+(`:find-auth-user-by-email`, `:create-auth-user`, `:set-lockout`,
+`:enable-mfa`, ...). It logs them at debug level with their duration, and
+failures at their status's level; error reporting is left to the service
+layer.
+
+=== See Also
 
 * link:../../docs/modules/libraries/pages/observability.adoc[Observability Module Reference]
-* link:#architecture:observability-integration.adoc[Observability Integration Guide]
-* link:#architecture:error-handling-observability.adoc[Error Handling & Observability Architecture]
