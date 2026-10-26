@@ -16,7 +16,7 @@ Fallback if `get.wagoe.org` is unavailable:
 curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
 ----
 
-Supports macOS, Debian/Ubuntu, Arch Linux, and WSL2.
+Supports macOS, Debian/Ubuntu, Fedora/RHEL, Arch Linux, and WSL2.
 See xref:getting-started:installation.adoc[Installation] for manual setup.
 
 == In short
@@ -72,7 +72,7 @@ Add optional modules before starting the system:
 ----
 wagoe add payments          # PSP abstraction (Stripe / Mollie / Mock)
 wagoe add cache             # Redis / in-memory caching
-wagoe list modules          # See all 19 optional modules
+wagoe list modules          # See all 22 optional modules
 ----
 
 == Run database migrations
@@ -101,7 +101,7 @@ NOTE: `wagoe new` writes a `.env` (git-ignored) containing a generated `JWT_SECR
 [source,clojure]
 ----
 (go)
-;; => System started. Visit http://localhost:3000
+;; => prints a dashboard: components, modules, http://localhost:3000
 
 ;; After changing code:
 (reset)
@@ -146,12 +146,14 @@ Then reload the system so the new routes are live:
 
 [source,bash]
 ----
-curl http://localhost:3000/api/v1/products
-# => []
+curl -i http://localhost:3000/api/v1/products
+# => HTTP/1.1 401 Unauthorized
 ----
 
-`[]` is the right answer: the table is empty. The generated handlers call the
-service, so a `POST` creates a row the next `GET` returns. The routes live in
+401 is the right answer: the route is mounted, and every generated route
+requires a signed-in user. Signed in (after `bb create-admin`), the same `GET`
+answers `[]` and a `POST` creates a row the next `GET` returns. Generate with
+`--public-api` for routes open to anyone. The routes live in
 `src/<your-project>/product/shell/http.clj` — `bb scaffold integrate` prints the prefix
 they are mounted under.
 

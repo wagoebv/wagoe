@@ -90,10 +90,10 @@ Higher-weight fields boost ranking:
 
 | Weight | Priority | Typical use |
 |--------|----------|-------------|
-| `:A` | Highest | Title, name |
-| `:B` | High | Summary, short description |
-| `:C` | Normal | Body text, tags |
-| `:D` | Lowest | Auxiliary metadata |
+| `:a` | Highest | Title, name |
+| `:b` | High | Summary, short description |
+| `:c` | Normal | Body text, tags |
+| `:d` | Lowest | Auxiliary metadata |
 
 ### Dual Query Strategy
 
@@ -169,7 +169,8 @@ CREATE TABLE search_documents (
 );
 ```
 
-Re-indexing an existing entity is safe — upsert uses `ON CONFLICT (index_id, entity_id) DO UPDATE`.
+Re-indexing an existing entity is safe — upsert uses `ON CONFLICT (index_id, entity_id) DO UPDATE`,
+or delete and insert in one transaction where the adapter lacks `:on-conflict`.
 
 ---
 

@@ -20,7 +20,7 @@ rather than sitting here.
 
 === Architecture Decision Records
 
-35 ADRs recording decisions and their context. Start with
+41 ADRs recording decisions and their context. Start with
 link:adr/README.adoc[the ADR index] for the current status of each.
 
 * link:adr/ADR-001-library-split.adoc[ADR-001: Split Wagoe Monolith into Modular Libraries]
@@ -58,6 +58,12 @@ link:adr/README.adoc[the ADR index] for the current status of each.
 * link:adr/ADR-033-mcp-reflective-resources.adoc[ADR-033: Reflective MCP Resources — Ground Truth from the Running Project]
 * link:adr/ADR-034-mcp-tier1-verify-loop.adoc[ADR-034: Tier 1 Generate Tools + Closed Verify Loop — the Moat]
 * link:adr/ADR-035-realtime-redis-scaling.adoc[ADR-035: Realtime Redis-backed Pub/Sub and Multi-Replica Scaling]
+* link:adr/ADR-036-error-convention.adoc[ADR-036: One Error Convention — Extending ADR-022 to Return Values]
+* link:adr/ADR-037-reitit-routes-directly.adoc[ADR-037: Modules Emit Reitit Route Data]
+* link:adr/ADR-038-htmx-version-policy.adoc[ADR-038: Stay on htmx 2.x]
+* link:adr/ADR-039-database-adapter-contract.adoc[ADR-039: The database adapter contract]
+* link:adr/ADR-040-admin-overview-contract.adoc[ADR-040: The admin overview contract]
+* link:adr/ADR-041-authorization-roles-groups.adoc[ADR-041: Authorization through roles on groups]
 
 === Reference
 
@@ -83,6 +89,4 @@ templates, plus launch material under `reference/launch/`.
 * link:security-checklist.adoc[Security checklist]
 * link:DOCKER_DEVELOPMENT.adoc[Docker development]
 * link:DOCS_LINT.adoc[Documentation linting]
-* link:alpha-release-checklist.adoc[Alpha release checklist]
-* link:implementation/user-module-implementation.adoc[User module implementation]
 * link:presentations/fc-is-hexagonal-nl.adoc[Voorbij MVC: Functional Core / Imperative Shell] (NL)

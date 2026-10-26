@@ -100,7 +100,7 @@ Without it, the error interceptor cannot map it to an HTTP status code and retur
                 {:type :not-found :id user-id}))
 
 ;; Valid :type values
-:validation-error   → HTTP 422
+:validation-error   → HTTP 400
 :not-found          → HTTP 404
 :unauthorized       → HTTP 401
 :forbidden          → HTTP 403

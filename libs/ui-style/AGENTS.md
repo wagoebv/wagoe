@@ -14,9 +14,9 @@ files a page loads and **in what order**. Layout namespaces pick a bundle key
 lists. The library also ships the actual asset files (CSS, JS, fonts, icons)
 under `resources/public/`, which the platform serves from the classpath.
 
-This is a **thin, pure data library** — no core/shell/ports split, no Integrant
-components, no schema. It is one namespace of vectors and two lookup functions,
-plus a `resources/` asset tree.
+This is a **thin, pure data library** — no core/shell/ports split, no schema.
+It is one namespace of vectors and two lookup functions, a `resources/` asset
+tree, and a no-op `:wagoe/ui-style` Integrant key (`wagoe.ui-style.shell.module-wiring`).
 
 ## Key namespace
 
@@ -60,7 +60,7 @@ tables and buttons a base style (`resources/tailwind/pilot-rules.css`).
 ## Assets shipped (`resources/public/`)
 
 - **CSS** (`css/`): `wagoe-tokens.css` (design tokens), `app.css`, `fonts.css`,
-  and two compiled files: `daisy-admin.css` (`:pilot`'s daisyUI/Tailwind) and
+  `user-menu.css`, `profile.css`, and two compiled files: `daisy-admin.css` (`:pilot`'s daisyUI/Tailwind) and
   `wagoe-admin.css` (all of `:admin-pilot`).
 - **JS** (`js/`): `theme.js`, `components.js`, `admin-ux.js`, `forms.js`,
   `keyboard.js`, `init.js`, plus vendored `alpine.min.js`, `htmx.min.js` and
@@ -101,9 +101,10 @@ Example (feature namespace — no CSS list of its own):
 
 ## Config / wiring
 
-None. No Integrant keys, no `config.edn` entries. Depend on the library and
-require the namespace. `deps.edn` has a single runtime dep (`org.clojure/clojure`)
-and `:paths ["src" "resources"]` so the assets travel with the jar.
+Depend on the library and require the namespace. `:wagoe/ui-style` is a
+settings block, not a lifecycle component: its `init-key` returns the config so
+other components can ref it. `deps.edn` depends on `org.clojure/clojure` and
+`integrant`, with `:paths ["src" "resources"]` so the assets travel with the jar.
 
 ## Common pitfalls
 
@@ -116,9 +117,10 @@ and `:paths ["src" "resources"]` so the assets travel with the jar.
    editing.
 3. **Theme changes go in token files.** Adjust `wagoe-tokens.css`, not
    one-off colors in component CSS.
-4. **`daisy-admin.css` is generated.** Edit `resources/tailwind/admin-pilot.css`
-   and recompile (`npm run build:css:admin` from the monorepo root); do not
-   hand-edit the compiled output.
+4. **`daisy-admin.css` and `wagoe-admin.css` are generated.** Edit
+   `resources/tailwind/pilot.css` or `admin.css` and recompile
+   (`npm run build:css` from the monorepo root); do not hand-edit the compiled
+   output.
 5. **Bundle lookups never return nil** — unknown keys fall back to `:pilot`. Don't
    add nil-guards around `bundle` / `js-bundle`; a wrong key silently yields the
    default stack, so verify the key if styling looks off.

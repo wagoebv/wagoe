@@ -14,7 +14,7 @@ Multi-tenancy for the Wagoe Framework — isolated PostgreSQL schemas, tenant-sc
 - **Tenant Resolution**: Extract tenant context from subdomains, headers, or tokens
 - **Cross-Module Integration**: Seamless tenant context in jobs and cache modules
 - **Middleware Support**: Automatic tenant context injection into HTTP requests
-- **Flexible Identification**: Support for subdomains, API keys, or custom strategies
+- **Flexible Identification**: Subdomain, JWT claim, or `X-Tenant-Slug` / `X-Tenant-Id` header
 
 ## Quick Start
 
@@ -44,16 +44,13 @@ Multi-tenancy for the Wagoe Framework — isolated PostgreSQL schemas, tenant-sc
 ```clojure
 (require '[wagoe.tenant.shell.provisioning :as provisioning])
 
-;; Provision creates isolated schema and copies structure
+;; Provision creates the schema and runs the tenant migration set into it
 (provisioning/provision-tenant! db-ctx tenant)
-;; → Creates schema: tenant_acme_corp
-;; → Copies tables from public schema
-;; → Sets up constraints and indexes
-;; → Marks tenant as :provisioned
+;; => {:success? true :schema-name "tenant_acme_corp" :table-count 5 :message "..."}
 
-;; Verify provisioning status
-(tenant-ports/find-tenant-by-id tenant-service (:id tenant))
-;; => {:id #uuid "..." :slug "acme-corp" :status :provisioned ...}
+;; Provisioning does not change the tenant's :status
+(provisioning/tenant-provisioned? db-ctx tenant)
+;; => true
 ```
 
 ### 3. Use Tenant Schema
@@ -108,17 +105,10 @@ Tenant middleware lives in the **tenant** library (`wagoe.tenant.shell.tenant-mi
 Provisioning creates an isolated PostgreSQL schema for each tenant:
 
 1. **Create Schema**: `CREATE SCHEMA tenant_<slug>`
-2. **Copy Structure**: Copy all tables, indexes, constraints from `public` schema
-3. **Initialize Data**: Optionally seed tenant-specific data
-4. **Update Status**: Mark tenant as `:provisioned`
+2. **Build Structure**: run the tenant-scoped migration set (the app's `migrations-tenant/` plus each active library's) into it
+3. **Validate**: the schema has tables; on failure it is dropped again
 
-```clojure
-;; Before provisioning
-{:id #uuid "..." :slug "acme-corp" :status :active}
-
-;; After provisioning
-{:id #uuid "..." :slug "acme-corp" :status :provisioned}
-```
+The tenant's `:status` stays as it was; provisioning is not a status.
 
 ### Provisioning API
 
@@ -127,7 +117,7 @@ Provisioning creates an isolated PostgreSQL schema for each tenant:
 
 ;; Provision new tenant
 (provisioning/provision-tenant! db-ctx tenant)
-;; → Returns: {:schema "tenant_acme_corp" :status :success}
+;; → Returns: {:success? true :schema-name "tenant_acme_corp" :table-count 5 :message "..."}
 
 ;; Check if tenant is provisioned
 (provisioning/tenant-provisioned? db-ctx tenant)
@@ -158,8 +148,7 @@ Provisioning creates an isolated PostgreSQL schema for each tenant:
 ```
 
 **States**:
-- `:active` - Tenant created, schema not yet provisioned
-- `:provisioned` - Schema created and ready for use
+- `:active` - Tenant usable (provisioned or not)
 - `:suspended` - Tenant access disabled (schema preserved)
 - `:deleted` - Soft delete (schema can be deprovisioned)
 
@@ -171,9 +160,9 @@ Provisioning creates an isolated PostgreSQL schema for each tenant:
 (provisioning/with-tenant-schema db-ctx "tenant_acme_corp"
   (fn [ctx]
     (jdbc/execute! ctx ["SELECT * FROM users"])))
-;; → Executes: SET search_path TO tenant_acme_corp
+;; → One transaction: SET LOCAL search_path TO tenant_acme_corp, public
 ;; → Query: SELECT * FROM users  (in tenant schema)
-;; → Resets: SET search_path TO public
+;; → The search_path ends with the transaction
 ```
 
 **Other Databases (Row-Level Filtering)**:
@@ -192,18 +181,12 @@ Provisioning creates an isolated PostgreSQL schema for each tenant:
 
 2. **Validate Before Provisioning**: Ensure slug is unique and valid
    ```clojure
-   (when (tenant-ports/find-tenant-by-slug tenant-service slug)
+   (when (tenant-ports/get-tenant-by-slug tenant-service slug)
      (throw (ex-info "Slug already exists" {:type :conflict})))
    ```
 
-3. **Handle Provisioning Failures**: Schema creation can fail
-   ```clojure
-   (try
-     (provisioning/provision-tenant! db-ctx tenant)
-     (catch Exception e
-       (tenant-ports/update-tenant-status! tenant-service (:id tenant) :failed)
-       (throw e)))
-   ```
+3. **Handle Provisioning Failures**: Schema creation can fail; `provision-tenant!`
+   drops the half-built schema and throws `:provisioning-error`.
 
 4. **Test with Multiple Tenants**: Verify isolation
    ```clojure
@@ -219,51 +202,20 @@ Provisioning creates an isolated PostgreSQL schema for each tenant:
 
 ## Tenant Resolution
 
-### Subdomain-Based Resolution
+`wrap-tenant-resolution` looks for the tenant in this order:
+
+1. **Subdomain** — `acme-corp.myapp.com` resolves slug `acme-corp`
+2. **JWT claim** — `:tenant-slug`, else `:tenant-id`, on the request's `:identity`
+3. **Header** — `X-Tenant-Slug`, else `X-Tenant-Id`
 
 ```clojure
-(defn subdomain-resolver [tenant-service]
-  (fn [request]
-    (let [host (get-in request [:headers "host"])
-          subdomain (first (clojure.string/split host #"\."))]
-      (when-not (contains? #{"www" "api" "localhost"} subdomain)
-        (tenant-ports/find-tenant-by-slug tenant-service subdomain)))))
-
-;; Usage
-(def app
-  (-> routes
-      (tenant-mw/wrap-tenant-resolution
-        tenant-service
-        {:resolver (subdomain-resolver tenant-service)})))
-
-;; Request: https://acme-corp.myapp.com/dashboard
-;; → Resolves to tenant with slug "acme-corp"
+(tenant-mw/wrap-tenant-resolution handler tenant-service
+  {:require-tenant? true   ; 404 when no tenant is found (default false)
+   :cache (atom {})})      ; optional lookup cache
 ```
 
-### Header-Based Resolution
-
-```clojure
-(defn header-resolver [tenant-service]
-  (fn [request]
-    (when-let [tenant-id (get-in request [:headers "x-tenant-id"])]
-      (tenant-ports/find-tenant-by-id tenant-service (parse-uuid tenant-id)))))
-
-;; Request with header: X-Tenant-Id: 123e4567-e89b-12d3-a456-426614174000
-;; → Resolves to tenant with that ID
-```
-
-### Token-Based Resolution
-
-```clojure
-(defn token-resolver [tenant-service]
-  (fn [request]
-    (when-let [claims (get-in request [:auth :claims])]
-      (when-let [tenant-id (:tenant-id claims)]
-        (tenant-ports/find-tenant-by-id tenant-service tenant-id)))))
-
-;; JWT payload: {"sub": "user-123", "tenant_id": "uuid-456"}
-;; → Resolves to tenant from JWT claim
-```
+There is no pluggable resolver; for another strategy, set `:tenant` on the
+request in your own middleware.
 
 ## Cross-Module Integration
 
@@ -352,7 +304,7 @@ See [Cache Module README](../cache/README.md#tenant-scoping) for details.
 (cache-ports/set-value! tenant-cache :settings (:settings tenant) 3600)
 
 ;; 6. Later: Retrieve tenant and verify isolation
-(def retrieved-tenant (tenant-ports/find-tenant-by-slug tenant-service "acme-corp"))
+(def retrieved-tenant (tenant-ports/get-tenant-by-slug tenant-service "acme-corp"))
 (def cached-settings (cache-ports/get-value tenant-cache :settings))
 
 ;; All operations automatically scoped to tenant - no data leakage!
@@ -373,58 +325,30 @@ under `/api/v1/tenants` (kebab-case JSON; errors are typed 400/404/409 — a tak
 | `POST`   | `/api/v1/tenants/:id/suspend` | Suspend tenant (blocks access) |
 | `POST`   | `/api/v1/tenants/:id/activate` | Re-activate tenant |
 | `POST`   | `/api/v1/tenants/:id/provision` | Provision schema (PostgreSQL only) |
+| `GET`    | `/api/v1/tenants/:id/export` | Download the tenant's data (platform admin; audited) |
+| `POST`   | `/api/v1/tenants/:id/export-jobs` | The same as a background job (needs storage + jobs) |
+
+All `/tenants` routes take the global admin role (BOU-568).
 
 ## Configuration
 
 ### Integrant Configuration
 
+Switch the module on in `:active`; `wagoe.tenant.shell.module-wiring/ig-config`
+adds every tenant key, and the platform's HTTP handler picks up
+`:wagoe/tenant-http-middleware` as `:extra-middleware`:
+
 ```clojure
-;; config/dev.edn
-{:wagoe/db-context {...}
- 
- :wagoe/tenant-repository
- {:db-context #ig/ref :wagoe/db-context}
- 
- :wagoe/tenant-service
- {:repository #ig/ref :wagoe/tenant-repository
-  :logger #ig/ref :wagoe/logger
-  :error-reporter #ig/ref :wagoe/error-reporter}
- 
- :wagoe/membership-service
- {:repository #ig/ref :wagoe/membership-repository
-  :logger #ig/ref :wagoe/logger}
-
- ;; Builds the tenant HTTP middleware seq (tenant resolution + membership).
- ;; The app injects it into platform's http-handler via :extra-middleware (BOU-200),
- ;; so platform never requires the tenant lib directly.
- :wagoe/tenant-http-middleware
- {:tenant-service #ig/ref :wagoe/tenant-service
-  :membership-service #ig/ref :wagoe/membership-service
-  :db-context #ig/ref :wagoe/db-context}}
+;; resources/conf/<profile>/config.edn, under :active
+:wagoe/tenant {:enabled? true}
+;; the test profile on H2 also sets :allow-h2? true
 ```
-
-Under the Wagoe app wiring (`wagoe.config`), these keys are added
-automatically and `:wagoe/tenant-http-middleware` is referenced by
-`:wagoe/http-handler`'s `:module-middleware` — no manual middleware mounting
-is required.
 
 ### Database Migrations
 
-```sql
--- Migration: 011_create_tenants_table.sql
-CREATE TABLE IF NOT EXISTS tenants (
-  id UUID PRIMARY KEY,
-  slug TEXT NOT NULL UNIQUE,
-  name TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active',
-  settings JSONB,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_tenants_slug ON tenants(slug);
-CREATE INDEX idx_tenants_status ON tenants(status);
-```
+`tenants`, `tenant_memberships`, `tenant_member_invites` and `tenant_audit_log`
+ship as library migrations (`wagoe/tenant/migrations/`); boot creates them from
+the same definition. Run `bb migrate up`.
 
 ## Testing
 
@@ -432,7 +356,7 @@ CREATE INDEX idx_tenants_status ON tenants(status);
 
 ```bash
 # All tenant module tests
-clojure -M:test:test/pg :tenant --focus wagoe.tenant.*
+clojure -M:test:test/pg :tenant
 
 # Specific test suites
 clojure -M:test:test/pg :tenant --focus wagoe.tenant.core.tenant-test         # Unit tests
@@ -459,7 +383,7 @@ clojure -M:test:test/pg :tenant --focus wagoe.tenant.shell.provisioning-test  # 
 
 ✅ **Database**
 - Use PostgreSQL 12+ for schema-per-tenant
-- Create indexes on `tenants.slug` and `tenants.status`
+- `tenants.slug` and `tenants.schema_name` are unique-indexed by the library
 - Set connection pool size >= concurrent requests
 
 ✅ **Provisioning**
@@ -513,7 +437,7 @@ clojure -M:test:test/pg :tenant --focus wagoe.tenant.shell.provisioning-test  # 
 ### Migration Steps
 
 1. **Install Module**: Add `wagoe-tenant` dependency
-2. **Run Migration**: Create `tenants` table via migration 011
+2. **Run Migration**: `bb migrate up` creates the tenant tables
 3. **Create Tenants**: Insert existing tenants into `tenants` table
 4. **Provision Schemas**: Run provisioning for each existing tenant
 5. **Migrate Data**: Copy data from shared tables to tenant schemas
@@ -527,12 +451,15 @@ clojure -M:test:test/pg :tenant --focus wagoe.tenant.shell.provisioning-test  # 
 
 **`wagoe.tenant.ports`**
 
+`ITenantService`:
+
 - `(create-new-tenant service tenant-input)` - Create new tenant
-- `(find-tenant-by-id service tenant-id)` - Lookup by ID
-- `(find-tenant-by-slug service slug)` - Lookup by slug
-- `(update-tenant service tenant-id updates)` - Update tenant
-- `(delete-tenant service tenant-id)` - Soft delete tenant
-- `(list-tenants service filters)` - List tenants with filtering
+- `(get-tenant service tenant-id)` - Lookup by ID
+- `(get-tenant-by-slug service slug)` - Lookup by slug
+- `(update-existing-tenant service tenant-id updates)` - Update tenant
+- `(delete-existing-tenant service tenant-id)` - Soft delete tenant
+- `(suspend-tenant service tenant-id)` / `(activate-tenant service tenant-id)`
+- `(list-tenants service options)` - List tenants with filtering
 
 ### Provisioning Operations
 
@@ -595,10 +522,10 @@ Part of Wagoe Framework - See main LICENSE file.
 
 ## Next Steps
 
-- **Production Deployment**: See [ADR-004](../../docs/adr/ADR-004-multi-tenancy-architecture.md) for architecture details
+- **Production Deployment**: See [ADR-004](../../dev-docs/adr/ADR-004-multi-tenancy-architecture.adoc) for architecture details
 - **Background Jobs**: See [Jobs Module](../jobs/README.md) for tenant-scoped background jobs
 - **Caching**: See [Cache Module](../cache/README.md) for tenant-scoped caching
-- **Database Support**: See [Future Enhancements](#database-support--limitations) for roadmap
+- **Database Support**: See [Database Support](#database-support)
 
 ---
 

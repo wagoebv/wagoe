@@ -10,9 +10,9 @@ Admin UI and CRUD management tooling for Wagoe entities, including HTMX-driven v
 
 | Namespace | Purpose |
 |-----------|---------|
-| `wagoe.admin.core.ui` | Main admin UI rendering (tables, forms, layout composition) |
+| `wagoe.admin.core.ui` | Facade over `wagoe.admin.core.ui.*` (list, detail, filters, drawer, layout, inline editing) |
 | `wagoe.shared.ui.core.icons` | Shared Lucide icon rendering used by admin and other modules |
-| `wagoe.admin.shell.http` | Admin HTTP handlers and HTMX fragment endpoints |
+| `wagoe.admin.shell.http` | Admin routes; handlers in `wagoe.admin.shell.http.handlers.*` |
 
 ## Admin Entity Configuration
 
@@ -43,7 +43,7 @@ resources/conf/dev/
 **Adding a new entity**: create `admin/{module}.edn` and add it to `:entities #merge [...]`.
 Also add the entity keyword to `:entity-discovery :allowlist`.
 
-**Access** (`wagoe.admin.core.permissions`): role `:admin` under `:wagoe/authorization :mode :off`;
+**Access** (`wagoe.admin.core.permissions`): role `:admin` under `:wagoe/authorization :mode :off` or `:report`;
 `admin.<entity>/read|write` in the user's scopes under `:enforce`, the scoped service
 (`shell.scoped-service`) filtering lists and refusing records outside them. An entity maps scope keys with
 `:scope {:domain-id :domain-id}` (a field) or a symbol naming `(fn [ids] honeysql-condition)`, its bare columns
@@ -51,7 +51,7 @@ the entity's own table's (it runs as `pk IN (SELECT pk FROM table WHERE …)`). 
 on one entity in a scope that entity maps.
 Read opens the detail page; without write it renders read-only. Many-to-many titles are scoped by the linked
 entity's read, and a save keeps the links the user could not see.
-`:require-role` is deprecated and read by nothing; `wagoe add admin` and `bb setup` no longer write it.
+`:require-role` is deprecated and enforces nothing (outside `:off` it logs a warning); `wagoe add admin` and `bb setup` no longer write it.
 Moving an app to `:enforce`: `docs/modules/guides/pages/authorization.adoc`.
 Granting entity access as an administrator: `docs/modules/guides/pages/managing-access.adoc`.
 
@@ -68,12 +68,12 @@ other pages as tabs beside the form; `{id}` is the record's key, and the optiona
 
 List-view column widths are resolved in three layers:
 
-**Layer 1 — type/name heuristic** (`list-column-weight` in `core/ui.clj`): width derived automatically from `:type` and field name. Default weights:
+**Layer 1 — display role, then type/name heuristic** (`list-column-weight` in `core/ui/base.clj`): a column's display role (ADR-040) sets its weight — `:title` 5, `:relation`/`:email` 4, `:date`/`:datetime`/`:money`/`:url` 3, `:boolean` 1, `:enum`/`:number`/`:count`/`:percent`/`:identifier` 2. Any other role (`:text` among them) falls back to `:type` and field name:
 
 | Type / name pattern | Weight |
 |---|---|
 | `:boolean` | 1 |
-| `:enum`, `:int`, `:decimal`, `:uuid`, `:json` | 2 |
+| `:enum`, `:int`, `:decimal`, `:uuid`, `:json`, `:binary` | 2 |
 | `:date`, `:instant` | 3 |
 | `:string` + name matches description/bio/body/address/notes/comment/… | 6 |
 | `:string` + name matches name/email/title/slug/url/label/… | 4 |
@@ -110,15 +110,14 @@ List-view column widths are resolved in three layers:
 
 ### 2. Filters Not Appearing for a Field
 
-**Cause**: Field is not listed in `:fields` with `:filterable true`.
+**Cause**: The filter offers the entity's `:list-fields` (every field when there are none) that are table columns, plus its many-to-many relations. A field outside `:list-fields`, or one marked `:filterable false`, gets no filter.
 
 ```clojure
-;; ❌ WRONG — field exists but no filter in dropdown
-{:status {:type :enum :label "Status"}}
+;; ❌ WRONG — :status is not a list column, so no filter in dropdown
+:list-fields [:name :email]
 
 ;; ✅ CORRECT
-{:status {:type :enum :label "Status" :filterable true
-          :options [[:active "Active"] [:inactive "Inactive"]]}}
+:list-fields [:name :email :status]
 ```
 
 Note: `:filterable false` explicitly disables a field from the filter dropdown (use this for fields covered by free-text `:search-fields`).
@@ -151,7 +150,7 @@ When you define `:query-overrides`, all fields used in `WHERE` or `ORDER BY` cla
 
 **Cause**: `:soft-delete-table` not specified when using `:query-overrides`.
 
-The service soft-deletes by running `UPDATE <table> SET deleted_at = ? WHERE id = ?`. With query-overrides the primary table is inferred from `:from`, but if `deleted_at` lives on a different table (e.g. `auth_users` not `users`), you must specify it explicitly.
+The service soft-deletes by running `UPDATE <table> SET deleted_at = ? WHERE id = ?`. It updates the entity's `:table-name` unless told otherwise, so if `deleted_at` lives on a different table (e.g. `auth_users` not `users`), you must specify it explicitly.
 
 ```clojure
 :query-overrides
@@ -406,13 +405,14 @@ State-changing requests are CSRF-protected (see platform AGENTS.md → CSRF Prot
 ### UI Component Hierarchy
 
 ```
-libs/admin/src/wagoe/
-├── shared/ui/core/
-│   ├── layout.clj        # Page layouts, navigation
-│   ├── icons.clj         # Icon definitions (50+ Lucide icons)
-│   └── components.clj    # Reusable components
-├── admin/core/
-│   └── ui.clj            # Admin interface (tables, forms)
+libs/shared-ui/src/wagoe/shared/ui/core/
+├── layout.clj            # Page layouts, navigation
+├── icons.clj             # Icon definitions (Lucide)
+└── components.clj        # Reusable components
+
+libs/admin/src/wagoe/admin/core/
+├── ui.clj                # Facade over ui/*
+└── ui/                   # list, detail, filters, drawer, layout, cells, inline editing
 
 libs/{module}/src/wagoe/{module}/core/
 └── ui.clj                # Module-specific UI components
@@ -670,7 +670,7 @@ Both values are submitted when checkbox is checked, resulting in an array.
                         :secondary-fields #{:email :active}}}}
 ```
 
-**Prevention**: The admin `new-entity-handler` now validates this at startup and throws a clear config error if the combination is missing.
+**Prevention**: Introspection reports the missing pairing as a config error, and the create page shows it with status 500 instead of a form (as in #5).
 
 ### 5. A NOT NULL Column Off the Create Form
 

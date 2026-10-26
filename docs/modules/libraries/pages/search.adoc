@@ -10,15 +10,18 @@ and an admin UI. Uses PostgreSQL FTS in production with LIKE fallback for H2/SQL
 ----
 libs/search/src/wagoe/search/
 ├── schema.clj         — Malli schemas: SearchDocument, SearchResult, SearchResponse
-├── ports.clj          — ISearchStore (persistence), ISearchEngine (orchestration)
+├── ports.clj          — ISearchStore (persistence), ISearchEngine (orchestration),
+│                        ISearchDefinitions
 ├── core/
 │   ├── index.clj      — defsearch, build-document*
 │   ├── query.clj      — SQL builders (PostgreSQL FTS + H2/SQLite LIKE fallback)
+│   ├── ranking.clj, highlighting.clj
 │   └── ui.clj         — Hiccup: search results, admin index page
 └── shell/
-    ├── persistence.clj  — SearchStore (next.jdbc, HoneySQL ON CONFLICT upsert)
-    ├── service.clj      — SearchService (orchestration, pagination, reindex)
-    └── http.clj         — Routes: API + admin web UI
+    ├── persistence.clj    — SearchStore (next.jdbc, HoneySQL ON CONFLICT upsert)
+    ├── service.clj        — SearchService (orchestration, pagination, reindex)
+    ├── http.clj           — Routes: API + admin web UI
+    └── module_wiring.clj  — the :wagoe/search component
 ----
 
 == Defining a search index
@@ -29,7 +32,7 @@ libs/search/src/wagoe/search/
 
 (search/defsearch product-search
   {:entity-type :product
-   :language    "english"
+   :language    :english
    :fields      [{:name :title  :weight :a}
                  {:name :body   :weight :b}
                  {:name :tags   :weight :c}]
@@ -77,31 +80,29 @@ ships no indexes.
 ----
 (require '[wagoe.search.ports :as ports])
 
-(ports/index-document! search-store
-  {:id        product-id
-   :index-id  :product-search
-   :title     "Wagoe Framework"
-   :body      "A Clojure web framework..."
-   :tags      "clojure framework"
-   :tenant-id tenant-id})
+(ports/index-document! search-engine :product-search product-id
+  {:title "Wagoe Framework"
+   :body  "A Clojure web framework..."
+   :tags  "clojure framework"}
+  {:filter-values {:tenant-id tenant-id}})
 
-;; Bulk reindex
-(ports/reindex! search-engine :product-search)
+;; Bulk reindex: a seq of [entity-id field-values] pairs
+(ports/reindex! search-engine :product-search documents)
+;=> {:indexed 120}
 ----
 
 == Searching
 
 [source,clojure]
 ----
-(ports/search search-engine
-  {:index-id  :product-search
-   :query     "clojure framework"
-   :filters   {:tenant-id tenant-id}
-   :limit     25
-   :offset    0})
-;=> {:results [{:id "..." :title "..." :rank 0.9}]
+(ports/search search-engine :product-search "clojure framework"
+  {:filters {:tenant-id tenant-id}
+   :limit   25
+   :offset  0})
+;=> {:results [{:entity-type :product :entity-id #uuid "..." :rank 0.9 :snippet "..."}]
 ;    :total 42
-;    :query "clojure framework"}
+;    :query "clojure framework"
+;    :took-ms 3}
 ----
 
 == Testing

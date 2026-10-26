@@ -2,7 +2,7 @@
 
 **Location:** `libs/tools`
 **Version:** `1.0.1`
-**Distribution:** Published to Clojars as `com.wagoe/wagoe-tools`, in lockstep with the rest of the suite. Inside this monorepo it is wired into `bb.edn` as a `:local/root` dependency, so local edits take effect without a release.
+**Distribution:** Published to Clojars as `com.wagoe/wagoe-tools`, in lockstep with the rest of the suite. Inside this monorepo its `src` and `resources` are on the root `bb.edn` `:paths`, so local edits take effect without a release.
 
 Developer tooling for the Wagoe framework: scaffolding, AI assistance, config management, i18n management, deployment, and development utilities — available out of the box in every Wagoe project.
 
@@ -10,12 +10,12 @@ Developer tooling for the Wagoe framework: scaffolding, AI assistance, config ma
 
 ## Getting started
 
-`libs/tools` is included in the monorepo and wired into the root `bb.edn` as a local dependency. No Clojars dependency needed — the tasks are available out of the box in every Wagoe project.
+`libs/tools` is included in the monorepo and wired into the root `bb.edn` through its `:paths`. No Clojars dependency needed — the tasks are available out of the box in every Wagoe project.
 
 The root `bb.edn` wiring looks like this:
 
 ```clojure
-{:deps {wagoe-tools {:local/root "libs/tools"}}
+{:paths [... "libs/tools/src" "libs/tools/resources" ...]
  :tasks
  {:requires ([wagoe.tools.scaffold  :as scaffold]
              [wagoe.tools.ai        :as ai]
@@ -50,13 +50,14 @@ The root `bb.edn` wiring looks like this:
 
 ### `bb doctor` — Config Doctor
 
-Validates your Wagoe config files for common mistakes. Rule-based (no AI needed) — runs 6 checks against your `config.edn` and project files.
+Validates your Wagoe config files for common mistakes. Rule-based (no AI needed) — `bb doctor --help` lists the checks it runs against your `config.edn` and project files.
 
 ```bash
 bb doctor                    # Check dev environment (default)
 bb doctor --env prod         # Check a specific environment
 bb doctor --env all          # Check all environments (dev, test, acc, prod)
 bb doctor --ci               # Exit non-zero on any error (for CI pipelines)
+bb doctor --all              # Config checks plus the environment checks of bb doctor:env
 ```
 
 **Checks performed:**
@@ -70,6 +71,9 @@ bb doctor --ci               # Exit non-zero on any error (for CI pipelines)
 | `prod-placeholders` | error | Placeholder values like `company.com`, `example.com`, `TODO` in prod/acc configs |
 | `config-loadable` | error | `config.edn` does not parse, or has no `:active` section |
 | `upgrade-wiring` | error | A namespace that moved between releases, and where it went |
+| `secret-refs` | error | `#secret` names without a `:default` that no env or file source provides |
+| `reset-endpoint-flag` | error | `:test/reset-endpoint-enabled?` true outside test/dev |
+| `rate-limit-cache` | error | Rate limiting on without `:wagoe/cache` active (prod refuses to boot) |
 
 A module whose library is genuinely missing is not checked here: it throws
 `:wagoe/module-library-missing` at boot, naming the library and both ways out
@@ -100,8 +104,11 @@ Summary: 4 passed, 1 warning, 1 error
  :wagoe/metrics          #{:no-op :prometheus :datadog-statsd}
  :wagoe/error-reporting  #{:no-op :sentry}
  :wagoe/payment-provider #{:mock :mollie :stripe}
- :wagoe/ai-service       #{:ollama :anthropic :openai :no-op}
- :wagoe/cache            #{:redis :memory}}
+ :wagoe/ai-service       #{:ollama :anthropic :openai :replicate :no-op}
+ :wagoe/cache            #{:redis :memory}
+ :wagoe/realtime         #{:redis :memory}
+ :wagoe/jobs             #{:redis :memory :db}
+ :wagoe/events           #{:redis :memory}}
 ```
 
 **CI integration example** (GitHub Actions):
@@ -148,11 +155,12 @@ bb setup --database h2 --payment none --ai-provider none
 |--------|--------|---------|
 | `--project-name` | any kebab-case string | `my-app` |
 | `--database` | `postgresql`, `sqlite`, `h2`, `mysql` | `postgresql` |
-| `--ai-provider` | `ollama`, `anthropic`, `openai`, `none` | `none` |
+| `--ai-provider` | `ollama`, `anthropic`, `openai`, `replicate`, `none` | `none` |
 | `--payment` | `none`, `mock`, `stripe`, `mollie` | `none` |
-| `--cache` | `none`, `redis`, `in-memory` | `none` |
+| `--cache` | `none`, `redis`, `memory` | `none` |
 | `--email` | `none`, `smtp` | `none` |
 | `--admin-ui` | `true`, `false` | `true` |
+| `--prod` | `true` | answers go to prod only |
 
 **Example workflow** — setting up a new project:
 
@@ -183,13 +191,15 @@ clojure -M:repl-clj
 ```bash
 bb scaffold                          # Show help
 bb scaffold generate                 # Interactive module generation wizard
+bb scaffold entity [args]            # Add an entity to an existing module
+bb scaffold subscriber [args]        # Add an event subscriber to a module
 bb scaffold field                    # Interactive add-field wizard
 bb scaffold endpoint                 # Interactive add-endpoint wizard
 bb scaffold adapter                  # Interactive add-adapter wizard
 bb scaffold ai "<description>"       # AI-powered module from NL description
 bb scaffold ai "<description>" --yes # Non-interactive (skip confirmation)
 bb scaffold ai "<description>" --dry-run  # Preview; also --fresh (parse again), --output-dir, --base-ns, --force, --no-http, --no-web, --[no-]public-api
-bb scaffold integrate <module>       # Wire scaffolded module into project (see below)
+bb scaffold integrate <module>       # Write the module's config key (see below)
 
 # Non-interactive passthrough (pass args directly to scaffolder CLI):
 bb scaffold generate --module-name foo --entity Foo --field name:string:required
@@ -204,10 +214,10 @@ had a duplicate, drifted copy of the project templates.)
 
 ### `bb scaffold integrate` — Module Integration
 
-After scaffolding a new module with `bb scaffold generate`, this tool locates it and guides the remaining wiring. Purely rule-based — no AI needed.
+After scaffolding a module with `bb scaffold generate`, this locates it and writes its config key. Purely rule-based — no AI needed.
 
 ```bash
-# Guide integration of the "product" module
+# Write :wagoe/product into every resources/conf/<profile>/config.edn
 bb scaffold integrate product
 
 # Module scaffolded under a custom base namespace
@@ -220,37 +230,37 @@ bb scaffold integrate product --dry-run
 bb scaffold:integrate product
 ```
 
-**What it does:** `bb scaffold generate [--base-ns NS]` writes a module to `src/<base-ns-path>/<module>/` (default base-ns `wagoe`). Because `src`/`test` are already on the project's paths, the module is **already on the classpath and covered by the standard test suites** — there is nothing to patch into `deps.edn`/`tests.edn`. What remains is registering the module's Integrant components, which `integrate` guides:
+**What it does:** `bb scaffold generate [--base-ns NS]` writes a module to `src/<base-ns-path>/<module>/` (default: the project's own namespace). Because `src`/`test` are already on the project's paths, the module is **already on the classpath and covered by the standard test suites** — there is nothing to patch into `deps.edn`/`tests.edn`. What remains is the module's config key:
 
 | Step | Where | What |
 |------|-------|------|
-| Locate module | `src/<base-ns-path>/<module>/` | Discovers the module + whether it has HTTP routes / module-wiring |
-| Print config snippet | stdout | An Integrant config template to paste into `config.edn` |
-| Print wiring require | stdout | The `[<base-ns>.<module>.shell.module-wiring]` require to add to your app's config namespace (when the module ships one) |
+| Locate module | `src/<base-ns-path>/<module>/` | Discovers the module + whether it has HTTP routes / module-wiring. Exits 1 when `shell/module_wiring.clj` is missing |
+| Write config | `resources/conf/<profile>/config.edn` | Adds `:wagoe/<module>` to the `:active` section of each profile; dev-only keys are skipped |
+
+There is no require to add: the config loads the module's `shell.module-wiring` namespace by convention. Running it twice is a no-op — an existing key is left alone. It exits 1 when nothing could be written.
 
 **Example output:**
 
 ```
 Wagoe Module Integration — product
 
-Discovered: src/wagoe/product
-  Namespace: wagoe.product.*
-  Tests:     test/wagoe/product
+Discovered: src/my_app/product
+  Namespace: my-app.product.*
+  Tests:     test/my_app/product
   HTTP:      yes
-  Wiring:    no
+  Wiring:    yes
 
 ✓ On the classpath — src/ and test/ are already on the project paths;
   the module's tests run with clojure -M:test (no deps.edn/tests.edn changes).
 
-Register the module's Integrant components:
-  1. Add config to resources/conf/dev/config.edn (and test):
-     (snippet shown)
-  2. This module has no shell/module_wiring.clj yet — add one to register its
-     Integrant keys, then require it from your app config.
-  3. Verify: clojure -M:test
-```
+Writing:
+  (snippet shown)
 
-**Why config.edn modification is manual:** Config files use Aero reader tags (`#env`, `#or`, `#include`, `#merge`) that aren't standard EDN. Programmatic modification risks corrupting these tags, so the tool prints a snippet for the developer to insert.
+  ✓ added to resources/conf/dev/config.edn
+  ✓ added to resources/conf/test/config.edn
+
+Next: clojure -M:test then (go)
+```
 
 **Complete scaffolding workflow:**
 
@@ -259,14 +269,13 @@ Register the module's Integrant components:
 bb scaffold generate --module-name product --entity Product \
   --field name:string:required --field price:decimal:required
 
-# 2. Wire it into the project
+# 2. Write its config key
 bb scaffold integrate product
 
-# 3. Add config (manually paste the printed snippet into config.edn)
-# 4. Run migrations
+# 3. Run migrations
 bb migrate up
 
-# 5. Run tests
+# 4. Run tests
 clojure -M:test
 ```
 
@@ -354,7 +363,7 @@ Writes `resources/conf/<profile>/admin/<entity>.edn` into every profile that has
 bb create-admin                              # Interactive wizard
 bb create-admin --env prod                   # Use production config
 bb create-admin --email admin@app.com --name "Admin"  # Skip prompts
-bb create-admin --dir examples/ecommerce-api # Target a sub-project
+bb create-admin --dir examples/shop        # Target a sub-project
 ```
 
 Run database migrations first: `clojure -M:migrate up`
@@ -401,7 +410,7 @@ bb migrate create add-search-index
 ### `bb check-links` — Validate AGENTS.md links
 
 ```bash
-bb check-links    # Check root AGENTS.md + all libs/*/AGENTS.md for broken local links
+bb check-links    # Check AGENTS.md files and the AsciiDoc docs for broken local links
 ```
 
 Exits non-zero if broken links are found. Skips `http://`, `https://`, `mailto:`, and `#anchor` links.
@@ -409,10 +418,10 @@ Exits non-zero if broken links are found. Skips `http://`, `https://`, `mailto:`
 ### `bb smoke-check` — Verify tool entrypoints
 
 ```bash
-bb smoke-check    # Verify deps.edn aliases, migrate CLI, test runner, docs lint
+bb smoke-check    # Verify deps.edn aliases, migrate CLI, test runner, link check
 ```
 
-Checks that required aliases (`:migrate`, `:test`, `:repl-clj`, `:docs-lint`) exist in `deps.edn` and that key CLIs respond.
+Checks that `:migrate`, `:test` and a REPL alias (`:repl` or `:repl-clj`) exist in `deps.edn`, that every alias that boots the system declares a JDBC driver, and that key CLIs respond.
 
 ### `bb install-hooks` — Configure git hooks
 
@@ -440,10 +449,10 @@ Translation files live in `libs/i18n/resources/wagoe/i18n/translations/`.
 |---|---|
 | `wagoe.tools.scaffold` | Interactive scaffolding wizards + AI passthrough + integrate dispatch |
 | `wagoe.tools.ai` | AI CLI frontend (explain, gen-tests, sql, docs, admin-entity) |
-| `wagoe.tools.doctor` | Config Doctor — rule-based config validation (6 checks) |
+| `wagoe.tools.doctor` | Config Doctor — rule-based config validation |
 | `wagoe.tools.setup` | Config Setup Wizard — interactive + template-based config generation |
-| `wagoe.tools.integrate` | Module Integration — locate scaffolded modules under src/ and guide Integrant config + wiring |
-| `wagoe.tools.admin_entity` | Admin Entity Generator — Babashka wrapper for AI admin entity generation |
+| `wagoe.tools.integrate` | Module Integration — locate scaffolded modules under src/ and write their config key |
+| `wagoe.tools.admin-entity` | Admin Entity Generator — Babashka wrapper for AI admin entity generation |
 | `wagoe.tools.i18n` | i18n catalogue management (find/scan/missing/unused) |
 | `wagoe.tools.admin` | First admin user creation wizard |
 | `wagoe.tools.deploy` | Clojars deployment for all 33 published Wagoe artifacts |
@@ -453,4 +462,4 @@ Translation files live in `libs/i18n/resources/wagoe/i18n/translations/`.
 
 ## Releasing wagoe-tools
 
-`wagoe-tools` is published to Clojars as `com.wagoe/wagoe-tools`, on the same lockstep version as every other library, and `bb deploy --all` includes it. Inside this monorepo, consumers read it through the `:local/root` dep in `bb.edn`, so a change to `libs/tools` takes effect on the next `bb` invocation without waiting for a release.
+`wagoe-tools` is published to Clojars as `com.wagoe/wagoe-tools`, on the same lockstep version as every other library, and `bb deploy --all` includes it. Inside this monorepo, `bb.edn` reads it from source through its `:paths`, so a change to `libs/tools` takes effect on the next `bb` invocation without waiting for a release.

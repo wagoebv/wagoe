@@ -31,7 +31,7 @@ The library saves boilerplate around:
    :label   "Active free-plan users"
    :filters [{:type :role   :field :plan   :op :eq          :value "free"}
              {:type :last-active            :op :within-days :value 30}]
-   :cache   {:ttl-minutes 60}})
+   :cache-config {:ttl-minutes 60}})
 ;; :plan is not a default filter field: add it with :wagoe/audience {:filter-fields #{:plan}}
 
 ;; Registry operations
@@ -130,6 +130,7 @@ Segments can be composed with AND, OR, and NOT. The `:compose` key accepts a tre
 (defaudience paid-active
   {:id      :paid-active
    :label   "Paid and active"
+   :filters []
    :compose {:and [{:ref :paid-users}
                    {:ref :active-users}]}})
 
@@ -137,6 +138,7 @@ Segments can be composed with AND, OR, and NOT. The `:compose` key accepts a tre
 (defaudience any-trial-or-paid
   {:id      :any-trial-or-paid
    :label   "Trial or paid"
+   :filters []
    :compose {:or [{:ref :trial-users}
                   {:ref :paid-users}]}})
 
@@ -144,6 +146,7 @@ Segments can be composed with AND, OR, and NOT. The `:compose` key accepts a tre
 (defaudience paid-not-churned
   {:id      :paid-not-churned
    :label   "Paid and not churned"
+   :filters []
    :compose {:and [{:ref :paid-users}
                    {:not {:ref :churned-users}}]}})
 ```
@@ -162,7 +165,7 @@ Results are persisted to `audience_memberships` with a timestamp in `audience_se
   {:id    :weekly-digest-targets
    :label "Weekly digest recipients"
    :filters [{:type :demographics :field :notifications-email :op :eq :value true}]
-   :cache {:ttl-minutes 1440}})   ;; 24 hours
+   :cache-config {:ttl-minutes 1440}})   ;; 24 hours
 ```
 
 ### Refresh modes
@@ -239,15 +242,17 @@ Hidden inputs `#audience-filters-data` and `#audience-compose-data` carry the fi
 ### Integrant config
 
 ```clojure
-;; resources/conf/dev/config.edn
+;; resources/conf/dev/config.edn — settings, all optional
 {:wagoe/audience
- {:db-ctx           #ig/ref :wagoe/db-context
-  :cache-service    #ig/ref :wagoe/cache
-  :user-data-source #ig/ref :wagoe/user-data-source}
-
- :wagoe/audience-routes
- {:audience-service #ig/ref :wagoe/audience}}
+ {:filter-fields       #{:plan :country}
+  :users-table         :users
+  :users-field-mapping {:last_active_at :last_login}}}
 ```
+
+From that key the module's `ig-config` wires `:wagoe/audience-db-schema` (creates the tables at boot),
+`:wagoe/audience-user-source` (the SQL `IUserDataSource` over `:users-table`), `:wagoe/audience`,
+and, when the user module is on, `:wagoe/audience-routes` with `:wagoe/admin-only-middleware`.
+`:cache-service` is passed only when `:wagoe/cache` is on.
 
 The `:wagoe/audience` component returns `{:store <IAudienceRepository> :resolver <IAudienceResolver> :cache <IAudienceCache>}`.
 
@@ -313,7 +318,7 @@ segments and read their member ids, and the global authentication only *sets* `:
 credentials are present rather than demanding them. The routes component refuses to
 initialise with an empty middleware vector (BOU-419).
 
-**Note**: `:user-data-source` is required. Without it, `resolve-audience` will throw. Provide any implementation of `IUserDataSource`:
+**Note**: `:user-data-source` is required; without it `:wagoe/audience` refuses to boot. The wired default is the SQL source above. To use your own, provide any implementation of `IUserDataSource`:
 
 ```clojure
 (defrecord MyUserDataSource [db]
@@ -368,10 +373,10 @@ clojure -M:clj-kondo --lint libs/audience/src libs/audience/test
 `:behavior` filters with fn values cannot be serialized to JSON. The `DynamicAudienceDefinition` schema will reject them. If you need behavioral filters in a DB-persisted segment, store a named dispatch key and implement `filter->predicate` for it.
 
 ### 3. UUID vs keyword audience ID
-Code segments use keyword IDs (`:active-users`). DB-persisted segments use UUIDs as the primary key in `audience_segments.audience_id`, stored as a string. `load-definition` resolves by keyword first (registry), then falls back to the repository. Keep the `:id` keyword consistent across registry and DB.
+Code segments use keyword IDs (`:active-users`). A DB-persisted segment has a UUID `id` primary key; `audience_segments.audience_id` holds the keyword name as a string. `load-definition` resolves by keyword first (registry), then falls back to the repository. Keep the `:id` keyword consistent across registry and DB.
 
 ### 4. H2 vs PostgreSQL JSON handling
-The cache reads `cache_config` from the DB as either a `PGobject` (PostgreSQL) or a plain string (H2). The cache layer handles both with `cheshire/parse-string`. If you write custom queries against `cache_config`, always parse the column before accessing keys.
+`cache_config` comes back from the DB as either a `PGobject` (PostgreSQL) or a plain string (other adapters). The persistence layer handles both with `cheshire/parse-string`. If you write custom queries against `cache_config`, always parse the column before accessing keys.
 
 ### 5. `compose` vs `filters` — pick one
 A segment is either filters or a composition. One with `:compose` and non-empty `:filters` is
@@ -404,4 +409,4 @@ Passing `nil` as the HoneySQL clause means "all users". Implement your `IUserDat
 | HTTP handlers + route definitions | `shell/http.clj` |
 | Integrant lifecycle keys | `shell/module_wiring.clj` |
 
-**Strict rule**: `core/` namespaces must not require anything from `shell/`, `clojure.tools.logging`, `next.jdbc`, `honey.sql`, or any I/O library. Violations are caught by `bb check:fcis`.
+**Strict rule**: `core/` namespaces must not require anything from `shell/`, `clojure.tools.logging`, `next.jdbc`, or any I/O library. Violations are caught by `bb check:fcis`.

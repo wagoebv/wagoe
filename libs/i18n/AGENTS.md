@@ -14,8 +14,8 @@ No UI function signatures change — the translation function is injected via th
 
 - **Pure core** — `wagoe.i18n.core.translate/t` has no I/O, no logging, no exceptions.
 - **Marker syntax** — `[:t :key]` in Hiccup; resolved by `render/resolve-markers`.
-- **Locale chain** — user locale → tenant locale → default locale → `:en` fallback → `(str key)`.
-- **Graceful degradation** — missing key returns `(str key)` (e.g. `"user/sign-in"`), never throws.
+- **Locale chain** — user locale → tenant locale → default locale → `:en` fallback → the key's name.
+- **Graceful degradation** — missing key returns the key without its colon (e.g. `"user/sign-in"`), never throws.
 - **EDN catalogues** — one file per locale: `wagoe/i18n/translations/en.edn`, `nl.edn`, etc.
 - **Integrant component** — `:wagoe/i18n` loads catalogues at startup; injected into `:wagoe/http-handler`.
 
@@ -43,6 +43,7 @@ libs/i18n/
 │       └── module_wiring.clj  ← ig/init-key :wagoe/i18n
 └── test/wagoe/i18n/
     ├── core/translate_test.clj
+    ├── integration_test.clj
     └── shell/
         ├── render_test.clj
         └── catalogue_test.clj
@@ -162,7 +163,8 @@ clojure -M:clj-kondo --lint libs/i18n/src libs/i18n/test
                 :dev?           true}   ; omit or false in production
 ```
 
-The component exposes `{:catalogue cat :default-locale :en :dev? bool}`.
+`:catalogue-paths` (a vector) merges several catalogues, later paths winning. The component exposes
+`{:catalogue cat :default-locale :en :catalogue-paths [...] :dev? bool}`.
 
 **Wiring it into the HTTP pipeline (BOU-131).** The middleware is now built by
 this module as `:wagoe/i18n-http-middleware` and injected into
@@ -205,7 +207,7 @@ Handlers retrieve it via `(get request :i18n/t identity)`.
    ;; shell/catalogue.clj
    (load-catalogue base-path [:en :nl :fr])
    ```
-   Or pass it explicitly from config.
+   `:wagoe/i18n` has no locales option, so this is the only way.
 3. Run `bb i18n:missing` to see which keys need translating.
 
 ---
@@ -215,5 +217,5 @@ Handlers retrieve it via `(get request :i18n/t identity)`.
 1. **Hiccup vs. HTML strings** — `render` passes strings through unchanged; markers only resolve in Hiccup vectors.
 2. **`:i18n/t` not in request** — middleware must run before handlers; `(get request :i18n/t identity)` is only safe for plain strings. If a handler may render `[:t ...]` markers, prefer a 1/2/3-arity fallback function instead of bare `identity`.
 3. **Namespace typos** — `:user/sign-i` (missing `n`) returns key string gracefully, but `bb i18n:unused` will flag it.
-4. **Plural maps need `:many`** — `{:one "…"}` without `:many` will return `nil` for n>1 unless `:many` is present.
-5. **Dev? mode** — when `:dev? true`, resolved markers are wrapped in `[:span {:data-i18n "..."}]` for browser inspection.
+4. **Plural fallback** — a missing form falls back to `:many`, then `:one`, then any value: `{:one "…"}` alone is used for every n.
+5. **Dev? mode** — `:dev? true` on `:wagoe/i18n` only logs each request's locale chain at debug. `render` / `resolve-markers` called with `{:dev? true}` wrap resolved markers in `[:span {:data-i18n "..."}]`.

@@ -159,8 +159,9 @@ Report generation library for the Wagoe Framework — produce PDF, Excel, Word (
 ```
 libs/reports/src/wagoe/reports/
 ├── core/
-│   └── report.clj               # pure helpers (formatting, sections, prepare)
-├── ports.clj                    # ReportGeneratorProtocol
+│   ├── report.clj               # pure helpers (formatting, sections, prepare)
+│   └── csv.clj                  # RFC 4180 quoting, formula-injection guard
+├── ports.clj                    # ReportServiceProtocol, ReportGeneratorProtocol
 ├── schema.clj                   # Malli schemas
 └── shell/
     ├── registry.clj            # defreport macro + in-process registry
@@ -197,8 +198,8 @@ libs/reports/src/wagoe/reports/
 | Dependency | Version | Purpose |
 |------------|---------|---------|
 | `com.openhtmltopdf/openhtmltopdf-pdfbox` | 1.0.10 | Hiccup → HTML → PDF |
-| `dk.ative/docjure` | 1.14.0 | Excel generation (also brings in POI XWPF) |
-| `metosin/malli` | 0.20.0 | Schema validation |
+| `dk.ative/docjure` | 1.22.0 | Excel generation (also brings in POI XWPF) |
+| `metosin/malli` | 0.20.1 | Schema validation |
 | `hiccup/hiccup` | 2.0.0 | HTML rendering for PDF templates |
 
 Apache POI XWPF (Word) is included as a transitive dependency of docjure — no extra entry in `deps.edn` is required.
@@ -213,7 +214,7 @@ Apache POI XWPF (Word) is included as a transitive dependency of docjure — no 
                   ▼
 ┌─────────────────────────────────────────┐
 │            wagoe/reports             │
-│       (PDF, Excel, Word generation)     │
+│    (PDF, Excel, Word, CSV generation)   │
 └──────────┬──────────────────────────────┘
            │ optional
            ▼

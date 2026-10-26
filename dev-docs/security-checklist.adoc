@@ -30,7 +30,7 @@ All headers below are set by the `security-headers` interceptor. No application 
 |Status |Item
 
 |icon:check-circle[]
-|**Content-Security-Policy** — `default-src 'self'; script-src 'self' 'unsafe-eval'` (Alpine.js requires unsafe-eval). Inline scripts are blocked.
+|**Content-Security-Policy** — `default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; object-src 'none'; frame-ancestors 'none'; ...`. `'unsafe-inline'` stays while UI components use inline handlers and `[:script]` blocks; `'unsafe-eval'` stays because htmx `hx-on` attributes need it.
 
 |icon:check-circle[]
 |**X-Frame-Options** — `DENY` (prevents clickjacking)
@@ -105,7 +105,7 @@ All headers below are set by the `security-headers` interceptor. No application 
 |**CSRF tokens** — Custom HMAC synchronizer-token protection in `wagoe.platform.core.csrf` (not Ring anti-forgery). Enforcement is opt-in (`:wagoe/http :security :csrf :enabled?`, lib default off) — enable it per app, then emit tokens via `csrf/hidden-field` (forms) and `csrf/hx-headers` or the `<meta>` tag (HTMX).
 
 |icon:hand-o-right[]
-|**CORS** — Configure allowed origins in production config (`wagoe/http :cors`). Never use `*` in production. Restrict to your actual frontend domains.
+|**CORS** — Wagoe sets no CORS headers, so browsers refuse cross-origin API calls. If a separate frontend needs them, add CORS at the proxy or in your own middleware, restricted to your frontend domains. Never `*`.
 |===
 
 == 6. Rate Limiting & DDoS Mitigation
@@ -115,10 +115,10 @@ All headers below are set by the `security-headers` interceptor. No application 
 |Status |Item
 
 |icon:check-circle[]
-|**Rate limiting framework** — Redis-backed rate limiting available via `libs/cache`. Configurable per-endpoint.
+|**Rate limiting framework** — `http-rate-limit-protection` is in the default route pipeline, configured under `:wagoe/http :rate-limit {:enabled? :limit :window-ms}`. With an active `:wagoe/cache` (Redis) the limit is shared across replicas.
 
 |icon:hand-o-right[]
-|**Enable rate limiting** — Activate the cache module (move from `:inactive` to `:active` in config.edn) and configure rate limits for auth endpoints (login, register, password reset).
+|**Enable rate limiting** — It ships disabled (`HTTP_RATE_LIMIT_ENABLED`). Move `:wagoe/cache` from `:inactive` to `:active` first: the `:prod` profile refuses to boot with the limiter on and no reachable cache.
 
 |icon:hand-o-right[]
 |**Reverse proxy rate limiting** — Add connection limits and request rate limiting at the nginx/LB layer as a first line of defence.
@@ -131,7 +131,7 @@ All headers below are set by the `security-headers` interceptor. No application 
 |Status |Item
 
 |icon:check-circle[]
-|**Environment variables** — All secrets use `#env` Aero tags. No secrets in config.edn files.
+|**Environment variables** — Secrets are read with `#env` or `#secret` (environment variables or mounted files). No secrets in config.edn files.
 
 |icon:check-circle[]
 |**Config Doctor** — `bb doctor` validates that required env vars are set and warns about missing secrets.
@@ -139,7 +139,7 @@ All headers below are set by the `security-headers` interceptor. No application 
 |icon:hand-o-right[]
 |**Required secrets for production:**
   `JWT_SECRET` (32+ chars),
-  `DB_PASSWORD`,
+  `POSTGRES_PASSWORD`,
   `SENTRY_DSN` (if using Sentry),
   `REDIS_PASSWORD` (if using Redis),
   `CLOJARS_USERNAME` / `CLOJARS_PASSWORD` (CI only)
@@ -158,7 +158,7 @@ All headers below are set by the `security-headers` interceptor. No application 
 |Status |Item
 
 |icon:hand-o-right[]
-|**CVE scanning** — Add https://github.com/rm-hull/nvd-clojure[nvd-clojure] or https://github.com/clj-holmes/clj-watson[clj-watson] to your CI pipeline. Run `clojure -T:nvd check` regularly.
+|**CVE scanning** — `bb check:vulns` checks every `deps.edn`, aliases included, against known vulnerabilities (needs `GITHUB_TOKEN`). The framework runs it weekly and on PRs that touch a `deps.edn` (`.github/workflows/security.yml`); run it in your own CI too.
 
 |icon:hand-o-right[]
 |**Dependency updates** — Review `deps.edn` dependencies monthly. Use `clojure -X:deps find-versions` to check for updates.
@@ -192,7 +192,7 @@ All headers below are set by the `security-headers` interceptor. No application 
 |**Audit logging** — Enable audit trail for sensitive operations (user creation, role changes, data deletion). The audit repository is wired; ensure your application logs critical actions.
 
 |icon:hand-o-right[]
-|**Log retention** — Production uses rolling file appender with 90-day retention. Verify this meets your compliance requirements.
+|**Log retention** — `resources/logback.xml` keeps 30 days of application logs and 90 days of audit and security logs. Verify this meets your compliance requirements.
 |===
 
 == 10. Repository & CI Security
@@ -235,8 +235,8 @@ clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
 # 4. Security verification (GitHub settings)
 ./scripts/verify-security.sh
 
-# 5. Dependency audit (if nvd-clojure is configured)
-clojure -T:nvd check
+# 5. Dependency audit (needs GITHUB_TOKEN)
+bb check:vulns
 ----
 
 == OWASP Top 10 Coverage
@@ -266,8 +266,8 @@ clojure -T:nvd check
 |Run `bb doctor --env prod` before deploy
 
 |A06: Vulnerable Components
-|—
-|Add nvd-clojure to CI
+|`bb check:vulns`
+|Run it in CI
 
 |A07: Auth Failures
 |MFA, password policy, rate limiting framework

@@ -36,6 +36,8 @@ Layered pipeline: `classify → enrich → format → output`. All pure function
 | WGE-4xx | Authentication / authorization
 | WGE-5xx | Interceptor pipeline
 | WGE-6xx | FC/IS violations
+| WGE-7xx | Tooling / build errors
+| WGE-8xx | MCP guardrails (`wagoe-mcp`)
 |===
 
 === Auto-Fix
@@ -105,7 +107,7 @@ project, call them through their namespaces:
 ----
 ;; Schema exploration
 (require (quote [wagoe.devtools.core.schema-tools :as schema-tools]))
-(schema-tools/schema-tree :user/CreateUser)
+(schema-tools/format-schema-tree [:map [:email :string] [:name {:optional true} :string]])
 ----
 
 == Request Recording
@@ -114,15 +116,19 @@ Capture HTTP request/response pairs for debugging and replay.
 
 [source,clojure]
 ----
-;; Start recording
-(def session (recording/create-session))
+(require (quote [wagoe.devtools.shell.recording :as recording]))
 
-;; After capturing entries, inspect them
-(recording/format-entry-table session)
-(recording/diff-entries session 0 1)
+;; Start a session; requests pass through recording/capture-middleware
+(recording/start-recording!)
 
-;; Save/load sessions
-(recording/serialize-session session)
+;; Inspect captured entries
+(recording/list-entries)
+(recording/diff-entries 0 1)
+
+;; Stop, save and load sessions (.edn files)
+(recording/stop-recording!)
+(recording/save-session! "login-flow")
+(recording/load-session! "login-flow")
 ----
 
 == Route Testing
@@ -131,19 +137,23 @@ Add or remove routes on a running system without restart.
 
 [source,clojure]
 ----
-;; Add a temporary test route
-(router/add-route {:path "/test" :method :get :handler my-handler})
+(require (quote [wagoe.devtools.shell.router :as router]))
 
-;; Inject a tap interceptor for debugging
-(router/inject-tap-interceptor route-name)
+;; Add a temporary test route
+(router/add-dynamic-route! :get "/test" my-handler)
+
+;; Tap a handler by its route :name; takes effect on the next (reset)
+(router/add-tap! :create-user (fn [ctx] (println (:request ctx)) ctx))
 ----
 
 == AI REPL Commands
 
-Three AI-powered commands (require an AI provider to be configured):
+Three AI-powered commands from `wagoe.ai.shell.repl` (require an AI provider to be configured):
 
 [source,clojure]
 ----
+(require (quote [wagoe.ai.shell.repl :as ai]))
+
 ;; Code review
 (ai/review "path/to/file.clj")
 
@@ -190,7 +200,7 @@ Steps: AI spec generation → confirm → scaffold → integrate → test.
 
 | `wagoe.devtools.error-codes`
 | core
-| WGE error catalog (WGE-1xx through WGE-6xx)
+| WGE error catalog (WGE-1xx through WGE-8xx)
 
 | `wagoe.devtools.core.guidance`
 | core

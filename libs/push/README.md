@@ -17,7 +17,8 @@
 ```
 
 ```clojure
-(require '[wagoe.push.shell.service :as push])
+(require '[wagoe.push.ports :as push]
+         '[wagoe.push.shell.registry :refer [defpush]])
 
 ;; Define a notification type
 (defpush order-shipped
@@ -47,7 +48,18 @@
 
 ## Integrant Configuration
 
-Add to `resources/conf/{env}/config.edn` and require `wagoe.push.shell.module-wiring` at system start:
+`wagoe add push` writes a `:wagoe/push` settings block, from which the components
+below are assembled; providers without credentials fall back to the mock:
+
+```edn
+:wagoe/push {:fcm-credentials  {:project-id       #env WAG_PUSH_FCM_PROJECT_ID
+                                :credentials-path #env WAG_PUSH_FCM_CREDENTIALS_PATH}
+             :apns-credentials {:team-id #env WAG_PUSH_APNS_TEAM_ID :key-id #env WAG_PUSH_APNS_KEY_ID
+                                :key-path #env WAG_PUSH_APNS_KEY_PATH :bundle-id #env WAG_PUSH_APNS_BUNDLE_ID}
+             :callback-secret  #env WAG_PUSH_CALLBACK_SECRET}
+```
+
+Wired by hand, add these to `resources/conf/{env}/config.edn` and require `wagoe.push.shell.module-wiring` at system start:
 
 ```edn
 :wagoe.push/fcm-provider  {:provider         :fcm
@@ -68,7 +80,7 @@ Add to `resources/conf/{env}/config.edn` and require `wagoe.push.shell.module-wi
                         :analytics-store #ig/ref :wagoe.push/analytics-store
                         :fcm-provider    #ig/ref :wagoe.push/fcm-provider
                         :apns-provider   #ig/ref :wagoe.push/apns-provider
-                        :job-queue       #ig/ref :wagoe/jobs
+                        :job-queue       #ig/ref :wagoe/job-queue
                         :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
 
 :wagoe.push/job-handlers {:push-service #ig/ref :wagoe.push/service}
@@ -78,7 +90,8 @@ Add to `resources/conf/{env}/config.edn` and require `wagoe.push.shell.module-wi
                        :callback-secret #env WAG_PUSH_CALLBACK_SECRET}
 ```
 
-Use `:provider :mock` for FCM and APNs in dev/test environments.
+Use `:provider :mock` for FCM and APNs in dev/test environments. Nothing mounts
+`:wagoe.push/routes`; contribute it to the HTTP handler yourself (see [AGENTS.md](AGENTS.md)).
 
 ---
 
@@ -165,7 +178,7 @@ CREATE TABLE IF NOT EXISTS push_analytics_events (
 
 | Provider | Key `:channels` | Credentials | Notes |
 |----------|----------------|-------------|-------|
-| Firebase Cloud Messaging | `:fcm` | Service account JSON (`WAG_PUSH_FCM_CREDENTIALS_JSON`) | Supports multicast, token validation |
+| Firebase Cloud Messaging | `:fcm` | Service account JSON file (`:credentials-path`) | Supports multicast, token validation |
 | Apple Push Notification service | `:apns` | Key ID + Team ID + P8 private key | Separate sandbox/production hosts; set `:sandbox?` per env |
 | Mock (dev/test) | `:mock` | None | In-memory; use `wagoe.push.shell.adapters.mock` |
 

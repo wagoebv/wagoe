@@ -38,9 +38,9 @@ _Brief description of what this endpoint does_
 [source,highlightjs,highlight]
 ----
 {
-  "exampleField": "value",
-  "exampleId": "123e4567-e89b-12d3-a456-426614174000",
-  "exampleFlag": true
+  "example-field": "value",
+  "example-id": "123e4567-e89b-12d3-a456-426614174000",
+  "example-flag": true
 }
 ----
 
@@ -68,8 +68,8 @@ _Brief description of what this endpoint does_
 ----
 {
   "data": {
-    "exampleId": "123e4567-e89b-12d3-a456-426614174000",
-    "exampleField": "value"
+    "example-id": "123e4567-e89b-12d3-a456-426614174000",
+    "example-field": "value"
   },
   "meta": {
     "total": 1,
@@ -89,25 +89,22 @@ _Brief description of what this endpoint does_
 [source,highlightjs,highlight]
 ----
 {
-  "type": "https://wagoe.example.com/problems/validation-error",
-  "title": "Validation Error",
-  "status": 400,
-  "detail": "One or more fields failed validation",
-  "instance": "/api/v1/users",
-  "errors": [
-    {
-      "field": "email",
-      "message": "Email format is invalid"
-    }
-  ]
+  "error": {
+    "type": "validation-error",
+    "message": "One or more fields failed validation",
+    "details": {"errors": [{"field": "email", "message": "Email format is invalid"}]},
+    "correlation-id": "..."
+  }
 }
 ----
+
+`type` is the thrown `ex-info`'s `:type`; `details` is optional (`wagoe.platform.core.http.errors`).
 
 [[_implementation_notes]]
 ===== link:#_implementation_notes[]Implementation Notes
 
 * _Implementation details, business rules, constraints_
-* _Core function mapping: ++`++wagoe.core.++[++domain++]++/++[++function-name++]`++_
+* _Core function mapping: ++`++++[++app++]++.++[++module++]++.core.++[++domain++]++/++[++function-name++]`++_
 * _Repository dependencies: ++`[++IRepository++]`++_
 
 [[_examples]]
@@ -124,8 +121,8 @@ wagoe [resource] [action] --field="value"
 
 [source,highlightjs,highlight]
 ----
-curl -X [METHOD] http://localhost:8080/api/v1/[resource] \
+curl -X [METHOD] http://localhost:3000/api/v1/[resource] \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"exampleField": "value"}'
+  -d '{"example-field": "value"}'
 ----

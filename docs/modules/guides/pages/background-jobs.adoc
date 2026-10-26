@@ -3,7 +3,7 @@
 
 The `jobs` library provides background job processing with priority queues,
 scheduled execution, automatic retries with exponential backoff, and multi-tenant support.
-Uses an in-memory backend for development/tests and Redis for production.
+`:provider` picks the backend: `:memory` (the default), `:db` or `:redis`.
 
 == Defining a job handler
 
@@ -23,6 +23,19 @@ Uses an in-memory backend for development/tests and Redis for production.
 
 == Registering handlers
 
+A module contributes its handlers from its `ig-config`, as a `:job-handlers`
+vector of maps from job type to handler, or refs to components returning one.
+`:wagoe/job-registry` registers them all.
+
+[source,clojure]
+----
+(defn ig-config [_settings _ctx]
+  {:job-handlers [{:send-welcome-email send-welcome-email
+                   :process-payment    process-payment}]})
+----
+
+Outside a system, register them yourself:
+
 [source,clojure]
 ----
 (require '[wagoe.jobs.shell.worker :as worker]
@@ -30,7 +43,6 @@ Uses an in-memory backend for development/tests and Redis for production.
 
 (def registry (worker/create-job-registry))
 (ports/register-handler! registry :send-welcome-email send-welcome-email)
-(ports/register-handler! registry :process-payment process-payment)
 ----
 
 == Enqueueing jobs
@@ -44,63 +56,60 @@ Uses an in-memory backend for development/tests and Redis for production.
                                             :email    "alice@example.com"}
                                 :priority  :high
                                 :max-retries 3}
-                               (random-uuid))]
+                               (random-uuid)
+                               (java.time.Instant/now))]
   (ports/enqueue-job! job-queue :default new-job))
 ----
 
-Priority levels: `:critical`, `:high`, `:default`, `:low`, `:bulk`.
+`job-queue` is the `:wagoe/job-queue` component. Priority levels: `:critical`,
+`:high`, `:normal` (the default), `:low`.
 
 == Starting workers
 
 [source,clojure]
 ----
-;; Single worker
-(def worker (worker/create-worker
-              {:queue-name :default :poll-interval-ms 1000}
-              queue store registry))
-
-;; Worker pool (recommended for production)
+;; Creates and starts the workers
 (def pool (worker/create-worker-pool
             {:queue-name :default :worker-count 5 :poll-interval-ms 500}
             queue store registry))
 
-(worker/start-pool! pool)
-(worker/stop-pool! pool)
+(worker/stop-worker-pool! pool)
 ----
+
+In a running system `:wagoe/job-workers` does this from the config below.
 
 == Integrant configuration
 
 [source,clojure]
 ----
 ;; config.edn
-:wagoe/job-queue {:backend :redis :redis-url #env REDIS_URL}
-:wagoe/job-store {:backend :redis :redis-url #env REDIS_URL}
-:wagoe/job-worker {:queue-name :default
-                      :worker-count 5
-                      :queue   #ig/ref :wagoe/job-queue
-                      :store   #ig/ref :wagoe/job-store
-                      :registry #ig/ref :wagoe/job-registry}
+:wagoe/jobs {:provider :redis                       ; :memory (default) | :db | :redis
+             :redis    {:host "localhost" :port 6379}
+             :workers  {:count 5 :queue-name :default}}
 ----
+
+`:count 0` starts no workers: a node that only enqueues. `:workers {:queues
+[:default :push]}` runs a pool per queue.
 
 == Retry logic
 
-Failed jobs are automatically retried with exponential backoff:
-
-* Attempt 1: immediate
-* Attempt 2: 30 seconds
-* Attempt 3: 5 minutes
-* Attempt 4: 1 hour
-* After `max-retries`: moved to dead letter queue
+Failed jobs are retried with exponential backoff: the first retry waits two
+seconds, each next one twice as long, capped at a minute, plus up to 100 ms of
+jitter. `:workers {:retry-config …}` changes it. After `max-retries` attempts
+(default 3) the job fails for good and lands in the dead letter queue.
 
 == Multi-tenant jobs
 
 [source,clojure]
 ----
-;; Jobs run in tenant schema context automatically
-(job/create-job {:job-type   :sync-inventory
-                 :args       {:product-id sku}
-                 :tenant-id  "acme-corp"}
-                (random-uuid))
+;; With the tenant module on, the job runs in that tenant's schema
+(job/create-job {:job-type :sync-inventory
+                 :args     {:product-id sku}
+                 :metadata {:tenant-id "acme-corp"}}
+                (random-uuid)
+                (java.time.Instant/now))
 ----
+
+Without the tenant module such a job fails.
 
 See xref:libraries:jobs.adoc[jobs library] for the full reference.

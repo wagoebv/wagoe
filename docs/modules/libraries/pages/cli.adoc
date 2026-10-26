@@ -15,7 +15,7 @@ curl -fsSL https://get.wagoe.org | bash
 ----
 
 The installer handles all prerequisites: JVM, Clojure CLI, Babashka, bbin, and the `wagoe` command itself.
-Supports macOS, Debian/Ubuntu, Arch Linux, and WSL2.
+Supports macOS, Debian/Ubuntu, Fedora/RHEL, Arch Linux, and WSL2.
 
 Fallback if `get.wagoe.org` is unavailable:
 
@@ -31,7 +31,8 @@ curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.
 [source,bash]
 ----
 wagoe new my-app            # Scaffold a new project
-wagoe new my-app --force    # Overwrite existing directory
+wagoe new my-app --force    # Write into a directory that is not empty
+wagoe new my-app --skip-git # Do not run git init
 wagoe new my-app --no-user  # Leave out the user module
 ----
 
@@ -79,12 +80,12 @@ application needs no persistence at all, remove `:wagoe/sqlite` from
 ----
 wagoe add payments          # PSP abstraction (Stripe / Mollie / Mock)
 wagoe add cache             # Redis / in-memory caching
-wagoe add search            # Full-text search (Meilisearch)
+wagoe add search            # Full-text search (PostgreSQL FTS)
 wagoe add jobs              # Background job processing
 ----
 
-Adds the dependency to `deps.edn` and the module's key to
-`resources/conf/{dev,test}/config.edn`. Nothing else has to change: the module
+Adds the dependency to `deps.edn` and the module's key to each existing
+profile's `resources/conf/<env>/config.edn` (dev only, for a dev-scoped module). Nothing else has to change: the module
 describes its own Integrant components, and `system-config` builds them because
 the config now names it.
 
@@ -144,8 +145,9 @@ wagoe list modules --json   # Machine-readable JSON
 
 [source,bash]
 ----
-wagoe upgrade               # Print a diff per file, write nothing
+wagoe upgrade               # Print a diff per file, write nothing (same as --dry-run)
 wagoe upgrade --apply       # Write the changes
+wagoe upgrade authorization <step>  # Move :wagoe/authorization from :off to :enforce
 ----
 
 Run from inside a project after bumping the Wagoe version. It rewrites what a
@@ -162,6 +164,15 @@ default rewritten (`#or [#env X "database"]`); one with no literal, such as
 than rewritten. A deprecation that cannot be rewritten mechanically is listed at
 the end with what to do by hand.
 
+=== Refresh AGENTS.md
+
+[source,bash]
+----
+wagoe agents update            # Rewrite the framework sections of AGENTS.md
+wagoe agents update --check    # Exit 1 when they are out of date, write nothing
+wagoe agents update --modules  # Refresh only the module lists
+----
+
 === Show version
 
 [source,bash]
@@ -174,14 +185,20 @@ wagoe version
 [source]
 ----
 my-app/
-├── deps.edn          # Clojure deps with :migrate, :repl, :test aliases
+├── deps.edn          # Clojure deps with :repl, :test, :run, :migrate, :build aliases
 ├── bb.edn            # Babashka tasks (scaffold, check, doctor, deploy, ...)
-├── dev-config.edn    # Development environment config
-├── test-config.edn   # Test environment config
+├── resources/conf/
+│   ├── dev/config.edn    # Development profile
+│   └── test/config.edn   # Test profile
 ├── src/
 │   └── my_app/
-│       └── system.clj    # Component system wiring
-└── AGENTS.md         # AI agent context file
+│       ├── main.clj           # Entry point (clojure -M:run)
+│       ├── system.clj         # Component system wiring
+│       └── system_config.clj  # Loads the profile config
+├── dev/user.clj      # REPL helpers
+├── test/my_app/system_test.clj
+├── build.clj, Dockerfile
+└── AGENTS.md, CLAUDE.md, .mcp.json   # AI agent context and MCP server
 ----
 
 == Manual install (advanced)

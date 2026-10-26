@@ -25,7 +25,7 @@ Foundation library providing validation, utilities, and interceptor framework fo
 |---------|-------------|
 | **Validation Framework** | Malli-based validation with behavior-driven testing support |
 | **Case Conversion** | Bidirectional kebab-case ↔ snake_case ↔ camelCase utilities |
-| **Type Conversion** | Safe UUID, Instant, BigDecimal conversions with error handling |
+| **Type Conversion** | nil-safe UUID, Instant, keyword, boolean and int conversions |
 | **PII Redaction** | Automatic sensitive data masking for logs and error reports |
 | **Interceptor Pipeline** | Composable request/response interceptor framework |
 | **Feature Flags** | Runtime feature toggle configuration |
@@ -69,13 +69,15 @@ Foundation library providing validation, utilities, and interceptor framework fo
    [:name [:string {:min 1 :max 100}]]
    [:age [:int {:min 0 :max 150}]]])
 
-;; Validate data
-(v/validate user-schema {:email "john@example.com" :name "John" :age 30})
-;; => {:valid? true :data {...}}
+;; Validate data (compiled validators are cached per schema)
+(v/valid? user-schema {:email "john@example.com" :name "John" :age 30})
+;; => true
 
-(v/validate user-schema {:email "invalid" :name "" :age -1})
-;; => {:valid? false :errors [...]}
+(v/explain user-schema {:email "invalid" :name "" :age -1})
+;; => Malli explanation with :errors
 ```
+
+Result maps (`success-result`, `failure-result`) live in `wagoe.core.validation.result`.
 
 ### Type Conversion
 
@@ -102,22 +104,24 @@ Foundation library providing validation, utilities, and interceptor framework fo
   (:require [wagoe.core.utils.pii-redaction :as pii]))
 
 ;; Redact sensitive fields before logging
-(pii/redact-map {:email "john@example.com" :password "secret123" :name "John"})
-;; => {:email "[REDACTED]" :password "[REDACTED]" :name "John"}
+(pii/redact-pii {:email "john@example.com" :password "secret123" :name "John"}
+                (pii/build-redact-state {}))
+;; => {:email "j***@example.com" :password "[REDACTED]" :name "John"}
 ```
 
 ## Module Structure
 
 ```
 libs/core/src/wagoe/core/
-├── validation.clj           # Malli validation utilities
-├── interceptors/            # Interceptor framework
-│   ├── core.clj
-│   └── chain.clj
+├── validation.clj           # Cached Malli validators
+├── validation/              # Result shape, codes, messages, test tooling
+├── interceptor.clj          # Interceptor pipeline engine
+├── interceptor_context.clj  # Context schema and helpers
+├── config/feature_flags.clj # Feature flags
 └── utils/
-    ├── case-conversion.clj  # Case conversion utilities
-    ├── type-conversion.clj  # Type parsing and conversion
-    └── pii-redaction.clj    # Sensitive data handling
+    ├── case_conversion.clj  # Case conversion utilities
+    ├── type_conversion.clj  # Type parsing and conversion
+    └── pii_redaction.clj    # Sensitive data handling
 ```
 
 ## Dependencies
@@ -126,7 +130,7 @@ This library has minimal dependencies:
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `metosin/malli` | 0.20.0 | Schema validation |
+| `metosin/malli` | 0.20.1 | Schema validation |
 
 ## Relationship to Other Libraries
 

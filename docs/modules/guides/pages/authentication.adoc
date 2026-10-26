@@ -22,7 +22,7 @@ JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test :user
 
 [source,bash]
 ----
-curl -X POST http://localhost:3000/api/auth/login \
+curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "user@example.com", "password": "secret"}'
 ----
@@ -67,14 +67,17 @@ standard shape (`{"error": {"type", "message", "correlation-id"}}`):
 
 == Protected routes
 
-Add the auth interceptor to routes that require authentication:
+Every route requires a signed-in user, by session cookie or `Authorization: Bearer`
+JWT, unless its route data says `:public true`. Which permission it needs is in
+xref:authorization.adoc[Authorization].
 
 [source,clojure]
 ----
-[["/profile"
-  {:get {:handler      handlers/get-profile
-         :interceptors ['auth/require-authenticated]
-         :summary      "Get current user profile"}}]]
+[["/profile" {:authorization :signed-in
+              :get {:handler handlers/get-profile
+                    :summary "Get current user profile"}}]
+ ["/webhook" {:public true
+              :post {:handler handlers/webhook}}]]
 ----
 
 == Multi-Factor Authentication (MFA)
@@ -85,22 +88,22 @@ MFA uses TOTP (Time-based One-Time Passwords, compatible with Google Authenticat
 
 [source,bash]
 ----
-# 1. Start MFA setup (returns a secret + QR code URL)
-curl -X POST http://localhost:3000/api/auth/mfa/setup \
+# 1. Start MFA setup (returns a secret, QR code URL and backup codes)
+curl -X POST http://localhost:3000/api/v1/auth/mfa/setup \
   -H "Authorization: Bearer <token>"
 
 # 2. Enable MFA (verify with first TOTP code)
-curl -X POST http://localhost:3000/api/auth/mfa/enable \
+curl -X POST http://localhost:3000/api/v1/auth/mfa/enable \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{"secret": "...", "verificationCode": "123456"}'
+  -d '{"secret": "...", "backupCodes": ["..."], "verificationCode": "123456"}'
 ----
 
 === Login with MFA enabled
 
 [source,bash]
 ----
-curl -X POST http://localhost:3000/api/auth/login \
+curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "user@example.com", "password": "secret", "mfaCode": "123456"}'
 ----
@@ -162,7 +165,7 @@ locks the account like one.
 
 [source,bash]
 ----
-curl -X POST http://localhost:3000/api/auth/mfa/disable \
+curl -X POST http://localhost:3000/api/v1/auth/mfa/disable \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"code": "123456"}'
@@ -492,14 +495,15 @@ at a page that exists.
 
 [source,bash]
 ----
-# List active sessions
-curl http://localhost:3000/api/auth/sessions \
-  -H "Authorization: Bearer <token>"
+# Validate a session token
+curl http://localhost:3000/api/v1/sessions/{session-token}
 
-# Revoke a specific session
-curl -X DELETE http://localhost:3000/api/auth/sessions/{session-id} \
-  -H "Authorization: Bearer <token>"
+# End it (logout)
+curl -X DELETE http://localhost:3000/api/v1/sessions/{session-token}
 ----
+
+The token in the path is the credential. A user's other sessions are listed and
+revoked on their *Sessions* tab in the web UI.
 
 [#csrf]
 == CSRF protection
@@ -533,8 +537,9 @@ Configure under `:wagoe/http :security :csrf`:
                   :exempt-paths ["/api/v1/payments/webhook"]}}  ; webhooks/callbacks
 ----
 
-The secret defaults to `JWT_SECRET`, so deployments are protected even without an
-explicit `:csrf` block. Disable it (`:enabled? false`) only in test/dev. List endpoints
+`:enabled?` defaults to false, so an upgrade cannot refuse forms that emit no token;
+the framework's dev, acc and prod configs set it to true. The secret defaults to
+`CSRF_SECRET`, then `JWT_SECRET`. List endpoints
 that legitimately cannot send a token (PSP webhooks, OAuth callbacks) under
 `:exempt-paths`; a trailing `/*` matches on a path-segment boundary.
 
@@ -545,7 +550,7 @@ the interceptor internals and token format.
 
 * `JWT_SECRET` must be set; missing it causes startup failures (it is also the default
   CSRF signing secret)
-* CSRF protection is enforced for session-authenticated, state-changing requests — see
+* CSRF protection, when enabled, is enforced for session-authenticated, state-changing requests — see
   <<csrf>>
 * Internal entities use `:password-hash` (kebab-case) — never `:password_hash`
 * The `user` library enforces account lockout after repeated failed login attempts. A

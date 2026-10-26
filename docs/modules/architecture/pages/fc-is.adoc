@@ -81,7 +81,7 @@ libs/{library}/src/wagoe/{library}/
 |===
 
 The most common violation is when a core namespace requires a shell namespace (for logging or persistence).
-clj-kondo and the test suite will catch this, but the structure is self-enforcing if you ask:
+`bb check:fcis` catches this on every commit, but the structure is self-enforcing if you ask:
 *"Can I test this function without any mocks?"*
 
 == Why this matters
@@ -112,8 +112,8 @@ not touching any business logic.
 
 [source,bash]
 ----
-# clj-kondo catches cross-layer requires
-clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
+# FC/IS gate: core requires (an allowlist), throws, mutable state, non-determinism
+bb check:fcis
 ----
 
-The rule to remember: *if a namespace path contains `core/`, it must not require any path containing `shell/`.*
+The rule to remember: *a `core/` namespace may require only pure libraries and its own core, schema and ports.*

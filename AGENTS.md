@@ -1162,14 +1162,14 @@ rename a released id: databases that recorded it would run it again. Per-module 
 
 ## libs/tools — Developer Tooling
 
-`libs/tools` contains all portable Babashka developer tooling. It lives under `libs/tools/` alongside the other libraries and is consumed by the monorepo via a local path dep in `bb.edn`:
+`libs/tools` contains all portable Babashka developer tooling. It lives under `libs/tools/` alongside the other libraries and is put on the monorepo's Babashka classpath through `:paths` in `bb.edn`:
 
 ```clojure
 ;; bb.edn (monorepo)
-{:deps {com.wagoe/wagoe-tools {:local/root "libs/tools"}}}
+{:paths ["libs/tools/src" "libs/tools/resources" ...]}
 ```
 
-> **Note:** the monorepo consumes `libs/tools` through the `:local/root` dep above, not from Clojars — but it *is* published, as `com.wagoe/wagoe-tools`, and `bb deploy --all` includes it along with the other 28. "Dev-only" describes when you use it, not whether it ships.
+> **Note:** the monorepo reads `libs/tools` from source, not from Clojars — but it *is* published, as `com.wagoe/wagoe-tools`, and `bb deploy --all` includes it along with the other 32. "Dev-only" describes when you use it, not whether it ships.
 
 ### Namespaces
 

@@ -61,7 +61,7 @@ _Brief description of what this feature accomplishes_
 * *When:* _Operation is attempted_
 * *Then:* _Appropriate error response is returned_
 * *Status Code:* _++[++HTTP status if applicable++]++_
-* *Error Format:* _Follow RFC 7807 Problem Details_
+* *Error Format:* _`{"error": {"type" ... "message" ...}}` (ADR-022, ADR-036)_
 
 [[_error_scenario_2_error_type]]
 ======= link:#_error_scenario_2_error_type[]Error Scenario 2: ++[++Error Type++]++

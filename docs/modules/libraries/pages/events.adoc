@@ -37,13 +37,16 @@ wants a port call.
 | Namespace | Purpose
 
 | `wagoe.events.ports`
-| Protocols: `IEventPublisher`, `IEventSubscriber`, `IEventHistory`
+| Protocols: `IEventPublisher`, `IEventSubscriber`, `IEventHistory`, `ITransactionalPublisher`
 
 | `wagoe.events.core.event`
 | Pure: envelope, validation, redelivery detection, tenant scoping
 
 | `wagoe.events.shell.publisher`
-| `build` and `emit!` — assigns the id and timestamp
+| `build`, `emit!` and `emit-in-tx!` — assigns the id and timestamp
+
+| `wagoe.events.shell.outbox`
+| Transactional outbox: `publish-in-tx!` writes to `event_outbox` in the caller's transaction, and a relay publishes the rows to the bus
 
 | `wagoe.events.shell.adapters.in-memory`
 | In-process bus with a bounded history buffer (development, tests)
@@ -55,9 +58,9 @@ wants a port call.
 | `:wagoe/events` Integrant key
 |===
 
-Three protocols rather than one: a module that only emits events should not
-depend on subscription machinery it never calls, and not every backend can
-replay history.
+Several protocols rather than one: a module that only emits events should not
+depend on subscription machinery it never calls, not every backend can
+replay history, and only the outbox publishes inside a transaction.
 
 == Usage
 

@@ -12,7 +12,10 @@ Supports sync generation and optional async via `wagoe-jobs`.
 | Namespace | Purpose
 
 | `wagoe.reports.core.report`
-| Registry, `defreport` macro, pure helpers
+| Pure helpers: formatting, section rendering, report preparation
+
+| `wagoe.reports.shell.registry`
+| `defreport` macro and the definition registry
 
 | `wagoe.reports.ports`
 | `ReportServiceProtocol` — what apps call on `(ig/ref :wagoe/reports)`; `ReportGeneratorProtocol` — what adapters implement
@@ -52,6 +55,8 @@ Supports sync generation and optional async via `wagoe-jobs`.
    :type      :pdf
    :page-size :a4
    :filename  "invoice.pdf"
+   ;; generate passes its opts here; the result is the template's data
+   :data-source (fn [{:keys [invoice-id]}] (load-invoice invoice-id))
    :template  (fn [data]
                 [:html
                  [:head [:title "Invoice"]]
@@ -64,7 +69,7 @@ Supports sync generation and optional async via `wagoe-jobs`.
                       [:tr [:td (:description line)]
                            [:td (str "€ " (:amount line))]])]]]])})
 
-(def output (reports/generate svc invoice-report {:invoice-number 42 :lines [...]}))
+(def output (reports/generate svc invoice-report {:invoice-id 42}))
 ;=> {:bytes #bytes[...] :type :pdf :filename "invoice.pdf"}
 ----
 
@@ -76,11 +81,13 @@ Supports sync generation and optional async via `wagoe-jobs`.
   {:id      :users-export
    :type    :excel
    :filename "users.xlsx"
-   :columns [{:key :name  :label "Name"  :width 30}
-              {:key :email :label "Email" :width 40}
-              {:key :role  :label "Role"  :width 15}]})
+   :data-source (fn [_opts] (list-all-users))   ; a seq of row maps
+   :sections [{:type    :table
+               :columns [{:key :name  :label "Name"}
+                         {:key :email :label "Email"}
+                         {:key :role  :label "Role"}]}]})
 
-(reports/generate svc users-export {:rows (list-all-users)})
+(reports/generate svc users-export {})
 ----
 
 == Async generation

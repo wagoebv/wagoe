@@ -7,7 +7,7 @@ The scaffolder generates a complete FC/IS module quickly.
 
 [source,bash]
 ----
-bb scaffold
+bb scaffold generate
 ----
 
 The wizard walks you through:
@@ -50,12 +50,15 @@ bb scaffold ai "product module with name, price, and stock quantity" --yes
 
 == What gets generated
 
-For a `product` module with three fields, the scaffolder creates:
+For a `product` module, the scaffolder creates:
 
-* 8 source files: core, shell (persistence, service, http, web_handlers), ports, schema
-* 3 test files: unit, integration, contract
-* 1 migration file
-* Zero linting errors, complete FC/IS architecture
+* 9 source files: schema, ports, core (`product`, `ui`), shell (service, persistence,
+  http, web_handlers, module_wiring)
+* 3 test files: core unit, repository, service
+* An up and a down migration
+* A commented seed example in `resources/seeds/dev.edn`
+
+`--no-http` and `--no-web` leave out the API routes or the web UI.
 
 == Integration steps
 
@@ -63,17 +66,18 @@ After scaffolding:
 
 [source,bash]
 ----
-# 1. Apply the migration
+# 1. Write :wagoe/product into every resources/conf/<profile>/config.edn
+bb scaffold integrate product
+
+# 2. Apply the migration
 clojure -M:migrate up
 
-# 2. Wire the module into config.edn
-# Add :wagoe/product key to resources/conf/dev/config.edn
-
-# 3. Register routes in module HTTP wiring and config
-
-# 4. Reload the system
+# 3. Reload the system
 # In REPL: (reset)
 ----
+
+The config key is the whole registration: the module's routes come from its
+`module_wiring.clj`.
 
 == Adding fields after the fact
 
@@ -82,14 +86,16 @@ clojure -M:migrate up
 bb scaffold field  # Interactive: choose module, field name/type
 ----
 
-This generates a new migration and updates schema.clj and persistence.clj.
+This writes an `ALTER TABLE` migration and adds the field to `schema.clj`.
 
 == Other scaffold commands
 
 [source,bash]
 ----
+bb scaffold entity      # Add an entity to an existing module
 bb scaffold endpoint    # Add an endpoint to an existing module
 bb scaffold adapter     # Generate a new adapter implementation
+bb scaffold subscriber  # Add an event subscriber to a module
 bb scaffold             # Show all commands and help
 ----
 

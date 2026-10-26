@@ -30,7 +30,7 @@ Framework-aware AI tooling for Wagoe applications — offline-first via Ollama, 
 | **Documentation Wizard** | Generate AGENTS.md, OpenAPI YAML, or README |
 | **Admin Entity Generator** | Generate admin UI entity EDN config from a description |
 | **Setup Parser** | Parse a natural language project setup into a config spec |
-| **Multi-provider** | Ollama (local), Anthropic Claude, OpenAI, plus a no-op test stub |
+| **Multi-provider** | Ollama (local), Anthropic Claude, OpenAI (or any compatible endpoint), Replicate, plus a no-op test stub |
 
 Unlike a generic assistant, `wagoe/ai` knows Wagoe's own conventions (FC/IS, ports, kebab↔snake naming, Malli schemas, HoneySQL syntax) and uses that knowledge to produce higher-quality output. The functional core is pure — all HTTP, file I/O, and env-var reads live in the shell.
 
@@ -92,7 +92,7 @@ they refuse unless you pass `--yes` or `--force`.
 - [AGENTS.md](AGENTS.md) — namespaces, Integrant config, full public API, CLI reference, and pitfalls
 - [Library docs](../../docs/modules/libraries/pages/ai.adoc) — module overview on the docs site
 
-**Provider selection** via environment variables: `ANTHROPIC_API_KEY` (takes precedence) → Anthropic, `OPENAI_API_KEY` → OpenAI, `OLLAMA_URL` (default `http://localhost:11434`) → Ollama, `AI_MODEL` to override the default model.
+**Provider selection**: the CLI uses a `:wagoe/ai-service` provider named in `config.edn` first, else the first environment variable set of `ANTHROPIC_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `REPLICATE_API_TOKEN`, `OLLAMA_URL` (default `http://localhost:11434`). `AI_MODEL` overrides the default model.
 
 ## License
 

@@ -38,7 +38,7 @@ clj-nrepl-eval -p 7888 "(+ 1 2)"
 ----
 ;; Get a running service from the Integrant system
 (def user-svc (get integrant.repl.state/system :wagoe/user-service))
-(def db (get integrant.repl.state/system :wagoe/db))
+(def db (get-in integrant.repl.state/system [:wagoe/db-context :datasource]))
 
 ;; Call service methods directly
 (require '[wagoe.user.ports :as ports])
@@ -46,7 +46,7 @@ clj-nrepl-eval -p 7888 "(+ 1 2)"
 
 ;; Query the database directly
 (require '[next.jdbc :as jdbc])
-(jdbc/execute! db ["SELECT * FROM users LIMIT 5"])
+(jdbc/execute! db ["SELECT * FROM auth_users LIMIT 5"])
 ----
 
 == Reloading namespaces
@@ -73,7 +73,8 @@ If you changed a record definition and the change isn't taking effect, do a full
 ----
 ;; Test core functions directly (no system needed)
 (require '[wagoe.user.core.user :as user-core])
-(user-core/prepare-user {:email "alice@example.com" :name "Alice"})
+(user-core/prepare-user-for-creation {:email "alice@example.com" :name "Alice"}
+                                     (java.time.Instant/now) (random-uuid))
 
 ;; Test a service method
 (def admin-svc (get integrant.repl.state/system :wagoe/admin-service))
@@ -86,7 +87,7 @@ If you changed a record definition and the change isn't taking effect, do a full
 [source,clojure]
 ----
 (def ds (get-in integrant.repl.state/system [:wagoe/db-context :datasource]))
-(jdbc/execute! ds ["SELECT id, email FROM users WHERE id = ?" some-uuid])
+(jdbc/execute! ds ["SELECT id, email FROM auth_users WHERE id = ?" some-uuid])
 ----
 
 == Useful REPL snippets

@@ -33,6 +33,9 @@ Writes no config and moves no rights; like any start, it creates user tables tha
 * whether `deps.edn` is behind the CLI;
 * the mode in `config.edn`, a `:require-role` in `:wagoe/admin`, and each OIDC
   provider's `:default-role`;
+* admin entities missing from `:wagoe/admin :entity-discovery :allowlist`: the
+  admin declares `admin.<entity>` permissions only for the allowlist, so under
+  `:enforce` only a platform admin reaches the others;
 * pending migrations;
 * how many users hold each stored role: platform admin, admin in a tenant,
   user, viewer;
@@ -51,7 +54,8 @@ bb upgrade authorization prepare --env prod --dry-run   # look first
 bb upgrade authorization prepare --env prod
 ----
 
-It deletes `:require-role`, which nothing reads any more, sets
+It deletes `:require-role`, which nothing reads any more, adds the admin's
+entities to its `:allowlist`, sets
 `:wagoe/authorization {:mode :report}` if the mode was `:off`, runs the
 migrations, and starts the app once without serving. That first start moves
 the old rights, as every start of this release would:
@@ -101,8 +105,9 @@ Close each difference: give the route a rule (`:public`, `:authorization
 bb upgrade authorization enforce --env prod --log logs/app.log
 ----
 
-It sets `:mode :enforce`, and refuses to while a route has no rule, a user
-would be refused or held to a scope, or the log holds a refusal. `--force`
+It sets `:mode :enforce`, and refuses to while the mode is still `:off`, a
+route has no rule, a user would be refused or held to a scope, or the log
+holds a refusal. `--force`
 switches anyway, for differences you mean, such as viewers who should not
 write. Restart the app afterwards.
 

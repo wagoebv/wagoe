@@ -57,10 +57,11 @@ The `defevent` macro and the event type registry live in the shell
 **Validation** of raw EventData maps (independent of type registry, pure core):
 ```clojure
 (require '[wagoe.calendar.core.event :as event])
+(import '[java.time Instant])
 
 (event/valid-event? {:id (random-uuid) :title "X"
-                     :start #inst "2026-03-10T09:00:00Z"
-                     :end   #inst "2026-03-10T10:00:00Z"
+                     :start (Instant/parse "2026-03-10T09:00:00Z")
+                     :end   (Instant/parse "2026-03-10T10:00:00Z")
                      :timezone "Europe/Amsterdam"})
 ;; => true
 ```
@@ -90,39 +91,41 @@ All occurrence functions are pure and live in `wagoe.calendar.core.recurrence`.
 
 ```clojure
 (require '[wagoe.calendar.core.recurrence :as r])
+(import '[java.time Instant])
 
 (def standup
   {:id        (random-uuid)
    :title     "Standup"
-   :start     #inst "2026-03-02T08:00:00Z"   ; 09:00 Amsterdam (UTC+1)
-   :end       #inst "2026-03-02T08:30:00Z"
+   :start     (Instant/parse "2026-03-02T08:00:00Z")   ; 09:00 Amsterdam (UTC+1)
+   :end       (Instant/parse "2026-03-02T08:30:00Z")
    :timezone  "Europe/Amsterdam"
    :recurrence "FREQ=WEEKLY;BYDAY=MO,WE,FR"})
 
 ;; Returns vector of Instant values (Mon/Wed/Fri in the given week)
 (r/occurrences standup
-               #inst "2026-03-01T00:00:00Z"
-               #inst "2026-03-08T00:00:00Z")
+               (Instant/parse "2026-03-01T00:00:00Z")
+               (Instant/parse "2026-03-08T00:00:00Z"))
 ;; => [#inst "2026-03-02T08:00:00Z"
 ;;     #inst "2026-03-04T08:00:00Z"
 ;;     #inst "2026-03-06T08:00:00Z"]
 
 ;; Expand to full event maps (no :recurrence key)
 (r/expand-event standup
-                #inst "2026-03-01T00:00:00Z"
-                #inst "2026-03-08T00:00:00Z")
+                (Instant/parse "2026-03-01T00:00:00Z")
+                (Instant/parse "2026-03-08T00:00:00Z"))
 ;; => [{:id ... :title "Standup" :start #inst "..." :end #inst "..." :timezone "..."}
 ;;     ...]
 
 ;; Next future occurrence from an explicit reference instant
-(r/next-occurrence* standup #inst "2026-03-02T00:00:00Z")
+(r/next-occurrence* standup (Instant/parse "2026-03-02T00:00:00Z"))
 ;; => #inst "2026-XX-XXT08:00:00Z"  ; next Mon/Wed/Fri
 ```
 
 ### Timezone notes
 
 - `:timezone` must be a valid IANA TZ database name (e.g. `"Europe/Amsterdam"`, `"America/New_York"`).
-- ical4j's `Recur` iterates in UTC internally but respects DST when a `TimeZone` is attached to the `DateTime` property.
+- ical4j's `Recur` is seeded with a `ZonedDateTime` in the event's `:timezone`, so local time holds across DST.
+- `:start`, `:end` and the window bounds must be `java.time.Instant`; a `#inst` (`java.util.Date`) throws `ClassCastException`.
 - **Always store `:start` and `:end` as UTC `Instant`s** in your database. Convert to local time only for display.
 - `expand-event` preserves the original duration across DST boundaries.
 
@@ -132,20 +135,21 @@ All occurrence functions are pure and live in `wagoe.calendar.core.recurrence`.
 
 ```clojure
 (require '[wagoe.calendar.core.conflict :as c])
+(import '[java.time Instant])
 
 ;; Simple overlap check (expanded, single-occurrence events)
 (c/overlaps? event-a event-b)   ;; => bool
 
 ;; Check two events (potentially recurring) in a window
 (c/conflicts? event-a event-b
-              #inst "2026-03-01T00:00:00Z"
-              #inst "2026-04-01T00:00:00Z")
+              (Instant/parse "2026-03-01T00:00:00Z")
+              (Instant/parse "2026-04-01T00:00:00Z"))
 ;; => bool
 
 ;; Find all conflicts in a collection
 (c/find-conflicts [room-a-booking room-b-booking shift-a shift-b]
-                  #inst "2026-03-01T00:00:00Z"
-                  #inst "2026-04-01T00:00:00Z")
+                  (Instant/parse "2026-03-01T00:00:00Z")
+                  (Instant/parse "2026-04-01T00:00:00Z"))
 ;; => [{:event-a {...} :event-b {...}
 ;;      :overlap-start #inst "..." :overlap-end #inst "..."} ...]
 ```
@@ -231,7 +235,7 @@ All components are pure Hiccup functions in `wagoe.calendar.core.ui`.
 
 ```clojure
 (require '[wagoe.calendar.core.ui :as ui])
-(require '[java.time LocalDate])
+(import '[java.time LocalDate])
 
 ;; Month grid
 (ui/month-view 2026 3 events {:today (LocalDate/now) :timezone "Europe/Amsterdam"})
@@ -273,19 +277,16 @@ Store `:start` and `:end` as UTC in the database. Never store local time strings
 ### 3. Instant vs ZonedDateTime
 `occurrences` returns `java.time.Instant` values. To display them in a local timezone, use `(.atZone instant (ZoneId/of timezone))`.
 
-### 4. ical4j DateTime mutability
-ical4j `DateTime` objects are mutable. The adapter always creates new instances — never share them across threads.
-
-### 5. RRULE BYDAY with MONTHLY
+### 4. RRULE BYDAY with MONTHLY
 `FREQ=MONTHLY;BYDAY=1MO` means "first Monday of each month". Without the ordinal prefix, `BYDAY=MO` with `FREQ=MONTHLY` means *every* Monday of each month (multiple per month). Be explicit.
 
-### 6. Expansion window size
+### 5. Expansion window size
 `expand-event` calls `occurrences` which iterates all dates in the window. For `FREQ=DAILY` over 10 years, this produces ~3650 maps. Always pass a narrow window relevant to your use case.
 
-### 7. All-day is a flag
+### 6. All-day is a flag
 `event/all-day?` reads `:all-day? true` and nothing else. A timed event from midnight to midnight is not all-day: set the flag, or it is exported with times.
 
-### 8. Registry pollution in tests
+### 7. Registry pollution in tests
 Always use `(use-fixtures :each (fn [f] (registry/clear-registry!) (f) (registry/clear-registry!)))` (with `wagoe.calendar.shell.registry` aliased as `registry`) to prevent `defevent` definitions at namespace load time from leaking across tests.
 
 ---
@@ -315,18 +316,19 @@ clojure -M:clj-kondo --lint libs/calendar/src libs/calendar/test
 
 ```clojure
 (require '[wagoe.calendar.core.recurrence :as r])
+(import '[java.time Instant])
 (require '[wagoe.calendar.shell.service :as cal])
 
 (def standup
   {:id        (random-uuid)
    :title     "Standup"
-   :start     #inst "2026-03-02T08:00:00Z"
-   :end       #inst "2026-03-02T08:30:00Z"
+   :start     (Instant/parse "2026-03-02T08:00:00Z")
+   :end       (Instant/parse "2026-03-02T08:30:00Z")
    :timezone  "Europe/Amsterdam"
    :recurrence "FREQ=WEEKLY;BYDAY=MO,WE,FR"})
 
 ;; 3 occurrences in first week of March
-(r/occurrences standup #inst "2026-03-01T00:00:00Z" #inst "2026-03-08T00:00:00Z")
+(r/occurrences standup (Instant/parse "2026-03-01T00:00:00Z") (Instant/parse "2026-03-08T00:00:00Z"))
 
 ;; iCal export
 (cal/export-ical [standup] {})

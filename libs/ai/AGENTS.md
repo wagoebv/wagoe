@@ -17,7 +17,7 @@
 
 **gen-tests checks before writing:** the prompt carries the API and Malli schemas of each required namespace and the module's `schema` ns; the answer is linted and its literal `^{:schema s}` fixtures validated without evaluating anything (`wagoe.ai.shell.test-check`). Still failing after one retry: refused unless `--force`. `--run` (opt-in) also loads and runs it in a child JVM (`wagoe.ai.shell.test-runner`, env limited to `child-env`); every test must pass. That runs model code and is not a sandbox: files and network stay reachable.
 
-**Provider strategy:** offline-first via Ollama (no data leaves the machine by default), with cloud opt-in via `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` (any OpenAI-compatible endpoint) or `REPLICATE_API_TOKEN` (hosted, no local GPU). Setting one takes precedence over `config.edn`, so opting in needs no config edit; the dev default stays local.
+**Provider strategy:** offline-first via Ollama (no data leaves the machine by default), with cloud opt-in via `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` (any OpenAI-compatible endpoint) or `REPLICATE_API_TOKEN` (hosted, no local GPU). The CLI uses a `:wagoe/ai-service` provider named in `config.edn` first (other than `:no-op`), then those variables in that order, then local Ollama. Generated projects ship no such key, so exporting one is all opting in takes.
 
 **FC/IS rule:** `core/` is pure. All HTTP calls, file I/O, and env-var reads live in `shell/`.
 
@@ -29,16 +29,18 @@
 |-----------|-------|----------------|
 | `wagoe.ai.schema` | shared | Malli schemas: `Message`, `AIRequest`, `AIResponse`, `ProviderConfig`, `AIConfig` |
 | `wagoe.ai.ports` | shared | `IAIProvider` protocol: `complete`, `complete-json`, `provider-name` |
-| `wagoe.ai.core.prompts` | core | Pure prompt builders for all 7 features |
+| `wagoe.ai.core.prompts` | core | Pure prompt builders for every feature |
 | `wagoe.ai.core.context` | core | Pure context extractors (module names, stack traces, function signatures, schema) |
 | `wagoe.ai.core.sql-copilot` | core | Schema text for the SQL prompt; checks a HoneySQL answer's tables and columns against it |
 | `wagoe.ai.core.parsing` | core | Pure response parsers (JSON, module spec, SQL response, test code) |
+| `wagoe.ai.core.admin-entity` | core | Checks a generated admin entity against the migrations' tables and columns |
 | `wagoe.ai.shell.providers.ollama` | shell | Ollama HTTP adapter (`OllamaProvider`) |
 | `wagoe.ai.shell.providers.anthropic` | shell | Anthropic API adapter (`AnthropicProvider`) |
 | `wagoe.ai.shell.providers.openai` | shell | OpenAI API adapter (`OpenAIProvider`) |
+| `wagoe.ai.shell.providers.replicate` | shell | Replicate-hosted models |
 | `wagoe.ai.shell.providers.no-op` | shell | Test stub (`NoOpProvider`) |
-| `wagoe.ai.shell.service` | shell | Public API: `scaffold-from-description`, `explain-error`, `generate-tests`, `sql-from-description`, `generate-docs`, `generate-admin-entity`, `parse-setup-description` |
-| `wagoe.ai.shell.repl` | shell | REPL helpers: `explain`, `sql`, `gen-tests` |
+| `wagoe.ai.shell.service` | shell | Public API: `scaffold-from-description`, `explain-error`, `generate-tests`, `sql-from-description`, `generate-docs`, `generate-admin-entity`, `parse-setup-description`, `review-code`, `suggest-tests`, `refactor-fcis` |
+| `wagoe.ai.shell.repl` | shell | REPL helpers: `explain`, `sql`, `gen-tests`, `review`, `test-ideas`, `refactor-fcis` |
 | `wagoe.ai.shell.cli-entry` | shell | `-main` for `clojure -M -m wagoe.ai.shell.cli-entry` |
 | `wagoe.ai.shell.module-wiring` | shell | Integrant `:wagoe/ai-service` |
 
@@ -163,9 +165,11 @@ bb ai admin-entity "invoices with number, customer, total, due-date, paid status
 bb ai setup-parse "PostgreSQL with Stripe payments and Redis caching"
 ```
 
-**Provider selection** (environment variables):
-- `ANTHROPIC_API_KEY` → Anthropic (takes precedence)
+**Provider selection**: a `:wagoe/ai-service` provider in `config.edn` (other than `:no-op`) wins; otherwise the first of these that is set:
+- `ANTHROPIC_API_KEY` → Anthropic
+- `OPENAI_BASE_URL` → an OpenAI-compatible endpoint
 - `OPENAI_API_KEY` → OpenAI
+- `REPLICATE_API_TOKEN` → Replicate
 - `OLLAMA_URL` → Ollama (default `http://localhost:11434`)
 - `AI_MODEL` → override default model
 
@@ -180,7 +184,7 @@ Always require `[wagoe.ai.ports :as ports]` and call `(ports/complete ...)`. Nev
 The `schema` argument to `complete-json` is a descriptive hint string, not a Malli schema. JSON validation of the response is the caller's responsibility (see `parsing/parse-module-spec`).
 
 ### 3. Ollama must be running for live calls
-Start with: `ollama serve`. The adapter will throw a connection exception if Ollama is not running; the fallback provider will be tried automatically if configured.
+Start with: `ollama serve`. If Ollama is not running the adapter returns `{:error ...}` rather than throwing; the fallback provider is tried automatically if configured.
 
 ### 4. Module wiring uses the flat config (no nested `:config` map)
 The `ig/init-key :wagoe/ai-service` handler receives the full config map directly. Unlike some other modules, there is no separate `:config` sub-key.
@@ -188,8 +192,8 @@ The `ig/init-key :wagoe/ai-service` handler receives the full config map directl
 ### 5. No-op provider for tests — not a mock
 `NoOpProvider` returns deterministic canned responses. For integration tests that need to assert on specific AI outputs, use `reify IAIProvider` directly in the test.
 
-### 6. `cli-entry` reads provider from environment, not Integrant
-The CLI entrypoint (`-main`) constructs the provider from env vars at startup. It does not use the Integrant system. This is intentional — CLI scripts run outside the application lifecycle.
+### 6. `cli-entry` builds its own provider, outside the running system
+The CLI entrypoint (`-main`) reads `:wagoe/ai-service` from `config.edn`, else the env vars above, and builds the provider itself. It does not use a running Integrant system — CLI scripts run outside the application lifecycle.
 
 ### 7. Context extraction is pure — file I/O stays in the service
 `core/context.clj` functions receive already-loaded content. File reading happens only in `shell/service.clj`. Do not add `slurp` calls to `core/`.
@@ -222,9 +226,6 @@ clojure -M:test --focus-meta :unit :ai
 
 # Integration tests (mock providers)
 clojure -M:test --focus-meta :integration :ai
-
-# Contract tests (live Ollama — requires OLLAMA_URL)
-OLLAMA_URL=http://localhost:11434 clojure -M:test --focus-meta :contract :ai
 
 # Lint
 clojure -M:clj-kondo --lint libs/ai/src libs/ai/test

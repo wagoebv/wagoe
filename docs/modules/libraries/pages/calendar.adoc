@@ -20,7 +20,11 @@ iCal export/import, and admin UI components for scheduling applications.
 
 | `wagoe.calendar.core.event`
 | core
-| `defevent` macro, registry, `duration`, `all-day?`, `within-range?`
+| `duration`, `all-day?`, `within-range?`
+
+| `wagoe.calendar.shell.registry`
+| shell
+| `defevent` macro and the event-type registry
 
 | `wagoe.calendar.core.recurrence`
 | core
@@ -51,17 +55,17 @@ iCal export/import, and admin UI components for scheduling applications.
 
 [source,clojure]
 ----
-(require '[wagoe.calendar.core.event :as event])
+(require '[wagoe.calendar.shell.registry :as registry])
 
-(event/defevent appointment-event
+(registry/defevent appointment-event
   {:id     :appointment
    :label  "Appointment"
    :schema [:map
             [:patient-id :uuid]
             [:room       :string]]})
 
-(event/get-event-type :appointment)   ;=> {:id :appointment ...}
-(event/list-event-types)              ;=> [:appointment ...]
+(registry/get-event-type :appointment)   ;=> {:id :appointment ...}
+(registry/list-event-types)              ;=> [:appointment ...]
 ----
 
 == Recurring events (RRULE)
@@ -87,8 +91,8 @@ iCal export/import, and admin UI components for scheduling applications.
 (require '[wagoe.calendar.core.conflict :as conflict])
 
 (conflict/overlaps? event-a event-b)    ;=> true/false
-(conflict/find-conflicts new-event existing-events)
-;=> [{:event existing-event :overlap-start ... :overlap-end ...}]
+(conflict/find-conflicts events window-start window-end)
+;=> ({:event-a ... :event-b ... :overlap-start ... :overlap-end ...})
 ----
 
 == UI components
@@ -145,7 +149,7 @@ Without Integrant, `wagoe.calendar.shell.service` offers the same calls.
 
 == Dependencies
 
-Uses `org.mnode.ical4j/ical4j {:mvn/version "4.0.3"}` (note: group ID is `org.mnode.ical4j`, Java packages are still `net.fortuna.ical4j.*`).
+Uses `org.mnode.ical4j/ical4j {:mvn/version "4.3.0"}` (note: group ID is `org.mnode.ical4j`, Java packages are still `net.fortuna.ical4j.*`).
 
 == Testing
 

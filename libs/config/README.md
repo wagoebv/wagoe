@@ -31,7 +31,7 @@ application's decision; see the `system_config.clj` that `wagoe new` generates.
 
 | Function | Reads |
 |----------|-------|
-| `db-adapter` / `db-spec` | The active database. Exactly one adapter section must be present — none is an error, not a default |
+| `db-adapter` / `db-spec` | The active database, from the adapter section under `:active`. None is an error, not a default |
 | `http-config` | Port, host, server settings |
 | `app-config` / `default-tenant-id` | Application identity and the development tenant |
 | `user-validation-config` | Password and profile rules for `wagoe-user` |

@@ -7,7 +7,7 @@
 ;;   bb create-admin                                         -- interactive wizard
 ;;   bb create-admin --env prod                              -- use production config
 ;;   bb create-admin --email a@b.com --name "Admin"         -- skip email/name prompts
-;;   bb create-admin --dir examples/ecommerce-api           -- target a sub-project
+;;   bb create-admin --dir examples/shop           -- target a sub-project
 
 (ns wagoe.tools.admin
   (:require [wagoe.tools.ansi :refer [bold green red cyan dim]]
@@ -125,7 +125,7 @@
   (println)
   (println (bold "Usage:"))
   (println "  bb create-admin                            Interactive wizard (root project)")
-  (println "  bb create-admin --dir examples/ecommerce-api  Target a sub-project")
+  (println "  bb create-admin --dir examples/shop  Target a sub-project")
   (println "  bb create-admin --env prod                 Use production config")
   (println "  bb create-admin --email EMAIL --name NAME  Skip email/name prompts")
   (println)

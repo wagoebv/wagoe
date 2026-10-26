@@ -9,7 +9,7 @@ Multi-tenancy with schema-per-tenant isolation on PostgreSQL. Provides:
 - **Schema provisioning** — per-tenant PostgreSQL schema creation
 - **Membership management** — invite users, accept invitations, manage roles and status (ADR-016)
 - **Email invite flow** — token-based external invites with expiry and revocation
-- **Tenant resolution** — subdomain, JWT, or header-based tenant detection (via `platform` library)
+- **Tenant resolution** — subdomain, JWT, or header-based tenant detection (`wagoe.tenant.shell.tenant-middleware`)
 
 ---
 
@@ -27,7 +27,7 @@ Multi-tenancy with schema-per-tenant isolation on PostgreSQL. Provides:
 
 | Namespace | Protocols |
 |-----------|-----------|
-| `wagoe.tenant.ports` | `ITenantRepository`, `ITenantService`, `ITenantMembershipRepository`, `ITenantMembershipService`, `ITenantInviteRepository`, `ITenantInviteService`, `ITenantInviteAcceptanceService`, `ITenantSchemaProvider` |
+| `wagoe.tenant.ports` | `ITenantRepository`, `ITenantService`, `ITenantMembershipRepository`, `ITenantMembershipDeletion`, `ITenantMembershipService`, `ITenantInviteRepository`, `ITenantInviteService`, `ITenantInviteAcceptanceService`, `ITenantSchemaProvider`, `ITenantAuditRepository` |
 
 ### Shell (side-effecting)
 
@@ -37,13 +37,14 @@ Multi-tenancy with schema-per-tenant isolation on PostgreSQL. Provides:
 | `wagoe.tenant.shell.persistence` | `TenantRepository` — DB CRUD with case/type conversion |
 | `wagoe.tenant.shell.provisioning` | PostgreSQL schema provisioning/deprovisioning |
 | `wagoe.tenant.shell.http` | Tenant REST API handlers (CRUD + provision/suspend/activate) |
-| `wagoe.tenant.shell.membership_service` | `MembershipService` — membership management |
-| `wagoe.tenant.shell.membership_persistence` | `MembershipRepository` — DB CRUD for memberships |
-| `wagoe.tenant.shell.membership_http` | Membership REST API handlers |
-| `wagoe.tenant.shell.membership_middleware` | `wrap-tenant-membership` Ring middleware |
-| `wagoe.tenant.shell.invite_service` | `InviteService` + `InviteAcceptanceService` — email invite flows |
-| `wagoe.tenant.shell.invite_persistence` | `InviteRepository` — DB CRUD for invites |
-| `wagoe.tenant.shell.module_wiring` | Integrant `init-key` / `halt-key!` definitions |
+| `wagoe.tenant.shell.membership-service` | `MembershipService` — membership management |
+| `wagoe.tenant.shell.membership-persistence` | `MembershipRepository` — DB CRUD for memberships |
+| `wagoe.tenant.shell.membership-http` | Membership REST API handlers |
+| `wagoe.tenant.shell.membership-middleware` | `wrap-tenant-membership` Ring middleware |
+| `wagoe.tenant.shell.tenant-middleware` | `wrap-tenant-resolution`, `wrap-tenant-schema`, `wrap-multi-tenant` |
+| `wagoe.tenant.shell.invite-service` | `InviteService` + `InviteAcceptanceService` — email invite flows |
+| `wagoe.tenant.shell.invite-persistence` | `InviteRepository` — DB CRUD for invites |
+| `wagoe.tenant.shell.module-wiring` | Integrant `init-key` / `halt-key!` definitions |
 
 ### Schema
 
@@ -72,8 +73,7 @@ Multi-tenancy with schema-per-tenant isolation on PostgreSQL. Provides:
 ## Tenant Lifecycle States
 
 ```
-:active       → Created, not yet provisioned
-:provisioned  → Schema created and ready
+:active       → Created (schema provisioning is separate: POST /tenants/:id/provision)
 :suspended    → Access disabled (data preserved)
 :deleted      → Soft delete (schema NOT auto-dropped)
 ```
@@ -131,14 +131,12 @@ Multi-tenancy with schema-per-tenant isolation on PostgreSQL. Provides:
 
 ### Bootstrap flow — first admin
 
-When a tenant is created there are no memberships yet.
-Use `bootstrap-open?` before calling the membership service:
+When a tenant is created there are no memberships yet. The membership
+service's `bootstrap-open?` says whether the first member may still be added:
 
 ```clojure
-(when (m/bootstrap-open? tenant-id membership-service)
-  (membership-ports/create-active-membership!
-    membership-service
-    {:tenant-id tenant-id :user-id user-id :role :admin}))
+(when (ports/bootstrap-open? membership-service tenant-id)
+  (ports/bootstrap-first-member membership-service tenant-id user-id :admin))
 ```
 
 ### HTTP routes (membership)
@@ -182,25 +180,24 @@ A global admin passes every tenant check. The `/tenants` routes themselves
 The raw token is **never** stored in the database:
 
 ```clojure
-;; 1. Generate raw token (32 random bytes, URL-safe base64)
-(invite-core/generate-token)   ;=> "aB3cD..."
-
-;; 2. Hash before storing
-(invite-core/hash-token raw-token)   ;=> "sha256hex..."
-
-;; 3. Store only the hash; send raw token to user via email
+;; Inside wagoe.tenant.shell.invite-service (private helpers):
+;; 1. Raw token: 32 SecureRandom bytes, URL-safe base64 without padding
+;; 2. Stored: its SHA-256 hash only; the raw token goes to the user by email
 ```
 
 ### Acceptance flow (two-phase, transactional)
 
 ```clojure
 ;; Phase 1: load and validate (does not mutate)
-(invite-ports/load-external-invite-for-acceptance invite-service token)
-;=> {:invite ... :tenant ...}  or throws :validation-error if expired/invalid
+(invite-ports/load-external-invite-for-acceptance invite-service {:token token})
+;=> the pending invite; throws :not-found, or :validation-error when expired
 
 ;; Phase 2: atomic accept — creates membership in same transaction
-(invite-ports/accept-external-invite! invite-service token user-id
-  {:after-accept-tx (fn [tx invite membership] ...)})
+(invite-ports/accept-external-invite! invite-service
+  {:token token
+   :accepted-by-user-id user-id
+   :hooks {:after-accept-tx (fn [{:keys [invite membership tx-context]}] ...)}})
+;=> {:invite ... :membership ... :effects {:after-accept-tx ...}}
 ```
 
 ---
@@ -216,7 +213,7 @@ The raw token is **never** stored in the database:
 ;; Execute queries in tenant schema context
 (provisioning/with-tenant-schema db-ctx "tenant_acme_corp"
   (fn [tx]
-    ;; SET search_path TO tenant_acme_corp, public
+    ;; SET LOCAL search_path TO tenant_acme_corp, public (ends with the transaction)
     (jdbc/execute! tx ["SELECT * FROM users"])))
 ```
 
@@ -290,20 +287,21 @@ Enriches the Ring request with `:tenant-membership` for the current user+tenant 
 Must run **after** both `wrap-tenant-resolution` (platform) and user authentication middleware.
 
 ```clojure
-(require '[wagoe.tenant.shell.membership_middleware :refer [wrap-tenant-membership]])
+(require '[wagoe.tenant.shell.membership-middleware :refer [wrap-tenant-membership]])
 
-;; In your Ring handler stack
-(-> handler
-    (wrap-tenant-membership membership-service)
-    (wrap-user-authentication user-service)
-    (wrap-tenant-resolution tenant-service {:require-tenant? true}))
+;; Service first, then the handler
+(wrap-tenant-membership membership-service handler)
 ```
+
+`:wagoe/tenant-http-middleware` builds this, after `wrap-multi-tenant`, for the
+platform's `:extra-middleware`; wiring it by hand is rarely needed.
 
 Result on request: `{:tenant {...} :user {...} :tenant-membership {:status :active :role :admin ...}}`
 
-### Tenant resolution (platform library)
+### Tenant resolution
 
-See `libs/platform/AGENTS.md` for `wrap-tenant-resolution`, `wrap-tenant-schema`, and `wrap-multi-tenant`.
+`wrap-tenant-resolution`, `wrap-tenant-schema` and `wrap-multi-tenant` live in
+`wagoe.tenant.shell.tenant-middleware` (BOU-200 moved them out of platform).
 
 ---
 
@@ -338,10 +336,14 @@ The four tenant-aware HTTP interceptors live in `wagoe.user.shell.http-intercept
 
 | Key | Component |
 |-----|-----------|
-| `:wagoe/tenant-db-schema` | Initialise tables (`tenants`, `tenant_memberships`, `tenant_member_invites`) |
+| `:wagoe/tenant-db-schema` | Initialise tables (`tenants`, `tenant_memberships`, `tenant_member_invites`, `tenant_audit_log`) |
 | `:wagoe/tenant-repository` | `TenantRepository` record |
 | `:wagoe/tenant-service` | `TenantService` record |
 | `:wagoe/tenant-routes` | Normalized tenant API routes |
+| `:wagoe/tenant-http-middleware` | Middleware seq (multi-tenant, then membership) for the platform's `:extra-middleware` |
+| `:wagoe/tenant-data-exporter` | `TenantDataExporter` — the tenant section of a data export |
+| `:wagoe/tenant-audit-repository` | `tenant_audit_log` repository |
+| `:wagoe/tenant-export-routes` | `/tenants/:id/export` (and `/export-jobs` with the jobs module) |
 | `:wagoe/each-tenant` | `(fn [f])`: `(f tenant)` in each active tenant's schema, `db/*tenant-id*` bound (`tenant-iteration/for-each-tenant`) |
 | `:wagoe/membership-repository` | `MembershipRepository` record |
 | `:wagoe/membership-service` | `MembershipService` record |
@@ -353,17 +355,16 @@ The four tenant-aware HTTP interceptors live in `wagoe.user.shell.http-intercept
 
 ## Database Tables
 
-None of the three tables has a migration. `:wagoe/tenant-db-schema` creates
-them at boot from the Malli schemas in `wagoe.tenant.schema`, which are their
-one source; change a table there. The two ADR-016 migrations that also created
-the membership tables run no statement since BOU-576. The uniqueness below is
+Boot and the library migration both build the tables from the Malli schemas in
+`wagoe.tenant.schema`, via `wagoe.tenant.shell.tenant-tables`; change a table
+there (see "The library's own tables" above). The uniqueness below is
 created at boot as `CREATE UNIQUE INDEX IF NOT EXISTS`, so it reaches existing
 tables too; boot stops, naming the table, when rows already duplicate a value. The admin cannot create tenants (`schema_name` is derived at
 provisioning), so the shipped admin config sets `:permissions {:create false}`;
 use `POST /api/v1/tenants` (BOU-534).
 
 ```sql
--- Created at boot from wagoe.tenant.schema
+-- Built from wagoe.tenant.schema
 tenants (id, slug UNIQUE, name, schema_name UNIQUE, status, settings JSONB,
          created_at, updated_at, deleted_at)
 
@@ -375,6 +376,9 @@ tenant_member_invites (id, tenant_id, email, role, status,
                        token_hash UNIQUE, expires_at,
                        accepted_at, revoked_at, accepted_by_user_id,
                        metadata JSONB, created_at, updated_at)
+
+tenant_audit_log (id, tenant_id, action, actor_id, actor_email,
+                  ip_address, user_agent, created_at)
 ```
 
 ---
@@ -401,7 +405,7 @@ tenant_member_invites (id, tenant_id, email, role, status,
 |--------|-------------------|
 | **Jobs** | `wagoe.jobs.shell.tenant-context/enqueue-tenant-job!` — jobs execute in tenant schema |
 | **Cache** | `wagoe.cache.shell.tenant-cache/create-tenant-cache` — keys prefixed with tenant ID |
-| **Platform** | `wrap-tenant-resolution`, `wrap-tenant-schema`, `wrap-multi-tenant` — tenant detection and schema switching |
+| **Platform** | Takes `:wagoe/tenant-http-middleware` as `:extra-middleware`; binds `wagoe.platform.database/*tenant-id*` / `*tenant-schema*` |
 | **User** | `require-tenant-member`, `require-tenant-admin`, `require-web-tenant-admin` interceptors |
 
 ---
@@ -415,7 +419,7 @@ clojure -M:test:test/pg :tenant --focus wagoe.tenant.core.membership-test       
 clojure -M:test:test/pg :tenant --focus wagoe.tenant.shell.service-test          # TenantService (mocked repo)
 clojure -M:test:test/pg :tenant --focus wagoe.tenant.shell.membership-service-test  # MembershipService
 clojure -M:test:test/pg :tenant --focus wagoe.tenant.shell.invite-service-test   # InviteService
-clojure -M:test:test/pg :tenant --focus wagoe.tenant.shell.persistence-test      # Contract tests (H2)
+clojure -M:test:test/pg :tenant --focus wagoe.tenant.shell.invite-persistence-test  # Invite persistence
 clojure -M:test:test/pg :tenant --focus wagoe.tenant.integration-test            # End-to-end flows
 ```
 
@@ -425,5 +429,4 @@ clojure -M:test:test/pg :tenant --focus wagoe.tenant.integration-test           
 
 - [Tenant Implementation How-to](../../docs/modules/guides/pages/multi-tenancy.adoc)
 - [Root AGENTS Guide](../../AGENTS.md)
-- [Platform AGENTS — tenant middleware](../platform/AGENTS.md)
 - [User AGENTS — auth interceptors](../user/AGENTS.md)

@@ -13,7 +13,10 @@ service, with job-backed reliable delivery and delivery analytics.
 | Namespace | Purpose
 
 | `wagoe.push.core.notification`
-| Pure: `defpush` macro, notification records, i18n locale maps
+| Pure: locale resolution and template rendering
+
+| `wagoe.push.shell.registry`
+| `defpush` macro and the definition registry
 
 | `wagoe.push.core.delivery`
 | Pure: delivery planning + error classification (retryable / permanent / token-invalid)
@@ -25,7 +28,7 @@ service, with job-backed reliable delivery and delivery analytics.
 | Pure: delivery analytics aggregation
 
 | `wagoe.push.ports`
-| Protocols: `IPushService`, `IFCMProvider`, `IAPNsProvider`
+| Protocols: `IPushService`, `IFCMProvider`, `IAPNsProvider`, `IDeviceTokenStore`, `IPushAnalyticsStore`
 
 | `wagoe.push.shell.service`
 | Orchestrator dispatching to platform providers
@@ -53,10 +56,12 @@ multi-tenant support.
 
 == Reliable delivery
 
-Delivery runs as jobs via a hard dependency on `wagoe-jobs`, so sends
-are retried according to each notification's retry configuration. Error
-classification decides whether a failure is retried, dropped, or marks
-the token invalid.
+`send-push!`, `schedule-push!` and `broadcast!` enqueue `:push/send` and
+`:push/broadcast` jobs, so the `:wagoe/jobs` module must be enabled; the
+handlers and queue are wired only then. Each device's result is recorded in
+`push_send_log`, and a token the provider reports invalid is deactivated.
+A failed send to one device is not retried; a job retries only when its
+handler throws.
 
 == Analytics
 
@@ -69,10 +74,14 @@ open events, recorded in `push_analytics_events`.
 |===
 | Endpoint | Purpose
 
-| `/api/push/devices` | Device token CRUD
-| `/api/push/callback` | HMAC-secured delivery/open analytics callback
-| `/api/push/stats/:id` | Per-notification delivery stats
+| `/api/push/devices` | Register and list the caller's device tokens
+| `/api/push/devices/:token` | Unregister one
+| `/api/push/callback` | HMAC-secured delivery/open analytics callback (public)
+| `/api/push/stats/:notification-id` | Per-notification delivery stats (`:push/read`)
 |===
+
+The `:wagoe.push/routes` component builds these routes, but the module
+contributes no `:routes`, so the platform does not mount them.
 
 == Database
 

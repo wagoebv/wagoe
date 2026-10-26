@@ -13,8 +13,10 @@ Infrastructure layer for HTTP routing/interceptors, database integration, CLI/ru
 | `wagoe.platform.shell.http.interceptors` | HTTP-specific interceptor pipeline execution |
 | `wagoe.platform.shell.interceptors` | Universal cross-cutting interceptors (logging, metrics, error) |
 | `wagoe.platform.shell.http.reitit-router` | Compiles module route contributions into the Ring handler |
-| `wagoe.platform.ports.http` | HTTP router and server protocols |
-| `wagoe.platform.db.*` | Database context, connection pooling, shared persistence utilities |
+| `wagoe.platform.ports.http` | `IHttpServer` protocol |
+| `wagoe.platform.database` | Data-access API for modules: queries, transactions, `upsert!` |
+| `wagoe.platform.ports.database` | `DBAdapter` and the per-engine capability protocols |
+| `wagoe.platform.shell.adapters.database.*` | Engine adapters (PostgreSQL, MySQL, SQLite, H2), connection pooling |
 | `wagoe.platform.lease` | A lease row replicas take turns holding, timed by the database clock (jobs ticker, outbox relay) |
 
 ---
@@ -56,10 +58,12 @@ From `wagoe.platform.shell.http.interceptors`:
 |-------------|-------|--------------|
 | `http-request-logging` | enter + leave | Logs request entry and completion with timing |
 | `http-request-metrics` | enter + leave | Collects timing and status code metrics |
+| `http-request-tracing` | enter + leave | One span per request on `:wagoe/tracing` (see `libs/observability/AGENTS.md`) |
+| `http-web-error-pages` | error | Renders an error page or htmx toast for `/web` callers |
 | `http-error-reporting` | error | Captures exceptions to error tracking service |
 | `http-correlation-header` | leave | Adds correlation ID to response headers |
 | `http-error-handler` | error | Converts `:type` in ex-data to HTTP status codes |
-| `http-security-headers` | leave | Adds CSP, HSTS, X-Frame-Options, etc. |
+| `(http-security-headers)` | leave | Adds CSP, HSTS, X-Frame-Options, etc.; takes optional header overrides |
 | `http-csrf-protection` | enter + leave | Validates CSRF tokens, issues tokens, mints pre-session cookie (see [CSRF Protection](#csrf-protection)) |
 | `http-rate-limit-protection` | enter + leave | Config-driven fixed-window rate limiting in the default stack; reads `(:rate-limit system)` + `(:cache system)`. Opt-in (default off). See [Rate Limiting](#rate-limiting) |
 | `http-rate-limit(limit, window-ms, cache?)` | enter + leave | Fixed-limit form for explicit per-route use / standalone wiring (Redis or in-process) |
@@ -413,10 +417,15 @@ as `:wagoe/rights` (under `:report` too; a platform admin's are not read).
 The platform library provides database context and connection pooling:
 
 ```clojure
-;; Integrant key: :wagoe/db-context
-;; Config in resources/conf/{env}/config.edn
-{:wagoe/db-context
- {:jdbc-url #env ["DATABASE_URL" "jdbc:h2:mem:dev;DB_CLOSE_DELAY=-1"]}}
+;; resources/conf/{env}/config.edn — the one database adapter key under :active
+;; (:wagoe/postgresql, :wagoe/mysql, :wagoe/sqlite or :wagoe/h2) becomes :wagoe/db-context
+:wagoe/postgresql
+{:host     #or [#env POSTGRES_HOST "localhost"]
+ :port     #long #or [#env POSTGRES_PORT 5432]
+ :dbname   #or [#env POSTGRES_DB "wagoe_dev"]
+ :user     #or [#env POSTGRES_USER "postgres"]
+ :password #env POSTGRES_PASSWORD
+ :pool     {:maximum-pool-size 10}}
 ```
 
 The `db-context` map is injected into services via Integrant:

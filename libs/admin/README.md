@@ -27,7 +27,7 @@ Auto-generated CRUD admin interface with database schema introspection, filterin
 | **Filtering** | Dynamic filter builder with multiple operators |
 | **Sorting** | Click-to-sort column headers |
 | **Pagination** | Built-in pagination for large datasets |
-| **Role-based Access** | Restrict access by user role |
+| **Access Control** | The `:admin` role, or per-entity read/write rights under `:enforce` |
 | **Field Ordering** | Configure preferred field order in forms |
 | **Field Grouping** | Group related fields with section headings |
 | **Soft Delete** | Mark records as deleted without removing from DB |
@@ -278,7 +278,7 @@ The admin UI auto-detects field types from the database schema. You can override
 
 ## Filter Operators
 
-When `:filterable true` is set on a field, the admin UI renders an "Add filter" control for that field. The following operators are supported:
+The filter offers each of the entity's `:list-fields` (every field when there are none) that is a table column, and its many-to-many relations. The following operators are supported:
 
 | Operator | Meaning |
 |----------|---------|
@@ -299,7 +299,7 @@ When `:filterable true` is set on a field, the admin UI renders an "Add filter" 
 
 For `:enum` and `:boolean` fields, the UI builds the filter UI automatically from `:options`. For `:instant` fields, a date-range filter is used.
 
-Fields with `:filterable false` (or not listed) are excluded from the filter dropdown. Use this for fields already covered by free-text search (`:search-fields`).
+Fields with `:filterable false`, or not in `:list-fields`, are excluded from the filter dropdown. Use this for fields already covered by free-text search (`:search-fields`).
 
 ---
 
@@ -346,11 +346,10 @@ The admin's `[:ui :currency]` is the default for money fields. In the REPL, `(ex
 If you register your Malli schemas with the admin schema provider, enum types and their options are **auto-detected** — you don't need to list `:options` manually in the `.edn` file.
 
 ```clojure
-;; In your Integrant config:
+;; Merged into the generated :wagoe/admin-schema-provider entry
+;; (which already carries :db-ctx and :config):
 :wagoe/admin-schema-provider
-{:db-ctx       (ig/ref :wagoe/database-context)
- :config       (ig/ref :wagoe/admin)
- :malli-schemas {:users wagoe.user.schema/User
+{:malli-schemas {:users wagoe.user.schema/User
                  :products myapp.product.schema/Product}}
 ```
 
@@ -371,7 +370,7 @@ A has-many restricts by default, configured or detected: while it has rows, dele
 
 With `:on-delete :cascade` on the entry, children follow their parent instead, in one transaction: a restrict anywhere below rolls back the whole delete. A hard delete removes them first, so the foreign key needs no `ON DELETE CASCADE`. A soft delete sets `deleted_at` on the children that have the column and leaves the others. Each removed row, children included, publishes its own `:admin/entity-deleted`.
 
-For entities using `:query-overrides`, set `:soft-delete-table` to tell the service which table to `UPDATE` on delete (defaults to the primary table in `:from`).
+For entities using `:query-overrides`, set `:soft-delete-table` to tell the service which table to `UPDATE` on delete (defaults to the entity's `:table-name`).
 
 ---
 
@@ -472,7 +471,7 @@ When entity data lives across multiple tables (e.g. `auth_users` + `users`), use
 - `:join` — optional, pairs of `[table condition]` (HoneySQL inner join)
 - `:select` — explicit column list; use qualified names (`table.column`) to avoid ambiguity
 - `:field-aliases` — map from kebab-case field name → qualified column reference; used for `WHERE`, `ORDER BY`, and soft-delete
-- `:soft-delete-table` — which table the `UPDATE … SET deleted_at = …` runs on (defaults to first table in `:from`)
+- `:soft-delete-table` — which table the `UPDATE … SET deleted_at = …` runs on (defaults to the entity's `:table-name`)
 - Updates and creates always target the actual entity table (`:table-name`), not the joined tables
 
 ---
@@ -567,42 +566,40 @@ Starting a workflow when an invoice is created in the admin:
 
 | Path | Method | Description |
 |------|--------|-------------|
-| `/web/admin` | GET | Dashboard |
+| `/web/admin/` | GET | Admin home (`/web/admin` redirects here) |
 | `/web/admin/:entity` | GET | List entities |
+| `/web/admin/:entity` | POST | Create entity |
 | `/web/admin/:entity/new` | GET | Create form |
-| `/web/admin/:entity/new` | POST | Create entity |
 | `/web/admin/:entity/new/rows/:child` | GET | One child row for the create form (HTMX) |
-| `/web/admin/:entity/:id` | GET | View entity detail |
-| `/web/admin/:entity/:id/edit` | GET | Edit form |
+| `/web/admin/:entity/:id` | GET | Detail/edit page |
 | `/web/admin/:entity/:id` | PUT | Update entity |
 | `/web/admin/:entity/:id` | DELETE | Delete entity |
+| `/web/admin/:entity/bulk-delete` | POST | Bulk delete |
+| `/web/admin/:entity/:id/:field` | PATCH | Inline edit of one field |
 
 ---
 
 ## Module Structure
 
 ```
-libs/admin/src/wagoe/
-├── admin/
-│   ├── core/
-│   │   ├── ui.clj                   # Admin UI rendering (tables, forms, layout)
-│   │   ├── schema_introspection.clj # Pure: DB type → field type mapping, config merging
-│   │   └── permissions.clj          # Pure: role/access checks
-│   ├── ports.clj                    # ISchemaProvider, IAdminService, IActionExecutor
-│   ├── schema.clj                   # Malli schemas for entity configs
-│   └── shell/
-│       ├── service.clj              # CRUD operations (list, get, create, update, delete)
-│       ├── http.clj                 # HTTP handlers and HTMX fragment endpoints
-│       ├── schema_repository.clj   # ISchemaProvider: DB metadata + config merging
-│       └── module_wiring.clj       # Integrant lifecycle
-└── shared/
-    └── ui/
-        └── core/
-            ├── components.clj       # Reusable UI components (buttons, badges, etc.)
-            ├── icons.clj            # Lucide icon definitions (50+)
-            ├── layout.clj           # Page layouts (admin-pilot-page-layout)
-            └── table.clj            # Data table component
+libs/admin/src/wagoe/admin/
+├── core/
+│   ├── ui.clj                   # Facade over ui/* (list, detail, filters, drawer, layout, cells)
+│   ├── display.clj              # Pure: display roles of the list overview (ADR-040)
+│   ├── forms.clj                # Pure: form parsing (child rows, links)
+│   ├── schema_introspection.clj # Pure: DB type → field type mapping, config merging
+│   └── permissions.clj          # Pure: role/access checks
+├── ports.clj                    # ISchemaProvider, IAdminService, IEntityWriter, ILinks, ...
+├── schema.clj                   # Malli schemas for entity configs
+└── shell/
+    ├── service.clj              # CRUD operations (list, get, create, update, delete)
+    ├── scoped_service.clj       # IAdminService limited to the user's scopes (:enforce)
+    ├── http.clj                 # Routes; handlers under http/handlers/
+    ├── schema_repository.clj    # ISchemaProvider: DB metadata + config merging
+    └── module_wiring.clj        # Integrant lifecycle
 ```
+
+Shared UI primitives (layout, icons, components) live in `libs/shared-ui`.
 
 ---
 

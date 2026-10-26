@@ -1,7 +1,7 @@
 = File Storage
 :description: Storing and retrieving files with local filesystem and S3 backends.
 
-The `storage` library provides file storage with local and S3 backends behind a unified protocol.
+The `storage` library provides file storage with local, S3 and Google Cloud Storage backends behind a unified protocol.
 
 == Basic operations
 
@@ -17,7 +17,7 @@ The `storage` library provides file storage with local and S3 backends behind a 
 
 ;; Retrieve a file
 (ports/retrieve-file storage "ab/1234-uuid-hash.txt")
-;=> {:bytes #bytes[...] :metadata {...}}
+;=> {:bytes #bytes[...] :content-type "text/plain" :size 12}
 
 ;; Check existence
 (ports/file-exists? storage "ab/1234-uuid-hash.txt")
@@ -25,7 +25,7 @@ The `storage` library provides file storage with local and S3 backends behind a 
 ;; Delete
 (ports/delete-file storage "ab/1234-uuid-hash.txt")
 
-;; Signed URL (S3 only; local returns public URL)
+;; Signed URL (local signs only with :signing-secret, else returns the public URL)
 (ports/generate-signed-url storage "ab/1234-uuid-hash.txt" 3600) ; expires in 1 hour
 ----
 
@@ -37,10 +37,12 @@ The `storage` library provides file storage with local and S3 backends behind a 
 
 ;; Validate before storing
 (validation/validate-file
-  {:bytes file-bytes :content-type "image/png" :filename "photo.png"}
-  {:max-size-bytes (* 5 1024 1024)  ; 5 MB
-   :allowed-types  #{"image/jpeg" "image/png" "image/webp"}
-   :allowed-exts   #{".jpg" ".jpeg" ".png" ".webp"}})
+  {:bytes file-bytes :content-type "image/png"}
+  {:filename "photo.png"}
+  {:max-size           (* 5 1024 1024)  ; 5 MB; default 10 MB
+   :allowed-types      #{"image/jpeg" "image/png" "image/webp"}
+   :allowed-extensions #{"jpg" "jpeg" "png" "webp"}})
+;=> {:valid? true :data {...}} or {:valid? false :errors [...]}
 ----
 
 == Image processing
@@ -49,41 +51,40 @@ The `storage` library provides file storage with local and S3 backends behind a 
 ----
 (require '[wagoe.storage.ports :as ports])
 
-;; Resize image
-(ports/resize-image image-processor file-bytes
-                    {:width 800 :height 600 :maintain-aspect? true})
+;; Resize image; give one dimension to keep the aspect ratio
+(ports/resize-image image-processor file-bytes {:width 800})
 
-;; Create thumbnail
-(ports/create-thumbnail image-processor file-bytes
-                        {:width 150 :height 150})
+;; Create thumbnail: the longest side becomes 150 px
+(ports/create-thumbnail image-processor file-bytes 150)
 ----
 
 == Integrant configuration
 
 [source,clojure]
 ----
-;; Local filesystem (development)
+;; Local filesystem (development); :provider defaults to :local
 :wagoe/storage
-{:backend   :local
- :base-path "/var/app/uploads"
- :base-url  "http://localhost:3000/uploads"}
+{:provider       :local
+ :root           "/var/app/uploads"          ; or :base-path
+ :url-base       "http://localhost:3000/api/v1/storage"
+ :signing-secret #env STORAGE_SIGNING_SECRET}
 
 ;; AWS S3 (production)
 :wagoe/storage
-{:backend    :s3
+{:provider   :s3
  :bucket     #env AWS_S3_BUCKET
  :region     #env AWS_REGION
- :access-key #env AWS_ACCESS_KEY_ID
- :secret-key #env AWS_SECRET_ACCESS_KEY}
+ :access-key #env AWS_ACCESS_KEY_ID          ; omit both for the default
+ :secret-key #env AWS_SECRET_ACCESS_KEY}     ; AWS credentials
 ----
 
 == Storage key format
 
-Files are stored with content-addressed keys:
+Keys are generated:
 
-* *Local*: `+{shard}/{timestamp}-{uuid}-{hash16}.{ext}+` where shard = first 2 chars of SHA-256
-* *S3*: `+{prefix}/{timestamp}-{uuid}-{hash16}.{ext}+`
+* *Local*: `+{shard}/{timestamp}-{uuid}-{hash16}.{ext}+` where shard = first 2 chars of the content's SHA-256, or `+{path}/{filename}+` when the caller names a `:path`
+* *S3*: `+{prefix}/{timestamp}-{uuid8}.{ext}+`
 
-The SHA-256 hash prevents duplicate storage for identical files.
+The UUID makes every key unique, so storing the same file twice stores it twice.
 
 See xref:libraries:storage.adoc[storage library] for the full reference.

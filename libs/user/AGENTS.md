@@ -40,15 +40,16 @@ Reference:
 
 ## Authentication Flow
 
-### Register → Login → Use Token → Logout
+### Create → Login → Use Token → Logout
 
 ```bash
-# 1. Register
+# 1. Create a user — admin only; self-service sign-up is /web/register
 curl -X POST http://localhost:3000/api/v1/users \
+  -H "Authorization: Bearer <admin jwtToken>" \
   -H "Content-Type: application/json" \
   -d '{"email": "user@example.com", "password": "SecurePass123!", "role": "user"}'
 
-# 2. Login — returns jwtToken. Wrong credentials answer 401, a locked
+# 2. Login — returns sessionToken and jwtToken. Wrong credentials answer 401, a locked
 #    account 429 with Retry-After; 200 with requiresMfa means resend with mfaCode.
 curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
@@ -58,16 +59,15 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 curl -H "Authorization: Bearer <jwtToken>" \
   http://localhost:3000/api/v1/users
 
-# 4. Logout (invalidates session)
-curl -X POST http://localhost:3000/api/v1/auth/logout \
-  -H "Authorization: Bearer <jwtToken>"
+# 4. Logout (invalidates the session; a JWT stays valid until it expires)
+curl -X DELETE http://localhost:3000/api/v1/sessions/<sessionToken>
 ```
 
 ### Token model — DB sessions are canonical
 
 The module carries **two** token mechanisms; know which you are using:
 
-- **DB-backed session tokens** (`wagoe.user.shell.middleware/validate-session`)
+- **DB-backed session tokens** (`wagoe.user.shell.middleware/session-authentication-middleware`)
   are the **canonical, horizontally-safe** mechanism. They are stored, so they
   can be **revoked immediately** (logout, `invalidate-session`,
   `invalidate-all-user-sessions`) and any replica validates them against the DB.
@@ -227,9 +227,10 @@ JWT tokens are issued on login and validated on each request:
 export JWT_SECRET="dev-secret-at-least-32-characters-long-here"
 
 ;; Token structure (decoded)
-{:user-id  uuid
+{:sub      string  ; the user id
  :email    string
  :role     string
+ :iat      unix-timestamp
  :exp      unix-timestamp}
 ```
 
@@ -249,26 +250,26 @@ A database error while reading a session or a token's user is a 500, not a 401: 
 
 ```bash
 # Step 1: Generate TOTP secret and QR code
-curl -X POST http://localhost:3000/api/auth/mfa/setup \
+curl -X POST http://localhost:3000/api/v1/auth/mfa/setup \
   -H "Authorization: Bearer <token>"
 # Returns: {secret, qrCodeUrl, backupCodes}
 
 # Step 2: Scan QR with Google Authenticator / Authy
 
 # Step 3: Enable MFA with verification code
-curl -X POST http://localhost:3000/api/auth/mfa/enable \
+curl -X POST http://localhost:3000/api/v1/auth/mfa/enable \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{"secret": "...", "verificationCode": "123456"}'
+  -d '{"secret": "...", "backupCodes": ["..."], "verificationCode": "123456"}'
 ```
 
 ### Login with MFA Enabled
 
 ```bash
-# Include mfa-code in login request
-curl -X POST http://localhost:3000/api/auth/login \
+# Include mfaCode in login request
+curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email": "user@example.com", "password": "...", "mfa-code": "123456"}'
+  -d '{"email": "user@example.com", "password": "...", "mfaCode": "123456"}'
 ```
 
 ### Deciding Per Login
@@ -284,9 +285,9 @@ Do not waive MFA by making the repository report `:mfa-enabled false`: login wri
 Generated on MFA setup. Each code is single-use. Use when the authenticator app is unavailable:
 
 ```bash
-curl -X POST http://localhost:3000/api/auth/login \
+curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email": "user@example.com", "password": "...", "mfa-code": "BACKUP-CODE"}'
+  -d '{"email": "user@example.com", "password": "...", "mfaCode": "BACKUP-CODE"}'
 ```
 
 **Details**: See [MFA Setup Guide](../../docs/modules/guides/pages/authentication.adoc) for complete MFA setup guide

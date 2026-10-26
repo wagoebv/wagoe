@@ -21,12 +21,14 @@ Requires [Babashka](https://babashka.org) and [bbin](https://github.com/babashka
 
 | Command | Description |
 |---------|-------------|
-| `wagoe new <project-name>` | Create a new Wagoe project (full FC/IS template: `src/wagoe/system_config.clj`, `src/<project>/system.clj`, `deps.edn`, `bb.edn`, `.env`, tests, git hooks) |
+| `wagoe new <project-name>` | Create a new Wagoe project (full FC/IS template: `src/<project>/system_config.clj`, `src/<project>/system.clj`, `deps.edn`, `bb.edn`, `.env`, tests, git hooks) |
 | `wagoe add <module>` | Add a framework module (payments, tenant, admin, …) to the current project — patches `deps.edn`, config, and the AGENTS.md module table |
-| `wagoe list` | List the available modules from the module catalogue |
+| `wagoe list modules [--json]` | List the available modules from the module catalogue |
+| `wagoe doctor` | Check the project and name the next thing to do |
 | `wagoe agents update [--check] [--modules]` | Re-sync the project's `AGENTS.md` installed-modules table with what is actually installed (`--check` verifies without writing; `--modules` touches only the module blocks, as `bb setup` runs it) |
 | `wagoe upgrade [--dry-run \| --apply]` | Rewrite deprecated config values, keys and names after a Wagoe upgrade (prints a diff unless `--apply`) |
 | `wagoe upgrade authorization check\|prepare\|report\|enforce` | Move the app from `:wagoe/authorization :off` to `:enforce`, naming each user who would lose access (`bb upgrade` in an app) |
+| `wagoe version` | Show the CLI version |
 
 ## Quick Start
 
@@ -41,7 +43,7 @@ wagoe add tenant
 
 # Boot it (JWT_SECRET is generated into .env by `wagoe new`)
 source .env
-clojure -M:repl-clj
+bb repl
 ```
 
 Projects created with `wagoe new` are agent-ready out of the box: they ship a

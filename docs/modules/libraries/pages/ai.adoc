@@ -79,8 +79,9 @@ probe whether Ollama is running.
 
 == Provider strategy
 
-Offline-first by default: uses Ollama (no data leaves the machine).
-Falls back to cloud providers if configured:
+`:provider` is required; the service refuses to start without one. Ollama
+keeps data on the machine. A `:fallback` provider answers when the primary
+fails:
 
 [source,clojure]
 ----
@@ -105,7 +106,11 @@ Falls back to cloud providers if configured:
               :api-key  #env ANTHROPIC_API_KEY}}
 ----
 
-CLI provider resolution order: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `OLLAMA_URL`.
+The `bb ai` commands use `:wagoe/ai-service` from the active config when it
+names a provider other than `:no-op`. Otherwise the first variable set picks:
+`ANTHROPIC_API_KEY` → `OPENAI_BASE_URL` (an OpenAI-compatible endpoint) →
+`OPENAI_API_KEY` → `REPLICATE_API_TOKEN` → `OLLAMA_URL`, then Ollama on
+`localhost:11434`. `AI_MODEL` overrides the model.
 
 == Key namespaces
 
@@ -141,6 +146,10 @@ CLI provider resolution order: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `OLL
 | shell
 | OpenAI API adapter
 
+| `wagoe.ai.shell.providers.replicate`
+| shell
+| Replicate API adapter
+
 | `wagoe.ai.shell.providers.no-op`
 | shell
 | Test stub
@@ -161,7 +170,7 @@ CLI provider resolution order: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `OLL
 (require '[wagoe.ai.shell.repl :as ai])
 
 ;; Bind a service
-(ai/set-service! (create-service-from-config))
+(ai/set-service! (integrant.repl.state/system :wagoe/ai-service))
 
 ;; Use helpers
 (ai/explain "ClassNotFoundException: wagoe.user.core.user")

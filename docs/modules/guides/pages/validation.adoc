@@ -65,8 +65,11 @@ Validation always happens in the shell, never in core.
 ----
 (require '[wagoe.core.validation.coverage :as coverage])
 
-;; Report which fields are validated vs. unvalidated
-(coverage/report UserInput)
+;; Which registered validation rules the tests executed; pure, you pass both sets
+(-> (coverage/compute {:registered #{:user.email/required :user.name/required}
+                       :executed   #{:user.email/required}})
+    (coverage/human-report {}))
+;=> "Coverage: 50.0% (1/2) ..."
 ----
 
 == Snapshot testing for validation
@@ -94,14 +97,14 @@ UPDATE_SNAPSHOTS=true clojure -M:test:test/all --focus user-validation-snapshot-
 | `:int`
 | `[:int {:min 0}]`
 
-| `:decimal`
-| `:decimal` (for money/prices)
+| `decimal?`
+| `decimal?` (for money/prices; JSON needs a decoder to `BigDecimal`)
 
 | `:uuid`
 | `:uuid`
 
 | `inst?`
-| `:inst?` (timestamps)
+| `inst?` (timestamps)
 
 | Optional field
 | `[:name {:optional true} :string]`

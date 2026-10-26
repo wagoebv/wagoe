@@ -11,7 +11,7 @@ Provides in-memory (development/tests) and Redis (production) backends.
 | Namespace | Purpose
 
 | `wagoe.cache.ports`
-| Protocols: `ICache`, `IBatchCache`, `IAtomicCache`, `IPatternCache`, `INamespacedCache`, `ICacheStats`
+| Protocols: `ICache`, `IBatchCache`, `IAtomicCache`, `IPatternCache`, `INamespacedCache`, `ICacheStats`, `ICacheManagement`
 
 | `wagoe.cache.schema`
 | Malli schemas for `CacheKey`, `CacheValue`, `TTL`, `CacheConfig`, `RedisConfig`
@@ -20,7 +20,7 @@ Provides in-memory (development/tests) and Redis (production) backends.
 | In-memory adapter (atoms, LRU eviction, TTL)
 
 | `wagoe.cache.shell.adapters.redis`
-| Redis adapter (Jedis, connection pooling, JSON serialization)
+| Redis adapter (Jedis, connection pooling, Nippy serialization)
 
 | `wagoe.cache.shell.tenant-cache`
 | Tenant-scoped wrapper with automatic key prefixing
@@ -39,7 +39,7 @@ Provides in-memory (development/tests) and Redis (production) backends.
 ;; Basic operations
 (ports/set-value! cache :user-123 {:name "Alice"} 3600)  ; TTL in seconds
 (ports/get-value cache :user-123)
-(ports/delete-value! cache :user-123)
+(ports/delete-key! cache :user-123)
 
 ;; Atomic operations
 (ports/increment! cache :counter)
@@ -55,14 +55,13 @@ Provides in-memory (development/tests) and Redis (production) backends.
 
 * Keys can be strings or keywords; internally converted to strings
 * TTL is in seconds; `nil` from `ttl()` means no expiration
-* In-memory stores Clojure values as-is; Redis uses JSON serialization
+* In-memory stores Clojure values as-is; Redis stores integers natively (so `increment!` works) and everything else with Nippy
 * `flush-all!` on a tenant cache only deletes that tenant's keys (safe)
 
 == Important notes
 
 * Pattern matching is O(n) for in-memory (regex scan); Redis uses cursor-based SCAN
-* Redis adapter uses JSON — Java objects and Clojure functions cannot be stored
-* Do not share an OSM geo-adapter across threads (rate-limiting atom is per-instance)
+* Redis adapter uses Nippy — keywords, sets and `java.time` values round-trip; functions cannot be stored. An entry Nippy cannot read is a cache miss
 
 == Integrant configuration
 

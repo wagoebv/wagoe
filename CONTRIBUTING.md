@@ -81,7 +81,7 @@ Wagoe follows strict architectural principles:
 
 When adding new functionality:
 
-1. **Choose appropriate module** (user, billing, workflow) or create new one
+1. **Choose appropriate module** (user, payments, workflow) or create new one
 2. **Start with core functions** - implement pure business logic
 3. **Define ports** if external capabilities needed
 4. **Implement adapters** for concrete implementations  
@@ -181,22 +181,22 @@ bb scaffold ai "product module with name, price"    # AI-assisted (with confirma
 bb scaffold ai "product module with name, price" --yes  # AI-assisted (non-interactive)
 ```
 
-This generates the standard library structure under `libs/{module}/`:
+This writes the module, its tests and its migration under `src/wagoe/{module}/`,
+`test/` and `migrations/` of the directory you run it in, not under `libs/`:
 
 ```
-libs/new-module/
-└── src/wagoe/new-module/
-    ├── core/           # Pure business logic
-    ├── ports.clj       # Abstract interfaces
-    ├── schema.clj      # Domain schemas
-    └── shell/          # Shell orchestration (persistence, service, http, cli)
+src/wagoe/new-module/
+├── core/           # Pure business logic
+├── ports.clj       # Abstract interfaces
+├── schema.clj      # Domain schemas
+└── shell/          # persistence, service, http, web handlers, module wiring
 ```
 
-Manual steps after scaffolding:
+A new framework library under `libs/` is set up by hand. Once it exists:
 
-1. **Update AGENTS.md**: Add to module examples and structure section
-2. **Update `tests.edn`**: Add a test suite entry for the new library
-3. **Add tests**: Create corresponding test structure under `libs/{module}/test/`
+1. **Update the root `deps.edn` and `tests.edn`**: its paths and a test suite entry
+2. **Update CI**: see "Adding a New Library to CI" in [AGENTS.md](./AGENTS.md)
+3. **Add it to `modules-catalogue.edn`** and run `bb agents:gen`
 4. **Update documentation**: Reference in architecture docs if applicable
 
 ### 🔌 **Port and Adapter Development**
@@ -204,7 +204,7 @@ Manual steps after scaffolding:
 When adding new external integrations:
 
 1. **Define port (abstract interface)** in appropriate module's `ports.clj`
-2. **Implement adapter** in `shell/adapters.clj` 
+2. **Implement adapter** under `shell/adapters/`
 3. **Add configuration** for the new adapter
 4. **Create mock implementation** for testing
 5. **Update system wiring** to inject the adapter

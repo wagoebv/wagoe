@@ -14,9 +14,12 @@ Provides permission-based transitions, automatic audit trails, and optional side
 | Malli schemas: `WorkflowDefinition`, `WorkflowInstance`, `AuditEntry`
 
 | `wagoe.workflow.ports`
-| Protocols: `IWorkflowStore`, `IWorkflowEngine`, `IWorkflowRegistry`
+| Protocols: `IWorkflowStore`, `ITransactionalWorkflowStore`, `IWorkflowEngine`, `IWorkflowRegistry`
 
 | `wagoe.workflow.core.machine`
+| Pure introspection of a definition: states, initial state, transitions
+
+| `wagoe.workflow.shell.registry`
 | `defworkflow` macro, in-process definition registry
 
 | `wagoe.workflow.core.transitions`

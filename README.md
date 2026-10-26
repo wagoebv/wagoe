@@ -7,7 +7,7 @@
 
 **Wagoe** is a batteries-included Clojure web framework that enforces the **Functional Core / Imperative Shell (FC/IS)** pattern: pure business logic in `core/`, side effects in `shell/`, and clean interfaces through `ports.clj` protocols.
 
-**Status: 1.0.0, stable.** The public surface follows Semantic Versioning: a breaking change needs a major version, after a deprecation of at least one minor release and 90 days. A few libraries are *incubating* — usable, outside that guarantee, and marked as such in `wagoe list modules`. See [Stability](https://wagoe.org/docs/stability.html).
+**Status: 1.0.1, stable.** The public surface follows Semantic Versioning: a breaking change needs a major version, after a deprecation of at least one minor release and 90 days. A few libraries are *incubating* — usable, outside that guarantee, and marked as such in `wagoe list modules`. See [Stability](https://wagoe.org/docs/stability.html).
 
 Questions go to [GitHub Discussions](https://github.com/wagoebv/wagoe/discussions); bugs and feature requests to [Issues](https://github.com/wagoebv/wagoe/issues/new/choose).
 
@@ -27,7 +27,7 @@ Fallback if `get.wagoe.org` is unavailable:
 curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
 ```
 
-Supports macOS, Debian/Ubuntu, Arch Linux, and WSL2.
+Supports macOS, Debian/Ubuntu, Fedora/RHEL, Arch Linux, and WSL2.
 
 ## Quick Start
 
@@ -44,7 +44,7 @@ wagoe list modules    # see all optional modules
 bb migrate up
 
 # 4. Start the REPL (prompt + nREPL server on port 7888)
-export JWT_SECRET="change-me-dev-secret-min-32-chars"
+source .env    # wagoe new wrote it, with a generated JWT_SECRET
 bb repl
 ```
 
@@ -62,7 +62,7 @@ You get: SQLite database (zero-config, and your data survives a restart), HTTP s
 
 ```bash
 wagoe doctor      # checks the project and prints the one thing to fix
-bb guide          # topic guides: scaffold, testing, database, fcis, config
+bb guide          # topic guides: scaffold, testing, database, fcis, config, seed
 bb guide error WGE-201   # what an error code means and how to fix it
 ```
 
@@ -138,14 +138,14 @@ Wagoe is a monorepo of **33 independently publishable libraries**, application a
 | [platform](libs/platform/) | HTTP, database, CLI infrastructure |
 | [user](libs/user/) | Authentication, authorization, MFA, session management |
 | [admin](libs/admin/) | Auto-generated CRUD admin UI (Hiccup + HTMX) |
-| [storage](libs/storage/) | File storage: local filesystem and S3 |
+| [storage](libs/storage/) | File storage: local filesystem, S3 and GCS |
 | [scaffolder](libs/scaffolder/) | Interactive module code generator |
 | [cache](libs/cache/) | Distributed caching: Redis and in-memory |
 | [jobs](libs/jobs/) | Background job processing with retry logic |
 | [email](libs/email/) | Email delivery: SMTP, async, jobs integration |
 | [tenant](libs/tenant/) | Multi-tenancy with PostgreSQL schema-per-tenant isolation |
 | [realtime](libs/realtime/) | WebSocket / SSE for real-time features |
-| [external](libs/external/) | External service adapters: Twilio, IMAP |
+| [external](libs/external/) | External service adapters: SMTP, IMAP, Twilio, FTPS, SOAP |
 | [payments](libs/payments/) | Payment provider abstraction: Stripe, Mollie, Mock |
 | [reports](libs/reports/) | PDF, Excel, and Word (DOCX) generation via `defreport` |
 | [calendar](libs/calendar/) | Recurring events, iCal export/import, conflict detection |
@@ -161,7 +161,7 @@ Wagoe is a monorepo of **33 independently publishable libraries**, application a
 | [shared-ui](libs/shared-ui/) | Shared Hiccup primitives: forms, tables, layouts, modals, icons |
 | [devtools](libs/devtools/) | Dev-only: error pipeline, dev dashboard, REPL power tools, guidance engine |
 | [tools](libs/tools/) | Dev-only: deploy, doctor, setup, scaffolder integration, quality checks |
-| [wagoe-cli](libs/wagoe-cli/) | The `wagoe` command: `new`, `add`, `list modules` |
+| [wagoe-cli](libs/wagoe-cli/) | The `wagoe` command: `new`, `add`, `list modules`, `doctor`, `upgrade` |
 | [wagoe-mcp](libs/wagoe-mcp/) | MCP server over stdio for editor agents |
 
 ---
@@ -267,7 +267,7 @@ WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test
 
 ## Quality Gates
 
-Six automated safeguards run in CI to catch regressions early. The FC/IS check also runs as a pre-commit hook.
+`bb check` runs every quality gate CI runs; the FC/IS and ports checks also run as a pre-commit hook. A few of them:
 
 ```bash
 bb check:fcis                    # Core namespaces must not import shell, I/O, logging, or DB
@@ -282,7 +282,7 @@ See [ADR-021](./dev-docs/adr/ADR-021-fcis-boundary-rules.adoc) (FC/IS rules) and
 
 ## Releasing a New Version
 
-The version appears in 104 locations — 59 in source, 45 in documentation.
+The version appears in 136 locations — 73 in source, 63 in documentation.
 `bb check:versions` is the list, and `bb bump` is the way to change it.
 
 **1. Bump:**
@@ -297,7 +297,7 @@ prints a `git diff --stat`, and finishes by verifying the result against the
 version it just wrote. Re-running it is a no-op.
 
 Give the plain version, not the tag: `1.0.1`, not `v1.0.1`. It
-refuses a leading `v` rather than writing it into 104 places, where every
+refuses a leading `v` rather than writing it into 136 places, where every
 location would then agree and the check would pass on it.
 
 **2. Verify and commit:**

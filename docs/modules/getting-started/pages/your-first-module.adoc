@@ -37,7 +37,7 @@ test/<your-project>/product/   ← a test namespace per layer
 
 The module lives under your project's namespace, not under `wagoe` — it is your
 code. The key that switches it on is `:wagoe/product`, beside `:wagoe/http` and
-`:wagoe/h2`: the namespace says whose code it is, the key names the module to
+`:wagoe/sqlite`: the namespace says whose code it is, the key names the module to
 the framework.
 
 Then activate it:
@@ -68,7 +68,7 @@ Two shapes: the entity as it is stored, and what an API request may contain.
    [:id :uuid]
    [:name :string]
    [:sku :string]
-   [:price {:optional true} :double]
+   [:price {:optional true} decimal?]
    [:created-at inst?]
    [:updated-at {:optional true} [:maybe inst?]]
    [:deleted-at {:optional true} [:maybe inst?]]])
@@ -78,7 +78,7 @@ Two shapes: the entity as it is stored, and what an API request may contain.
   [:map {:title "Create Product Request"}
    [:name :string]
    [:sku :string]
-   [:price {:optional true} :double]])
+   [:price {:optional true} decimal?]])
 ----
 
 The generator infers types from your `--field` flags and stops there. Bounds and
