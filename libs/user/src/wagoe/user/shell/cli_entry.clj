@@ -14,15 +14,24 @@
             [wagoe.user.shell.auth :as user-auth]
             [wagoe.user.shell.mfa :as user-mfa]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
-            [wagoe.observability.logging.shell.adapters.no-op :as no-op-logging]
+            [wagoe.platform.shell.system.wiring]
             [wagoe.observability.metrics.shell.adapters.no-op :as no-op-metrics]
-            [wagoe.observability.errors.shell.adapters.no-op :as no-op-error-reporting]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log]
+            [integrant.core :as ig]))
 
 (def ^:dynamic *exit!*
   "Terminates the process with `code`. Indirection so tests can observe the exit
    code -main asks for instead of killing the test JVM."
   (fn [code] (System/exit code)))
+
+(defn cli-observability
+  "What the CLI's user service logs and reports through: the configured
+   `:wagoe/logging` and `:wagoe/error-reporting`, built as the system builds
+   them. Metrics are a no-op: the process exits before anything collects them."
+  [cfg]
+  {:logger          (ig/init-key :wagoe/logging (config/logging-config cfg))
+   :metrics-emitter (no-op-metrics/create-metrics-emitter nil)
+   :error-reporter  (ig/init-key :wagoe/error-reporting (config/error-reporting-config cfg))})
 
 (defn run-cli!
   "Run the user module CLI for the given command-line arguments.
@@ -48,12 +57,6 @@
                 session-repo (user-persistence/create-session-repository db-ctx)
                 audit-repo (user-persistence/create-audit-repository db-ctx pagination-cfg)
 
-                ;; Create no-op observability services for CLI
-                ;; (available for future use if needed)
-                _logger (no-op-logging/create-no-op-logger nil)
-                _metrics (no-op-metrics/create-metrics-emitter nil)
-                _error-reporter (no-op-error-reporting/create-error-reporter nil)
-
                 ;; Validation and auth configuration
                 validation-cfg (config/user-validation-config cfg)
                 auth-cfg (get-in cfg [:active :wagoe/user :auth] {})
@@ -67,7 +70,8 @@
 
                 ;; Create user service with full dependencies
                 user-svc (user-service/create-user-service
-                          user-repo session-repo audit-repo validation-cfg auth-svc)
+                          user-repo session-repo audit-repo validation-cfg auth-svc
+                          (cli-observability cfg))
 
                 ;; Dispatch CLI commands and capture exit status
                 status (user-cli/run-cli! user-svc args)]

@@ -27,6 +27,7 @@
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.service-interceptors :as service-interceptors]
+            [wagoe.observability.core.sql-redaction :as redaction]
             [clojure.string :as str]
             [clojure.tools.logging :as log])
   (:import (java.security SecureRandom)
@@ -203,6 +204,12 @@
         (.invalidate-all-user-sessions session-repository user-id))
       out)))
 
+(defn- warn-audit-failed
+  "With the stack, which the message alone left out; redacted, since a driver's
+   message can quote the values sent."
+  [e]
+  (log/warn (redaction/redacted-exception e) "Failed to create audit log"))
+
 (defn- audit-quietly!
   "Record `entry-fn`'s audit entry for `user-id`; a failed write warns and does
    not undo the change."
@@ -212,7 +219,7 @@
       (.create-audit-log audit-repository
                          (entry-fn actor-id actor-email user-id email ip-address user-agent)))
     (catch Exception e
-      (log/warn "Failed to create audit log:" (.getMessage e)))))
+      (warn-audit-failed e))))
 
 (defn- existing-user [user-repository user-id]
   (or (.find-user-by-id user-repository user-id)
@@ -355,7 +362,7 @@
                                               nil)) ; user-agent (extract from request context if available)
                           (catch Exception e
                             ;; Log audit failure but don't fail the operation
-                            (log/warn "Failed to create audit log:" (.getMessage e))))
+                            (warn-audit-failed e)))
 
                         ;; Remove sensitive data before returning
                         (dissoc created-user :password-hash))))
@@ -811,7 +818,7 @@
                                 user-agent)]
                (.create-audit-log audit-repository audit-entry))
              (catch Exception e
-               (log/warn "Failed to create audit log for password change:" (.getMessage e))))
+               (warn-audit-failed e)))
 
            ;; Return success
            true)))
@@ -909,14 +916,19 @@
      audit-repository: Implementation of IUserAuditRepository
      validation-config: Map containing validation policies and settings
      auth-service: Implementation of IAuthenticationService
+     observability: Optional {:logger :metrics-emitter :error-reporter}; each
+                    operation logs, counts and reports through what it holds
 
    Returns:
      UserService instance
 
    Example:
      (def service (create-user-service user-repo session-repo audit-repo validation-cfg auth-svc))"
-  [user-repository session-repository audit-repository validation-config auth-service]
-  (->UserService user-repository session-repository audit-repository validation-config auth-service))
+  ([user-repository session-repository audit-repository validation-config auth-service]
+   (->UserService user-repository session-repository audit-repository validation-config auth-service))
+  ([user-repository session-repository audit-repository validation-config auth-service observability]
+   (merge (->UserService user-repository session-repository audit-repository validation-config auth-service)
+          observability)))
 
 (defn interceptor-system
   "The interceptor :system for a user HTTP or CLI handler."

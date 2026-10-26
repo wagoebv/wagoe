@@ -43,20 +43,20 @@ Add to your `resources/conf/{env}/config.edn`:
 {:provider   :openstreetmap
  :user-agent "MyApp/1.0 (contact@example.com)"
  :cache-ttl  86400
- :db-ctx     #ig/ref :wagoe/db-context}
+ :cache?     true}
 
 ;; PDOK Locatieserver (Dutch addresses from postcode + house number, no key)
 :wagoe/geo-service
 {:provider  :pdok
  :cache-ttl 86400
- :db-ctx    #ig/ref :wagoe/db-context}
+ :cache?    true}
 
 ;; Google Maps with DB cache
 :wagoe/geo-service
 {:provider  :google
  :api-key   #env WAG_GEO_API_KEY
  :cache-ttl 86400
- :db-ctx    #ig/ref :wagoe/db-context}
+ :cache?    true}
 
 ;; Fallback chain: try OSM first, fall back to Google
 :wagoe/geo-service
@@ -64,8 +64,12 @@ Add to your `resources/conf/{env}/config.edn`:
  :api-key    #env WAG_GEO_API_KEY
  :cache-ttl  86400
  :rate-limit 1
- :db-ctx     #ig/ref :wagoe/db-context}
+ :cache?     true}
 ```
+
+`:cache? true` caches lookups in `geo_cache` through `:wagoe/db-context`, which the
+module wires itself; run the migration first. A config that does not match
+`wagoe.geo.schema/GeoConfig` fails at boot.
 
 Require the wiring namespace in your system config loader:
 ```clojure

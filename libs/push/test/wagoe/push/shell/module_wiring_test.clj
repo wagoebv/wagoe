@@ -75,3 +75,14 @@
       (is (= (not= "s3cret" secret)
              (log-test/logged? 'wagoe.push.shell.module-wiring :warn #"callback-secret"))
           (pr-str secret)))))
+
+(deftest ^:unit stores-take-the-db-context-as-db-ctx
+  (let [components (:components (wiring/ig-config {} {}))]
+    (is (= {:db-ctx (ig/ref :wagoe/db-context)} (:wagoe.push/device-store components)))
+    (is (= {:db-ctx (ig/ref :wagoe/db-context)} (:wagoe.push/analytics-store components))))
+  (log-test/with-log
+    (is (= :ctx (:db (ig/init-key :wagoe.push/device-store {:db-ctx :ctx}))))
+    (is (not (log-test/logged? 'wagoe.push.shell.module-wiring :warn #"DEPRECATED"))))
+  (log-test/with-log
+    (is (= :ctx (:db (ig/init-key :wagoe.push/analytics-store {:db :ctx}))) "the deprecated :db still works")
+    (is (log-test/logged? 'wagoe.push.shell.module-wiring :warn #"DEPRECATED :wagoe.push/analytics-store :db.*2\.0"))))

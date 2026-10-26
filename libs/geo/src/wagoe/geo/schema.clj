@@ -60,8 +60,9 @@
   [:map
    [:provider   [:or :keyword [:vector :keyword]]]  ; single or fallback chain
    [:cache-ttl  {:optional true} :int]              ; cache TTL in seconds
-   [:rate-limit {:optional true} :int]              ; requests per second
+   [:rate-limit {:optional true} [:and number? pos?]]  ; requests per second
    [:timeout-ms {:optional true} :int]              ; connect and read timeout per call
+   [:cache?     {:optional true} :boolean]          ; wire :wagoe/db-context for the cache
    [:api-key    {:optional true} [:maybe :string]]  ; nil for OSM
    [:db-ctx     {:optional true} [:map [:datasource some?]]]  ; :wagoe/db-context
    [:db         {:optional true} :any]])            ; deprecated: a datasource; goes in 2.0

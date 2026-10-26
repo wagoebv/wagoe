@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Geo `:cache? true`** (BOU-847): the module wires `:wagoe/db-context` for its cache itself, and a config that does
+  not match `GeoConfig` fails at boot, naming the keys. Use it in place of `:db-ctx #ig/ref :wagoe/db-context`.
 - **A handler reuses the rights the authorization middleware read** (BOU-837): they ride on the request as
   `:wagoe/rights`, and `shell.authorization/request-rights` resolves those of any permission, reading only when the
   middleware did not. One `IRights` read per request on a `:permission` route.
@@ -225,6 +227,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Service operations log their start and completion at debug** (BOU-847): the HTTP or CLI handler around them logs
+  both at info. Set the `wagoe` logger to `:debug` to see them.
 - **`default-admin-config` drops `:require-role`, and `AdminConfig` makes it optional** (BOU-842). An admin config
   without it validates; nothing to change.
 - **Admin CSS without `!important` fights or `legacy.css`** (BOU-821): 6 `!important` left; `tailwind/admin/legacy.css`
@@ -283,6 +287,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Deprecated
 
+- **`wagoe.push.schema/valid-device-info?`, `valid-callback?`, and `:db` on the push stores** (BOU-847): the routes
+  declare the schemas, and the stores take `:db-ctx`. All go in 2.0.
 - **`:wagoe.push/routes`** (BOU-838): the module mounts push itself; an app that mounts the vector by hand keeps
   `/api/push` too; goes in 2.0. Drop it from your wiring.
 - **`wagoe.platform.shell.database.migrations/create-config`** (BOU-813): `create-migration` no longer calls
@@ -322,6 +328,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`GET /api/v1/push/devices/:token` takes `?app-id=`** (BOU-847), and a registration's `Location` carries it. A token
+  under two app-ids answers 409 without it; a token with `/` gets no `Location`.
+- **User CLI commands log and report through `:wagoe/logging` and `:wagoe/error-reporting`** (BOU-847). A failed
+  user audit write logs its stack trace.
+- **`:dashboard-extra-cards` warns when the admin module is off, names a non-collection at boot, and has a heading**
+  (BOU-847).
 - **Push registration's `Location` names `GET /api/v1/push/devices/:token`, a route that now exists** (BOU-845).
   Push bodies are declared, so they appear in `/openapi.json` and a bad one gets the platform's 400.
 - **Pushes carry the callback token, so `POST /api/v1/push/callback` records analytics** (BOU-844). Set

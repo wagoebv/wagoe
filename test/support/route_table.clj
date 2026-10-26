@@ -123,27 +123,30 @@
    :malformed "{not json"})
 
 (defn call
-  "The response to `method` on `uri`, as a JSON client sends it. `headers` are
-   added to the request's, `request` merged into it. A handler that throws has
-   been reached, which is an answer too: `{:status \"threw <Class>\"}`."
+  "The response to `method` on `uri`, which may carry a query string, as a JSON
+   client sends it. `headers` are added to the request's, `request` merged into
+   it. A handler that throws has been reached, which is an answer too:
+   `{:status \"threw <Class>\"}`."
   ([method uri] (call method uri (:empty bodies) {}))
   ([method uri body] (call method uri body {}))
   ([method uri body headers] (call method uri body headers {}))
   ([method uri body headers request]
    (try
-     (*handler* (merge
-                 {:request-method method
-                  :uri            uri
-                  :scheme         :http
-                  :server-name    "localhost"
-                  :server-port    80
-                  :remote-addr    "127.0.0.1"
-                  :headers        (merge {"accept"       "application/json"
-                                          "content-type" "application/json"
-                                          "host"         "localhost"}
-                                         headers)
-                  :body           (java.io.ByteArrayInputStream. (.getBytes ^String body))}
-                 request))
+     (let [[path query] (str/split uri #"\?" 2)]
+       (*handler* (merge
+                   {:request-method method
+                    :uri            path
+                    :query-string   query
+                    :scheme         :http
+                    :server-name    "localhost"
+                    :server-port    80
+                    :remote-addr    "127.0.0.1"
+                    :headers        (merge {"accept"       "application/json"
+                                            "content-type" "application/json"
+                                            "host"         "localhost"}
+                                           headers)
+                    :body           (java.io.ByteArrayInputStream. (.getBytes ^String body))}
+                   request)))
      (catch Exception e
        {:status (str "threw " (.getSimpleName (class e)))}))))
 

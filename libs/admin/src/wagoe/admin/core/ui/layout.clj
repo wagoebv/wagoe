@@ -159,7 +159,10 @@
             (dashboard-tile item stats opts))
           (map dashboard-link links)]])
       (when (seq extra-cards)
-        [:section.admin-home-section.admin-home-extra
+        [:section.admin-home-section.admin-home-extra {:aria-labelledby "admin-home-extra"}
+         [:h2.admin-home-section-title {:id "admin-home-extra"}
+          (icons/icon :folder {:size 18})
+          [:span [:t :admin/dashboard-extra-cards]]]
          [:div.entity-grid (seq extra-cards)]])]
      (when activity
        (activity-panel activity opts))]]))

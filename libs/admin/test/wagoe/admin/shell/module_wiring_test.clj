@@ -185,7 +185,14 @@
       (is (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #"DEPRECATED :dashboard-extra-cards.*2\.0"))))
   (log-test/with-log
     (is (not (contains? (routes-config {} {}) :dashboard-extra-cards)))
-    (is (not (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #":dashboard-extra-cards")))))
+    (is (not (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #":dashboard-extra-cards"))))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #":dashboard-extra-cards must be a vector"
+                        (wiring/ig-config {} {:config {:dashboard-extra-cards :reports}}))
+      "not the ISeq error it was")
+  (log-test/with-log
+    (wiring/ig-config {} {:config {:dashboard-extra-cards [:div "Reports"]}})
+    (is (log-test/logged? 'wagoe.admin.shell.module-wiring :warn #"should be a vector of Hiccup cards")
+        "one card, not wrapped, warns: it booted before")))
 
 (defn order-domain
   "A relation condition, named by symbol as config.edn would."

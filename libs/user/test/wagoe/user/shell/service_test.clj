@@ -6,7 +6,8 @@
             [wagoe.observability.metrics.ports :as metrics]
             [wagoe.observability.errors.ports :as errors]
             [integrant.core :as ig]
-            [clojure.test :refer [deftest is testing]])
+            [clojure.test :refer [deftest is testing]]
+            [clojure.tools.logging.test :as log-test])
   (:import (java.time Instant)
            (java.util UUID)))
 
@@ -654,3 +655,15 @@
                       (catch clojure.lang.ExceptionInfo e e))]
     (is (= :session-invalid (:type (ex-data ex))))
     (is (empty? @reported))))
+
+(deftest ^:unit a-failed-audit-write-logs-its-stack
+  (let [user-id (UUID/randomUUID)
+        failing #_{:clj-kondo/ignore [:missing-protocol-method]}
+                (reify ports/IUserAuditRepository
+                  (create-audit-log [_ _] (throw (ex-info "audit table gone" {}))))
+        service (sut/->UserService (->UserRepoStub (atom {user-id {:id user-id :email "a@b.nl" :role :user :active true}}))
+                                   (->SessionRepoStub nil) failing {} nil)]
+    (log-test/with-log
+      (is (true? (ports/deactivate-user service user-id)) "the change stands")
+      (is (some #(and (= :warn (:level %)) (= "audit table gone" (ex-message (:throwable %))))
+                (log-test/the-log))))))

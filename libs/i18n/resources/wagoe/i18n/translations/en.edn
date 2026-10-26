@@ -544,6 +544,7 @@
  :admin/dashboard-activity         "Recent activity"
  :admin/dashboard-activity-empty   "Nothing recorded yet."
  :admin/dashboard-activity-failed  "Recent activity could not be loaded."
+ :admin/dashboard-extra-cards      "More"
  :admin/filter-placeholder-search  "Search {fields}..."
  :admin/button-clear-search        "Clear search"
  :admin/select-placeholder         "Select..."

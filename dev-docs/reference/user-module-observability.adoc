@@ -40,7 +40,8 @@ operation (`:register-user`, `:authenticate-user`, `:validate-session`,
 |Breadcrumb `Starting <op>`, starts the timer
 
 |`service-operation-logging`
-|Logs start, completion and failure. A typed 4xx is logged below error level
+|Logs start and completion at debug, since the handler pipeline logs both at
+info. A failure logs at its status's level: a typed 4xx below error
 
 |`service-operation-metrics`
 |`<op>-attempted`, `<op>-successful`, `<op>-failed` (tag `:reason`), and the

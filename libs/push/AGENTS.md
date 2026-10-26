@@ -185,7 +185,7 @@ Built by the `:wagoe.push/route-contribution` Integrant key and contributed as `
 |--------|------|---------|
 | `POST` | `/api/v1/push/devices` | Register device token |
 | `GET` | `/api/v1/push/devices` | List user's active devices |
-| `GET` | `/api/v1/push/devices/:token` | One of the user's devices, by token (the `Location` of a registration) |
+| `GET` | `/api/v1/push/devices/:token` | One of the user's devices, by token (the `Location` of a registration); `?app-id=` picks one when the token is under several, else 409 |
 | `DELETE` | `/api/v1/push/devices/:token` | Unregister device token |
 | `POST` | `/api/v1/push/callback` | Delivery/open analytics callback (HMAC-secured) |
 | `GET` | `/api/v1/push/stats/:notification-id` | Aggregate stats with delivery/open rates |
@@ -263,8 +263,8 @@ Three migrations under `libs/push/resources/wagoe/push/migrations/` create the t
                                :sandbox? false}
 
 ;; Stores
-:wagoe.push/device-store    {:db #ig/ref :wagoe/db-context}
-:wagoe.push/analytics-store {:db #ig/ref :wagoe/db-context}
+:wagoe.push/device-store    {:db-ctx #ig/ref :wagoe/db-context}
+:wagoe.push/analytics-store {:db-ctx #ig/ref :wagoe/db-context}
 
 ;; Service
 :wagoe.push/service {:device-store    #ig/ref :wagoe.push/device-store

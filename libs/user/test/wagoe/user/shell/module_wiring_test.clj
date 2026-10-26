@@ -77,3 +77,13 @@
 (deftest ^:unit user-supplies-the-error-page-in-the-apps-layout
   (let [{:keys [http]} (sut/ig-config nil {:config {} :enabled #{}})]
     (is (fn? (:error-page http)))))
+
+(deftest ^:unit extra-cards-without-the-admin-warn
+  (let [config {:dashboard-extra-cards [[:div "Reports"]]}]
+    (log-test/with-log
+      (sut/ig-config nil {:config config :enabled #{:wagoe/user}})
+      (is (log-test/logged? 'wagoe.user.shell.module-wiring :warn #":dashboard-extra-cards is shown nowhere")))
+    (log-test/with-log
+      (sut/ig-config nil {:config config :enabled #{:wagoe/user :wagoe/admin}})
+      (is (not (log-test/logged? 'wagoe.user.shell.module-wiring :warn #":dashboard-extra-cards"))
+          "the admin shows them, and warns itself"))))
