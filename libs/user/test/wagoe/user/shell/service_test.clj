@@ -1,7 +1,10 @@
 (ns wagoe.user.shell.service-test
   (:require [wagoe.user.shell.auth :as auth-shell]
+            [wagoe.user.shell.module-wiring]
             [wagoe.user.shell.service :as sut]
             [wagoe.user.ports :as ports]
+            [wagoe.observability.metrics.ports :as metrics]
+            [integrant.core :as ig]
             [clojure.test :refer [deftest is testing]])
   (:import (java.time Instant)
            (java.util UUID)))
@@ -609,3 +612,21 @@
                                                        :user-agent "test"})]
           (is (true? (:requires-mfa? result)))
           (is (= "MFA code required" (:message result))))))))
+
+(deftest ^:unit service-operations-emit-metrics-test
+  ;; The service handed its repositories to the interceptors as :system, so
+  ;; no operation found a logger, emitter or reporter (BOU-840).
+  (let [calls   (atom [])
+        emitter (reify metrics/IMetricsEmitter
+                  (inc-counter! [_ h v tags] (swap! calls conj [h v tags]))
+                  (observe-histogram! [_ h _v tags] (swap! calls conj [h tags])))
+        user-id (UUID/randomUUID)
+        service (ig/init-key :wagoe/user-service
+                             {:user-repository    (->UserRepoStub (atom {user-id {:id user-id}}))
+                              :session-repository (->SessionRepoStub nil)
+                              :audit-repository   (->AuditRepoStub)
+                              :validation-config  {}
+                              :metrics-emitter    emitter})]
+    (is (= user-id (:id (ports/get-user-by-id service user-id))))
+    (is (some #{["get-user-by-id-successful" 1 {}]} @calls))
+    (is (some #{["service-operation-duration" {:operation-type "get-user-by-id"}]} @calls))))

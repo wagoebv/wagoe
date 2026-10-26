@@ -62,9 +62,9 @@ Everything logged or attached to a breadcrumb goes through
 `wagoe.core.utils.pii-redaction/redact-for-log` first.
 
 Each interceptor acts only when the `:system` map it is given holds a
-`:logger`, `:metrics-emitter` or `:error-reporter`. The user service passes its
-repositories there, so check what reaches it before relying on the service-level
-metrics.
+`:logger`, `:metrics-emitter` or `:error-reporter`. `:wagoe/user-service` is
+wired with `:wagoe/logging`, `:wagoe/metrics` and `:wagoe/error-reporting`, and
+passes those three on to every operation.
 
 === Persistence pipeline
 
