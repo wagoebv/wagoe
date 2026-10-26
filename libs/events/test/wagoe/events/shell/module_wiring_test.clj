@@ -43,3 +43,9 @@
       (is (= :memory (:wagoe.events/provider bus))
           (str provider " stored a provider the halt path does not handle"))
       (ig/halt-key! :wagoe/events bus))))
+
+(deftest ^:unit the-bus-gets-the-error-reporter
+  ;; Its handlers run with a clean error context (BOU-848).
+  (let [bus (ig/init-key :wagoe/events {:provider :memory :error-reporter ::reporter})]
+    (is (= ::reporter (:error-reporter bus)))
+    (ig/halt-key! :wagoe/events bus)))

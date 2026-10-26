@@ -948,6 +948,19 @@
     (is (= 1 (count @sent)))
     (is (some #{"from-middleware"} (map :message (:breadcrumbs (first @sent)))))))
 
+(deftest ^:unit a-request-leaves-nothing-on-its-thread
+  ;; The idle thread kept the last request's user until the next one (BOU-848).
+  (with-redefs [sentry/init! (fn [& _] nil)]
+    (let [reporter (sentry-adapter/create-sentry-error-reporting-component
+                    {:dsn "https://key@sentry.invalid/1"})
+          handler  (reitit/compile-routes
+                    [["/a" {:get {:handler (fn [_]
+                                             (error-ports/set-user! reporter {:id "user-a"})
+                                             {:status 200 :body {}})}}]]
+                    {:system {:error-reporter reporter}})]
+      (handler {:request-method :get :uri "/a" :headers {}})
+      (is (empty? (error-ports/current-context reporter))))))
+
 ;; =============================================================================
 ;; Static asset caching (BOU-389)
 ;; =============================================================================

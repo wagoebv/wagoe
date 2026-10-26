@@ -8,7 +8,10 @@
   (:require [wagoe.events.shell.adapters.redis-streams :as redis-streams]
             [wagoe.events.shell.publisher :as publisher]
             [wagoe.events.ports :as ports]
+            [wagoe.observability.errors.ports :as error-ports]
+            [wagoe.observability.errors.shell.adapters.sentry :as sentry-adapter]
             [clojure.test :refer [deftest is testing]]
+            [sentry-clj.core :as sentry]
             [clojure.java.shell :as shell]
             [integrant.core])
   (:import (redis.clients.jedis JedisPool JedisPoolConfig StreamEntryID)))
@@ -371,3 +374,28 @@
       ;; different instructions, and only one of them is what was configured.
       (is (contains? @built :max-deliveries))
       (is (nil? (:max-deliveries @built))))))
+
+(deftest ^:integration a-handler-reports-nothing-from-the-one-before-it
+  ;; Both events reach the handler on the topic's poller thread (BOU-848).
+  (when-redis
+   (let [sent (atom [])]
+     (with-redefs [sentry/init!      (fn [& _] nil)
+                   sentry/send-event #(swap! sent conj %)]
+       (let [topic    (unique-topic)
+             p        (pool)
+             reporter (sentry-adapter/create-sentry-error-reporting-component
+                       {:dsn "https://key@sentry.invalid/1"})
+             bus      (redis-streams/create-redis-streams-bus
+                       p {:group (str "g-" (name topic)) :error-reporter reporter})]
+         (try
+           (ports/subscribe! bus topic (fn [e]
+                                         (if (= :thing/a (:type e))
+                                           (error-ports/set-user! reporter {:id "user-a"})
+                                           (error-ports/capture-message reporter "from b" :error))))
+           (Thread/sleep 300)
+           (publisher/emit! bus topic :thing/a :tests {})
+           (publisher/emit! bus topic :thing/b :tests {})
+           (is (wait-for #(seq @sent)))
+           (finally (redis-streams/stop! bus) (.close p)))))
+     (is (= 1 (count @sent)))
+     (is (not (.contains (pr-str (first @sent)) "user-a"))))))

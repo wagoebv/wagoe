@@ -6,7 +6,10 @@
             [wagoe.jobs.shell.adapters.in-memory :as in-memory]
             [wagoe.jobs.core.job :as job]
             [wagoe.jobs.ports :as ports]
-            [wagoe.observability.tracing.ports :as tracing-ports])
+            [wagoe.observability.errors.ports :as error-ports]
+            [wagoe.observability.errors.shell.adapters.sentry :as sentry-adapter]
+            [wagoe.observability.tracing.ports :as tracing-ports]
+            [sentry-clj.core :as sentry])
   (:import [java.util UUID]
            [java.time Instant]))
 
@@ -543,6 +546,35 @@
     (testing "a job scheduled for later stays queued"
       (is (zero? (worker/run-pending! {} queue store *registry*))))))
 
+
+(deftest ^:unit a-job-reports-nothing-from-the-job-before-it
+  ;; Both on this thread, as on a worker thread (BOU-848).
+  (let [{:keys [queue store]} *system*
+        sent (atom [])]
+    (with-redefs [sentry/init!      (fn [& _] nil)
+                  sentry/send-event #(swap! sent conj %)]
+      (let [reporter (sentry-adapter/create-sentry-error-reporting-component
+                      {:dsn "https://key@sentry.invalid/1"})]
+        (ports/register-handler! *registry* :job-a
+                                 (fn [_]
+                                   (error-ports/set-user! reporter {:id "user-a"})
+                                   (error-ports/set-tags! reporter {:tag-a "a"})
+                                   (error-ports/add-breadcrumb! reporter {:message "crumb-a"})
+                                   {:success? true}))
+        (ports/register-handler! *registry* :job-b
+                                 (fn [_] {:success? false :error {:message "boom"}}))
+        (ports/enqueue-job! queue :default (create-test-job {:job-type :job-a}))
+        (is (= 1 (worker/run-pending! {:error-reporter reporter} queue store *registry*)))
+        (error-ports/set-user! reporter {:id "caller"})
+        (ports/enqueue-job! queue :default (create-test-job {:job-type :job-b}))
+        (is (= 1 (worker/run-pending! {:error-reporter reporter} queue store *registry*)))
+        (testing "the calling thread gets its own context back"
+          (is (= "caller" (get-in (error-ports/current-context reporter) [:user :id]))))
+        (error-ports/reset-context! reporter)))
+    (is (= 1 (count @sent)))
+    (let [text (pr-str (dissoc (first @sent) :throwable))]
+      (doseq [a ["user-a" ":tag-a" "crumb-a" "caller"]]
+        (is (not (.contains text a)) a)))))
 
 (deftest ^:unit an-error-past-exception-is-a-failure-and-the-worker-lives-on
   ;; The worker caught Exception: an AssertionError recorded nothing, reported
