@@ -489,8 +489,10 @@
    :enter (fn [{:keys [request system correlation-id] :as ctx}]
             (when-let [error-reporter (:error-reporter system)]
               ;; A pooled thread still holds the previous request's context.
-              ;; A no-op for a reporter that does not implement it (BOU-843).
-              (error-ports/reset-context! error-reporter)
+              ;; Not when the router already reset it: that would drop what
+              ;; route middleware added for this request (BOU-843).
+              (when-not (::error-context-reset request)
+                (error-ports/reset-context! error-reporter))
               (error-reporting/add-breadcrumb
                error-reporter
                "HTTP request started"

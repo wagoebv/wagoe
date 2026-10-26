@@ -60,8 +60,8 @@
 (defn- store
   "Per thread. A component's reporter and context get their own, so two
    components with different caps do not trim each other's breadcrumbs (BOU-843).
-   Per thread is per request: handlers run synchronously on the request's
-   thread, and the HTTP stack resets it as each request starts."
+   An HTTP request runs synchronously on one thread and the router resets this
+   as it starts, so there it is per request. Nothing resets it between jobs."
   ^ThreadLocal [config]
   (or (::store config) default-store))
 
@@ -260,7 +260,7 @@
 
   ports/IErrorContextReset
   (reset-context! [_this]
-    (set-thread-context! (store config) nil)
+    (.remove (store config))
     nil))
 
 ;; =============================================================================
@@ -403,7 +403,7 @@
    through IErrorReportingConfig or IErrorFilter reaches the reporter."
   [config]
   (init-sentry! config)
-  (let [config       (assoc config ::store (ThreadLocal.))
+  (let [config       (update config ::store #(or % (ThreadLocal.)))
         settings     (atom config)
         error-filter (new-filter settings)]
     {:error-reporter (->SentryErrorReporter settings error-filter)
@@ -422,7 +422,8 @@
    - :filtering - {:min-severity, :exclude-exceptions, :exclude-messages}
    - :redact - PII redaction options (wagoe.core.utils.pii-redaction)"
   [config]
-  (:error-reporter (shared-parts config)))
+  ;; The store create-sentry-error-context uses, so the two share context.
+  (:error-reporter (shared-parts (assoc config ::store default-store))))
 
 (defn create-sentry-error-context
   "Create a Sentry error context manager instance. `:max-breadcrumbs` caps

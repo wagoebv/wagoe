@@ -31,6 +31,7 @@
             [ring.util.request :as ring-request]
             [ring.util.response :as ring-response]
             [wagoe.config :as wagoe-config]
+            [wagoe.observability.errors.ports :as error-ports]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.platform.shell.http.flash :as flash]
@@ -346,6 +347,18 @@
                           (refuse request decoded)
                           (handler decoded)))))))}))
 
+(defn- reset-error-context
+  "Outermost, so a report from route middleware, outside the interceptor stack,
+   carries nothing of the thread's previous request either (BOU-843)."
+  [config]
+  (let [error-reporter (get-in config [:system :error-reporter])]
+    (fn [handler]
+      (if error-reporter
+        (fn [request]
+          (error-ports/reset-context! error-reporter)
+          (handler (assoc request ::http-interceptors/error-context-reset true)))
+        handler))))
+
 (defn- create-default-middleware
   "Create default middleware stack for Reitit router.
 
@@ -359,7 +372,8 @@
     Vector of middleware for Reitit router"
   [config]
   (let [authentication (:authentication config)]
-    (-> [;; Query params & form params
+    (-> [(reset-error-context config)
+         ;; Query params & form params
          parameters/parameters-middleware
          ;; Content negotiation
          muuntaja/format-negotiate-middleware
