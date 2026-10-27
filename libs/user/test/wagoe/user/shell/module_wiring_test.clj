@@ -117,6 +117,11 @@
   [missing]
   `(reify wagoe.user.ports/IUserGroupService ~@(remove #{missing} group-protocols)))
 
+(defmacro ^:private each-missing
+  "{protocol name, a group service lacking only it} for each of `group-protocols`."
+  []
+  (into {} (for [p group-protocols] [(name p) `(group-service-without ~p)])))
+
 (defn- boot-error [k service]
   (try (ig/init-key k {:user-service nil :group-service service :config {}})
        nil
@@ -125,11 +130,7 @@
 
 (deftest ^:unit a-group-service-lacking-a-newer-protocol-refuses-to-boot
   ;; BOU-859: refused at startup, not on the first request to its page.
-  (doseq [[proto service] {"IAccessExplain"   (group-service-without wagoe.user.ports/IAccessExplain)
-                           "IRightsPreview"   (group-service-without wagoe.user.ports/IRightsPreview)
-                           "IRoleAssignments" (group-service-without wagoe.user.ports/IRoleAssignments)
-                           "IGrantOptions"    (group-service-without wagoe.user.ports/IGrantOptions)
-                           "ITimeBoundAccess" (group-service-without wagoe.user.ports/ITimeBoundAccess)}]
+  (doseq [[proto service] (each-missing)]
     (testing proto
       (let [[message data] (boot-error :wagoe/user-group-routes service)]
         (is (= (str "WGE-107: the group service does not implement " proto) message))
