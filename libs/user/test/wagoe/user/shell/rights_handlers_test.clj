@@ -205,7 +205,7 @@
             ada    (user! "ada@example.com")
             bob    (user! "bob@example.com")
             g      (ports/create-group gsvc {:name "Stand-ins"})
-            later  (.plusSeconds (java.time.Instant/now) 3600)
+            later  (.truncatedTo (.plusSeconds (java.time.Instant/now) 3600) java.time.temporal.ChronoUnit/MILLIS)
             ends   #(count (re-seq #"class=\"expires-on" %))]
         (ports/add-group-member-until gsvc (:id g) (:id ada) later)
         (ports/add-group-role gsvc (:id g) {:role :invoice/editor :scope {} :expires-at later})

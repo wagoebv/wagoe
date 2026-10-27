@@ -80,7 +80,8 @@
                      :wagoe/user-group-repository :wagoe/user-group-service
                      :wagoe/user-group-routes
                      :wagoe/user-data-exporter :wagoe/user-audit-retention
-                     :wagoe/user-export-routes]
+                     :wagoe/user-export-routes
+                     :wagoe.user/job-handlers]
               ;; What this module offers the rest of a split deployment. Only
               ;; served when it is run as a service *and* :wagoe/rpc is
               ;; configured — a `server` boot never starts the listener.
