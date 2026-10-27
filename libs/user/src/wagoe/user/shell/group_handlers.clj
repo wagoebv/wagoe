@@ -151,22 +151,24 @@
                  200))
 
 (defn- change
-  "Run `f` on the group named in the path, redirecting back to it with
-   `flash-key`, or with no message when `f` answers falsey: nothing changed.
-   Unconfirmed, `preview`'s change for the group is shown instead. A refused
-   change re-renders the page saying why."
-  [group-service request flash-key preview f]
+  "Make `(change-of id)` for the group named in the path through `f`,
+   redirecting back to it with `flash-key`, or with no message when `f`
+   answers falsey: nothing changed. A change with an `:op` changes rights:
+   unconfirmed, its preview is shown instead. A refused change re-renders the
+   page saying why."
+  [group-service request flash-key change-of f]
   (if-let [id (path-uuid request :id)]
     (try
-      (cond
-        (and preview (not (confirmed? request)))
-        (preview-response request group-service (preview id) (group-ui/group-path id))
+      (let [c (change-of id)]
+        (cond
+          (and (:op c) (not (confirmed? request)))
+          (preview-response request group-service c (group-ui/group-path id))
 
-        (f id)
-        (redirect (group-ui/group-path id) flash-key)
+          (f c)
+          (redirect (group-ui/group-path id) flash-key)
 
-        :else
-        (response/redirect (group-ui/group-path id) :see-other))
+          :else
+          (response/redirect (group-ui/group-path id) :see-other)))
       (catch clojure.lang.ExceptionInfo e
         (if (refused? e)
           (do (log/info "Group change refused" (select-keys (ex-data e) [:type :field]))
@@ -177,10 +179,9 @@
 
 (defn update-group [group-service]
   (fn [request]
-    (change group-service request :user.groups/flash-saved nil
-            #(ports/update-group group-service {:id          %
-                                                :name        (form request "name")
-                                                :description (form request "description")}))))
+    (change group-service request :user.groups/flash-saved
+            (fn [id] {:id id :name (form request "name") :description (form request "description")})
+            #(ports/update-group group-service %))))
 
 (defn delete-group [group-service]
   (fn [request]
@@ -212,7 +213,7 @@
   (fn [request]
     (change group-service request :user.groups/flash-member-added
             (fn [id] {:op :add-member :group-id id :user-id (member-id user-service request)})
-            #(ports/add-group-member group-service % (member-id user-service request)))))
+            #(ports/add-group-member group-service (:group-id %) (:user-id %)))))
 
 (defn- user-label [{:keys [name email]}]
   (if (str/blank? name) email (str name " <" email ">")))
@@ -249,8 +250,7 @@
   (fn [request]
     (change group-service request :user.groups/flash-member-removed
             (fn [id] {:op :remove-member :group-id id :user-id (path-uuid request :user-id)})
-            #(when-let [user-id (path-uuid request :user-id)]
-               (ports/remove-group-member group-service % user-id)))))
+            #(when (:user-id %) (ports/remove-group-member group-service (:group-id %) (:user-id %))))))
 
 (defn- parse-scope
   "The scope typed into the form, read as EDN; blank is {}."
@@ -291,11 +291,10 @@
   (fn [request]
     (change group-service request :user.groups/flash-role-added
             (fn [id] {:op :add-role :group-id id :assignment (form-assignment group-service request)})
-            #(ports/add-group-role group-service % (form-assignment group-service request)))))
+            #(ports/add-group-role group-service (:group-id %) (:assignment %)))))
 
 (defn remove-role [group-service]
   (fn [request]
     (change group-service request :user.groups/flash-role-removed
             (fn [id] {:op :remove-role :group-id id :assignment-id (path-uuid request :assignment-id)})
-            #(when-let [assignment-id (path-uuid request :assignment-id)]
-               (ports/remove-group-role group-service % assignment-id)))))
+            #(when (:assignment-id %) (ports/remove-group-role group-service (:group-id %) (:assignment-id %))))))
