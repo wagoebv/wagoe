@@ -25,7 +25,7 @@
 ;; document a generated project or a standalone lib, whose own deps.edn has a
 ;; :test alias that loads nothing from tests.edn.
 (def ^:private excluded-prefixes
-  ["CHANGELOG.md" "dev-docs/adr/" "docs/superpowers/"
+  ["CHANGELOG.md" "dev-docs/adr/"
    "examples/" "libs/wagoe-cli/" "libs/wagoe-mcp/" "claude-plugin/"
    "UPGRADING.md" "docs/modules/getting-started/"
    "docs/modules/ROOT/pages/index.adoc" "libs/tools/AGENTS.md"])

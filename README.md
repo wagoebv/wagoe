@@ -348,8 +348,8 @@ of the normal release. `patch-catalogue-version!` keeps `modules-catalogue.edn`
 in sync after each successful deploy either way.
 
 **What `bb bump` deliberately leaves alone:** `CHANGELOG.md` and the ADRs
-(historical — they record what was true when written), `docs/superpowers/`
-(dated design records), and `docs/modules/ROOT/pages/stability.adoc`, whose
+(historical — they record what was true when written), and
+`docs/modules/ROOT/pages/stability.adoc`, whose
 subject *is* the old version numbers. Also draft/pre-releases on GitHub —
 `install.sh` uses `/releases/latest`, which only returns published releases.
 

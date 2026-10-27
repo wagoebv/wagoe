@@ -113,4 +113,4 @@ nREPL port, active modules, and suggested next commands.
 
 == References
 
-* Design spec: `docs/superpowers/specs/2026-04-18-mindblowing-dx-design.md`
+* Design spec: `docs/superpowers/specs/2026-04-18-mindblowing-dx-design.md` (removed; in git history at `ddc43a9e1`)

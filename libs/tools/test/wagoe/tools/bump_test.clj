@@ -108,8 +108,7 @@
 
     (testing "it never plans to touch a historical document"
       (is (not-any? #(or (= "CHANGELOG.md" %)
-                         (str/starts-with? % "dev-docs/adr/")
-                         (str/starts-with? % "docs/superpowers/"))
+                         (str/starts-with? % "dev-docs/adr/"))
                     (keys plan))))
 
     (testing "planning is read-only"

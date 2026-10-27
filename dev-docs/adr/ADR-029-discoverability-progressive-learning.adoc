@@ -126,5 +126,5 @@ Unified CLI commands to reduce cognitive load:
 
 == References
 
-* Design spec: `docs/superpowers/specs/2026-04-18-mindblowing-dx-design.md`
+* Design spec: `docs/superpowers/specs/2026-04-18-mindblowing-dx-design.md` (removed; in git history at `ddc43a9e1`)
   (Pillar 6: Discoverability & Progressive Learning)

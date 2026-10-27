@@ -23,7 +23,7 @@
 ;; `all`    -> hard groups + prose (prose still report-only).
 ;;
 ;; Allowlist: paths in .wagoe/check-no-boundary.edn `:allow-paths` (prefix
-;; match) are exempt — CHANGELOG history, planning docs, the rename tooling
+;; match) are exempt — CHANGELOG history, the rename tooling
 ;; itself, and (pre-rename) the boundary-pathed source tree of this checker.
 
 ;; Lives under scripts/ (NOT libs/tools) on purpose: the rename phases rewrite
@@ -127,11 +127,10 @@
 
 (def ^:private default-allow-paths
   "Baked-in exemptions (prefix match on the repo-relative path). The rename
-   tooling and its config legitimately contain the tokens; CHANGELOG + planning
-   docs preserve history; the checker's own boundary-pathed source is exempt
+   tooling and its config legitimately contain the tokens; the CHANGELOG
+   preserves history; the checker's own boundary-pathed source is exempt
    until Phase 1 moves it to wagoe/."
   ["CHANGELOG.md"
-   "docs/superpowers/"
    ".wagoe/"
    "scripts/rename_wagoe.clj"
    "scripts/check_no_boundary.clj"])

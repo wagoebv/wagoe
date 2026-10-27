@@ -22,11 +22,10 @@
 (deftest ^:unit historical-documents-are-out-of-scope
   ;; Same principle as check:doc-counts: a CHANGELOG entry naming alpha-32 was
   ;; true at that release, and rewriting it would be a lie about the past.
-  (testing "changelogs, ADRs, delivered talks and dated design docs are excluded"
+  (testing "changelogs, ADRs and delivered talks are excluded"
     (is (not (sut/doc-in-scope? "CHANGELOG.md")))
     (is (not (sut/doc-in-scope? "dev-docs/adr/ADR-015-wagoe-tools.adoc")))
-    (is (not (sut/doc-in-scope? "dev-docs/presentations/fc-is-hexagonal-nl.adoc")))
-    (is (not (sut/doc-in-scope? "docs/superpowers/specs/2026-04-29-cli-design.md"))))
+    (is (not (sut/doc-in-scope? "dev-docs/presentations/fc-is-hexagonal-nl.adoc"))))
 
   (testing "the stability page is exempt from the rules that would damage it"
     ;; It exists to explain that 1.0.0-beta-1 sorts older than 1.0.1-alpha-42,

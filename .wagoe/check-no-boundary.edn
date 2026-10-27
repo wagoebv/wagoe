@@ -1,8 +1,8 @@
 ;; Allowlist for `bb check:no-boundary` (BOU-209 rename gate).
 ;;
 ;; Repo-relative path PREFIXES exempt from the residual-boundary scan. These
-;; legitimately keep "boundary" tokens: history, planning docs, and the rename
-;; tooling itself. Extend as genuine exceptions surface during the rename; do
+;; legitimately keep "boundary" tokens: history and the rename tooling itself.
+;; Extend as genuine exceptions surface during the rename; do
 ;; NOT add real source here to silence the gate.
 ;;
 ;; Every entry needs a reason, and every entry must be individually
@@ -11,15 +11,11 @@
 ;; another entry. A prefix that matches nothing is silent by construction — it
 ;; cannot announce that it stopped working.
 ;;
-;; CHANGELOG.md, docs/superpowers/, .wagoe/ and scripts/rename_wagoe.clj are
+;; CHANGELOG.md, .wagoe/ and scripts/rename_wagoe.clj are
 ;; deliberately absent: they are baked into `default-allow-paths` in the gate
 ;; itself. Repeating them here changed nothing and the audit now says so.
 {:allow-paths
- [;; Doc-drift linter: its #"boundary\.<ns>" pattern matches ns references in
-  ;; the docs it lints. Only the dev/ copy carries the pattern — scripts/
-  ;; became a thin shim over this namespace in #344 and needs no exemption.
-  "dev/wagoe/tools/docs_lint.clj"
-  ;; Clojars relocation tooling (BOU-218). Same category as the rename tooling
+ [;; Clojars relocation tooling (BOU-218). Same category as the rename tooling
   ;; above: the retired org.boundary-app coordinates and the boundary-cli /
   ;; boundary-mcp artifact ids are its SUBJECT, not residue. It publishes the
   ;; stubs that point those coordinates at com.wagoe, so it cannot name them
