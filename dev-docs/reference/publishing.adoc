@@ -124,6 +124,7 @@ Wagoe follows semantic versioning:
 * `1.0.0-beta-N` — beta release
 * `1.0.0` — stable release
 * `1.0.1` — patch release
+* `1.1.0-rc-N` — release candidate of the next minor (see the stability page for the naming rule)
 
 [IMPORTANT]
 ====
@@ -255,7 +256,9 @@ GitHub Actions will:
 . Check that every `build.clj` carries the release version (`bb deploy --check-versions`)
 . Run `bb deploy --missing` with the Clojars credentials, so a re-run skips what already landed
 . Check every artifact is on Clojars (`bb deploy --verify`)
-. Create a GitHub Release, never marked pre-release: `scripts/install.sh` resolves `/releases/latest`, which skips pre-releases
+. Create a GitHub Release. A version with a stage (`1.1.0-rc-1`) is marked pre-release, so `/releases/latest`, which
+  `scripts/install.sh` installs, stays on the last final release. Try a pre-release through its Maven version
+  (`{:mvn/version "1.1.0-rc-1"}`), not through `install.sh`.
 
 === Trigger: manual dispatch
 
@@ -343,7 +346,7 @@ no-API trade the rest of that gate makes.
 - bb deploy --check-versions NEW # Every build.clj carries the release version
 - bb deploy --missing            # Deploys what is not yet on Clojars, in order
 - bb deploy --verify             # Every artifact landed
-- Create GitHub Release          # Only on tag pushes; never pre-release
+- Create GitHub Release          # Only on tag pushes; pre-release when the version has a stage
 ----
 
 ---
