@@ -58,6 +58,13 @@ authorization`) moves an app from `:off` to `:enforce` and names each user who
 would lose access. See
 [Upgrading an existing app to permissions](docs/modules/guides/pages/upgrade-authorization.adoc).
 
+### 4. The `:base` CSS bundle is gone; pages use `:pilot` (BOU-457, BOU-458)
+
+Pages on the default layout render with daisyUI, not pico: restyle pages that
+relied on pico with daisy classes. `base-css` and `base-js` no longer compile;
+use `pilot-css` and `pilot-js`. `(ui-style/bundle :base)` still renders, but it
+serves `:pilot` and warns once.
+
 ## beta-5 → beta-6 (error shapes)
 
 ### 1. `wagoe.user.shell.auth/authenticate-user` and the MFA shell return `:error` as a map (BOU-323)
