@@ -12,7 +12,8 @@
             [wagoe.shared.ui.core.modal :as modal]
             [wagoe.shared.ui.core.shell :as shell]
             [wagoe.shared.ui.core.table :as table-ui]
-            [wagoe.user.core.group :as group]))
+            [wagoe.user.core.group :as group]
+            [wagoe.user.core.hygiene :as hygiene]))
 
 (def roles-path "/web/admin/roles")
 (def permissions-path "/web/admin/permissions")
@@ -119,13 +120,58 @@
   [registry p]
   (module-of p (get-in registry [p :module])))
 
+(defn- active-signal
+  "The signal `table-query` filters on, when `spec` offers it."
+  [{:keys [signals]} table-query]
+  (some #{(keyword (get-in table-query [:filters :signal :value]))} signals))
+
 (defn- list-query
-  "`table-query` sorted by `spec`'s default unless by one of its sort keys."
-  [{:keys [sort-keys default-sort]} table-query]
-  (let [tq (select-keys table-query [:sort :dir :search])]
+  "`table-query` sorted by `spec`'s default unless by one of its sort keys,
+   filtered on a signal `spec` offers."
+  [{:keys [sort-keys default-sort] :as spec} table-query]
+  (let [signal (active-signal spec table-query)
+        tq     (cond-> (select-keys table-query [:sort :dir :search])
+                 signal (assoc :filters {:signal {:op :eq :value (name signal)}}))]
     (if (contains? sort-keys (:sort tq))
       (merge {:dir :asc} tq)
       (assoc tq :sort default-sort :dir :asc))))
+
+;; =============================================================================
+;; Hygiene signals (BOU-855)
+;; =============================================================================
+
+(def ^:private signal-labels
+  (array-map
+   :empty          [:user.hygiene/empty :warning]
+   :single-member  [:user.hygiene/single-member :info]
+   :near-duplicate [:user.hygiene/near-duplicate :warning]
+   :unused         [:user.hygiene/unused :neutral]
+   :unheld         [:user.hygiene/unheld :neutral]
+   :everyone       [:user.hygiene/everyone :warning]))
+
+(defn signal-badges
+  "A badge per signal in `signals`, as `wagoe.user.core.hygiene` gives them
+   for `item`."
+  [signals item]
+  (for [[s [label tone]] signal-labels
+        :when (contains? signals s)]
+    (list " " (ui/tone-badge (if (= :near-duplicate s)
+                               [:t :user.hygiene/near-duplicate-of
+                                {:roles (str/join ", " (map group/permission-str (:near-duplicates item)))}]
+                               [:t label])
+                             tone (str "signal-" (name s))))))
+
+(defn- signal-filters
+  "Links filtering the list on each signal `spec` offers, with how many items carry it."
+  [{:keys [url signals signals-of]} items active]
+  [:nav.signal-filters {:class "flex flex-wrap items-center gap-2" :aria-label [:t :user.hygiene/filter-label]}
+   (for [[s label] (cons [nil [:t :user.hygiene/all]]
+                         (for [s signals] [s (list [:t (first (signal-labels s))] " "
+                                                   (count (filter #(contains? (signals-of %) s) items)))]))]
+     [:a {:href         (if s (str url "?" (table-ui/encode-query-params {"filters[signal][value]" (name s)})) url)
+          :class        (str "btn btn-sm " (if (= s active) "btn-primary" "btn-ghost") (when s (str " signal-filter-" (name s))))
+          :aria-current (when (= s active) "true")}
+      label])])
 
 (defn list-row
   "A list row opening `href`: its `cells` under the `columns` labels, the
@@ -140,9 +186,11 @@
 
 (defn- list-parts
   "`items` searched and sorted for `spec`: the table and the count."
-  [{:keys [columns search-text sort-keys group-of row] :as spec} items table-query]
-  (let [tq    (list-query spec table-query)
-        items (table-ui/query-rows items tq {:search-text search-text :sort-keys sort-keys})
+  [{:keys [columns search-text sort-keys group-of row signals-of] :as spec} items table-query]
+  (let [tq     (list-query spec table-query)
+        signal (active-signal spec tq)
+        items  (cond->> (table-ui/query-rows items tq {:search-text search-text :sort-keys sort-keys})
+                 signal (filter #(contains? (signals-of %) signal)))
         rows  (if group-of
                 (grouped items group-of row (inc (count columns)))
                 (map row items))]
@@ -150,9 +198,12 @@
                                  :url            (:url spec)
                                  :columns        columns
                                  :rows           rows
-                                 :table-query    tq
+                                 :table-query    (dissoc tq :filters)
+                                 :filters        (:filters tq)
                                  :empty          (:empty-text spec)
-                                 :empty-filtered [:t :user.lists/no-matches {:search (:search tq)}]
+                                 :empty-filtered (if (:search tq)
+                                                   [:t :user.lists/no-matches {:search (:search tq)}]
+                                                   [:t :user.hygiene/none])
                                  :clear-label    [:t :admin/button-clear-search]})
      :badge (table-ui/count-badge (str (:id spec) "-count") (count items) (:count-label spec))}))
 
@@ -165,9 +216,13 @@
 (defn list-view
   "A list as the admin's entity lists have it: count, search and `actions`
    over the sortable table."
-  [{:keys [id url placeholder] :as spec} items table-query & actions]
-  (let [{:keys [table badge]} (list-parts spec items table-query)]
+  [{:keys [id url placeholder signals] :as spec} items table-query & actions]
+  (let [{:keys [table badge]} (list-parts spec items table-query)
+        signal                (active-signal spec table-query)]
     (list
+     (when (seq signals) (signal-filters spec items signal))
+     ;; The search sends it along; only a link changes it
+     (when signal [:input {:type "hidden" :id (str id "-signal") :name "filters[signal][value]" :value (name signal)}])
      [:div.table-toolbar-container
       [:div.toolbar-row-actions
        ;; Live here and not on the count, which a swap replaces
@@ -178,7 +233,7 @@
                                  :placeholder placeholder
                                  :url         url
                                  :hx-target   (str "#" id)
-                                 :hx-include  (str "#" id " .table-state input")})
+                                 :hx-include  (str "#" id " .table-state input" (when signal (str ", #" id "-signal")))})
        (into [:div.toolbar-actions] actions)]]
      table)))
 
@@ -402,11 +457,14 @@
                     :source      #(name (or (:source %) :managed))}
      :search-text  #(str (group/permission-str (:name %)) " " (:description %))
      :group-of     #(module-of (:name %) (:module %))
-     :row          (fn [{:keys [name description permissions source]}]
+     :signals      [:near-duplicate :unused :everyone]
+     :signals-of   :signals
+     :row          (fn [{:keys [name description permissions source] :as role}]
                      (list-row (role-path name)
                                {:class (str "role-row role-" (clojure.core/name (or source :managed)))}
                                columns
-                               [[:a {:href (role-path name)} (code name)]
+                               [(list [:a {:href (role-path name)} (code name)]
+                                      (signal-badges (:signals role) role))
                                 description
                                 (count permissions)
                                 (source-badge source)]))}))
@@ -506,29 +564,36 @@
                      (str/join " " (concat [(group/permission-str permission) label]
                                            (map group/permission-str roles))))
      :group-of     #(module-of (:permission %) (:module %))
-     :row          (fn [{:keys [permission label roles]}]
+     :signals      [:unheld :everyone]
+     :signals-of   :signals
+     :row          (fn [{:keys [permission label roles signals] :as item}]
                      (list-row (permission-path permission) {:class "permission-row"} columns
-                               [[:a {:href (permission-path permission)} (code permission)]
+                               [(list [:a {:href (permission-path permission)} (code permission)]
+                                      (signal-badges signals item))
                                 label
                                 (interpose " " (for [r roles] [:a {:href (role-path r)} (code r)]))]))}))
 
 (defn permission-items
-  "The registry's permissions as `permissions-list` lists them."
-  [registry roles]
+  "The registry's permissions as `permissions-list` lists them, each with its
+   `hygiene/permission-signals` over `assignments`."
+  [registry roles assignments]
   (let [holders (reduce (fn [m {:keys [name permissions]}]
                           (reduce #(update %1 %2 (fnil conj []) name) m permissions))
                         {} (sort-by (comp group/permission-str :name) roles))]
-    (for [[p {:keys [label module]}] registry]
-      {:permission p :label label :module module :roles (get holders p [])})))
+    (for [[p {:keys [label module]}] registry
+          :let [rs (get holders p [])]]
+      {:permission p :label label :module module :roles rs
+       :signals    (hygiene/permission-signals rs assignments)})))
 
 (defn permissions-page
   "The registry by module, each permission with the roles holding it.
-   `(:table-query opts)` searches and sorts them."
-  [registry roles opts]
+   `items` as `permission-items` gives them; `(:table-query opts)` searches
+   and sorts them."
+  [items opts]
   (list-page
    [:t :user.permissions/page-title]
    [:t :user.permissions/description]
-   (list-view permissions-list (permission-items registry roles) (:table-query opts))
+   (list-view permissions-list items (:table-query opts))
    opts))
 
 (defn permission-page
@@ -598,13 +663,63 @@
                                   (assignment-sentence a roles scope-info)])))]
     (grouped role-grants :module row (count rights-columns))))
 
+(defn- timestamp-text [at]
+  (some-> at str (str/replace "T" " ") (str/replace #"(\.\d+)?Z$" "")))
+
+(defn- effective-scope-view
+  "A resolved scope, {key #{value}}, as text."
+  [scope {:keys [labels]}]
+  (if (empty? scope)
+    [:span.scope-everywhere [:t :user.rights/scope-everywhere]]
+    (into [:span.scope]
+          (interpose "; " (for [[k vs] (sort-by key scope)]
+                            [:span.scope-part (or (get labels k) (name k)) ": "
+                             [:strong.scope-value (values-str vs)]])))))
+
+(defn- change-effect
+  "What a timeline entry did to the user's rights: each right gained and lost,
+   or, for a change to Everyone, how many users it changed."
+  [{:keys [added removed permissions affected-count]} scope-info]
+  (cond
+    (seq permissions)
+    (list [:t :user.timeline/everyone {:count (or affected-count 0)} (or affected-count 0)]
+          [:ul.timeline-counts
+           (for [{:keys [permission added removed]} permissions]
+             [:li (code permission) " +" added " −" removed])])
+
+    (or (seq added) (seq removed))
+    [:ul.timeline-rights
+     (for [[k badge tone] [[added :user.preview/gains :success] [removed :user.preview/loses :danger]]
+           {:keys [permission scope]} k]
+       [:li (ui/tone-badge [:t badge] tone) " " [:a {:href (permission-path permission)} (code permission)] " "
+        (if (map? scope) (effective-scope-view scope scope-info) [:code scope])])]
+
+    :else [:span.empty-state [:t :user.timeline/no-diff]]))
+
+(defn- rights-timeline
+  "`changes` as `wagoe.user.core.audit/rights-timeline` gives them."
+  [changes scope-info]
+  (section [:t :user.timeline/heading] {:class "rights-timeline"}
+           [:p [:t :user.timeline/note]]
+           (if (seq changes)
+             (table [[:t :common/audit-timestamp] [:t :common/audit-actor] [:t :common/audit-action] [:t :user.timeline/column-effect]]
+                    (for [{:keys [at actor action group-id group-name] :as c} changes]
+                      [:tr.timeline-entry
+                       [:td (timestamp-text at)]
+                       [:td (or actor [:t :user.timeline/system])]
+                       [:td [:t (keyword "common" (str "audit-" (name action)))] " "
+                        (if group-id [:a {:href (group-path group-id)} group-name] group-name)]
+                       [:td (change-effect c scope-info)]]))
+             [:p.empty-state [:t :user.timeline/empty]])))
+
 (defn rights-page
   "`user`'s groups, each with where the membership comes from, and their
    effective permissions, each with the group, role and scope it comes from.
    `grants` as `user-grants` gives them; `(:scope-info opts)` as `scope-view`
    reads it; `(:registry opts)`, the declared permissions, places each in its
    module; `(:roles opts)`, as `role-index` gives them, words each assignment.
-   `(:platform-admin? opts)`: the user passes every check."
+   `(:platform-admin? opts)`: the user passes every check. `(:changes opts)`:
+   the timeline of changes to their rights (BOU-855)."
   [user groups grants opts]
   (let [n (or (not-empty (:name user)) (:email user))]
     (page
@@ -628,7 +743,8 @@
                (if (seq grants)
                  (table (map :label rights-columns)
                         (rights-rows grants (:registry opts) (:roles opts) (:scope-info opts)))
-                 [:p.empty-state [:t :user.rights/permissions-empty]])))
+                 [:p.empty-state [:t :user.rights/permissions-empty]]))
+      (rights-timeline (:changes opts) (:scope-info opts)))
      opts)))
 
 ;; =============================================================================
@@ -748,16 +864,6 @@
 ;; =============================================================================
 ;; Change preview (BOU-852)
 ;; =============================================================================
-
-(defn- effective-scope-view
-  "A resolved scope, {key #{value}}, as text."
-  [scope {:keys [labels]}]
-  (if (empty? scope)
-    [:span.scope-everywhere [:t :user.rights/scope-everywhere]]
-    (into [:span.scope]
-          (interpose "; " (for [[k vs] (sort-by key scope)]
-                            [:span.scope-part (or (get labels k) (name k)) ": "
-                             [:strong.scope-value (values-str vs)]])))))
 
 (defn- hidden-fields
   "`params`, form params, as hidden inputs: a vector is one per value."

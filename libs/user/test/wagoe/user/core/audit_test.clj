@@ -117,24 +117,24 @@
       (is (= 0 (count (get-in entry [:changes :fields]))))
       (is (= 0 (get-in entry [:metadata :field-count]))))
 
-  (testing "Creates audit entry with only some fields changed"
-    (let [old-values {:role :user :name "Name" :active true}
-          new-values {:role :user :name "Name" :active false}
-          entry (audit/update-user-audit-entry
-                 test-actor-id
-                 test-actor-email
-                 test-target-id
-                 test-target-email
-                 old-values
-                 new-values
-                 test-ip
-                 test-user-agent)]
+    (testing "Creates audit entry with only some fields changed"
+      (let [old-values {:role :user :name "Name" :active true}
+            new-values {:role :user :name "Name" :active false}
+            entry (audit/update-user-audit-entry
+                   test-actor-id
+                   test-actor-email
+                   test-target-id
+                   test-target-email
+                   old-values
+                   new-values
+                   test-ip
+                   test-user-agent)]
 
-      (is (= 1 (count (get-in entry [:changes :fields]))))
-      (let [active-change (first (get-in entry [:changes :fields]))]
-        (is (= "active" (:field active-change)))
-        (is (= "true" (:old active-change)))
-        (is (= "false" (:new active-change))))))))
+        (is (= 1 (count (get-in entry [:changes :fields]))))
+        (let [active-change (first (get-in entry [:changes :fields]))]
+          (is (= "active" (:field active-change)))
+          (is (= "true" (:old active-change)))
+          (is (= "false" (:new active-change))))))))
 
 ;; =============================================================================
 ;; Deactivate User Audit Entry Tests
@@ -409,3 +409,32 @@
   (testing "Returns nil for nil input"
     (let [sanitized (audit/sanitize-audit-metadata nil)]
       (is (nil? sanitized)))))
+
+;; =============================================================================
+;; Rights timeline (BOU-855)
+;; =============================================================================
+
+(deftest ^:unit the-rights-timeline-reads-the-stored-diffs-newest-first
+  (let [user     {:id test-target-id :email test-target-email}
+        group    {:id (UUID/randomUUID) :name "Sales"}
+        ctx      {:actor-id test-actor-id :actor-email test-actor-email}
+        entry    (fn [action g diff]
+                   (first (audit/group-audit-entries action ctx g [user] [] {(str test-target-id) diff})))
+        join     (entry :group-join group {:added [{:permission :orders/read :scope {:dept #{7}}}]})
+        leave    (entry :group-leave group {:removed [{:permission :orders/read :scope {}}]})
+        everyone (entry :grant-add {:id (UUID/randomUUID) :name "Everyone"}
+                        {:permissions [{:permission :orders/read :added 3 :removed 0}] :affected-count 3})
+        old      (first (audit/group-audit-entries :grant-add ctx group [user] []))
+        at       #(assoc %1 :created-at (java.time.Instant/parse %2))
+        timeline (audit/rights-timeline [(at join "2026-10-01T10:00:00Z") (at leave "2026-10-03T10:00:00Z")
+                                         (at everyone "2026-10-02T10:00:00Z") (at old "2026-09-01T10:00:00Z")]
+                                        3)]
+    (is (= [:group-leave :grant-add :group-join] (map :action timeline)) "newest first, at most n")
+    (is (= [{:permission :orders/read :scope {}}] (:removed (first timeline))))
+    (is (= [{:permission :orders/read :scope {:dept #{7}}}] (:added (last timeline))) "the scope read back")
+    (is (= [test-actor-email "Sales"] ((juxt :actor :group-name) (last timeline))))
+    (testing "a change to Everyone is counted"
+      (is (= 3 (:affected-count (second timeline))))
+      (is (= [{:permission :orders/read :added 3 :removed 0}] (:permissions (second timeline)))))
+    (testing "an entry from before the diffs has none"
+      (is (= [[] []] ((juxt :added :removed) (first (audit/rights-timeline [old] 1))))))))

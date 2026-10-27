@@ -150,3 +150,39 @@
   (let [page (sut/rights-page {:id 1 :name "Ada"} [] [] {})]
     (is (some #(and (map? %) (= "tab tab-active" (:class %)) (= "/web/users/1/rights" (:href %)))
               (tree-seq coll? seq page)))))
+
+(defn- role-rows [page]
+  (filter #(re-find #"role-row" (first %)) (rows-of page)))
+
+(deftest ^:unit a-list-filters-on-a-signal
+  (let [signalled [(assoc (first roles) :signals #{:unused})
+                   (assoc (second roles) :signals #{})
+                   (assoc (nth roles 2) :signals #{:near-duplicate} :near-duplicates [:admin.users/viewer])]
+        page      #(sut/roles-page signalled {} {:table-query %})
+        filtered  {:filters {:signal {:op :eq :value "unused"}}}]
+    (testing "every row with its badges, and a filter per signal"
+      (is (= 3 (count (role-rows (page {})))))
+      (is (some #{:user.hygiene/near-duplicate-of} (text (page {}))))
+      (is (some #(and (map? %) (re-find #"signal-filter-unused" (str (:class %)))) (tree-seq coll? seq (page {})))))
+    (testing "filtered: the rows carrying it, and the search sends the filter along"
+      (is (= ["orders/clerk"] (map (comp first second) (role-rows (page filtered)))))
+      (is (some #(and (map? %) (= "filters[signal][value]" (:name %)) (= "unused" (:value %)))
+                (tree-seq coll? seq (page filtered)))))
+    (testing "a signal the list does not offer is ignored"
+      (is (= 3 (count (role-rows (page {:filters {:signal {:value "empty"}}}))))))))
+
+(deftest ^:unit the-rights-page-shows-the-changes-to-rights
+  (let [user    {:id (random-uuid) :email "ada@example.com"}
+        changes [{:at (java.time.Instant/parse "2026-10-03T10:00:00Z") :actor "admin@example.com"
+                  :action :group-join :group-id (str (random-uuid)) :group-name "Sales"
+                  :added [{:permission :orders/read :scope {:dept #{7}}}] :removed []}
+                 {:at (java.time.Instant/parse "2026-10-02T10:00:00Z") :actor "admin@example.com"
+                  :action :grant-add :group-name "Everyone" :added [] :removed []
+                  :permissions [{:permission :orders/read :added 3 :removed 0}] :affected-count 3}]
+        shown   (text (sut/rights-page user [] [] {:changes changes :scope-info {:labels {:dept "Department"}}}))]
+    (is (some #{"2026-10-03 10:00:00"} shown))
+    (is (some #{:common/audit-group-join} shown))
+    (is (some #{:user.preview/gains} shown))
+    (is (some #{"Department"} shown))
+    (is (some #{:user.timeline/everyone} shown))
+    (is (some #{:user.timeline/empty} (text (sut/rights-page user [] [] {}))))))

@@ -11,7 +11,8 @@
    - Pure functions only - deterministic, no side effects
    - Returns data that shell layer will persist
    - Business rules for what gets audited and how"
-  (:require [wagoe.user.core.group :as group]))
+  (:require [clojure.edn :as edn]
+            [wagoe.user.core.group :as group]))
 
 ;; =============================================================================
 ;; Pure Audit Entry Creation Functions
@@ -409,3 +410,39 @@
         :ip-address        ip-address
         :user-agent        user-agent
         :result            :success}))))
+
+;; =============================================================================
+;; Rights timeline (BOU-855)
+;; =============================================================================
+
+(def rights-actions
+  "The actions a change to a user's rights is audited as."
+  [:group-join :group-leave :grant-add :grant-remove])
+
+(defn- stored-right
+  "A right as `effective-record` stored it, read back: the scope a map, or
+   the stored text when it does not read as one."
+  [{:keys [permission scope]}]
+  (let [m (try (edn/read-string scope) (catch Exception _ nil))]
+    {:permission (group/parse-name permission)
+     :scope      (if (map? m) m scope)}))
+
+(defn rights-timeline
+  "The newest `n` of `entries`, audit entries of `rights-actions`, newest
+   first, each {:at :actor :action :group-id :group-name :added :removed},
+   the rights the change gave and took (BOU-852). A change to Everyone has
+   :permissions and :affected-count instead; an entry from before BOU-852
+   none of these."
+  [entries n]
+  (for [{:keys [created-at actor-email action metadata changes]}
+        (take n (sort-by :created-at #(compare %2 %1) entries))
+        :let [{:keys [added removed permissions affected-count]} (:effective changes)]]
+    {:at             created-at
+     :actor          actor-email
+     :action         action
+     :group-id       (:group-id metadata)
+     :group-name     (:group-name metadata)
+     :added          (mapv stored-right added)
+     :removed        (mapv stored-right removed)
+     :permissions    (mapv #(update % :permission group/parse-name) permissions)
+     :affected-count affected-count}))
