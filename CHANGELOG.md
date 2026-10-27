@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **A group service of your own is checked at boot** (BOU-859): with the web UI on, one lacking a protocol beside
+  `IUserGroupService` stops boot with `WGE-107`, not the explain, preview, overview or grant page on first use.
 - **Group memberships and role assignments can end on a date** (BOU-856), set on the group page and in the grant
   wizard; expired access counts for nothing at once. With `:wagoe/jobs` on, a job removes it every 15 minutes.
 - **Authorization hygiene signals and a rights timeline** (BOU-855): the groups, roles and permissions lists badge and

@@ -106,3 +106,43 @@
                                                         (expire-access! [_ _] {:members [{}] :assignments []}))})
                          sut/access-expiry-job-type)]
         (is (= {:success? true :result {:members 1 :assignments 0}} (handler {})))))))
+
+(def ^:private group-protocols
+  '[wagoe.user.ports/IAccessExplain wagoe.user.ports/IRightsPreview wagoe.user.ports/IRoleAssignments
+    wagoe.user.ports/IGrantOptions wagoe.user.ports/ITimeBoundAccess])
+
+(defmacro ^:private group-service-without
+  "A group service implementing IUserGroupService and every protocol beside it
+   but `missing`."
+  [missing]
+  `(reify wagoe.user.ports/IUserGroupService ~@(remove #{missing} group-protocols)))
+
+(defmacro ^:private each-missing
+  "{protocol name, a group service lacking only it} for each of `group-protocols`."
+  []
+  (into {} (for [p group-protocols] [(name p) `(group-service-without ~p)])))
+
+(defn- boot-error [k service & [config]]
+  (try (ig/init-key k {:user-service nil :group-service service :config (or config {})})
+       nil
+       (catch clojure.lang.ExceptionInfo e
+         [(ex-message e) (ex-data e)])))
+
+(deftest ^:unit a-group-service-lacking-a-newer-protocol-refuses-to-boot
+  ;; BOU-859: refused at startup, not on the first request to its page.
+  (doseq [[proto service] (each-missing)]
+    (testing proto
+      (let [[message data] (boot-error :wagoe/user-group-routes service)]
+        (is (= (str "WGE-107: the group service does not implement " proto) message))
+        (is (= :configuration-error (:type data))))))
+  (testing "the expiry job needs ITimeBoundAccess"
+    (is (= "WGE-107: the group service does not implement ITimeBoundAccess"
+           (first (boot-error :wagoe.user/job-handlers
+                              (group-service-without wagoe.user.ports/ITimeBoundAccess))))))
+  (testing "one implementing only IUserGroupService is refused"
+    (is (re-find #"^WGE-107: " (first (boot-error :wagoe/user-group-routes (reify wagoe.user.ports/IUserGroupService))))))
+  (testing "without the web UI no page calls them, so it boots"
+    (is (nil? (boot-error :wagoe/user-group-routes (reify wagoe.user.ports/IUserGroupService)
+                          {:active {:wagoe/settings {:features {:user-web-ui {:enabled? false}}}}}))))
+  (testing "one implementing them all boots"
+    (is (nil? (boot-error :wagoe/user-group-routes (group-service-without nil))))))

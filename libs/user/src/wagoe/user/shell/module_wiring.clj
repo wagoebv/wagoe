@@ -329,8 +329,12 @@
    removes it and audits that. `:wagoe/jobs :recurring` overrides it."
   {:cron "*/15 * * * *"})
 
+(def ^:private time-bound-access
+  {"ITimeBoundAccess" [ports/ITimeBoundAccess ['add-group-member-until 'expire-access!]]})
+
 (defmethod ig/init-key :wagoe.user/job-handlers
   [_ {:keys [group-service]}]
+  (require-protocols! "group service" group-service time-bound-access)
   {access-expiry-job-type
    (fn [_args]
      {:success? true
@@ -339,6 +343,16 @@
 (defmethod ig/init-key :wagoe/user-group-routes
   [_ {:keys [user-service group-service config]}]
   (require 'wagoe.user.shell.http)
+  ;; Refused rather than degraded: they shipped with IUserGroupService in 1.1,
+  ;; so no older group service exists to keep booting (BOU-859). Only the web
+  ;; pages call them, so an API-only app is not refused.
+  (when ((ns-resolve 'wagoe.user.shell.http 'web-ui-enabled?) config)
+    (require-protocols! "group service" group-service
+                        (merge time-bound-access
+                               {"IAccessExplain"   [ports/IAccessExplain ['explain-access]]
+                                "IRightsPreview"   [ports/IRightsPreview ['preview-change]]
+                                "IRoleAssignments" [ports/IRoleAssignments ['all-assignments]]
+                                "IGrantOptions"    [ports/IGrantOptions ['grant-options]]})))
   ((ns-resolve 'wagoe.user.shell.http 'group-routes) user-service group-service config))
 
 ;; =============================================================================
