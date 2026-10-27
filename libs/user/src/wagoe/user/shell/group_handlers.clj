@@ -8,6 +8,7 @@
             [malli.core :as m]
             [malli.transform :as mt]
             [ring.util.response :as response]
+            [wagoe.platform.core.csrf :as csrf]
             [wagoe.platform.ports.authorization :as authz]
             [wagoe.shared.ui.core.combobox :as combobox]
             [wagoe.shared.ui.core.htmx :as htmx]
@@ -131,15 +132,40 @@
       (group-page request group-service id 200 {})
       (not-found request))))
 
+(defn confirmed?
+  "Whether the form confirms a change its preview showed."
+  [request]
+  (= "true" (form request "confirm")))
+
+(defn preview-response
+  "What `change` would do to effective rights (BOU-852), and a form that
+   posts the request's fields again, confirmed. `back`: where cancel goes."
+  [request group-service change back]
+  (html-response request
+                 (rights-ui/preview-page (ports/preview-change group-service change)
+                                         (assoc (page-opts request)
+                                                :action     (:uri request)
+                                                :fields     (dissoc (:form-params request) csrf/field-name "confirm")
+                                                :back       back
+                                                :scope-info (scope-info group-service)))
+                 200))
+
 (defn- change
   "Run `f` on the group named in the path, redirecting back to it with
-   `flash-key`, or with no message when `f` answers falsey: nothing changed. A
-   refused change re-renders the page saying why."
-  [group-service request flash-key f]
+   `flash-key`, or with no message when `f` answers falsey: nothing changed.
+   Unconfirmed, `preview`'s change for the group is shown instead. A refused
+   change re-renders the page saying why."
+  [group-service request flash-key preview f]
   (if-let [id (path-uuid request :id)]
     (try
-      (if (f id)
+      (cond
+        (and preview (not (confirmed? request)))
+        (preview-response request group-service (preview id) (group-ui/group-path id))
+
+        (f id)
         (redirect (group-ui/group-path id) flash-key)
+
+        :else
         (response/redirect (group-ui/group-path id) :see-other))
       (catch clojure.lang.ExceptionInfo e
         (if (refused? e)
@@ -151,7 +177,7 @@
 
 (defn update-group [group-service]
   (fn [request]
-    (change group-service request :user.groups/flash-saved
+    (change group-service request :user.groups/flash-saved nil
             #(ports/update-group group-service {:id          %
                                                 :name        (form request "name")
                                                 :description (form request "description")}))))
@@ -159,22 +185,34 @@
 (defn delete-group [group-service]
   (fn [request]
     (if-let [id (path-uuid request :id)]
-      (if (ports/delete-group group-service id)
-        (redirect group-ui/base-path :user.groups/flash-deleted)
-        (not-found request))
+      (cond
+        (not (ports/get-group group-service id)) (not-found request)
+
+        (not (confirmed? request))
+        (try (preview-response request group-service {:op :delete-group :group-id id} (group-ui/group-path id))
+             (catch clojure.lang.ExceptionInfo e
+               (if (refused? e)
+                 (group-page request group-service id 422 {:error (error-text e)})
+                 (throw e))))
+
+        (ports/delete-group group-service id) (redirect group-ui/base-path :user.groups/flash-deleted)
+        :else (not-found request))
       (not-found request))))
+
+(defn- member-id
+  "The id of the user the member form names. Throws :not-found."
+  [user-service request]
+  ;; The lookup submits the user's id; a script may still send an email
+  (or (:id (if-let [user-id (some-> (form request "user-id") parse-uuid)]
+             (ports/get-user-by-id user-service user-id)
+             (some->> (form request "email") not-empty (ports/get-user-by-email user-service))))
+      (throw (ex-info "No such user" {:type :not-found :field :email}))))
 
 (defn add-member [user-service group-service]
   (fn [request]
     (change group-service request :user.groups/flash-member-added
-            (fn [id]
-              ;; The lookup submits the user's id; a script may still send an email
-              (let [user (if-let [user-id (some-> (form request "user-id") parse-uuid)]
-                           (ports/get-user-by-id user-service user-id)
-                           (some->> (form request "email") not-empty (ports/get-user-by-email user-service)))]
-                (if user
-                  (ports/add-group-member group-service id (:id user))
-                  (throw (ex-info "No such user" {:type :not-found :field :email}))))))))
+            (fn [id] {:op :add-member :group-id id :user-id (member-id user-service request)})
+            #(ports/add-group-member group-service % (member-id user-service request)))))
 
 (defn- user-label [{:keys [name email]}]
   (if (str/blank? name) email (str name " <" email ">")))
@@ -210,6 +248,7 @@
 (defn remove-member [group-service]
   (fn [request]
     (change group-service request :user.groups/flash-member-removed
+            (fn [id] {:op :remove-member :group-id id :user-id (path-uuid request :user-id)})
             #(when-let [user-id (path-uuid request :user-id)]
                (ports/remove-group-member group-service % user-id)))))
 
@@ -244,15 +283,19 @@
              sources)
       scope)))
 
+(defn- form-assignment [group-service request]
+  {:role  (group-core/parse-name (form request "role"))
+   :scope (form-scope group-service request)})
+
 (defn add-role [group-service]
   (fn [request]
     (change group-service request :user.groups/flash-role-added
-            #(ports/add-group-role group-service %
-                                   {:role  (group-core/parse-name (form request "role"))
-                                    :scope (form-scope group-service request)}))))
+            (fn [id] {:op :add-role :group-id id :assignment (form-assignment group-service request)})
+            #(ports/add-group-role group-service % (form-assignment group-service request)))))
 
 (defn remove-role [group-service]
   (fn [request]
     (change group-service request :user.groups/flash-role-removed
+            (fn [id] {:op :remove-role :group-id id :assignment-id (path-uuid request :assignment-id)})
             #(when-let [assignment-id (path-uuid request :assignment-id)]
                (ports/remove-group-role group-service % assignment-id)))))

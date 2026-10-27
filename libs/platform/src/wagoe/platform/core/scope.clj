@@ -187,3 +187,31 @@
                            missed)
                      (into (comp (filter #(= permission (:permission %))) (map (fn [r] {:right r :reason :unresolved})))
                            dropped))})))
+
+;; =============================================================================
+;; Diff (BOU-852)
+;; =============================================================================
+
+(defn- covers?
+  "Whether resolved `scope` admits wherever resolved `other` does: each of its
+   keys is one of `other`'s, holding every value `other` holds there."
+  [scope other]
+  (every? (fn [[k allowed]]
+            (when-let [vs (get other k)] (every? #(allows? allowed %) vs)))
+          scope))
+
+(defn rights-diff
+  "How resolved rights `after` differ from `before`, rights adding up as the
+   interceptor adds them: `:added`, the rights `after` holds where `before`
+   holds nothing that covers them, and `:removed` the reverse. Each
+   {:permission :scope}, none covered by another in its list."
+  [before after]
+  (let [norm      #(into #{} (map (fn [r] {:permission (:permission r) :scope (or (:scope r) {})})) %)
+        covered?  (fn [rights {:keys [permission scope] :as r}]
+                    (some #(and (not= r %) (= permission (:permission %)) (covers? (:scope %) scope)) rights))
+        uncovered (fn [xs others]
+                    (let [left (into #{} (remove #(or (contains? others %) (covered? others %))) xs)]
+                      (->> left (remove (partial covered? left)) (sort-by (juxt (comp str :permission) (comp str :scope))) vec)))
+        b         (norm before)
+        a         (norm after)]
+    {:added (uncovered a b) :removed (uncovered b a)}))

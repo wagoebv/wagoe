@@ -242,19 +242,20 @@
       []
       (let [active [:= :a.active (protocols/boolean->db (:adapter ctx) true)]
             roles  [:in :r.role (mapv group/permission-str role-names)]]
-        (mapv (fn [row] {:user-id (tc/string->uuid (:user-id row))
-                         :role    (keyword (:role row))
-                         :scope   (db->scope row)})
+        (mapv (fn [row] {:user-id  (tc/string->uuid (:user-id row))
+                         :group-id (tc/string->uuid (:group-id row))
+                         :role     (keyword (:role row))
+                         :scope    (db->scope row)})
               (db/execute-query!
                ;; UNION ALL: a scope is TEXT, which not every engine compares;
                ;; permission-holders makes them distinct.
-               ctx {:union-all [{:select [:m.user_id :r.role :r.scope]
+               ctx {:union-all [{:select [:m.user_id :r.group_id :r.role :r.scope]
                                  :from   [[:user_group_roles :r]]
                                  :join   [[:user_group_members :m] [:= :m.group_id :r.group_id]
                                           [:auth_users :a] [:= :a.id :m.user_id]]
                                  :where  [:and roles [:= :a.deleted_at nil] active]}
                                 ;; Everyone: every user, without a membership row.
-                                {:select [[:a.id :user_id] :r.role :r.scope]
+                                {:select [[:a.id :user_id] :r.group_id :r.role :r.scope]
                                  :from   [[:user_group_roles :r]]
                                  :join   [[:auth_users :a] [:= :r.group_id (str group/everyone-id)]]
                                  :where  [:and roles [:= :a.deleted_at nil] active]}]})))))

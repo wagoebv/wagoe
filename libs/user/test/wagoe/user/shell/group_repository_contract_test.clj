@@ -159,6 +159,8 @@
         (is (= #{[(:id ada) :report/viewer {}] [(:id bob) :report/viewer {}]}
                (holders #{:report/viewer}))
             "Everyone's role reaches every active user")
+        (is (= #{(:id finance) (:id audit)} (set (map :group-id (ports/find-role-holders repo #{:invoice/approver}))))
+            "each through its group")
         (is (= [] (ports/find-role-holders repo #{})))))))
 
 (deftest ^:contract everyone-is-made-once

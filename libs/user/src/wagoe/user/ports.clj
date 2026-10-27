@@ -232,7 +232,7 @@
   ;; :permissions when the role is a managed one. None for a soft-deleted user.
 
   (find-role-holders [this role-names])
-  ;; {:user-id :role :scope} for each active, not soft-deleted user holding
+  ;; {:user-id :group-id :role :scope} for each active, not soft-deleted user holding
   ;; one of the roles through a stored membership or Everyone.
 
   (ensure-everyone [this])
@@ -501,6 +501,17 @@
   ;; :paths :misses}, each right with its group's :membership (:member,
   ;; :provider or :everyone) and :stored-scope; refused, :alternatives too, the
   ;; assignments giving it as role-holders lists them. BOU-851.
+
+(defprotocol IRightsPreview
+  (preview-change [this change]))
+  ;; How `change` would alter effective rights, computed and checked as making
+  ;; it does (wagoe.platform.core.scope/rights-diff), nothing changed. A change:
+  ;; {:op :add-member|:remove-member :group-id :user-id}, {:op :delete-group
+  ;; :group-id}, {:op :add-role :group-id :assignment {:role :scope}}, {:op
+  ;; :remove-role :group-id :assignment-id}, {:op :update-role :role
+  ;; :permissions}, {:op :delete-role :role}. Returns
+  ;; wagoe.user.core.group/diff-summary and :everyone?. The group service
+  ;; stores each user's diff in the change's audit entries. BOU-852.
 
 ;; =============================================================================
 ;; Sign-in hooks

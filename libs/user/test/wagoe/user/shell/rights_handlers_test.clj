@@ -34,12 +34,13 @@
                                                        (group-service/with-registry-scopes
                                                          (group-service/prepare-settings nil) registry)
                                                        {:registry registry
-                                                        :explain  (partial authz/explain registry)})
+                                                        :explain  (partial authz/explain registry)
+                                                        :resolve  (partial authz/resolve-rights registry)})
             routes (http/group-routes usvc gsvc nil)
             app    (ring/ring-handler (ring/router ["/web" (:web routes)]))
             admin  (ports/create-user users {:email "admin@example.com" :name "Admin" :role :admin
                                              :active true :password-hash "x"})]
-        (f {:app app :users users :usvc usvc :gsvc gsvc :admin admin})))))
+        (f {:app app :users users :usvc usvc :gsvc gsvc :admin admin :audit audit})))))
 
 (defn- req
   ([user method uri] (req user method uri {}))
@@ -81,17 +82,17 @@
         (let [r (app (req admin :post "/web/admin/roles/duplicate" {"name" "invoice/viewer" "new-name" "invoice/reader"}))]
           (is (= "/web/admin/roles/view?name=invoice%2Freader" (get-in r [:headers "Location"]))))
         (is (= 303 (:status (app (req admin :post "/web/admin/roles/save"
-                                      {"name" "invoice/reader" "permissions" ["invoice/read" "invoice/approve"]})))))
+                                      {"name" "invoice/reader" "permissions" ["invoice/read" "invoice/approve"] "confirm" "true"})))))
         (is (= #{:invoice/read :invoice/approve}
                (:permissions (some #(when (= :invoice/reader (:name %)) %) (ports/list-roles gsvc))))))
 
       (testing "a code role is not saved or deleted"
         (is (= 422 (:status (app (req admin :post "/web/admin/roles/save"
                                       {"name" "invoice/viewer" "permissions" "invoice/read"})))))
-        (is (= 404 (:status (app (req admin :post "/web/admin/roles/delete" {"name" "invoice/viewer"}))))))
+        (is (= 404 (:status (app (req admin :post "/web/admin/roles/delete" {"name" "invoice/viewer" "confirm" "true"}))))))
 
       (testing "a managed role is deleted"
-        (is (= 303 (:status (app (req admin :post "/web/admin/roles/delete" {"name" "invoice/reader"})))))
+        (is (= 303 (:status (app (req admin :post "/web/admin/roles/delete" {"name" "invoice/reader" "confirm" "true"})))))
         (is (= 404 (:status (get-page app admin "/web/admin/roles/view?name=invoice/reader"))))))))
 
 (deftest ^:integration a-role-and-a-permission-show-who-holds-them
@@ -223,8 +224,49 @@
           (is (not (str/includes? page "name=\"scope-source-domain-id\""))))
         (is (= 303 (:status (app (req admin :post (str path "/roles")
                                       {"role" "invoice/viewer" "scope-domain-id" "4"
-                                       "scope-source-department-id" "user/department"})))))
+                                       "scope-source-department-id" "user/department" "confirm" "true"})))))
         (is (= [{:domain-id 4 :department-id :user/department}] (map :scope (:roles (ports/get-group gsvc gid)))))
         (testing "a source the key does not take is refused"
           (is (= 422 (:status (app (req admin :post (str path "/roles")
                                         {"role" "invoice/viewer" "scope-source-department-id" "user/boss"}))))))))))
+
+(deftest ^:integration a-change-shows-its-effect-on-rights-before-it-is-made
+  (with-app
+    (fn [{:keys [app users gsvc admin audit]}]
+      (let [user! #(ports/create-user users {:email % :name "U" :role :user :active true :password-hash "x"})
+            ada   (user! "ada@example.com")
+            bob   (user! "bob@example.com")
+            path  (get-in (app (req admin :post "/web/admin/groups" {"name" "Desks"})) [:headers "Location"])
+            gid   (parse-uuid (last (str/split path #"/")))
+            a     (ports/add-group-role gsvc gid {:role :invoice/viewer :scope {:department-id :user/department}})]
+        (ports/add-group-member gsvc gid (:id bob))
+        (testing "adding a member shows their gain, resolved as enforcement resolves it, and changes nothing"
+          (let [r (app (req admin :post (str path "/members") {"user-id" (str (:id ada))}))]
+            (is (= 200 (:status r)))
+            (is (str/includes? (:body r) "preview-added"))
+            (is (str/includes? (:body r) "<strong class=\"scope-value\">7, 70</strong>"))
+            (is (str/includes? (:body r) (str "name=\"user-id\" type=\"hidden\" value=\"" (:id ada) "\"")))
+            (is (str/includes? (:body r) "name=\"confirm\" type=\"hidden\" value=\"true\""))
+            (is (empty? (ports/user-grants gsvc ada)))))
+        (testing "confirmed, it is made, and its audit entry keeps the diff"
+          (is (= 303 (:status (app (req admin :post (str path "/members") {"user-id" (str (:id ada)) "confirm" "true"})))))
+          (is (= [{:permission "invoice/read" :scope "{:department-id #{7 70}}"}]
+                 (->> (ports/find-audit-logs-by-user audit (:id ada) {:limit 10})
+                      (some #(when (= "group-join" (name (:action %))) %))
+                      :changes :effective :added
+                      (map #(update-keys % keyword))))))
+        (testing "removing the role names every member it reaches"
+          (let [body (:body (app (req admin :post (str path "/roles/" (:id a) "/remove"))))]
+            (is (str/includes? body "preview-affected-count"))
+            (is (str/includes? body "ada@example.com"))
+            (is (str/includes? body "bob@example.com"))
+            (is (= 1 (count (:roles (ports/get-group gsvc gid)))))))
+        (testing "a role's permissions changed are previewed on its page"
+          (ports/create-role gsvc {:name :invoice/clerk :permissions #{:invoice/read}})
+          (ports/add-group-role gsvc gid {:role :invoice/clerk :scope {}})
+          (let [body (:body (app (req admin :post "/web/admin/roles/save"
+                                      {"name" "invoice/clerk" "permissions" ["invoice/read" "invoice/approve"]})))]
+            (is (str/includes? body "preview-permission"))
+            (is (str/includes? body "invoice/approve"))
+            (is (str/includes? body "name=\"permissions\" type=\"hidden\" value=\"invoice/approve\""))
+            (is (= #{:invoice/read} (:permissions (some #(when (= :invoice/clerk (:name %)) %) (ports/list-roles gsvc)))))))))))
