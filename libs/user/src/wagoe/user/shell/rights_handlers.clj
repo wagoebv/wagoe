@@ -6,6 +6,7 @@
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.scope :as scope]
             [wagoe.platform.ports.authorization :as authz]
+            [wagoe.user.core.access-ui :as access-ui]
             [wagoe.user.core.grant-ui :as grant-ui]
             [wagoe.user.core.group :as group-core]
             [wagoe.user.core.rights-ui :as rights-ui]
@@ -215,6 +216,7 @@
                        (rights-ui/rights-page user (ports/user-groups group-service user) grants
                                               (assoc (page-opts request)
                                                      :registry (registry-permissions group-service)
+                                                     :roles (rights-ui/role-index (ports/list-roles group-service))
                                                      :platform-admin? (access/platform-admin? user)
                                                      :scope-info (assoc (group-handlers/scope-info group-service)
                                                                         :resolved (resolve-sources group-service user grants))))
@@ -252,6 +254,41 @@
                                                       :scope-info scope-info))
                        200))
       (not-found request :user.rights/user-not-found))))
+
+;; =============================================================================
+;; Access overview (BOU-854)
+;; =============================================================================
+
+(defn- superusers
+  "The platform admins, who pass every check."
+  [user-service]
+  ;; Paged: tenant admins share the role and would push platform admins past one page
+  (->> (iterate #(+ % 100) 0)
+       (map #(:users (ports/list-users user-service {:filter-role :admin :filter-active true
+                                                     :sort-by :email :sort-direction :asc
+                                                     :limit 100 :offset %})))
+       (take-while seq)
+       (apply concat)
+       (filter access/platform-admin?)))
+
+(defn access-overview
+  "GET /web/admin/access — groups by modules; `module` and `group` filter it,
+   and a filter's htmx request gets the matrix alone."
+  [user-service group-service]
+  (fn [request]
+    (let [registry   (registry-permissions group-service)
+          roles      (rights-ui/role-index (ports/list-roles group-service))
+          params     (:query-params request)
+          filters    {:module (not-empty (get params "module")) :group (not-empty (get params "group"))}
+          ov         (access-ui/overview (ports/list-groups group-service) (ports/all-assignments group-service)
+                                         roles registry filters)
+          scope-info (group-handlers/scope-info group-service)]
+      (group-handlers/fragment-response
+       request access-ui/matrix-id
+       #(access-ui/matrix ov roles registry scope-info)
+       #(access-ui/page ov (superusers user-service)
+                        (assoc (page-opts request) :filters filters :roles roles
+                               :registry registry :scope-info scope-info))))))
 
 ;; =============================================================================
 ;; Grant wizard (BOU-853)

@@ -798,6 +798,8 @@
                       :label [:t :user.roles/page-title] :description [:t :user.roles/nav-description]}
                      {:href "/web/admin/permissions" :icon :check :access :admin
                       :label [:t :user.permissions/page-title] :description [:t :user.permissions/nav-description]}
+                     {:href "/web/admin/access" :icon :clipboard :access :admin
+                      :label [:t :user.access/page-title] :description [:t :user.access/nav-description]}
                      {:href "/web/audit" :icon :file-text :access :platform-admin
                       :label [:t :admin/audit-trail-title] :description [:t :admin/audit-trail-description]}]}})
 
@@ -868,6 +870,8 @@
                            {:get {:handler (rights-handlers/show-permission group-service)}})
                     (route "/grant"
                            {:get {:handler (rights-handlers/grant-bulk user-service group-service)}})]
+                   (route "/admin/access"
+                          {:get {:handler (rights-handlers/access-overview user-service group-service)}})
                    (route "/users/:id/rights"
                           {:get {:handler (rights-handlers/user-rights user-service group-service)}})
                    (route "/users/:id/explain"
