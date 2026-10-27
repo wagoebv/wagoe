@@ -342,15 +342,17 @@
 
 (defmethod ig/init-key :wagoe/user-group-routes
   [_ {:keys [user-service group-service config]}]
-  ;; Refused rather than degraded: they shipped with IUserGroupService in 1.1,
-  ;; so no older group service exists to keep booting (BOU-859).
-  (require-protocols! "group service" group-service
-                      (merge time-bound-access
-                             {"IAccessExplain"   [ports/IAccessExplain ['explain-access]]
-                              "IRightsPreview"   [ports/IRightsPreview ['preview-change]]
-                              "IRoleAssignments" [ports/IRoleAssignments ['all-assignments]]
-                              "IGrantOptions"    [ports/IGrantOptions ['grant-options]]}))
   (require 'wagoe.user.shell.http)
+  ;; Refused rather than degraded: they shipped with IUserGroupService in 1.1,
+  ;; so no older group service exists to keep booting (BOU-859). Only the web
+  ;; pages call them, so an API-only app is not refused.
+  (when ((ns-resolve 'wagoe.user.shell.http 'web-ui-enabled?) config)
+    (require-protocols! "group service" group-service
+                        (merge time-bound-access
+                               {"IAccessExplain"   [ports/IAccessExplain ['explain-access]]
+                                "IRightsPreview"   [ports/IRightsPreview ['preview-change]]
+                                "IRoleAssignments" [ports/IRoleAssignments ['all-assignments]]
+                                "IGrantOptions"    [ports/IGrantOptions ['grant-options]]})))
   ((ns-resolve 'wagoe.user.shell.http 'group-routes) user-service group-service config))
 
 ;; =============================================================================

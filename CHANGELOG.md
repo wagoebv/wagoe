@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **A group service of your own is checked at boot** (BOU-859): with the web UI on, one lacking a protocol beside
+  `IUserGroupService` stops boot with `WGE-107`, not the explain, preview, overview or grant page on first use.
 - **Group memberships and role assignments can end on a date** (BOU-856), set on the group page and in the grant
   wizard; expired access counts for nothing at once. With `:wagoe/jobs` on, a job removes it every 15 minutes.
 - **Authorization hygiene signals and a rights timeline** (BOU-855): the groups, roles and permissions lists badge and
@@ -241,8 +243,6 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
-- **A group service of your own must implement the protocols beside `IUserGroupService`** (BOU-859), or boot stops with
-  `WGE-107` naming the one it lacks, rather than the explain, preview, overview or grant page failing on first use.
 - **Service operations log their start and completion at debug** (BOU-847): the HTTP or CLI handler around them logs
   both at info. Set the `wagoe` logger to `:debug` to see them.
 - **`default-admin-config` drops `:require-role`, and `AdminConfig` makes it optional** (BOU-842). An admin config

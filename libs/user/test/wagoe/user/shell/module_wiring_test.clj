@@ -122,8 +122,8 @@
   []
   (into {} (for [p group-protocols] [(name p) `(group-service-without ~p)])))
 
-(defn- boot-error [k service]
-  (try (ig/init-key k {:user-service nil :group-service service :config {}})
+(defn- boot-error [k service & [config]]
+  (try (ig/init-key k {:user-service nil :group-service service :config (or config {})})
        nil
        (catch clojure.lang.ExceptionInfo e
          [(ex-message e) (ex-data e)])))
@@ -140,6 +140,9 @@
            (first (boot-error :wagoe.user/job-handlers
                               (group-service-without wagoe.user.ports/ITimeBoundAccess))))))
   (testing "one implementing only IUserGroupService is refused"
-    (is (some? (boot-error :wagoe/user-group-routes (reify wagoe.user.ports/IUserGroupService)))))
+    (is (re-find #"^WGE-107: " (first (boot-error :wagoe/user-group-routes (reify wagoe.user.ports/IUserGroupService))))))
+  (testing "without the web UI no page calls them, so it boots"
+    (is (nil? (boot-error :wagoe/user-group-routes (reify wagoe.user.ports/IUserGroupService)
+                          {:active {:wagoe/settings {:features {:user-web-ui {:enabled? false}}}}}))))
   (testing "one implementing them all boots"
     (is (nil? (boot-error :wagoe/user-group-routes (group-service-without nil))))))
