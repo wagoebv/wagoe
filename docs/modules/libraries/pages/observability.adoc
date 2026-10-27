@@ -100,9 +100,9 @@ so; the framework's own labels (method, status, operation) are bounded.
 The platform reports HTTP 5xx errors only, once each. Context, tags and extra
 are PII-redacted, and database values quoted in exception messages are removed.
 
-Context (breadcrumbs, user, tags, extra) is per thread. It is cleared at the
-start of each HTTP request, and each job, event handler and realtime handler
-runs with an empty context that is restored afterwards.
+Context (breadcrumbs, user, tags, extra) is per thread: cleared at the start of
+each HTTP request, and emptied for each job, event handler and realtime handler,
+then restored.
 
 The component also implements `IErrorFilter` and `IErrorReportingConfig`, and
 changes through either apply to the next event:

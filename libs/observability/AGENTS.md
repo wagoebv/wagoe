@@ -52,7 +52,8 @@ map, the key every system provides.
 
 Honoured config: `:dsn`, `:environment`, `:release`, `:server-name`, `:debug`,
 `:traces-sample-rate` (client init); `:sample-rate`, `:enabled`, `:filtering
-{:min-severity :exclude-exceptions :exclude-messages}`, `:redact` (per event).
+{:min-severity :exclude-exceptions :exclude-messages}`, `:redact` (per event); `:max-breadcrumbs` (default 100, newest kept, per
+component).
 Other schema keys (rate limits, retries, `:before-send`, …) are not read.
 
 The component's `IErrorFilter` and `IErrorReportingConfig` share one settings
@@ -90,7 +91,7 @@ The recommended way to add observability is to wrap operations with interceptors
 ```
 
 The interceptor automatically:
-- Logs start and completion at debug, a failure at its status's level
+- Logs start and completion at debug; a failure at error for a 5xx, warn for 401/403, else info
 - Records latency metrics
 - Captures exceptions to the error reporter
 - Adds breadcrumbs for distributed tracing
@@ -408,7 +409,7 @@ HTTP handler
 - Wrap operations at boundaries only — avoid duplicating interceptor execution inside already-instrumented paths.
 - Keep PII out of logs and breadcrumbs — sanitize before passing `params` to interceptors.
 - No-op adapters are used in tests automatically; never hardcode provider-specific calls in core.
-- Sentry context (breadcrumbs, user, tags, extra) is per thread, cleared per HTTP request and scoped per job, event handler and realtime handler. Work you hand to another thread starts without it.
+- Error context is per thread (see IErrorContextScope above); work you hand to another thread starts without it.
 
 ---
 
