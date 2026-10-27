@@ -30,7 +30,9 @@
   [preview]
   (max 0 (dec (reduce + (map :added (:permissions preview))))))
 
-(def ^:private last-resort #{:new-role :new-group})
+(def ^:private kind-order
+  "A join, then an assignment; a new managed role and a new group are last resorts."
+  {:join 0 :narrow 1 :new-role 2 :new-group 3})
 
 (defn rank
   "`options`, [{:kind :preview ..}], that give `permission` in `scope`: a
@@ -40,11 +42,9 @@
    group, always come last."
   [options permission scope]
   (->> options
-       (filter #(or (last-resort (:kind %)) (fixes? (:preview %) permission scope)))
+       (filter #(or (< 1 (kind-order (:kind %))) (fixes? (:preview %) permission scope)))
        (map #(cond-> % (:preview %) (assoc :extra (gained (:preview %) permission false)
                                            :radius (blast-radius (:preview %)))))
-       (sort-by (juxt #(get {:new-role 1 :new-group 2} (:kind %) 0)
-                      #(:radius % 0)
-                      #(if (= :join (:kind %)) 0 1)
+       (sort-by (juxt #(max 0 (dec (kind-order (:kind %)))) #(:radius % 0) (comp kind-order :kind)
                       #(str (get-in % [:group :name]))))
        vec))

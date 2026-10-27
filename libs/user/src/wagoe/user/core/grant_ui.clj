@@ -7,24 +7,24 @@
             [wagoe.user.core.group-ui :as group-ui]
             [wagoe.user.core.rights-ui :as rights-ui]))
 
-(defn- code [x] [:code (group/permission-str x)])
-
-(defn- hidden [k v]
-  [:input {:type "hidden" :name k :value (str v)}])
+(def ^:private code rights-ui/code)
 
 (defn- asked-fields
   "The permission and scope asked, as the wizard's own forms post them."
   [permission scope]
-  (cons (hidden "permission" (group/permission-str permission))
-        (for [[k v] scope] (hidden (str "scope." (group/permission-str k)) v))))
+  (into {"permission" (group/permission-str permission)}
+        (for [[k v] scope] [(str "scope." (group/permission-str k)) v])))
+
+(defn- assignment-line [{:keys [role scope]} scope-info]
+  [:p [:t :user.grant/assign] " " (code role) " " (rights-ui/scope-view scope scope-info)])
 
 (defn- apply-form
-  "A form posting `fields`, [name value], to `action`, confirmed: the option
-   shows its preview."
+  "A form posting `fields`, {name value}, to `action`: the option shows its
+   preview, so a change is posted confirmed."
   [action fields & inputs]
   [:form.grant-apply {:method "post" :action action :class "space-y-3"}
    (csrf/hidden-field)
-   (for [[k v] fields] (hidden k v))
+   (rights-ui/hidden-fields fields)
    inputs
    [:button.button.primary {:type "submit"} [:t :user.grant/apply]]])
 
@@ -52,27 +52,24 @@
        :join      (list (extra o)
                         (rights-ui/preview-sections preview scope-info)
                         (apply-form (str (group-ui/group-path (:id group)) "/members")
-                                    [["user-id" user-id] ["confirm" "true"]]))
-       :narrow    (list [:p [:t :user.grant/assign] " " (code role) " "
-                         (rights-ui/scope-view (:scope assignment) scope-info)]
+                                    {"user-id" user-id "confirm" "true"}))
+       :narrow    (list (assignment-line assignment scope-info)
                         (extra o)
                         (rights-ui/preview-sections preview scope-info)
                         (apply-form (str (group-ui/group-path (:id group)) "/roles")
-                                    (concat [["role" (group/permission-str role)] ["confirm" "true"]]
-                                            (for [[k v] scope] [(name (group-ui/scope-lookup-field k)) v]))))
+                                    (into {"role" (group/permission-str role) "confirm" "true"}
+                                          (for [[k v] scope] [(name (group-ui/scope-lookup-field k)) v]))))
        :new-role  (list [:p [:t :user.grant/new-role-hint {:permission (group/permission-str permission)}]]
-                        (apply-form (str (rights-ui/grant-path user-id nil nil) "/role") nil
-                                    (asked-fields permission scope)
+                        (apply-form (str (rights-ui/grant-path user-id nil nil) "/role") (asked-fields permission scope)
                                     [:label {:for "grant-role-name"} [:t :user.groups/field-name]]
                                     [:input (assoc required :id "grant-role-name" :name "name"
                                                    :value (group/permission-str permission))]))
        :new-group (list [:p [:t :user.grant/new-group-hint]]
-                        [:p [:t :user.grant/assign] " " (code role) " "
-                         (rights-ui/scope-view (:scope assignment) scope-info)]
+                        (assignment-line assignment scope-info)
                         (rights-ui/preview-sections preview scope-info)
                         (apply-form (str (rights-ui/grant-path user-id nil nil) "/group")
-                                    [["role" (group/permission-str role)] ["confirm" "true"]]
-                                    (asked-fields permission scope)
+                                    (assoc (asked-fields permission scope)
+                                           "role" (group/permission-str role) "confirm" "true")
                                     [:label {:for "grant-group-name"} [:t :user.groups/field-name]]
                                     [:input (assoc required :id "grant-group-name" :name "name")]
                                     [:label {:for "grant-group-purpose"} [:t :user.grant/field-purpose]]

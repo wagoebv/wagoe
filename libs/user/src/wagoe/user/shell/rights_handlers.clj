@@ -3,8 +3,6 @@
    go through the group service, so they are checked and audited."
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [malli.core :as m]
-            [malli.transform :as mt]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.scope :as scope]
             [wagoe.platform.ports.authorization :as authz]
@@ -202,11 +200,14 @@
                             (log/warn e "A scope source failed to resolve for the rights page" {:key k :source src})
                             :error))]))))
 
+(defn- user-of [user-service request]
+  (some->> (get-in request [:path-params :id]) str parse-uuid (ports/get-user-by-id user-service)))
+
 (defn user-rights
   "GET /web/users/:id/rights — the user's groups and effective permissions."
   [user-service group-service]
   (fn [request]
-    (if-let [user (some->> (get-in request [:path-params :id]) str parse-uuid (ports/get-user-by-id user-service))]
+    (if-let [user (user-of user-service request)]
       ;; Groups and grants both ask the membership hook: ask it once
       (let [group-service (cond-> group-service (:membership group-service) (update :membership memoize))
             grants        (ports/user-grants group-service user)]
@@ -238,7 +239,7 @@
    on a record when its scope keys are given (BOU-851)."
   [user-service group-service]
   (fn [request]
-    (if-let [user (some->> (get-in request [:path-params :id]) str parse-uuid (ports/get-user-by-id user-service))]
+    (if-let [user (user-of user-service request)]
       (let [scope-info (group-handlers/scope-info group-service)
             {:keys [permission record] :as q} (asked (:query-params request) (keys (:labels scope-info)))]
         (html-response request
@@ -256,19 +257,13 @@
 ;; Grant wizard (BOU-853)
 ;; =============================================================================
 
-(defn- user-of [user-service request]
-  (some->> (get-in request [:path-params :id]) str parse-uuid (ports/get-user-by-id user-service)))
-
 (defn- asked-scope
   "The permission and scope `params` ask, the scope's values read as the
    declared scope schema reads a form's: {} is everywhere."
   [group-service params]
-  (let [{:keys [permission record]} (asked params (keys (:labels (group-handlers/scope-info group-service))))
-        schema (get-in group-service [:settings :scope-schema])]
+  (let [{:keys [permission record]} (asked params (keys (:labels (group-handlers/scope-info group-service))))]
     {:permission permission
-     :record     (cond (not (and (map? record) (seq record))) {}
-                       schema (m/decode schema record (mt/string-transformer))
-                       :else  record)}))
+     :record     (if (and (map? record) (seq record)) (group-handlers/decode-scope group-service record) {})}))
 
 (defn- wizard-opts [request group-service q opts]
   (merge (page-opts request)
@@ -357,17 +352,12 @@
   (fn [request]
     (let [params (:query-params request)
           {:keys [permission record] :as q} (asked-scope group-service params)
-          [users unknown] (if permission (named-users user-service (get params "users")) [[] []])]
-      (try
-        (html-response request
-                       (grant-ui/bulk-page (for [u users] {:user u :result (ports/grant-options group-service u permission record)})
-                                           unknown
-                                           (wizard-opts request group-service q {:users (get params "users")}))
-                       200)
-        (catch clojure.lang.ExceptionInfo e
-          (if (group-handlers/refused? e)
-            (html-response request
-                           (grant-ui/bulk-page [] [] (wizard-opts request group-service q {:users (get params "users")
-                                                                                           :error (group-handlers/error-text e)}))
-                           422)
-            (throw e)))))))
+          [users unknown] (if permission (named-users user-service (get params "users")) [[] []])
+          [rows error] (try [(mapv (fn [u] {:user u :result (ports/grant-options group-service u permission record)}) users)]
+                            (catch clojure.lang.ExceptionInfo e
+                              (if (group-handlers/refused? e) [[] (group-handlers/error-text e)] (throw e))))]
+      (html-response request
+                     (grant-ui/bulk-page rows (if error [] unknown)
+                                         (wizard-opts request group-service q (cond-> {:users (get params "users")}
+                                                                                error (assoc :error error))))
+                     (if error 422 200)))))

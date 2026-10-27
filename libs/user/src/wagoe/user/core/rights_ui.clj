@@ -114,7 +114,7 @@
   [headers rows]
   (table-of "data-table table" headers rows))
 
-(defn- code [x] [:code (group/permission-str x)])
+(defn code [x] [:code (group/permission-str x)])
 
 ;; =============================================================================
 ;; Lists: groups, roles and permissions in the shared data-table
@@ -725,7 +725,7 @@
                             [:span.scope-part (or (get labels k) (name k)) ": "
                              [:strong.scope-value (values-str vs)]])))))
 
-(defn- hidden-fields
+(defn hidden-fields
   "`params`, form params, as hidden inputs: a vector is one per value."
   [params]
   (for [[k v] (sort-by key params)

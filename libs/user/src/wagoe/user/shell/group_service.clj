@@ -600,7 +600,8 @@
 
   ports/IGrantOptions
   (grant-options [this user permission scope]
-    (let [scope   (or scope {})
+    (let [;; Every preview asks the membership hook for this user: ask it once
+          this    (cond-> this membership (update :membership memoize))
           explain (ports/explain-access this user permission (if (empty? scope) :everywhere scope))
           roles   (all-roles group-repository registry)
           role    (grant-core/smallest-role roles permission)

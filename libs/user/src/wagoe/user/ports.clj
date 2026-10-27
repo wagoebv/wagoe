@@ -513,8 +513,8 @@
   ;; wagoe.user.core.group/diff-summary and :everyone?. The group service
   ;; stores each user's diff in the change's audit entries. BOU-852.
   ;; {:op :new-group :user-id :assignment} previews a group holding only that
-  ;; user and assignment, before it exists; a :user-id on :add-role names the
-  ;; user whose diff is :user (BOU-853).
+  ;; user and assignment, before it exists. On any change, :user-id names the
+  ;; user whose diff is :user when the change names none (BOU-853).
 
 (defprotocol IGrantOptions
   (grant-options [this user permission scope]))
