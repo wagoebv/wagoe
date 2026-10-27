@@ -206,7 +206,11 @@
         (doseq [[method uri] [[:get "/web/admin/roles"] [:post "/web/admin/roles"]
                               [:post "/web/admin/roles/duplicate"] [:get "/web/admin/permissions"]
                               [:get (str "/web/users/" (:id user) "/rights")]
-                              [:get (str "/web/users/" (:id user) "/explain")]]]
+                              [:get (str "/web/users/" (:id user) "/explain")]
+                              [:get (str "/web/users/" (:id user) "/grant")]
+                              [:post (str "/web/users/" (:id user) "/grant/role")]
+                              [:post (str "/web/users/" (:id user) "/grant/group")]
+                              [:get "/web/admin/permissions/grant"]]]
           (let [r (app (req user method uri {"name" "x/y"}))]
             (is (= 403 (:status r)) (str method " " uri))
             (is (nil? (get-in r [:headers "Location"])) (str method " " uri))))))))
@@ -270,3 +274,68 @@
             (is (str/includes? body "invoice/approve"))
             (is (str/includes? body "name=\"permissions\" type=\"hidden\" value=\"invoice/approve\""))
             (is (= #{:invoice/read} (:permissions (some #(when (= :invoice/clerk (:name %)) %) (ports/list-roles gsvc)))))))))))
+
+(defn- index-of [s x] (or (str/index-of s x) -1))
+
+(deftest ^:integration the-grant-wizard-gives-a-permission-through-a-group
+  (with-app
+    (fn [{:keys [app users usvc gsvc admin]}]
+      (let [user!   #(ports/create-user users {:email % :name % :role :user :active true :password-hash "x"})
+            ada     (user! "ada@example.com")
+            bob     (user! "bob@example.com")
+            cy      (user! "cy@example.com")
+            finance (ports/create-group gsvc {:name "Finance"})
+            desk    (ports/create-group gsvc {:name "Desk"})
+            wizard  (rights-handlers/grant-wizard usvc gsvc)
+            page    #(:body (explain wizard admin %1 %2))]
+        (ports/add-group-role gsvc (:id finance) {:role :invoice/editor :scope {}})
+        (ports/add-group-member gsvc (:id finance) (:id bob))
+        (doseq [u [ada cy]] (ports/add-group-member gsvc (:id desk) (:id u)))
+        (testing "options ranked by what else they give, each with its preview; a new group last"
+          (let [body (page ada {"permission" "invoice/read"})]
+            (is (< -1 (index-of body "grant-join") (index-of body "grant-narrow") (index-of body "grant-new-group")))
+            (is (not (str/includes? body "grant-new-role")) "invoice/viewer holds only invoice/read")
+            (is (str/includes? body "grant-extra"))
+            (is (str/includes? body "preview-added"))
+            (is (str/includes? body "preview-affected-count") "the narrower assignment reaches Cy too")
+            (is (str/includes? body (str "action=\"/web/admin/groups/" (:id desk) "/roles\"")))))
+        (testing "an option applies through the group's own page, confirmed"
+          (is (= 303 (:status (app (req admin :post (str "/web/admin/groups/" (:id desk) "/roles")
+                                        {"role" "invoice/viewer" "confirm" "true"})))))
+          (is (str/includes? (page ada {"permission" "invoice/read"}) "grant-allowed")))
+        (testing "no role holds only the permission: a managed role is proposed, then offered"
+          (let [body (page ada {"permission" "invoice/approve"})]
+            (is (str/includes? body "grant-new-role"))
+            (is (not (str/includes? body "grant-new-group")) "no role to give it with"))
+          (let [r (app (req admin :post (str "/web/users/" (:id ada) "/grant/role")
+                            {"permission" "invoice/approve" "name" "invoice/approver"}))]
+            (is (= 303 (:status r)))
+            (is (= (str "/web/users/" (:id ada) "/grant?permission=invoice%2Fapprove") (get-in r [:headers "Location"]))))
+          (let [body (page ada {"permission" "invoice/approve"})]
+            (is (str/includes? body "grant-narrow"))
+            (is (not (str/includes? body "grant-new-role")))))
+        (testing "a new group of one needs a name and a purpose"
+          (let [form {"permission" "invoice/write" "role" "invoice/editor" "name" "Cy writes" "confirm" "true"}
+                uri  (str "/web/users/" (:id cy) "/grant/group")
+                r    (app (req admin :post uri form))]
+            (is (= 422 (:status r)))
+            (is (str/includes? (:body r) "error-purpose"))
+            (is (not-any? #(= "Cy writes" (:name %)) (ports/list-groups gsvc)))
+            (let [r (app (req admin :post uri (assoc form "description" "Signs off the audit")))
+                  g (some #(when (= "Cy writes" (:name %)) %) (ports/list-groups gsvc))]
+              (is (= 303 (:status r)))
+              (is (= ["cy@example.com"] (map :email (:members (ports/get-group gsvc (:id g))))))
+              (is (= [[:invoice/editor {}]] (map (juxt :role :scope) (:roles (ports/get-group gsvc (:id g))))))
+              (is (:allowed? (ports/explain-access gsvc cy :invoice/write :everywhere))))))
+        (testing "a refusal on the explain page leads to the wizard"
+          (is (str/includes? (:body (explain (rights-handlers/explain-access usvc gsvc) admin bob {"permission" "invoice/approve"}))
+                             (str "/web/users/" (:id bob) "/grant?permission=invoice%2Fapprove"))))
+        (testing "several users at once: who is refused, and the smallest fix for each"
+          (let [body (:body ((rights-handlers/grant-bulk usvc gsvc)
+                             {:request-method :get :uri "/" :user admin :headers {}
+                              :query-params {"permission" "invoice/write"
+                                             "users"      (str "ada@example.com\n" (:id bob) "\nnobody@example.com")}}))]
+            (is (str/includes? body "grant-bulk-row"))
+            (is (str/includes? body "ada@example.com"))
+            (is (not (str/includes? body ">bob@example.com<")) "Bob may already")
+            (is (str/includes? body "nobody@example.com"))))))))

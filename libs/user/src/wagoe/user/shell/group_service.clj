@@ -11,6 +11,7 @@
             [wagoe.platform.core.scope :as scope]
             [wagoe.platform.ports.authorization :as authz]
             [wagoe.user.core.audit :as audit-core]
+            [wagoe.user.core.grant :as grant-core]
             [wagoe.user.core.group :as group-core]
             [wagoe.user.ports :as ports]
             [wagoe.user.schema :as user-schema]
@@ -293,6 +294,12 @@
                             (and group (= :delete-group op))   (ports/find-members group-repository group-id)
                             :else                              [])
                :update (if kept? identity (partial without-group group-id))))
+
+      :new-group
+      (let [user (or (ports/find-user-by-id user-repository user-id)
+                     (throw (not-found "No such user" {:user-id user-id})))
+            a    (checked-assignment settings roles (:assignment change) nil)]
+        (assoc plan :users [user] :focal user :grants (group-core/user-grants [a] roles) :update #(conj % a)))
 
       :add-role
       (let [group (existing-group group-repository group-id)
@@ -584,11 +591,43 @@
   ports/IRightsPreview
   (preview-change [this change]
     (let [{:keys [focal group] :as plan} (change-plan this change)
-          summary (group-core/diff-summary (user-diffs this plan) (:id focal))]
+          ;; A role change names no user, unless the change does (BOU-853)
+          summary (group-core/diff-summary (user-diffs this plan) (or (:id focal) (:user-id change)))]
       (cond-> (assoc summary :everyone? (boolean (some-> group :id group-core/everyone?)))
         ;; No permission touched: the user the change names still gains nothing
         (and focal (nil? (:user summary)))
         (assoc :user {:user (select-keys focal [:id :email]) :added [] :removed []}))))
+
+  ports/IGrantOptions
+  (grant-options [this user permission scope]
+    (let [scope   (or scope {})
+          explain (ports/explain-access this user permission (if (empty? scope) :everywhere scope))
+          roles   (all-roles group-repository registry)
+          role    (grant-core/smallest-role roles permission)
+          exact?  (= #{permission} (get-in roles [role :permissions]))
+          a       {:role role :scope scope}
+          preview #(ports/preview-change this %)
+          mine    (filterv #(= :member (:source %)) (ports/user-groups this user))
+          mine?   (into #{} (map (comp str :id)) mine)]
+      {:explain explain
+       :role    role
+       :exact?  exact?
+       :options (when-not (:allowed? explain)
+                  (grant-core/rank
+                   (concat
+                    (for [[gid [{:keys [group-name]}]] (group-by :group-id (:alternatives explain))
+                          :when (not (or (group-core/everyone? gid) (mine? (str gid))))]
+                      {:kind :join :group {:id gid :name group-name}
+                       :preview (preview {:op :add-member :group-id gid :user-id (:id user)})})
+                    (when role
+                      (for [g mine]
+                        {:kind :narrow :group (select-keys g [:id :name]) :assignment a
+                         :preview (preview {:op :add-role :group-id (:id g) :assignment a :user-id (:id user)})}))
+                    (when-not exact? [{:kind :new-role}])
+                    (when role
+                      [{:kind :new-group :assignment a
+                        :preview (preview {:op :new-group :user-id (:id user) :assignment a})}]))
+                   permission scope))}))
 
   ports/IUserGroupService
 

@@ -504,6 +504,11 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
   `core.scope/rights-diff` on rights resolved by `resolve-rights`; the group service writes each user's diff into
   the change's audit entries under `:changes :effective`. Other members' rights are read in one
   `find-role-holders` query; identity-provider groups count only for the user the change names.
+- `/web/users/:id/grant?permission=..&scope.<key>=..` gives a user one permission through groups, never directly
+  (BOU-853). `IGrantOptions/grant-options` lists joining a group that holds it, a narrower assignment to one of
+  theirs, a managed role holding only it, and a new group of one, each a `preview-change`, ranked by
+  `core.grant/rank`. Joins and assignments apply through the group pages; the new group needs a name and a purpose.
+  `/web/admin/permissions/grant` runs it for users pasted from `:report` log lines, which are not stored.
 - The group service takes `:permission-registry`. When the registry declares
   scope keys, the scope schema is `wagoe.platform.core.scope/scope-schema` of
   them (`with-registry-scopes`); a `:map` `:groups :scope` is declared into the

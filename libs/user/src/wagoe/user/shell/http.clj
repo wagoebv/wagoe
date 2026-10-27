@@ -817,7 +817,7 @@
 
 (defn group-routes
   "Groups, roles and permissions, mounted under /web/admin beside the admin UI,
-   and a user's rights at /web/users/:id/rights and /explain: admins only. Absent when the
+   and a user's rights at /web/users/:id/rights, /explain and /grant: admins only. Absent when the
    web UI is switched off."
   [user-service group-service config]
   (let [guard [(user-middleware/flexible-authentication-middleware user-service)
@@ -865,11 +865,19 @@
                     (route ""
                            {:get {:handler (rights-handlers/list-permissions group-service)}})
                     (route "/view"
-                           {:get {:handler (rights-handlers/show-permission group-service)}})]
+                           {:get {:handler (rights-handlers/show-permission group-service)}})
+                    (route "/grant"
+                           {:get {:handler (rights-handlers/grant-bulk user-service group-service)}})]
                    (route "/users/:id/rights"
                           {:get {:handler (rights-handlers/user-rights user-service group-service)}})
                    (route "/users/:id/explain"
-                          {:get {:handler (rights-handlers/explain-access user-service group-service)}})])}))
+                          {:get {:handler (rights-handlers/explain-access user-service group-service)}})
+                   (route "/users/:id/grant"
+                          {:get {:handler (rights-handlers/grant-wizard user-service group-service)}})
+                   (route "/users/:id/grant/role"
+                          {:post {:handler (rights-handlers/grant-role user-service group-service)}})
+                   (route "/users/:id/grant/group"
+                          {:post {:handler (rights-handlers/grant-group user-service group-service)}})])}))
 
 (defn- export-response
   "`doc`, a user's data export, as a download, logged with who asked."

@@ -512,6 +512,18 @@
   ;; :permissions}, {:op :delete-role :role}. Returns
   ;; wagoe.user.core.group/diff-summary and :everyone?. The group service
   ;; stores each user's diff in the change's audit entries. BOU-852.
+  ;; {:op :new-group :user-id :assignment} previews a group holding only that
+  ;; user and assignment, before it exists; a :user-id on :add-role names the
+  ;; user whose diff is :user (BOU-853).
+
+(defprotocol IGrantOptions
+  (grant-options [this user permission scope]))
+  ;; The ways to give `user` `permission` in `scope` ({scope-key value}, {} for
+  ;; everywhere) through groups, never directly: {:explain (explain-access) :role
+  ;; :exact? :options}. Unless already allowed, :options are
+  ;; wagoe.user.core.grant/rank of joining a group, a narrower assignment to one
+  ;; of the user's groups, a new managed role and a new group, each previewed
+  ;; with preview-change. BOU-853.
 
 ;; =============================================================================
 ;; Sign-in hooks

@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Grant wizard: give a user one permission, and nothing more** (BOU-853), at `/web/users/:id/grant`, linked from a
+  refused explain: options through groups, ranked by what else they give, each previewed. `IGrantOptions` at the REPL.
 - **Every group, assignment or managed-role change is previewed** (BOU-852): the admin pages show who gains and loses
   which rights; a post without `confirm=true` only previews. The audit entry keeps each user's diff.
 - **Access explain: why a user may or may not use a permission** (BOU-851), at `/web/users/:id/explain`, linked from

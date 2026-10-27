@@ -73,7 +73,7 @@
      :entities (into {} (keep (fn [[k {:keys [entity]}]] (when entity [k entity]))) scopes)
      :sources  (some-> registry authz/scope-sources (update-vals :label))}))
 
-(defn- error-text
+(defn error-text
   "What to show for a refused change: the field's message, and the schema's
    explanation when there is one."
   [e]
@@ -100,7 +100,7 @@
           status)
     (not-found request)))
 
-(defn- refused?
+(defn refused?
   [e]
   (let [{:keys [type field]} (ex-data e)]
     (or (#{:validation-error :not-found} type)
