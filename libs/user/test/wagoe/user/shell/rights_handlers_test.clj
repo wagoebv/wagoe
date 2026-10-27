@@ -131,6 +131,36 @@
                            "platform-admin-note"))
         (is (= 404 (:status (get-page app admin (str "/web/users/" (random-uuid) "/rights")))))))))
 
+(deftest ^:integration the-lists-signal-hygiene-and-the-rights-tab-shows-changes
+  (with-app
+    (fn [{:keys [app users gsvc admin]}]
+      (let [ada   (ports/create-user users {:email "ada@example.com" :name "Ada" :role :user
+                                            :active true :password-hash "x"})
+            solo  (ports/create-group gsvc {:name "Solo"})
+            _     (ports/create-group gsvc {:name "Hollow"})
+            get!  #(:body (get-page app admin %))]
+        (ports/create-role gsvc {:name :invoice/reader :permissions #{:invoice/read}})
+        (ports/add-group-role gsvc (:id solo) {:role :invoice/editor :scope {}})
+        (ports/add-group-member gsvc (:id solo) (:id ada))
+        (testing "groups: empty and single-member, and a filter keeping one"
+          (let [page (get! "/web/admin/groups")]
+            (is (str/includes? page "signal-empty"))
+            (is (str/includes? page "signal-single-member")))
+          (let [page (get! "/web/admin/groups?filters[signal][value]=empty")]
+            (is (str/includes? page "Hollow"))
+            (is (not (str/includes? page ">Solo<")))))
+        (testing "roles: the unused managed role, near a code role"
+          (let [page (get! "/web/admin/roles")]
+            (is (str/includes? page "signal-unused"))
+            (is (str/includes? page "signal-near-duplicate"))))
+        (testing "permissions: one no assigned role gives"
+          (is (str/includes? (get! "/web/admin/permissions") "signal-unheld")))
+        (testing "the rights tab: who changed what, newest first"
+          (let [page (get! (str "/web/users/" (:id ada) "/rights"))]
+            (is (str/includes? page "timeline-entry"))
+            (is (str/includes? page "audit-group-join"))
+            (is (str/includes? page "tone-success\">gains"))))))))
+
 (deftest ^:integration the-rights-page-asks-the-membership-hook-once
   (with-app
     (fn [{:keys [users usvc gsvc admin]}]
