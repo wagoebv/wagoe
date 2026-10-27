@@ -583,9 +583,12 @@
 
   ports/IRightsPreview
   (preview-change [this change]
-    (let [plan (change-plan this change)]
-      (assoc (group-core/diff-summary (user-diffs this plan) (:id (:focal plan)))
-             :everyone? (boolean (some-> (:group plan) :id group-core/everyone?)))))
+    (let [{:keys [focal group] :as plan} (change-plan this change)
+          summary (group-core/diff-summary (user-diffs this plan) (:id focal))]
+      (cond-> (assoc summary :everyone? (boolean (some-> group :id group-core/everyone?)))
+        ;; No permission touched: the user the change names still gains nothing
+        (and focal (nil? (:user summary)))
+        (assoc :user {:user (select-keys focal [:id :email]) :added [] :removed []}))))
 
   ports/IUserGroupService
 
