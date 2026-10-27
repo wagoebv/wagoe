@@ -114,6 +114,11 @@
         (keyword? x) (namespace x)
         :else        (namespace (keyword (group/permission-str x)))))
 
+(defn permission-module
+  "The module `registry` places permission `p` in."
+  [registry p]
+  (module-of p (get-in registry [p :module])))
+
 (defn- list-query
   "`table-query` sorted by `spec`'s default unless by one of its sort keys."
   [{:keys [sort-keys default-sort]} table-query]
@@ -211,6 +216,16 @@
       :data-quiet-failure true})
    (str v)])
 
+(defn- resolution
+  "What user source values `r` resolved to, as `resolved` holds them, between
+   `open` and `close`; nil when not resolved here."
+  [r open close]
+  (cond
+    (= ::none r) nil
+    (= :error r) (list " " [:span.scope-unresolved [:t :user.rights/scope-resolve-failed]])
+    (empty? r)   (list " " [:span.scope-unresolved [:t :user.rights/scope-resolved-none]])
+    :else        (list open [:strong.scope-value (values-str r)] close)))
+
 (defn scope-view
   "A stored scope as text. `info`: {:labels {key label} :entities {key entity}
    :sources {source label} :resolved {[key source] values-or-:error}}, the
@@ -224,28 +239,28 @@
            (for [[k v] (sort-by key scope)
                  :let [label (or (get labels k) (name k))]]
              (if (scope/source? v)
-               (let [r (get resolved [k v] ::none)]
-                 [:span.scope-part
-                  label ": " [:t :user.rights/scope-from-source {:source (get sources v (group/permission-str v))}]
-                  (cond
-                    (= ::none r)  nil
-                    (= :error r)  (list " " [:span.scope-unresolved [:t :user.rights/scope-resolve-failed]])
-                    (empty? r)    (list " " [:span.scope-unresolved [:t :user.rights/scope-resolved-none]])
-                    :else         (list " = " [:strong.scope-value (values-str r)]))])
+               [:span.scope-part
+                label ": " [:t :user.rights/scope-from-source {:source (get sources v (group/permission-str v))}]
+                (resolution (get resolved [k v] ::none) " = " nil)]
                [:span.scope-part label ": " (scope-value (get entities k) v)]))))))
 
 ;; =============================================================================
 ;; Assignments as sentences (BOU-854)
 ;; =============================================================================
 
-(def ^:private levels #{"viewer" "editor" "manager"})
+(def level-labels
+  "A code role's level, as `role-level` names it, as a badge says it."
+  {"viewer" :user.access/level-viewer "editor" :user.access/level-editor "manager" :user.access/level-manager})
+
+(def ^:private level-verbs
+  {"viewer" :user.access/may-viewer "editor" :user.access/may-editor "manager" :user.access/may-manager})
 
 (defn role-level
   "\"viewer\", \"editor\" or \"manager\" for one of a module's code roles,
    `role` as `list-roles` gives it; nil for any other role."
   [{:keys [name source]}]
   (when (and (= :code source) (keyword? name) (namespace name))
-    (levels (clojure.core/name name))))
+    ((set (keys level-labels)) (clojure.core/name name))))
 
 (defn- scope-phrase
   "\"everywhere\", or where `scope` holds: each fixed value by its record's
@@ -258,12 +273,8 @@
      (for [[k v] (sort-by key scope)
            :let [label (or (get labels k) (name k))]]
        (if (scope/source? v)
-         (let [r (get resolved [k v] ::none)]
-           (list [:t :user.access/within-source {:key label :source (get sources v (group/permission-str v))}]
-                 (cond (= ::none r) nil
-                       (= :error r)  (list " " [:span.scope-unresolved [:t :user.rights/scope-resolve-failed]])
-                       (empty? r)    (list " " [:span.scope-unresolved [:t :user.rights/scope-resolved-none]])
-                       :else         (list " (" [:strong.scope-value (values-str r)] ")"))))
+         (list [:t :user.access/within-source {:source (get sources v (group/permission-str v))}]
+               (resolution (get resolved [k v] ::none) " (" ")"))
          (list [:t :user.access/within {:key label}] " " (scope-value (get entities k) v)))))))
 
 (defn assignment-sentence
@@ -276,7 +287,7 @@
      (if group-id [:a {:href (group-path group-id)} group-name] group-name)
      " "
      (if level
-       [:a {:href (role-path role)} [:t (keyword "user.access" (str "may-" level)) {:module (namespace role)}]]
+       [:a {:href (role-path role)} [:t (level-verbs level) {:module (namespace role)}]]
        (list [:t :user.access/holds-role] " " [:a {:href (role-path role)} (code role)]))
      " "
      (scope-phrase scope scope-info)]))
@@ -573,9 +584,8 @@
   "`grants` by module: a row per role a group gives, with the permissions it
    gives in that module, so the group shows once per role."
   [grants registry roles scope-info]
-  (let [module-of-grant #(module-of (:permission %) (get-in registry [(:permission %) :module]))
-        role-grants     (->> grants
-                             (group-by (juxt module-of-grant :role :group-id :group-name :scope))
+  (let [role-grants     (->> grants
+                             (group-by (juxt #(permission-module registry (:permission %)) :role :group-id :group-name :scope))
                              (map (fn [[[m role group-id group-name scope] gs]]
                                     {:module m :role role :group-id group-id :group-name group-name :scope scope
                                      :permissions (sort-by group/permission-str (distinct (map :permission gs)))}))

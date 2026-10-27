@@ -502,6 +502,11 @@
   ;; :provider or :everyone) and :stored-scope; refused, :alternatives too, the
   ;; assignments giving it as role-holders lists them. BOU-851.
 
+(defprotocol IRoleAssignments
+  (all-assignments [this]))
+  ;; Every role assignment, {:role :group-id :group-name :scope :everyone?},
+  ;; without members: what the access overview reads. BOU-854.
+
 (defprotocol IRightsPreview
   (preview-change [this change]))
   ;; How `change` would alter effective rights, computed and checked as making

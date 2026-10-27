@@ -3,11 +3,9 @@
    go through the group service, so they are checked and audited."
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [ring.util.response :as response]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.scope :as scope]
             [wagoe.platform.ports.authorization :as authz]
-            [wagoe.shared.ui.core.htmx :as htmx]
             [wagoe.user.core.access-ui :as access-ui]
             [wagoe.user.core.group :as group-core]
             [wagoe.user.core.rights-ui :as rights-ui]
@@ -271,19 +269,15 @@
   [user-service group-service]
   (fn [request]
     (let [registry   (registry-permissions group-service)
-          roles      (ports/list-roles group-service)
-          index      (rights-ui/role-index roles)
-          groups     (ports/list-groups group-service)
+          roles      (rights-ui/role-index (ports/list-roles group-service))
           params     (:query-params request)
           filters    {:module (not-empty (get params "module")) :group (not-empty (get params "group"))}
-          ov         (access-ui/overview groups (ports/role-holders group-service (map :name roles))
-                                         index registry filters)
+          ov         (access-ui/overview (ports/list-groups group-service) (ports/all-assignments group-service)
+                                         roles registry filters)
           scope-info (group-handlers/scope-info group-service)]
-      (-> (html-response request
-                         (if (htmx/fragment-request? (:headers request) [access-ui/matrix-id])
-                           (access-ui/matrix ov index registry scope-info)
-                           (access-ui/page groups ov (superusers user-service)
-                                           (assoc (page-opts request) :filters filters :roles index
-                                                  :registry registry :scope-info scope-info)))
-                         200)
-          (response/header "Vary" htmx/vary)))))
+      (group-handlers/fragment-response
+       request access-ui/matrix-id
+       #(access-ui/matrix ov roles registry scope-info)
+       #(access-ui/page ov (superusers user-service)
+                        (assoc (page-opts request) :filters filters :roles roles
+                               :registry registry :scope-info scope-info))))))
