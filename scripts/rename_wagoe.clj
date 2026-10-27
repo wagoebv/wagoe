@@ -50,14 +50,13 @@
 (def code-globs ["*.clj" "*.cljc" "*.cljs" "*.edn" "*.tmpl" "*.template"])
 
 ;; Paths the driver must NEVER rewrite — the rename tooling itself (its literals
-;; ARE the tokens) plus history/planning docs. Mirrors the check:no-boundary
+;; ARE the tokens) plus the CHANGELOG. Mirrors the check:no-boundary
 ;; allowlist so gate + driver agree.
 (def ^:private default-allow
   ["scripts/rename_wagoe.clj"
    "scripts/check_no_boundary.clj"
    ".wagoe/"
-   "CHANGELOG.md"
-   "docs/superpowers/"])
+   "CHANGELOG.md"])
 
 (defn- allow-prefixes []
   (let [f ".wagoe/check-no-boundary.edn"]

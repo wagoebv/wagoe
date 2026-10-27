@@ -57,11 +57,6 @@
    #"^\.git/.*"
    #"^node_modules/.*"
    #"^docs/archive/.*"     ;; archived/deprecated docs
-   #"^docs/superpowers/.*"    ;; dated plans/specs — a record of what was true
-                              ;; then, not instructions to follow now. Linting
-                              ;; them would either falsify the record or hold
-                              ;; the gate permanently red. Same treatment as
-                              ;; CHANGELOG.md in .wagoe/check-no-boundary.edn.
    #"^dev-docs/adr/.*"])      ;; ADRs record decisions, including Proposed ones
                               ;; whose commands do not exist yet by design —
                               ;; ADR-004 documents `clojure -M:backup` under a

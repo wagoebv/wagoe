@@ -162,5 +162,5 @@ namespace directly.
 
 == References
 
-* Design spec: `docs/superpowers/specs/2026-04-18-mindblowing-dx-design.md`
+* Design spec: `docs/superpowers/specs/2026-04-18-mindblowing-dx-design.md` (removed; in git history at `ddc43a9e1`)
   (Pillar 3: REPL as Command Center)

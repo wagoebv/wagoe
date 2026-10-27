@@ -49,16 +49,15 @@
 
    CHANGELOG entries and ADRs record what was true when written. dev-docs/
    roadmap.adoc is explicitly marked stale and superseded by the published
-   roadmap. docs/superpowers/ holds dated design records. dev-docs/presentations/
-   holds delivered talks — `fc-is-hexagonal-nl.adoc` carries `:revdate:
-   2026-03-07` and said 13 libraries, which was true when it was given; a talk
-   is not edited after the fact."
+   roadmap. dev-docs/presentations/ holds delivered talks —
+   `fc-is-hexagonal-nl.adoc` carries `:revdate: 2026-03-07` and said 13
+   libraries, which was true when it was given; a talk is not edited after the
+   fact."
   ["CHANGELOG.md"
    "dev-docs/adr/"
    "dev-docs/roadmap.adoc"
    "dev-docs/presentations/"
-   "dev-docs/reference/historical-docs-triage.adoc"
-   "docs/superpowers/"])
+   "dev-docs/reference/historical-docs-triage.adoc"])
 
 (defn in-scope?
   "True when `path` is a live documentation file this gate governs."

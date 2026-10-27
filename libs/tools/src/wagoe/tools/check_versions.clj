@@ -331,7 +331,6 @@
    "dev-docs/roadmap.adoc"                          :all
    "dev-docs/presentations/"                        :all
    "dev-docs/reference/historical-docs-triage.adoc" :all
-   "docs/superpowers/"                              :all
    "docs/modules/ROOT/pages/stability.adoc"         #{"com.wagoe pin"
                                                       "git tag pin"
                                                       "release-pinned prose"}})

@@ -24,7 +24,7 @@
     (is (not (sut/in-scope? "CHANGELOG.md")))
     (is (not (sut/in-scope? "dev-docs/adr/ADR-001-library-split.adoc")))
     (is (not (sut/in-scope? "dev-docs/roadmap.adoc")))
-    (is (not (sut/in-scope? "docs/superpowers/specs/2026-05-24-boundary-push-design.md"))))
+    (is (not (sut/in-scope? "dev-docs/presentations/fc-is-hexagonal-nl.adoc"))))
 
   (testing "non-documentation and build output are not"
     (is (not (sut/in-scope? "libs/tools/src/wagoe/tools/deploy.clj")))

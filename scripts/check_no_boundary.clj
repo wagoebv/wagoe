@@ -127,11 +127,10 @@
 
 (def ^:private default-allow-paths
   "Baked-in exemptions (prefix match on the repo-relative path). The rename
-   tooling and its config legitimately contain the tokens; CHANGELOG + planning
-   docs preserve history; the checker's own boundary-pathed source is exempt
+   tooling and its config legitimately contain the tokens; the CHANGELOG
+   preserves history; the checker's own boundary-pathed source is exempt
    until Phase 1 moves it to wagoe/."
   ["CHANGELOG.md"
-   "docs/superpowers/"
    ".wagoe/"
    "scripts/rename_wagoe.clj"
    "scripts/check_no_boundary.clj"])
