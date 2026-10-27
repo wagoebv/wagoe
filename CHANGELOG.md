@@ -348,6 +348,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Guava 33.7.2 in `wagoe-push` and `wagoe-storage`** (BOU-861): 33.6.0 came in through the Google clients and has
+  CVE-2026-102554. Nothing to do.
 - **A push callback token counts for one notification, one device and seven days, once per event** (BOU-849); sent and
   callback rows share `callback_id`. Run `migrate up`.
 - **`GET /api/v1/push/devices/:token` takes `?app-id=`** (BOU-847), and a registration's `Location` carries it. A token

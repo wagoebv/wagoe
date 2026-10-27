@@ -11,6 +11,8 @@
          ;; AWS SDK for S3
          software.amazon.awssdk/s3                  {:mvn/version "2.54.17"}
          software.amazon.awssdk/s3-transfer-manager {:mvn/version "2.54.17"}
+         ;; The GCS client brings guava 33.6.0-jre: GHSA-xxph-c9ww-hj94, CVE-2026-102554 (BOU-861).
+         com.google.guava/guava {:mvn/version "33.7.2-jre"}
 
          ;; Google Cloud Storage (GCS adapter)
          com.google.cloud/google-cloud-storage      {:mvn/version "2.73.0"}}
