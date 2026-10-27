@@ -542,7 +542,7 @@
  :user.grant/open-bulk "Wie geweigerd zou worden"
  :user.grant/bulk-title "Wie geweigerd zou worden"
  :user.grant/bulk-heading "Gebruikers die een recht weigert, en de kleinste oplossing per gebruiker"
- :user.grant/bulk-hint "Onder :report wordt een weigering alleen gelogd. Plak de gebruikers-ids uit de logregels \"Authorization would refuse this request under :enforce\", met het recht en de scope van de route."
+ :user.grant/bulk-hint "Onder :report wordt een weigering alleen gelogd. Plak de gebruikers-ids uit de logregels \"Authorization would refuse this request under :enforce\", met het recht en de scope van de route. Hoogstens 50 worden gecontroleerd."
  :user.grant/field-users "Gebruikers: ids of e-mailadressen, een per regel"
  :user.grant/bulk-refused "{count} van {total} geweigerd"
  :user.grant/bulk-unknown "Onbekende gebruiker:"

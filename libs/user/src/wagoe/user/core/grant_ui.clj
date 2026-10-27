@@ -9,12 +9,6 @@
 
 (def ^:private code rights-ui/code)
 
-(defn- asked-fields
-  "The permission and scope asked, as the wizard's own forms post them."
-  [permission scope]
-  (into {"permission" (group/permission-str permission)}
-        (for [[k v] scope] [(str "scope." (group/permission-str k)) v])))
-
 (defn- assignment-line [{:keys [role scope]} scope-info]
   [:p [:t :user.grant/assign] " " (code role) " " (rights-ui/scope-view scope scope-info)])
 
@@ -28,9 +22,11 @@
    inputs
    [:button.button.primary {:type "submit"} [:t :user.grant/apply]]])
 
-(defn- extra [{:keys [extra]}]
+(defn- extra [{:keys [extra]} scope-info]
   (if (seq extra)
-    [:p.grant-extra [:t :user.grant/also-gets] " " (interpose ", " (map (comp code :permission) (distinct extra)))]
+    [:p.grant-extra [:t :user.grant/also-gets] " "
+     (interpose ", " (for [{:keys [permission scope]} extra]
+                       (list (code permission) " (" (rights-ui/effective-scope-view scope scope-info) ")")))]
     [:p.grant-nothing-else [:t :user.grant/nothing-else]]))
 
 (defn- title [{:keys [kind group]}]
@@ -46,21 +42,21 @@
   (let [{:keys [role]} assignment
         required       {:required true :class "input"}]
     (rights-ui/section
-     {:class (str "grant-option grant-" (name kind))}
      [:span (str n ". ") (title o)]
+     {:class (str "grant-option grant-" (name kind))}
      (case kind
-       :join      (list (extra o)
+       :join      (list (extra o scope-info)
                         (rights-ui/preview-sections preview scope-info)
                         (apply-form (str (group-ui/group-path (:id group)) "/members")
                                     {"user-id" user-id "confirm" "true"}))
        :narrow    (list (assignment-line assignment scope-info)
-                        (extra o)
+                        (extra o scope-info)
                         (rights-ui/preview-sections preview scope-info)
                         (apply-form (str (group-ui/group-path (:id group)) "/roles")
                                     (into {"role" (group/permission-str role) "confirm" "true"}
                                           (for [[k v] scope] [(name (group-ui/scope-lookup-field k)) v]))))
        :new-role  (list [:p [:t :user.grant/new-role-hint {:permission (group/permission-str permission)}]]
-                        (apply-form (str (rights-ui/grant-path user-id nil nil) "/role") (asked-fields permission scope)
+                        (apply-form (str (rights-ui/grant-path user-id nil nil) "/role") (rights-ui/asking-params permission scope)
                                     [:label {:for "grant-role-name"} [:t :user.groups/field-name]]
                                     [:input (assoc required :id "grant-role-name" :name "name"
                                                    :value (group/permission-str permission))]))
@@ -68,7 +64,7 @@
                         (assignment-line assignment scope-info)
                         (rights-ui/preview-sections preview scope-info)
                         (apply-form (str (rights-ui/grant-path user-id nil nil) "/group")
-                                    (assoc (asked-fields permission scope)
+                                    (assoc (rights-ui/asking-params permission scope)
                                            "role" (group/permission-str role) "confirm" "true")
                                     [:label {:for "grant-group-name"} [:t :user.groups/field-name]]
                                     [:input (assoc required :id "grant-group-name" :name "name")]

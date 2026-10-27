@@ -18,6 +18,18 @@
   [preview permission same?]
   (filterv #(= same? (= permission (:permission %))) (get-in preview [:user :added])))
 
+(defn- wider?
+  "Whether resolved `right` reaches beyond `scope`, {scope-key value}, as asked."
+  [scope right]
+  (not= (update-vals (:scope right) #(set (map str %))) (update-vals scope (comp hash-set str))))
+
+(defn extra
+  "What else the user `preview` names gains: other permissions, and
+   `permission` itself where it reaches beyond `scope`."
+  [preview permission scope]
+  (into (filterv (partial wider? scope) (gained preview permission true))
+        (gained preview permission false)))
+
 (defn fixes?
   "Whether the user `preview` names gains `permission` in a scope admitting
    `scope`, {scope-key value}: {} asks for it everywhere."
@@ -36,15 +48,20 @@
 
 (defn rank
   "`options`, [{:kind :preview ..}], that give `permission` in `scope`: a
-   `:join` or `:narrow` whose preview does not is dropped. Each gets `:extra`,
-   what else its user gains, and `:radius` (`blast-radius`); the smallest
+   `:join` or `:narrow` whose preview does not is dropped. Each gets `:extra`
+   (`extra`) and `:radius`, `blast-radius` and one more for a wider scope than
+   asked; the smallest
    first, a join before an assignment on a tie. A new managed role, then a new
    group, always come last."
   [options permission scope]
   (->> options
        (filter #(or (< 1 (kind-order (:kind %))) (fixes? (:preview %) permission scope)))
-       (map #(cond-> % (:preview %) (assoc :extra (gained (:preview %) permission false)
-                                           :radius (blast-radius (:preview %)))))
+       (map (fn [{:keys [preview] :as o}]
+              (if preview
+                (let [xs (extra preview permission scope)]
+                  (assoc o :extra xs :radius (cond-> (blast-radius preview)
+                                               (some #(= permission (:permission %)) xs) inc)))
+                o)))
        (sort-by (juxt #(max 0 (dec (kind-order (:kind %)))) #(:radius % 0) (comp kind-order :kind)
                       #(str (get-in % [:group :name]))))
        vec))

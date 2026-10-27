@@ -322,6 +322,9 @@
           retry       #(grant-response request user-service group-service (:form-params request) 422 {:error %})]
       (cond
         (nil? user)        (not-found request :user.rights/user-not-found)
+        ;; Unconfirmed, as on the group pages (BOU-852): the wizard shows its preview
+        (not (group-handlers/confirmed? request))
+        (grant-response request user-service group-service (:form-params request) 200 {})
         (nil? description) (retry [:t :user.grant/error-purpose])
         :else
         (try
@@ -336,9 +339,10 @@
 
 (defn- named-users
   "The users `text` names, ids or emails separated by space, comma or line,
-   at most `group-core/preview-page-size`, and what named nobody."
+   or pasted as a log's `:user-id #uuid \"..\"`, at most
+   `group-core/preview-page-size`, and what named nobody."
   [user-service text]
-  (let [found (for [s (take group-core/preview-page-size (distinct (remove str/blank? (str/split (str text) #"[\s,;]+"))))]
+  (let [found (for [s (take group-core/preview-page-size (distinct (remove str/blank? (remove #{"#uuid" ":user-id"} (str/split (str text) #"[\s,;\"{}]+")))))]
                 [s (if-let [id (parse-uuid s)]
                      (ports/get-user-by-id user-service id)
                      (ports/get-user-by-email user-service s))])]

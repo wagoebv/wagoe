@@ -40,3 +40,13 @@
       (is (= [0 1 1] (map :radius (take 3 ranked))))
       (is (= [write] (:extra (second ranked)))))
     (is (= 0 (sut/blast-radius (preview []))) "never below nothing")))
+
+(deftest ^:unit giving-it-wider-than-asked-counts-as-more
+  (let [everywhere {:kind :join :group {:name "Everywhere"}
+                    :preview (preview [{:permission :invoice/read :scope {}}] {:permission :invoice/read :added 1})}
+        exact      {:kind :narrow :group {:name "Exact"}
+                    :preview (preview [{:permission :invoice/read :scope {:domain-id #{4}}}] {:permission :invoice/read :added 1})}
+        [a b]      (sut/rank [everywhere exact] :invoice/read {:domain-id 4})]
+    (is (= ["Exact" "Everywhere"] [(get-in a [:group :name]) (get-in b [:group :name])]))
+    (is (= [[] [{:permission :invoice/read :scope {}}]] [(:extra a) (:extra b)]))
+    (is (= [0 1] [(:radius a) (:radius b)]))))

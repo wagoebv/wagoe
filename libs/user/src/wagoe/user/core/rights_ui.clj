@@ -30,14 +30,19 @@
 
 (defn user-rights-path [user-id] (str "/web/users/" user-id "/rights"))
 
+(defn asking-params
+  "`permission` on `record`, {scope-key value} or `:everywhere`, as the asking
+   forms post them."
+  [permission record]
+  (into {"permission" (group/permission-str permission)}
+        (if (= :everywhere record)
+          {"everywhere" "true"}
+          (for [[k v] record] [(str "scope." (group/permission-str k)) (str v)]))))
+
 (defn- asking-path [page user-id permission record]
   (str "/web/users/" user-id page
        (when permission
-         (str "?" (table-ui/encode-query-params
-                   (into {"permission" (group/permission-str permission)}
-                         (if (= :everywhere record)
-                           {"everywhere" "true"}
-                           (for [[k v] record] [(str "scope." (group/permission-str k)) (str v)]))))))))
+         (str "?" (table-ui/encode-query-params (asking-params permission record))))))
 
 (defn explain-path
   "The explain page for `user-id`, asking `permission` on `record`: {scope-key
@@ -715,7 +720,7 @@
 ;; Change preview (BOU-852)
 ;; =============================================================================
 
-(defn- effective-scope-view
+(defn effective-scope-view
   "A resolved scope, {key #{value}}, as text."
   [scope {:keys [labels]}]
   (if (empty? scope)

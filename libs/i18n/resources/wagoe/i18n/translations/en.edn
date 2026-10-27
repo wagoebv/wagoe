@@ -542,7 +542,7 @@
  :user.grant/open-bulk "Who would be refused"
  :user.grant/bulk-title "Who would be refused"
  :user.grant/bulk-heading "Users a permission refuses, and the smallest fix for each"
- :user.grant/bulk-hint "Under :report a refusal is only logged. Paste the user ids from the log lines \"Authorization would refuse this request under :enforce\", with the route's permission and scope."
+ :user.grant/bulk-hint "Under :report a refusal is only logged. Paste the user ids from the log lines \"Authorization would refuse this request under :enforce\", with the route's permission and scope. At most 50 are checked."
  :user.grant/field-users "Users: ids or emails, one per line"
  :user.grant/bulk-refused "{count} of {total} refused"
  :user.grant/bulk-unknown "No such user:"
