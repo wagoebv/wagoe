@@ -3,6 +3,7 @@
             [clojure.test :refer [deftest is testing]]
             [clojure.tools.logging.test :as log-test]
             [wagoe.user.shell.auth-persistence]
+            [wagoe.user.ports]
             [integrant.core :as ig]))
 
 (deftest ^:unit user-http-middleware-is-a-seq-the-handler-can-thread
@@ -87,3 +88,32 @@
       (sut/ig-config nil {:config config :enabled #{:wagoe/user :wagoe/admin}})
       (is (not (log-test/logged? 'wagoe.user.shell.module-wiring :warn #":dashboard-extra-cards"))
           "the admin shows them, and warns itself"))))
+
+(deftest ^:unit expired-access-is-removed-on-the-jobs-module
+  ;; BOU-856
+  (let [wired #(sut/ig-config nil {:config % :enabled #{:wagoe/user :wagoe/jobs}})]
+    (testing "without jobs, nothing is scheduled"
+      (let [g (sut/ig-config nil {:config {} :enabled #{:wagoe/user}})]
+        (is (empty? (:job-handlers g)))
+        (is (not (contains? (:components g) :wagoe.user/access-expiry-schedule)))))
+    (testing "with jobs, a handler and its schedule"
+      (let [g (wired {})]
+        (is (= [(ig/ref :wagoe.user/job-handlers)] (:job-handlers g)))
+        (is (= {:schedulers (ig/refset :wagoe/job-scheduler)}
+               (get-in g [:components :wagoe.user/access-expiry-schedule])))))
+    (testing "a schedule under :wagoe/jobs :recurring wins"
+      (let [g (wired {:active {:wagoe/jobs {:recurring {sut/access-expiry-job-type {:cron "0 * * * *"}}}}})]
+        (is (contains? (:components g) :wagoe.user/job-handlers))
+        (is (not (contains? (:components g) :wagoe.user/access-expiry-schedule)))))
+    (testing "the schedule reaches the scheduler, and a test system has none"
+      (let [s ((requiring-resolve 'wagoe.jobs.shell.recurring/create-scheduler) {})]
+        (ig/init-key :wagoe.user/access-expiry-schedule {:schedulers #{s}})
+        (is (contains? @(:schedules s) sut/access-expiry-job-type)))
+      (is (nil? (ig/init-key :wagoe.user/access-expiry-schedule {:schedulers #{}}))))
+    (testing "the handler counts what it removed"
+      (let [handler (get (ig/init-key :wagoe.user/job-handlers
+                                      {:group-service (reify wagoe.user.ports/ITimeBoundAccess
+                                                        (add-group-member-until [_ _ _ _] nil)
+                                                        (expire-access! [_ _] {:members [{}] :assignments []}))})
+                         sut/access-expiry-job-type)]
+        (is (= {:success? true :result {:members 1 :assignments 0}} (handler {})))))))

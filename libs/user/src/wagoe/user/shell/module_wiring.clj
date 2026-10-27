@@ -320,6 +320,29 @@
     (when-not (false? migrate?) (group-service/migrate! svc))
     svc))
 
+(def access-expiry-job-type
+  "The recurring job that removes expired memberships and assignments (BOU-856)."
+  :wagoe.user/expire-access)
+
+(def access-expiry-schedule
+  "Every quarter hour. Reads ignore what expired from that moment; the job
+   removes it and audits that. `:wagoe/jobs :recurring` overrides it."
+  {:cron "*/15 * * * *"})
+
+(defmethod ig/init-key :wagoe.user/job-handlers
+  [_ {:keys [group-service]}]
+  {access-expiry-job-type
+   (fn [_args]
+     {:success? true
+      :result   (update-vals (ports/expire-access! group-service (java.time.Instant/now)) count)})})
+
+(defmethod ig/init-key :wagoe.user/access-expiry-schedule
+  [_ {:keys [schedulers]}]
+  ;; A set: test systems run without the scheduler.
+  (doseq [s schedulers]
+    ((requiring-resolve 'wagoe.jobs.shell.recurring/schedule-recurring!)
+     s access-expiry-job-type (:cron access-expiry-schedule))))
+
 (defmethod ig/init-key :wagoe/user-group-routes
   [_ {:keys [user-service group-service config]}]
   (require 'wagoe.user.shell.http)
@@ -472,4 +495,13 @@
                   :wagoe/user-oidc-routes {:oidc   (ig/ref :wagoe/user-oidc)
                                            :hooks  (ig/ref :wagoe/auth-hooks)
                                            :config config})
-          (update :routes conj (ig/ref :wagoe/user-oidc-routes))))))
+          (update :routes conj (ig/ref :wagoe/user-oidc-routes)))
+
+      ;; Without jobs, expired rows stay, giving nothing
+      (contains? enabled :wagoe/jobs)
+      (-> (update :components assoc :wagoe.user/job-handlers {:group-service (ig/ref :wagoe/user-group-service)})
+          (update :job-handlers (fnil conj []) (ig/ref :wagoe.user/job-handlers)))
+
+      (and (contains? enabled :wagoe/jobs)
+           (nil? (get-in config [:active :wagoe/jobs :recurring access-expiry-job-type])))
+      (update :components assoc :wagoe.user/access-expiry-schedule {:schedulers (ig/refset :wagoe/job-scheduler)}))))

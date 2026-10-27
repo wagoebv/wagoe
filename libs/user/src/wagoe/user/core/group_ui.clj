@@ -139,7 +139,7 @@
   (for [m members]
     [:tr
      [:td {:data-label [:t :user.rights/column-user]} [:a {:href (rights-ui/user-rights-path (:id m))} (:email m)]]
-     [:td {:data-label [:t :user.groups/field-name]} (:name m)]
+     [:td {:data-label [:t :user.groups/field-name]} (:name m) (rights-ui/expiry-note (:expires-at m))]
      [:td.actions-cell (action m)]]))
 
 (defn provider-members
@@ -187,6 +187,7 @@
                              (combobox/combobox :user-id {:url         (member-options-path id)
                                                           :required    true
                                                           :placeholder [:t :user.groups/member-placeholder]})
+                             (rights-ui/expiry-input "member-expires-at" nil)
                              [:button.button.primary {:type "submit"} [:t :user.groups/button-add-member]]])
          ;; Asked for: listing them runs the membership hook for every user
          (rights-ui/section [:t :user.groups/provider-members-heading] {:class "group-provider-members"}
@@ -220,5 +221,6 @@
                                    [:summary [:t :user.groups/scope-as-edn]]
                                    (scope-edn-input (:form opts))])
                             (scope-edn-input (:form opts)))
+                          (rights-ui/expiry-input "role-expires-at" (get-in opts [:form "expires-at"]))
                           [:button.button.primary {:type "submit"} [:t :user.groups/button-add-role]]]))
      opts)))

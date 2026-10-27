@@ -15,7 +15,8 @@
             [wagoe.user.core.group :as group-core]
             [wagoe.user.ports :as ports]
             [wagoe.user.schema :as user-schema]
-            [wagoe.user.shell.service :as user-service]))
+            [wagoe.user.shell.service :as user-service])
+  (:import (java.time Instant)))
 
 ;; =============================================================================
 ;; Settings
@@ -130,12 +131,12 @@
   "Record `action` for each of `members`, or, for a change to Everyone, once
    for the actor: it reaches every user. `opts`: `:diffs`, as `user-diffs`
    gives them, add what the change did to each member's effective rights; for
-   Everyone, counted per permission. A failed write warns and does not undo the
+   Everyone, counted per permission; `:metadata` adds to each entry's. A failed write warns and does not undo the
    change, as for the user service's other entries, unless `:strict?`: then it
    throws, rolling back the transaction it is in."
   ([audit-repository action group members grants]
    (audit! audit-repository action group members grants {}))
-  ([audit-repository action group members grants {:keys [diffs strict?]}]
+  ([audit-repository action group members grants {:keys [diffs strict? metadata]}]
    (let [ctx       (user-service/effective-audit-context {})
          everyone? (group-core/everyone? (:id group))
          members   (if everyone?
@@ -146,7 +147,7 @@
                        {(str (:actor-id ctx)) (group-core/permission-counts diffs)})
                      (into {} (map (fn [d] [(str (get-in d [:user :id])) d])) diffs))]
      (doseq [entry (audit-core/group-audit-entries action ctx group members grants effective)]
-       (try (ports/create-audit-log audit-repository entry)
+       (try (ports/create-audit-log audit-repository (update entry :metadata merge metadata))
             (catch Exception e
               (when strict? (throw e))
               (log/warn e "Failed to write a group audit entry" {:action action :group-id (:id group)})))))))
@@ -161,11 +162,22 @@
       (throw (ex-info (:message error) (merge error data))))
     grant))
 
+(defn- checked-expiry!
+  "Throw :validation-error for an `expires-at` that has passed, or that the
+   repository cannot store: it lacks IAccessExpiry."
+  [svc expires-at]
+  (when expires-at
+    (when-not (:expiry? svc)
+      (throw (refused "This group repository keeps no expiry dates" {:field :expires-at})))
+    (when-let [{:keys [error]} (group-core/expiry-refusal expires-at (Instant/now))]
+      (throw (ex-info (:message error) error)))))
+
 (defn- checked-assignment
   "`assignment` as stored, its scope {} when it has none. Throws
    :validation-error naming an unknown role or a scope the schema refuses."
   [settings roles assignment data]
-  (let [a {:role (:role assignment) :scope (or (:scope assignment) {})}]
+  (let [a (cond-> {:role (:role assignment) :scope (or (:scope assignment) {})}
+            (:expires-at assignment) (assoc :expires-at (:expires-at assignment)))]
     (when-let [{:keys [error]} (group-core/assignment-refusal a roles settings)]
       (throw (ex-info (:message error) (merge error data))))
     a))
@@ -230,7 +242,7 @@
    (->> (mapcat #(ports/find-role-assignments repo %) (set role-names))
         (map (fn [{:keys [group-id] :as a}]
                (let [everyone? (group-core/everyone? group-id)]
-                 (cond-> (assoc (select-keys a [:role :group-id :group-name :scope]) :everyone? everyone?)
+                 (cond-> (assoc (select-keys a [:role :group-id :group-name :scope :expires-at]) :everyone? everyone?)
                    members? (assoc :members (if everyone? [] (ports/find-members repo group-id)))))))
         (sort-by (juxt :group-name (comp str :role)))
         vec)))
@@ -275,6 +287,7 @@
     (case op
       :add-member
       (let [_     (not-everyone! group-id)
+            _     (checked-expiry! svc (:expires-at change))
             group (existing-group group-repository group-id)
             user  (or (ports/find-user-by-id user-repository user-id)
                       (throw (not-found "No such user" {:user-id user-id})))
@@ -298,12 +311,14 @@
       :new-group
       (let [user (or (ports/find-user-by-id user-repository user-id)
                      (throw (not-found "No such user" {:user-id user-id})))
-            a    (checked-assignment settings roles (:assignment change) nil)]
+            a    (checked-assignment settings roles (:assignment change) nil)
+            _    (checked-expiry! svc (:expires-at change))]
         (assoc plan :users [user] :focal user :grants (group-core/user-grants [a] roles) :update #(conj % a)))
 
       :add-role
       (let [group (existing-group group-repository group-id)
             a     (assoc (checked-assignment settings roles (:assignment change) nil) :group-id group-id)
+            _     (checked-expiry! svc (:expires-at a))
             grants (group-core/user-grants [a] roles)]
         (assoc plan :group group :users (reached svc group-id) :assignment a :grants grants :update #(conj % a)))
 
@@ -560,6 +575,52 @@
     (assert-sources! group-repository registry)))
 
 ;; =============================================================================
+;; Expiry (BOU-856)
+;; =============================================================================
+
+(defn- expiry-metadata [expires-at]
+  (when expires-at {:expires-at (str expires-at)}))
+
+(defn- add-member!
+  "Add the user to the group, until `expires-at` unless nil, auditing the join."
+  [{:keys [group-repository audit-repository] :as svc} group-id user-id expires-at]
+  (let [{:keys [group focal grants] :as plan}
+        (change-plan svc {:op :add-member :group-id group-id :user-id user-id :expires-at expires-at})
+        diffs (user-diffs svc plan)
+        added (if expires-at
+                (ports/insert-member-until group-repository group-id (:id focal) expires-at)
+                (ports/insert-member group-repository group-id (:id focal)))]
+    (when added
+      (audit! audit-repository :group-join group [focal] grants
+              {:diffs diffs :metadata (expiry-metadata expires-at)}))
+    added))
+
+(defn- expire!
+  "Remove what expired by `now`, auditing each as a leave or a removed role
+   without an effective-rights diff: reads ignored it from the moment it
+   expired, so removing it changes no one's rights."
+  [{:keys [group-repository user-repository audit-repository registry]} now]
+  (let [{:keys [members assignments] :as removed} (ports/remove-expired group-repository now)
+        roles    (all-roles group-repository registry)
+        group-of (memoize #(or (ports/find-group group-repository %) {:id %}))
+        expired  #(assoc (expiry-metadata %) :reason "expired")]
+    (doseq [{:keys [group-id user-id expires-at]} members
+            ;; A soft-deleted user held nothing through it
+            :let [user (ports/find-user-by-id user-repository user-id)]
+            :when user]
+      (audit! audit-repository :group-leave (group-of group-id) [user]
+              (group-core/user-grants (ports/find-assignments group-repository group-id) roles)
+              {:metadata (expired expires-at)}))
+    (doseq [{:keys [group-id expires-at] :as a} assignments
+            :let [members (when-not (group-core/everyone? group-id)
+                            (ports/find-members group-repository group-id))]]
+      (audit! audit-repository :grant-remove (group-of group-id) members (group-core/user-grants [a] roles)
+              {:metadata (expired expires-at)}))
+    (when (or (seq members) (seq assignments))
+      (log/info "Removed expired group access" {:members (count members) :assignments (count assignments)}))
+    removed))
+
+;; =============================================================================
 ;; Service
 ;; =============================================================================
 
@@ -577,8 +638,10 @@
           ;; Grants and groups both ask the membership hook: ask it once
           svc     (cond-> this membership (update :membership memoize))
           result  (explain svc user permission record)
-          source  (into {} (map (juxt :id :source)) (ports/user-groups svc user))
-          sourced #(assoc % :membership (get source (:group-id %)))]
+          groups  (into {} (map (juxt :id identity)) (ports/user-groups svc user))
+          sourced #(let [{:keys [source expires-at]} (get groups (:group-id %))]
+                     (cond-> (assoc % :membership source)
+                       expires-at (assoc :membership-expires-at expires-at)))]
       (cond-> (-> result
                   (update :paths (partial mapv sourced))
                   (update :misses (partial mapv #(update % :right sourced))))
@@ -634,6 +697,15 @@
                         :preview (preview {:op :new-group :user-id (:id user) :assignment a})}]))
                    permission scope))}))
 
+  ports/ITimeBoundAccess
+  (add-group-member-until [this group-id user-id expires-at]
+    (add-member! this group-id user-id expires-at))
+
+  (expire-access! [this now]
+    (if (:expiry? this)
+      (expire! this now)
+      {:members [] :assignments []}))
+
   ports/IUserGroupService
 
   (list-groups [_]
@@ -665,12 +737,7 @@
         false)))
 
   (add-group-member [this group-id user-id]
-    (let [{:keys [group focal grants] :as plan} (change-plan this {:op :add-member :group-id group-id :user-id user-id})
-          diffs (user-diffs this plan)
-          added (ports/insert-member group-repository group-id (:id focal))]
-      (when added
-        (audit! audit-repository :group-join group [focal] grants {:diffs diffs}))
-      added))
+    (add-member! this group-id user-id nil))
 
   (remove-group-member [this group-id user-id]
     (let [{:keys [group focal grants] :as plan} (change-plan this {:op :remove-member :group-id group-id :user-id user-id})
@@ -712,7 +779,8 @@
           (change-plan this {:op :add-role :group-id group-id :assignment assignment})
           diffs  (user-diffs this plan)
           stored (ports/insert-assignment group-repository assignment)]
-      (audit! audit-repository :grant-add group users grants {:diffs diffs})
+      (audit! audit-repository :grant-add group users grants
+              {:diffs diffs :metadata (expiry-metadata (:expires-at assignment))})
       stored))
 
   (remove-group-role [this group-id assignment-id]
@@ -805,7 +873,9 @@
   ([group-repository user-repository audit-repository settings]
    (create-group-service group-repository user-repository audit-repository settings {}))
   ([group-repository user-repository audit-repository settings {:keys [registry membership explain resolve]}]
-   (cond-> (->UserGroupService group-repository user-repository audit-repository
-                               (with-registry-permissions settings registry) registry membership)
+   (cond-> (assoc (->UserGroupService group-repository user-repository audit-repository
+                                      (with-registry-permissions settings registry) registry membership)
+                  ;; Asked once: a repository without it keeps no expiry (Convention 5)
+                  :expiry? (satisfies? ports/IAccessExpiry group-repository))
      explain (assoc :explain explain)
      resolve (assoc :resolve resolve))))

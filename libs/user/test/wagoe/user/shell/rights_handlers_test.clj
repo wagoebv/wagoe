@@ -197,6 +197,31 @@
             (is (str/includes? body "explain-form"))
             (is (not (str/includes? body "explain-verdict")))))))))
 
+(deftest ^:integration access-given-until-a-date-says-so
+  ;; BOU-856
+  (with-app
+    (fn [{:keys [app users usvc gsvc admin]}]
+      (let [user!  #(ports/create-user users {:email % :name % :role :user :active true :password-hash "x"})
+            ada    (user! "ada@example.com")
+            bob    (user! "bob@example.com")
+            g      (ports/create-group gsvc {:name "Stand-ins"})
+            later  (.plusSeconds (java.time.Instant/now) 3600)
+            ends   #(count (re-seq #"class=\"expires-on" %))]
+        (ports/add-group-member-until gsvc (:id g) (:id ada) later)
+        (ports/add-group-role gsvc (:id g) {:role :invoice/editor :scope {} :expires-at later})
+        (testing "explain names when the membership and the assignment end"
+          (is (= [[later later]] (map (juxt :membership-expires-at :expires-at)
+                                      (:paths (ports/explain-access gsvc ada :invoice/write nil)))))
+          (is (= 2 (ends (:body (explain (rights-handlers/explain-access usvc gsvc) admin ada {"permission" "invoice/write"}))))))
+        (testing "the wizard offers an end date, and its new group's membership keeps it"
+          (is (str/includes? (:body (explain (rights-handlers/grant-wizard usvc gsvc) admin bob {"permission" "invoice/write"}))
+                             "name=\"expires-at\" type=\"date\""))
+          (is (= 303 (:status (app (req admin :post (str "/web/users/" (:id bob) "/grant/group")
+                                        {"permission" "invoice/write" "role" "invoice/editor" "name" "Bob stands in"
+                                         "description" "Holiday cover" "expires-at" "2099-01-31" "confirm" "true"})))))
+          (is (= [(java.time.Instant/parse "2099-01-31T00:00:00Z")]
+                 (map :expires-at (ports/user-groups gsvc bob)))))))))
+
 (deftest ^:integration the-access-overview-shows-groups-by-module
   (with-app
     (fn [{:keys [app gsvc admin]}]

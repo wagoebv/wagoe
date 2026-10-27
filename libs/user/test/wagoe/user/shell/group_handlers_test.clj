@@ -113,6 +113,31 @@
         (testing "an id that names nobody is refused on the page"
           (is (= 422 (:status (app (req admin :post (str path "/members") {"user-id" (str (random-uuid))}))))))))))
 
+(deftest ^:integration a-member-and-a-role-are-given-until-a-date
+  ;; BOU-856
+  (with-app nil
+    (fn [{:keys [app users gsvc admin]}]
+      (let [ada  (ports/create-user users {:email "ada@example.com" :name "Ada" :role :user
+                                           :active true :password-hash "x"})
+            path (get-in (app (req admin :post "/web/admin/groups" {"name" "Stand-ins"})) [:headers "Location"])
+            gid  (parse-uuid (last (str/split path #"/")))]
+        (testing "the forms ask for an optional date"
+          (is (str/includes? (:body (app (req admin :get path))) "type=\"date\"")))
+        (testing "a date passed or not a date is refused on the page"
+          (doseq [d ["2001-01-01" "soon"]]
+            (let [r (app (req admin :post (str path "/members") {"user-id" (str (:id ada)) "expires-at" d "confirm" "true"}))]
+              (is (= 422 (:status r)) d)
+              (is (str/includes? (:body r) "error-expires-at") d))))
+        (is (= 303 (:status (app (req admin :post (str path "/members")
+                                      {"user-id" (str (:id ada)) "expires-at" "2099-01-31" "confirm" "true"})))))
+        (is (= 303 (:status (app (req admin :post (str path "/roles")
+                                      {"role" "invoice/viewer" "expires-at" "2099-02-28" "confirm" "true"})))))
+        (let [{:keys [members roles]} (ports/get-group gsvc gid)
+              page                    (:body (app (req admin :get path)))]
+          (is (= [(java.time.Instant/parse "2099-01-31T00:00:00Z")] (map :expires-at members)))
+          (is (= [(java.time.Instant/parse "2099-02-28T00:00:00Z")] (map :expires-at roles)))
+          (is (= 2 (count (re-seq #"class=\"expires-on" page))) "the member's and the role's"))))))
+
 (deftest ^:integration a-scope-key-pointing-at-an-entity-is-a-lookup
   (with-app {:scope [:map [:domain-id {:optional true :wagoe/entity :domains} :int]
                      [:region {:optional true} :string]]}

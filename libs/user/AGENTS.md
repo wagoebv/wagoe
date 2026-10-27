@@ -509,6 +509,11 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
   theirs, a managed role holding only it, and a new group of one, each a `preview-change`, ranked by
   `core.grant/rank`. Joins and assignments apply through the group pages; the new group needs a name and a purpose.
   `/web/admin/permissions/grant` runs it for users pasted from `:report` log lines, which are not stored.
+- A membership or an assignment may end (BOU-856): `:expires-at` on `add-group-role`'s assignment,
+  `ITimeBoundAccess/add-group-member-until` for a membership. Every `IUserGroupRepository` read leaves an expired
+  row out, so enforcement, explain, previews and the wizard stop counting it at once. The recurring job
+  `:wagoe.user/expire-access` (every 15 minutes, on `:wagoe/jobs`; `:wagoe/jobs :recurring` overrides it) deletes it
+  through `IAccessExpiry/remove-expired` and audits a `:group-leave` or `:grant-remove` with `:reason "expired"`.
 - The group service takes `:permission-registry`. When the registry declares
   scope keys, the scope schema is `wagoe.platform.core.scope/scope-schema` of
   them (`with-registry-scopes`); a `:map` `:groups :scope` is declared into the

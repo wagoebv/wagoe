@@ -295,11 +295,29 @@
                (resolution (get resolved [k v] ::none) " (" ")"))
          (list [:t :user.access/within {:key label}] " " (scope-value (get entities k) v)))))))
 
+(defn expiry-date
+  "The UTC date `expires-at`, an Instant, falls on: what an expiry is entered
+   and shown as (BOU-856)."
+  [expires-at]
+  (str (java.time.LocalDate/ofInstant expires-at java.time.ZoneOffset/UTC)))
+
+(defn expiry-note
+  "\"expires on 2026-11-15\", or nil for access that does not end."
+  [expires-at]
+  (when expires-at
+    [:span.expires-on {:class "text-warning"} " " [:t :user.access/expires-on {:date (expiry-date expires-at)}]]))
+
+(defn expiry-input
+  "The optional expiry date of a membership or assignment, posted as `expires-at`."
+  [id value]
+  (list [:label {:for id} [:t :user.groups/field-expires-at]]
+        [:input {:type "date" :id id :name "expires-at" :class "input" :value value}]))
+
 (defn assignment-sentence
-  "`assignment`, {:group-id :group-name :role :scope}, as a sentence: \"Sales
-   may edit orders within Department Noord\". `roles`: {role-name role} as
-   `list-roles` gives them, to read a code role's level."
-  [{:keys [group-id group-name role scope]} roles scope-info]
+  "`assignment`, {:group-id :group-name :role :scope :expires-at}, as a
+   sentence: \"Sales may edit orders within Department Noord\". `roles`:
+   {role-name role} as `list-roles` gives them, to read a code role's level."
+  [{:keys [group-id group-name role scope expires-at]} roles scope-info]
   (let [level (role-level (get roles role))]
     [:span.access-sentence
      (if group-id [:a {:href (group-path group-id)} group-name] group-name)
@@ -308,7 +326,8 @@
        [:a {:href (role-path role)} [:t (level-verbs level) {:module (namespace role)}]]
        (list [:t :user.access/holds-role] " " [:a {:href (role-path role)} (code role)]))
      " "
-     (scope-phrase scope scope-info)]))
+     (scope-phrase scope scope-info)
+     (expiry-note expires-at)]))
 
 (defn role-index
   "`roles`, as `list-roles` gives them, by name."
@@ -605,9 +624,11 @@
    gives in that module, so the group shows once per role."
   [grants registry roles scope-info]
   (let [role-grants     (->> grants
-                             (group-by (juxt #(permission-module registry (:permission %)) :role :group-id :group-name :scope))
-                             (map (fn [[[m role group-id group-name scope] gs]]
+                             (group-by (juxt #(permission-module registry (:permission %)) :role :group-id :group-name :scope
+                                             :expires-at))
+                             (map (fn [[[m role group-id group-name scope expires-at] gs]]
                                     {:module m :role role :group-id group-id :group-name group-name :scope scope
+                                     :expires-at expires-at
                                      :permissions (sort-by group/permission-str (distinct (map :permission gs)))}))
                              (sort-by (juxt (comp group/permission-str :role) (comp str :group-name))))
         row             (fn [{:keys [permissions] :as a}]
@@ -641,8 +662,9 @@
       (section [:t :user.rights/groups-heading]
                (if (seq groups)
                  (table [[:t :user.rights/column-group] [:t :user.roles/column-source]]
-                        (for [{:keys [id name source]} groups]
-                          [:tr.rights-group [:td [:a {:href (group-path id)} name]] [:td (group-source-badge source)]]))
+                        (for [{:keys [id name source expires-at]} groups]
+                          [:tr.rights-group [:td [:a {:href (group-path id)} name] (expiry-note expires-at)]
+                           [:td (group-source-badge source)]]))
                  [:p.empty-state [:t :user.rights/groups-empty]]))
       (section [:t :user.rights/permissions-heading]
                (if (seq grants)
@@ -688,9 +710,10 @@
                :let [r (or right row)]]
            (cond-> [:tr.explain-path
                     [:td [:a {:href (group-path (:group-id r))} (:group-name r)]]
-                    [:td (group-source-badge (:membership r)) " " (membership-note r)]
+                    [:td (group-source-badge (:membership r)) " " (membership-note r)
+                     (expiry-note (:membership-expires-at r))]
                     [:td [:a {:href (role-path (:role r))} (code (:role r))]]
-                    [:td (right-scope r (= :unresolved reason) scope-info)]]
+                    [:td (right-scope r (= :unresolved reason) scope-info) (expiry-note (:expires-at r))]]
              why (conj [:td (cond (= :unresolved reason) [:t :user.explain/unresolved]
                                   (= :everywhere why)    [:t :user.explain/not-everywhere]
                                   :else                  (mismatch-text (:keys row) (:labels scope-info)))])))))
