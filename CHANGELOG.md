@@ -241,6 +241,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **A group service of your own must implement the protocols beside `IUserGroupService`** (BOU-859), or boot stops with
+  `WGE-107` naming the one it lacks, rather than the explain, preview, overview or grant page failing on first use.
 - **Service operations log their start and completion at debug** (BOU-847): the HTTP or CLI handler around them logs
   both at info. Set the `wagoe` logger to `:debug` to see them.
 - **`default-admin-config` drops `:require-role`, and `AdminConfig` makes it optional** (BOU-842). An admin config
