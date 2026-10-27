@@ -30,6 +30,18 @@
 
 (defn user-rights-path [user-id] (str "/web/users/" user-id "/rights"))
 
+(defn explain-path
+  "The explain page for `user-id`, asking `permission` on `record`: {scope-key
+   value}, or `:everywhere` for a route without a scope."
+  [user-id permission record]
+  (str "/web/users/" user-id "/explain"
+       (when permission
+         (str "?" (table-ui/encode-query-params
+                   (into {"permission" (group/permission-str permission)}
+                         (if (= :everywhere record)
+                           {"everywhere" "true"}
+                           (for [[k v] record] [(str "scope." (group/permission-str k)) (str v)]))))))))
+
 (defn page
   "`content` in the admin shell, `title` in its topbar."
   [title content opts]
@@ -542,7 +554,8 @@
       (header [[[:t :user/page-users-title] "/web/admin/users"]
                [n (str "/web/admin/users/" (:id user))]
                [[:t :user.rights/tab]]]
-              n)
+              n
+              [:a {:href (explain-path (:id user) nil nil) :class "btn btn-sm"} [:t :user.explain/open]])
       (user-tabs (:id user) :rights)
       (when (:platform-admin? opts)
         [:div {:class "alert alert-info" :role "status"} [:t :user.rights/platform-admin-note]])
@@ -557,4 +570,118 @@
                  (table (map :label rights-columns)
                         (rights-rows grants (:registry opts) (:scope-info opts)))
                  [:p.empty-state [:t :user.rights/permissions-empty]])))
+     opts)))
+
+;; =============================================================================
+;; Explain: why may (or may not) a user do this (BOU-851)
+;; =============================================================================
+
+(defn- membership-note [{:keys [membership group-name]}]
+  (case membership
+    :everyone [:t :user.explain/via-everyone]
+    :provider [:t :user.explain/via-provider {:group group-name}]
+    :member   [:t :user.explain/via-member]
+    nil))
+
+(defn- right-scope
+  "A right's stored scope, each source shown with what it resolved to."
+  [{:keys [stored-scope scope]} unresolved? scope-info]
+  (scope-view stored-scope
+              (assoc scope-info :resolved
+                     (into {} (for [[k v] stored-scope :when (scope/source? v)]
+                                [[k v] (if unresolved? #{} (get scope k #{}))])))))
+
+(defn- mismatch-text [by-key labels]
+  (interpose "; "
+             (for [[k {:keys [allowed value]}] (sort-by key by-key)
+                   :let [label (or (get labels k) (name k))]]
+               (if (nil? value)
+                 [:t :user.explain/key-unchecked {:key label}]
+                 [:t :user.explain/key-outside {:key label :value (str value) :allowed (values-str allowed)}]))))
+
+(defn- rights-table
+  "`rows`, rights or `:misses`, with why each misses when `why` is the record asked."
+  [rows scope-info why]
+  (table (cond-> [[:t :user.rights/column-group] [:t :user.explain/column-membership]
+                  [:t :user.groups/field-role] [:t :user.groups/field-scope]]
+           why (conj [:t :user.explain/column-why]))
+         (for [{:keys [right reason] :as row} rows
+               :let [r (or right row)]]
+           (cond-> [:tr.explain-path
+                    [:td [:a {:href (group-path (:group-id r))} (:group-name r)]]
+                    [:td (group-source-badge (:membership r)) " " (membership-note r)]
+                    [:td [:a {:href (role-path (:role r))} (code (:role r))]]
+                    [:td (right-scope r (= :unresolved reason) scope-info)]]
+             why (conj [:td (cond (= :unresolved reason) [:t :user.explain/unresolved]
+                                  (= :everywhere why)    [:t :user.explain/not-everywhere]
+                                  :else                  (mismatch-text (:keys row) (:labels scope-info)))])))))
+
+(defn- explain-form [user-id registry scope-keys {:keys [permission record]}]
+  [:form.explain-form {:method "get" :action (explain-path user-id nil nil) :class "space-y-3"}
+   [:label {:for "explain-permission"} [:t :user.explain/field-permission]]
+   [:select#explain-permission {:name "permission" :required true :class "select"}
+    [:option {:value ""} [:t :user.explain/pick-permission]]
+    (for [p (sort-by group/permission-str (keys registry))
+          :let [v (group/permission-str p)]]
+      [:option {:value v :selected (= p permission)} v])]
+   [:p [:t :user.explain/record-hint]]
+   (for [[k label] scope-keys
+         :let [id (str "explain-scope-" (name k))]]
+     (list [:label {:for id} label]
+           [:input {:id id :type "text" :class "input" :name (str "scope." (group/permission-str k))
+                    :value (when (map? record) (some-> (get record k) str))}]))
+   [:label.explain-everywhere {:class "flex items-center gap-2"}
+    [:input {:type "checkbox" :class "checkbox checkbox-sm" :name "everywhere" :value "true"
+             :checked (= :everywhere record)}]
+    [:t :user.explain/field-everywhere]]
+   [:button {:type "submit" :class "btn btn-primary"} [:t :user.explain/submit]]])
+
+(defn- verdict [{:keys [allowed? via]} record]
+  (let [asked (cond (= :everywhere record) :everywhere (seq record) :record :else :anywhere)]
+    [:div.explain-verdict {:class (if allowed? "alert alert-success" "alert alert-error") :role "status"}
+     [:t (cond (= :platform-admin via) :user.explain/yes-platform-admin
+               allowed?                ({:everywhere :user.explain/yes-everywhere :record :user.explain/yes-record
+                                         :anywhere   :user.explain/yes-anywhere} asked)
+               :else                   ({:everywhere :user.explain/no-everywhere :record :user.explain/no-record
+                                         :anywhere   :user.explain/no} asked))]]))
+
+(defn explain-page
+  "Why `user` may or may not use the permission asked, `result` as
+   `explain-access` gives it, nil before one is asked. `opts`: `:asked`
+   {:permission :record}, `:registry` the permissions to pick from,
+   `:scope-info` as `scope-view` reads it."
+  [user result opts]
+  (let [n          (or (not-empty (:name user)) (:email user))
+        scope-info (:scope-info opts)
+        asked      (:asked opts)]
+    (page
+     [:t :user.explain/page-title {:name n}]
+     (list
+      (header [[[:t :user/page-users-title] "/web/admin/users"]
+               [n (str "/web/admin/users/" (:id user))]
+               [[:t :user.rights/tab] (user-rights-path (:id user))]
+               [[:t :user.explain/crumb]]]
+              n)
+      (user-tabs (:id user) :rights)
+      (section [:t :user.explain/heading]
+               (explain-form (:id user) (:registry opts) (sort-by key (:labels scope-info)) asked))
+      (when result
+        (list
+         (verdict result (:record asked))
+         (when (seq (:paths result))
+           (section [:t :user.explain/paths-heading] (rights-table (:paths result) scope-info false)))
+         (when (seq (:misses result))
+           (section [:t :user.explain/misses-heading] (rights-table (:misses result) scope-info (or (:record asked) true))))
+         (when-not (:allowed? result)
+           (section [:t :user.explain/alternatives-heading]
+                    [:p [:t :user.explain/alternatives-hint]]
+                    (if (seq (:alternatives result))
+                      (table [[:t :user.rights/column-group] [:t :user.groups/field-role] [:t :user.groups/field-scope]]
+                             (for [{:keys [group-id group-name role scope everyone?]} (:alternatives result)]
+                               [:tr.explain-alternative
+                                [:td [:a {:href (group-path group-id)} group-name]
+                                 (when everyone? (list " " (group-source-badge :everyone)))]
+                                [:td [:a {:href (role-path role)} (code role)]]
+                                [:td (scope-view scope scope-info)]]))
+                      [:p.empty-state [:t :user.explain/no-alternatives]]))))))
      opts)))

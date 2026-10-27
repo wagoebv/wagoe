@@ -64,14 +64,15 @@
   [scopes]
   (boolean (some empty? scopes)))
 
+(defn- allows?
+  "Whether `v` is one of `allowed`, compared as strings, as a path parameter arrives."
+  [allowed v]
+  (boolean (some #(access/same-id? v %) allowed)))
+
 (defn- admits?
-  "Whether `scope` admits `values`: each of its keys has a value, inside it.
-   Compared as strings, as a path parameter arrives."
+  "Whether `scope` admits `values`: each of its keys has a value, inside it."
   [scope values]
-  (every? (fn [[k allowed]]
-            (let [v (get values k)]
-              (some #(access/same-id? v %) allowed)))
-          scope))
+  (every? (fn [[k allowed]] (allows? allowed (get values k))) scope))
 
 (defn in-scope?
   "Whether one of `scopes` admits `values`, {scope-key value}: a record's or a
@@ -127,3 +128,62 @@
                       :when (every? #(contains? fields %) (keys scope))]
                   (into [:and] (map (fn [[k vs]] (condition (get fields k) vs))) (sort-by key scope)))]
       (if (seq conds) (into [:or] conds) [:= 1 0]))))
+
+;; =============================================================================
+;; Explain (BOU-851)
+;; =============================================================================
+
+(defn record-route
+  "The route `:scope` and path parameters that check `record`, {scope-key
+   value}: a parameter per key. `:everywhere`: a route without `:scope`, which
+   needs the permission held everywhere. Nil: `:handler`, held anywhere."
+  [record]
+  (cond
+    (= :everywhere record) [nil {}]
+    (seq record)           [(into {} (map (fn [k] [k (keyword "path" (name k))])) (keys record))
+                            (update-keys record (comp keyword name))]
+    :else                  [:handler {}]))
+
+(defn route-record
+  "The record, as `record-route` reads it, that a route whose data says
+   `route-scope` checks, from its `path-params`."
+  [route-scope path-params]
+  (cond
+    (nil? route-scope)  :everywhere
+    (map? route-scope)  (not-empty (into {} (keep (fn [[k p]] (when-some [v (get path-params (keyword (name p)))] [k v])))
+                                         route-scope))))
+
+(defn- mismatch
+  "Why `scope` does not admit `record`: per key, its allowed values and the
+   record's value, nil when the record has none."
+  [scope record]
+  (into {} (for [[k allowed] scope
+                 :let [v (get record k)]
+                 :when (not (allows? allowed v))]
+             [k {:allowed allowed :value v}])))
+
+(defn explain
+  "Why a caller may or may not use `permission` on `record` ({scope-key
+   value}, `:everywhere` or nil for anywhere: see `record-route`), decided by
+   `route-decision` as a route checking `record` decides it. `rights`: the caller's, resolved; `dropped`: those
+   whose scope resolved to nothing. A platform admin holds everything.
+
+   {:allowed? :via (:platform-admin or :rights) :error :paths [right]
+    :misses [{:right r :reason :scope-mismatch|:unresolved :keys {k {:allowed :value}}}]}"
+  [{:keys [platform-admin? rights dropped]} permission record]
+  (if platform-admin?
+    {:allowed? true :via :platform-admin :paths [] :misses []}
+    (let [[route-scope params] (record-route record)
+          decide   #(route-decision (scopes-for % permission) route-scope params)
+          held     (filterv #(= permission (:permission %)) rights)
+          {admitted true missed false} (group-by #(nil? (:error (decide [%]))) held)
+          {:keys [error]} (decide held)]
+      {:allowed? (nil? error)
+       :via      :rights
+       :error    error
+       :paths    (vec admitted)
+       :misses   (-> []
+                     (into (map (fn [r] {:right r :reason :scope-mismatch :keys (mismatch (or (:scope r) {}) record)}))
+                           missed)
+                     (into (comp (filter #(= permission (:permission %))) (map (fn [r] {:right r :reason :unresolved})))
+                           dropped))})))

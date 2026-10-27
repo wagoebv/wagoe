@@ -493,6 +493,15 @@
   ;; unless opts {:replace? true}. Returns per group {:group :created? :joined
   ;; :left :roles-added :roles-removed}.
 
+(defprotocol IAccessExplain
+  (explain-access [this user permission record]))
+  ;; Why `user`, a user map, may or may not use `permission` on `record`
+  ;; ({scope-key value}, :everywhere, or nil for anywhere), decided as the authorization
+  ;; interceptor decides (wagoe.platform.core.scope/explain): {:allowed? :via
+  ;; :paths :misses}, each right with its group's :membership (:member,
+  ;; :provider or :everyone) and :stored-scope; refused, :alternatives too, the
+  ;; assignments giving it as role-holders lists them. BOU-851.
+
 ;; =============================================================================
 ;; Sign-in hooks
 ;; =============================================================================

@@ -217,17 +217,17 @@
     data))
 
 (defn- role-holders
-  "Every assignment of one of `role-names`, with its group's members; Everyone
-   lists none."
-  [repo role-names]
-  (->> (mapcat #(ports/find-role-assignments repo %) (distinct role-names))
-       (map (fn [{:keys [group-id] :as a}]
-              (let [everyone? (group-core/everyone? group-id)]
-                (assoc (select-keys a [:role :group-id :group-name :scope])
-                       :everyone? everyone?
-                       :members (if everyone? [] (ports/find-members repo group-id))))))
-       (sort-by (juxt :group-name (comp str :role)))
-       vec))
+  "Every assignment of one of `role-names`, with its group's members unless
+   `members?` is false; Everyone lists none."
+  ([repo role-names] (role-holders repo role-names true))
+  ([repo role-names members?]
+   (->> (mapcat #(ports/find-role-assignments repo %) (set role-names))
+        (map (fn [{:keys [group-id] :as a}]
+               (let [everyone? (group-core/everyone? group-id)]
+                 (cond-> (assoc (select-keys a [:role :group-id :group-name :scope]) :everyone? everyone?)
+                   members? (assoc :members (if everyone? [] (ports/find-members repo group-id)))))))
+        (sort-by (juxt :group-name (comp str :role)))
+        vec)))
 
 (defn- audit-role-change!
   "Audit what changing managed role `role-name` from `before` to `after`
@@ -429,6 +429,25 @@
   (rights [this user]
     (ports/user-grants this user))
 
+  ports/IAccessExplain
+  (explain-access [this user permission record]
+    (let [explain (or (:explain this)
+                      (throw (ex-info "Explaining access needs the permission registry"
+                                      {:type :configuration-error})))
+          ;; Grants and groups both ask the membership hook: ask it once
+          svc     (cond-> this membership (update :membership memoize))
+          result  (explain svc user permission record)
+          source  (into {} (map (juxt :id :source)) (ports/user-groups svc user))
+          sourced #(assoc % :membership (get source (:group-id %)))]
+      (cond-> (-> result
+                  (update :paths (partial mapv sourced))
+                  (update :misses (partial mapv #(update % :right sourced))))
+        (not (:allowed? result))
+        (assoc :alternatives
+               (role-holders group-repository
+                             (group-core/roles-holding (all-roles group-repository registry) permission)
+                             false)))))
+
   ports/IUserGroupService
 
   (list-groups [_]
@@ -597,9 +616,11 @@
   "A group service. `settings` is what `prepare-settings` returns. `opts`:
    `:registry`, the permission registry its code roles come from, and
    `:membership`, the hook `(fn [user] #{group-name …})` that adds groups an
-   identity provider names."
+   identity provider names, and `:explain`,
+   `wagoe.platform.shell.authorization/explain` with the registry applied."
   ([group-repository user-repository audit-repository settings]
    (create-group-service group-repository user-repository audit-repository settings {}))
-  ([group-repository user-repository audit-repository settings {:keys [registry membership]}]
-   (->UserGroupService group-repository user-repository audit-repository
-                       (with-registry-permissions settings registry) registry membership)))
+  ([group-repository user-repository audit-repository settings {:keys [registry membership explain]}]
+   (cond-> (->UserGroupService group-repository user-repository audit-repository
+                               (with-registry-permissions settings registry) registry membership)
+     explain (assoc :explain explain))))

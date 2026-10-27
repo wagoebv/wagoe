@@ -1437,7 +1437,7 @@
   "The page a browser sees for a failed request: the error's own message for a
    client error, the generic sentence for a server one, and the reference to
    quote when reporting it."
-  [{:keys [status message correlation-id user]}]
+  [{:keys [status message correlation-id user refusal]}]
   (page-layout
    [:t :common/error-page-title]
    [:div.error-page
@@ -1445,5 +1445,10 @@
     [:p.error-message (if (>= status 500) [:t :common/error-generic] message)]
     (when correlation-id
       [:p.error-reference [:t :common/error-page-reference] " " [:code correlation-id]])
+    ;; An authorization refusal: an admin opens why, or is sent this link
+    (when-let [user-id (:user-id refusal)]
+      [:p.error-explain
+       [:a {:href (rights-ui/explain-path user-id (:permission refusal) (:record refusal))}
+        [:t :user.explain/error-page-link]]])
     [:a.btn.btn-primary {:href home/*path*} [:t :common/error-page-home]]]
    {:user user}))

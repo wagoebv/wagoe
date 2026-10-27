@@ -206,3 +206,36 @@
                                                                         :resolved (resolve-sources group-service user grants))))
                        200))
       (not-found request :user.rights/user-not-found))))
+
+(defn- asked
+  "The permission and record the explain form asks: `permission`, and a
+   `scope.<key>` parameter per scope key the registry declares, or
+   `everywhere`, as a route without a scope asks."
+  [request scope-keys]
+  (let [params (:query-params request)]
+    {:permission (group-core/parse-name (get params "permission"))
+     :record     (if (= "true" (get params "everywhere"))
+                   :everywhere
+                   (into {} (for [k scope-keys
+                                  :let [v (some-> (get params (str "scope." (group-core/permission-str k))) str str/trim)]
+                                  :when (seq v)]
+                              [k v])))}))
+
+(defn explain-access
+  "GET /web/users/:id/explain — why the user may or may not use a permission,
+   on a record when its scope keys are given (BOU-851)."
+  [user-service group-service]
+  (fn [request]
+    (if-let [user (some->> (get-in request [:path-params :id]) str parse-uuid (ports/get-user-by-id user-service))]
+      (let [scope-info (group-handlers/scope-info group-service)
+            {:keys [permission record] :as q} (asked request (keys (:labels scope-info)))]
+        (html-response request
+                       (rights-ui/explain-page user
+                                               (when permission
+                                                 (ports/explain-access group-service user permission record))
+                                               (assoc (page-opts request)
+                                                      :asked q
+                                                      :registry (registry-permissions group-service)
+                                                      :scope-info scope-info))
+                       200))
+      (not-found request :user.rights/user-not-found))))

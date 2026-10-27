@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Access explain: why a user may or may not use a permission** (BOU-851), at `/web/users/:id/explain`, linked from
+  their Rights tab and from a 403; `IAccessExplain` at the REPL. It decides as the authorization interceptor does.
 - **Push `:callback-token-ttl-seconds` and `:refuse-legacy-callback-tokens?`** (BOU-850): the token lifetime, 7 days by
   default, and an opt-in refusal of 1.0-form tokens. Set the second once no app version holds such tokens.
 - **Geo `:cache? true`** (BOU-847): the module wires `:wagoe/db-context` for its cache itself, and a config that does

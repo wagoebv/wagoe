@@ -135,7 +135,12 @@
         (is (str/includes? body "403"))))
     (testing "in the app's own error page when it has one"
       (let [h (handler :enforce {:error-page (fn [_ {:keys [status]}] (str "<p>app page " status "</p>"))})]
-        (is (= "<p>app page 403</p>" (:body (call h :get "/web/orders" "nobody" "text/html"))))))))
+        (is (= "<p>app page 403</p>" (:body (call h :get "/web/orders" "nobody" "text/html"))))))
+    (testing "told what was refused, to link an admin to why (BOU-851)"
+      (let [seen (atom nil)
+            h    (handler :enforce {:error-page (fn [_ error] (reset! seen error) "page")})]
+        (call h :get "/web/orders" "nobody" "text/html")
+        (is (= {:user-id "nobody" :permission :orders/read :record :everywhere} (:refusal @seen)))))))
 
 (deftest ^:integration rights-are-read-once-per-request-and-only-when-needed
   (let [h (handler :enforce)]

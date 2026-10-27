@@ -495,6 +495,10 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
   permission names travel as `?name=`, since they hold a slash. Each shows who
   holds it (`role-holders`); the Rights tab resolves a user-sourced scope and its key's `:expand`, as
   enforcement does. `core.rights-ui/detail-tabs` is the one list of a user's tabs; `admin/users.edn` names it.
+- `/web/users/:id/explain?permission=..&scope.<key>=..` answers why a user may or may not (BOU-851), through
+  `IAccessExplain`: `wagoe.platform.shell.authorization/explain` reads and resolves the rights as the interceptor
+  does and `core.scope/explain` decides with `route-decision`; a property test holds the two equal. A 403 from the
+  interceptor links to it.
 - The group service takes `:permission-registry`. When the registry declares
   scope keys, the scope schema is `wagoe.platform.core.scope/scope-schema` of
   them (`with-registry-scopes`); a `:map` `:groups :scope` is declared into the
