@@ -308,7 +308,7 @@
          (update :middleware conj (:extra-middleware http)))
        (update :routes into (map #(module-routes-ref module %)) routes)
        (update :job-handlers into job-handlers)
-       (update :recurring merge recurring))))
+       (update :recurring #(merge-slots ":wagoe/job-scheduler :recurring" % k recurring)))))
 
 (defn- scaffold-components
   "The four keys a scaffolded module `k` gets: what `module_wiring.clj`

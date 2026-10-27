@@ -163,21 +163,25 @@
     grant))
 
 (defn- checked-expiry!
-  "Throw :validation-error for an `expires-at` that has passed, or that the
-   repository cannot store: it lacks IAccessExpiry."
+  "`expires-at`, any inst (a #inst reads as a Date), as the Instant stored;
+   nil for never. Throws :validation-error for one that is no inst, has
+   passed, or that the repository cannot store: it lacks IAccessExpiry."
   [svc expires-at]
-  (when expires-at
+  (when (some? expires-at)
     (when-not (:expiry? svc)
       (throw (refused "This group repository keeps no expiry dates" {:field :expires-at})))
-    (when-let [{:keys [error]} (group-core/expiry-refusal expires-at (Instant/now))]
-      (throw (ex-info (:message error) error)))))
+    (when-not (inst? expires-at)
+      (throw (refused "Not a date" {:field :expires-at})))
+    (let [t (if (instance? Instant expires-at) expires-at (Instant/ofEpochMilli (inst-ms expires-at)))]
+      (when-let [{:keys [error]} (group-core/expiry-refusal t (Instant/now))]
+        (throw (ex-info (:message error) error)))
+      t)))
 
 (defn- checked-assignment
   "`assignment` as stored, its scope {} when it has none. Throws
    :validation-error naming an unknown role or a scope the schema refuses."
   [settings roles assignment data]
-  (let [a (cond-> {:role (:role assignment) :scope (or (:scope assignment) {})}
-            (:expires-at assignment) (assoc :expires-at (:expires-at assignment)))]
+  (let [a {:role (:role assignment) :scope (or (:scope assignment) {})}]
     (when-let [{:keys [error]} (group-core/assignment-refusal a roles settings)]
       (throw (ex-info (:message error) (merge error data))))
     a))
@@ -287,13 +291,14 @@
     (case op
       :add-member
       (let [_     (not-everyone! group-id)
-            _     (checked-expiry! svc (:expires-at change))
+            until (checked-expiry! svc (:expires-at change))
             group (existing-group group-repository group-id)
             user  (or (ports/find-user-by-id user-repository user-id)
                       (throw (not-found "No such user" {:user-id user-id})))
             held  (ports/find-assignments group-repository group-id)
             grants (group-core/user-grants held roles)]
-        (assoc plan :group group :users [user] :focal user :grants grants :update #(into % held)))
+        (assoc plan :group group :users [user] :focal user :grants grants :update #(into % held)
+               :expires-at until))
 
       (:remove-member :delete-group)
       (let [_      (when (= :delete-group op) (not-everyone! group-id))
@@ -317,8 +322,9 @@
 
       :add-role
       (let [group (existing-group group-repository group-id)
-            a     (assoc (checked-assignment settings roles (:assignment change) nil) :group-id group-id)
-            _     (checked-expiry! svc (:expires-at a))
+            until (checked-expiry! svc (get-in change [:assignment :expires-at]))
+            a     (cond-> (assoc (checked-assignment settings roles (:assignment change) nil) :group-id group-id)
+                    until (assoc :expires-at until))
             grants (group-core/user-grants [a] roles)]
         (assoc plan :group group :users (reached svc group-id) :assignment a :grants grants :update #(conj % a)))
 
@@ -584,7 +590,7 @@
 (defn- add-member!
   "Add the user to the group, until `expires-at` unless nil, auditing the join."
   [{:keys [group-repository audit-repository] :as svc} group-id user-id expires-at]
-  (let [{:keys [group focal grants] :as plan}
+  (let [{:keys [group focal grants expires-at] :as plan}
         (change-plan svc {:op :add-member :group-id group-id :user-id user-id :expires-at expires-at})
         diffs (user-diffs svc plan)
         added (if expires-at
