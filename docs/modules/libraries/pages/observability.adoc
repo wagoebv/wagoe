@@ -91,7 +91,7 @@ so; the framework's own labels (method, status, operation) are bounded.
  :environment "prod"
  :release     #env APP_RELEASE
  :sample-rate 1.0                  ; fraction of events sent
- :max-breadcrumbs 100              ; newest kept, per component
+ :max-breadcrumbs 100              ; newest kept, per thread
  :filtering   {:min-severity       :warning              ; messages below are dropped
                :exclude-exceptions ["java.io.IOException"] ; class name, full or simple
                :exclude-messages   ["healthcheck"]}}       ; substring

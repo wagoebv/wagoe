@@ -52,8 +52,8 @@ map, the key every system provides.
 
 Honoured config: `:dsn`, `:environment`, `:release`, `:server-name`, `:debug`,
 `:traces-sample-rate` (client init); `:sample-rate`, `:enabled`, `:filtering
-{:min-severity :exclude-exceptions :exclude-messages}`, `:redact` (per event); `:max-breadcrumbs` (default 100, newest kept, per
-component).
+{:min-severity :exclude-exceptions :exclude-messages}`, `:redact` (per event);
+`:max-breadcrumbs` (default 100, newest kept, per thread).
 Other schema keys (rate limits, retries, `:before-send`, …) are not read.
 
 The component's `IErrorFilter` and `IErrorReportingConfig` share one settings
@@ -93,7 +93,7 @@ The recommended way to add observability is to wrap operations with interceptors
 The interceptor automatically:
 - Logs start and completion at debug; a failure at error for a 5xx, warn for 401/403, else info
 - Records latency metrics
-- Captures exceptions to the error reporter
+- Reports a 5xx failure to the error reporter; a typed 4xx is not reported
 - Adds breadcrumbs for distributed tracing
 
 ### Persistence Layer
@@ -182,9 +182,10 @@ The interceptor automatically:
   (with-clean-context [this f]))    ; run f with empty context, then restore the old one
 ```
 
-Both default to no-ops. Implement them when your context is per-thread: the
-platform wraps each HTTP request, job, event handler and realtime handler in
-them, so pooled threads do not carry context from one run into the next.
+Both default to leaving the context alone (`with-clean-context` still calls
+`f`). Implement them when your context is per-thread: the platform wraps each
+HTTP request, job, event handler and realtime handler in them, so pooled threads
+do not carry context from one run into the next.
 
 ### IMetricsEmitter
 
@@ -349,7 +350,7 @@ The default for every signal. No configuration beyond `{:provider :no-op}`.
                         :environment "prod"
                         :release     #env APP_RELEASE
                         :sample-rate 1.0
-                        :max-breadcrumbs 100   ; newest kept, per component
+                        :max-breadcrumbs 100   ; newest kept, per thread
                         :filtering   {:min-severity :warning
                                       :exclude-exceptions ["java.io.IOException"]}}
 ```
@@ -409,7 +410,7 @@ HTTP handler
 - Wrap operations at boundaries only — avoid duplicating interceptor execution inside already-instrumented paths.
 - Keep PII out of logs and breadcrumbs — sanitize before passing `params` to interceptors.
 - No-op adapters are used in tests automatically; never hardcode provider-specific calls in core.
-- Error context is per thread (see IErrorContextScope above); work you hand to another thread starts without it.
+- Error context is per thread in the Sentry adapter (see IErrorContextScope above): work you hand to another thread does not see it, and a pooled thread keeps what its last task left unless that task ran inside `with-clean-context`.
 
 ---
 
