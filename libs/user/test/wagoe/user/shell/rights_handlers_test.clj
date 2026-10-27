@@ -33,7 +33,8 @@
                                                        users audit
                                                        (group-service/with-registry-scopes
                                                          (group-service/prepare-settings nil) registry)
-                                                       {:registry registry})
+                                                       {:registry registry
+                                                        :explain  (partial authz/explain registry)})
             routes (http/group-routes usvc gsvc nil)
             app    (ring/ring-handler (ring/router ["/web" (:web routes)]))
             admin  (ports/create-user users {:email "admin@example.com" :name "Admin" :role :admin
@@ -143,6 +144,55 @@
         (is (str/includes? (:body page) "Finance") "the hook's group")
         (is (= 1 @calls))))))
 
+(defn- explain [handler admin user params]
+  (handler {:request-method :get :uri "/" :user admin :headers {}
+            :path-params {:id (str (:id user))} :query-params params}))
+
+(deftest ^:integration explain-says-why-a-user-may-or-may-not
+  (with-app
+    (fn [{:keys [users usvc gsvc admin]}]
+      (let [ada     (ports/create-user users {:email "ada@example.com" :name "Ada" :role :user
+                                              :active true :password-hash "x"})
+            finance (ports/create-group gsvc {:name "Finance"})
+            ops     (ports/create-group gsvc {:name "Ops"})
+            ;; Ops comes from the identity provider
+            gsvc    (assoc gsvc :membership (fn [_] #{"Ops"}))
+            handler (rights-handlers/explain-access usvc gsvc)
+            page    #(:body (explain handler admin ada %))]
+        (ports/add-group-member gsvc (:id finance) (:id ada))
+        (ports/add-group-role gsvc (:id finance) {:role :invoice/editor :scope {:domain-id 4}})
+        (ports/add-group-role gsvc (:id ops) {:role :invoice/viewer :scope {:department-id :user/department}})
+        (testing "the port answers with the path, as enforcement decides"
+          (let [r (ports/explain-access gsvc ada :invoice/write {:domain-id "4"})]
+            (is (:allowed? r))
+            (is (= [["Finance" :member :invoice/editor]] (map (juxt :group-name :membership :role) (:paths r))))))
+        (testing "yes on a record: the group, how the user is in it, the role"
+          (let [body (page {"permission" "invoice/write" "scope.domain-id" "4"})]
+            (is (str/includes? body "yes-record"))
+            (is (str/includes? body "Finance"))
+            (is (str/includes? body "via-member"))))
+        (testing "no on another record: the scope that misses, and what would give it"
+          (let [body (page {"permission" "invoice/write" "scope.domain-id" "5"})]
+            (is (str/includes? body "no-record"))
+            (is (str/includes? body "key-outside"))
+            (is (str/includes? body "explain-alternative"))))
+        (testing "an identity provider group, with where to change it, and the resolved source"
+          (let [body (page {"permission" "invoice/read"})]
+            (is (str/includes? body "yes-anywhere"))
+            (is (str/includes? body "via-provider"))
+            (is (str/includes? body "<strong class=\"scope-value\">7, 70</strong>"))))
+        (testing "nothing gives it"
+          (let [body (page {"permission" "invoice/approve"})]
+            (is (str/includes? body ">no</div>"))
+            (is (str/includes? body "no-alternatives"))))
+        (testing "a platform admin is named"
+          (is (str/includes? (:body (explain handler admin admin {"permission" "invoice/approve"}))
+                             "yes-platform-admin")))
+        (testing "without a permission, the form"
+          (let [body (page {})]
+            (is (str/includes? body "explain-form"))
+            (is (not (str/includes? body "explain-verdict")))))))))
+
 (deftest ^:integration ^:security only-admins-reach-the-rights-pages
   (with-app
     (fn [{:keys [app users]}]
@@ -150,7 +200,8 @@
                                            :active true :password-hash "x"})]
         (doseq [[method uri] [[:get "/web/admin/roles"] [:post "/web/admin/roles"]
                               [:post "/web/admin/roles/duplicate"] [:get "/web/admin/permissions"]
-                              [:get (str "/web/users/" (:id user) "/rights")]]]
+                              [:get (str "/web/users/" (:id user) "/rights")]
+                              [:get (str "/web/users/" (:id user) "/explain")]]]
           (let [r (app (req user method uri {"name" "x/y"}))]
             (is (= 403 (:status r)) (str method " " uri))
             (is (nil? (get-in r [:headers "Location"])) (str method " " uri))))))))

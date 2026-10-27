@@ -20,6 +20,7 @@
             [wagoe.user.shell.session-pruner :as session-pruner]
             [wagoe.user.shell.data-export :as data-export]
             [wagoe.user.shell.web-handlers :as web-handlers]
+            [wagoe.platform.shell.authorization :as authz-shell]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
 
@@ -309,7 +310,9 @@
   (let [svc (group-service/create-group-service group-repository user-repository audit-repository
                                                 (group-service/with-registry-scopes settings permission-registry)
                                                 {:registry   permission-registry
-                                                 :membership (:group-membership hooks)})]
+                                                 :membership (:group-membership hooks)
+                                                 :explain    (when permission-registry
+                                                               (partial authz-shell/explain permission-registry))})]
     ;; `migrate? false`: `wagoe upgrade authorization check` reads what the
     ;; migration would do without doing it.
     (when-not (false? migrate?) (group-service/migrate! svc))

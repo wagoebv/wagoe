@@ -1052,4 +1052,10 @@
       (let [body (page {:status 500 :message "Internal Server Error" :correlation-id "cid-500"})]
         (is (str/includes? body "Er ging iets mis. Probeer het later opnieuw."))
         (is (not (str/includes? body "Internal Server Error")))
-        (is (str/includes? body "cid-500"))))))
+        (is (str/includes? body "cid-500"))))
+    (testing "an authorization refusal links to why (BOU-851)"
+      (let [body (page {:status 403 :message "No" :refusal {:user-id "u1" :permission :invoice/approve
+                                                            :record {:domain-id "4"}}})]
+        (is (str/includes? body "/web/users/u1/explain?"))
+        (is (str/includes? body "permission=invoice%2Fapprove"))
+        (is (str/includes? body "scope.domain-id=4"))))))

@@ -135,7 +135,12 @@
         (is (str/includes? body "403"))))
     (testing "in the app's own error page when it has one"
       (let [h (handler :enforce {:error-page (fn [_ {:keys [status]}] (str "<p>app page " status "</p>"))})]
-        (is (= "<p>app page 403</p>" (:body (call h :get "/web/orders" "nobody" "text/html"))))))))
+        (is (= "<p>app page 403</p>" (:body (call h :get "/web/orders" "nobody" "text/html"))))))
+    (testing "told what was refused, to link an admin to why (BOU-851)"
+      (let [seen (atom nil)
+            h    (handler :enforce {:error-page (fn [_ error] (reset! seen error) "page")})]
+        (call h :get "/web/orders" "nobody" "text/html")
+        (is (= {:user-id "nobody" :permission :orders/read :record nil} (:refusal @seen)))))))
 
 (deftest ^:integration rights-are-read-once-per-request-and-only-when-needed
   (let [h (handler :enforce)]
@@ -202,8 +207,8 @@
   (let [h      (handler :report)
         errors (atom 0)]
     (with-redefs [clojure.tools.logging/log* (fn [_ level _ message]
-                                                (when (and (= :error level) (re-find #"report failed" (str message)))
-                                                  (swap! errors inc)))]
+                                               (when (and (= :error level) (re-find #"report failed" (str message)))
+                                                 (swap! errors inc)))]
       (dotimes [_ 3] (is (= 200 (status h :get "/api/v1/orders" "boom")))))
     (is (= 1 @errors) "a repeat within the minute is not logged again"))
   (testing ":enforce lets it fail"

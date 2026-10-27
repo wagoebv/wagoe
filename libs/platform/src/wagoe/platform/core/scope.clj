@@ -127,3 +127,58 @@
                       :when (every? #(contains? fields %) (keys scope))]
                   (into [:and] (map (fn [[k vs]] (condition (get fields k) vs))) (sort-by key scope)))]
       (if (seq conds) (into [:or] conds) [:= 1 0]))))
+
+;; =============================================================================
+;; Explain (BOU-851)
+;; =============================================================================
+
+(defn record-route
+  "The route `:scope` and path parameters that check `record`, {scope-key
+   value}: a parameter per key. `[:handler {}]` without one: held anywhere."
+  [record]
+  (if (seq record)
+    [(into {} (map (fn [k] [k (keyword "path" (name k))])) (keys record))
+     (update-keys record (comp keyword name))]
+    [:handler {}]))
+
+(defn route-record
+  "The record a route whose data says `route-scope` checks, from its
+   `path-params`; nil when it checks none."
+  [route-scope path-params]
+  (when (map? route-scope)
+    (not-empty (into {} (keep (fn [[k p]] (when-some [v (get path-params (keyword (name p)))] [k v])))
+                     route-scope))))
+
+(defn- mismatch
+  "Why `scope` does not admit `record`: per key, its allowed values and the
+   record's value, nil when the record has none."
+  [scope record]
+  (into {} (for [[k allowed] scope
+                 :let [v (get record k)]
+                 :when (not-any? #(access/same-id? v %) allowed)]
+             [k {:allowed allowed :value v}])))
+
+(defn explain
+  "Why a caller may or may not use `permission` on `record` ({scope-key
+   value}, nil for anywhere), decided by `route-decision` as a route checking
+   `record` decides it. `rights`: the caller's, resolved; `dropped`: those
+   whose scope resolved to nothing. A platform admin holds everything.
+
+   {:allowed? :via (:platform-admin or :rights) :error :paths [right]
+    :misses [{:right r :reason :scope-mismatch|:unresolved :keys {k {:allowed :value}}}]}"
+  [{:keys [platform-admin? rights dropped]} permission record]
+  (if platform-admin?
+    {:allowed? true :via :platform-admin :paths [] :misses []}
+    (let [[route-scope params] (record-route record)
+          decide   #(route-decision (scopes-for % permission) route-scope params)
+          held     (filterv #(= permission (:permission %)) rights)
+          admits?  #(nil? (:error (decide [%])))
+          {:keys [error]} (decide held)]
+      {:allowed? (nil? error)
+       :via      :rights
+       :error    error
+       :paths    (filterv admits? held)
+       :misses   (into (vec (for [r held :when (not (admits? r))]
+                              {:right r :reason :scope-mismatch :keys (mismatch (or (:scope r) {}) record)}))
+                       (for [r dropped :when (= permission (:permission r))]
+                         {:right r :reason :unresolved}))})))

@@ -31,10 +31,12 @@
              (access/web-request? request)
              (not (wants-json? request)))
     (when-let [error (errors/error-of response)]
-      {:status         status
-       :type           (some-> (:type error) name)
-       :message        (str (or (:message error) "An error occurred"))
-       :correlation-id (some-> (:correlation-id error) str)})))
+      (cond-> {:status         status
+               :type           (some-> (:type error) name)
+               :message        (str (or (:message error) "An error occurred"))
+               :correlation-id (some-> (:correlation-id error) str)}
+        ;; The authorization middleware's refusal, for a link to why
+        (:wagoe/refusal response) (assoc :refusal (:wagoe/refusal response))))))
 
 (defn page-response
   "`response` with `body`, HTML, in place of the error body."

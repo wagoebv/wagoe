@@ -168,9 +168,16 @@
    Only for a rule that can refuse: `:permission`, `:module` or `:none`."
   [registry rights-source rule route-scope request]
   (if-let [permission (core/required-permission rule (:request-method request))]
-    (let [request (with-rights rights-source request)]
+    (let [request  (with-rights rights-source request)
+          decision (authorize-scope request (scopes-of registry request permission) route-scope)]
       (merge {:request request}
-             (authorize-scope request (scopes-of registry request permission) route-scope)
+             (cond-> decision
+               ;; What the 403 page links an admin to: why (BOU-851)
+               (= 403 (get-in decision [:response :status]))
+               (assoc-in [:response :wagoe/refusal]
+                         {:user-id    (get-in request [:user :id])
+                          :permission permission
+                          :record     (scope/route-record route-scope (:path-params request))}))
              {:permission permission}))
     (if (access/platform-admin? (:user request))
       {:request request}
@@ -216,3 +223,24 @@
                           (if (and response (not= :report mode))
                             response
                             (handler checked))))))))}))
+
+;; =============================================================================
+;; Explain (BOU-851)
+;; =============================================================================
+
+(defn explain
+  "Why `user` may or may not use `permission` on `record` ({scope-key value},
+   nil for anywhere), as `core.scope/explain` gives it: the rights read from
+   `rights-source` and resolved as the interceptor does. Each right keeps the
+   keys `IRights` gave it, and its stored scope as `:stored-scope`."
+  [registry rights-source user permission record]
+  (if (access/platform-admin? user)
+    (scope/explain {:platform-admin? true} permission record)
+    (let [held     (into [] (comp (filter #(= permission (:permission %)))
+                                  (map-indexed #(assoc %2 ::i %1 :stored-scope (:scope %2))))
+                         (when rights-source (ports/rights rights-source user)))
+          resolved (resolve-rights registry user held)
+          kept     (set (map ::i resolved))
+          strip    (partial mapv #(dissoc % ::i))]
+      (scope/explain {:rights (strip resolved) :dropped (strip (remove (comp kept ::i) held))}
+                     permission record))))

@@ -81,6 +81,39 @@
     (is (= {:optional true :wagoe/entity :domains}
            (some (fn [[k props]] (when (= :domain-id k) props)) (m/children schema))))))
 
+(deftest ^:unit a-record-is-checked-as-a-route-with-a-parameter-per-key
+  (is (= [{:domain-id :path/domain-id} {:domain-id "42"}] (sut/record-route {:domain-id "42"})))
+  (is (= [:handler {}] (sut/record-route nil)))
+  (is (= {:domain-id "42"} (sut/route-record {:domain-id :path/domain-id} {:domain-id "42"})))
+  (is (nil? (sut/route-record :handler {:domain-id "42"}))))
+
+(deftest ^:unit explain-names-the-paths-and-the-near-misses
+  (let [rights [{:permission :orders/read :scope {:domain-id #{42}} :group-name "Sales"}
+                {:permission :orders/read :scope {:domain-id #{7} :category-id #{1}} :group-name "Cat"}
+                {:permission :orders/write :scope {} :group-name "Writers"}]]
+    (testing "a holder in scope"
+      (let [r (sut/explain {:rights rights} :orders/read {:domain-id "42"})]
+        (is (:allowed? r))
+        (is (= ["Sales"] (map :group-name (:paths r))))
+        (is (= [{:category-id {:allowed #{1} :value nil} :domain-id {:allowed #{7} :value "42"}}]
+               (map :keys (:misses r))))))
+    (testing "outside every scope: a no, each right naming its mismatch"
+      (let [r (sut/explain {:rights rights} :orders/read {:domain-id "43"})]
+        (is (not (:allowed? r)))
+        (is (= :not-found (get-in r [:error :type])))
+        (is (= [] (:paths r)))
+        (is (= #{:scope-mismatch} (set (map :reason (:misses r)))))))
+    (testing "without a record: held anywhere"
+      (is (:allowed? (sut/explain {:rights rights} :orders/read nil)))
+      (is (not (:allowed? (sut/explain {:rights rights} :orders/refund nil)))))
+    (testing "a right whose scope resolved to nothing is named"
+      (let [r (sut/explain {:rights [] :dropped [{:permission :orders/read :scope {:domain-id :user/domain}}]}
+                           :orders/read nil)]
+        (is (not (:allowed? r)))
+        (is (= [:unresolved] (map :reason (:misses r))))))
+    (testing "a platform admin is named, never a silent yes"
+      (is (= :platform-admin (:via (sut/explain {:platform-admin? true} :orders/refund {:domain-id "1"})))))))
+
 (deftest ^:unit sources-are-user-keywords
   (is (sut/source? :user/department))
   (is (not (sut/source? :department)))

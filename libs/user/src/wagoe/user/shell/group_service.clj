@@ -429,6 +429,25 @@
   (rights [this user]
     (ports/user-grants this user))
 
+  ports/IAccessExplain
+  (explain-access [this user permission record]
+    (let [explain (or (:explain this)
+                      (throw (ex-info "Explaining access needs the permission registry"
+                                      {:type :configuration-error})))
+          ;; Grants and groups both ask the membership hook: ask it once
+          svc     (cond-> this membership (update :membership memoize))
+          result  (explain svc user permission record)
+          source  (into {} (map (juxt :id :source)) (ports/user-groups svc user))
+          sourced #(assoc % :membership (get source (:group-id %)))]
+      (cond-> (-> result
+                  (update :paths (partial mapv sourced))
+                  (update :misses (partial mapv #(update % :right sourced))))
+        (not (:allowed? result))
+        (assoc :alternatives
+               (mapv #(dissoc % :members)
+                     (role-holders group-repository
+                                   (vec (group-core/roles-holding (all-roles group-repository registry) permission))))))))
+
   ports/IUserGroupService
 
   (list-groups [_]
@@ -597,9 +616,11 @@
   "A group service. `settings` is what `prepare-settings` returns. `opts`:
    `:registry`, the permission registry its code roles come from, and
    `:membership`, the hook `(fn [user] #{group-name …})` that adds groups an
-   identity provider names."
+   identity provider names, and `:explain`,
+   `wagoe.platform.shell.authorization/explain` with the registry applied."
   ([group-repository user-repository audit-repository settings]
    (create-group-service group-repository user-repository audit-repository settings {}))
-  ([group-repository user-repository audit-repository settings {:keys [registry membership]}]
-   (->UserGroupService group-repository user-repository audit-repository
-                       (with-registry-permissions settings registry) registry membership)))
+  ([group-repository user-repository audit-repository settings {:keys [registry membership explain]}]
+   (cond-> (->UserGroupService group-repository user-repository audit-repository
+                               (with-registry-permissions settings registry) registry membership)
+     explain (assoc :explain explain))))
