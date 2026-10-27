@@ -169,7 +169,12 @@
       (is (some #(and (map? %) (= "filters[signal][value]" (:name %)) (= "unused" (:value %)))
                 (tree-seq coll? seq (page filtered)))))
     (testing "a signal the list does not offer is ignored"
-      (is (= 3 (count (role-rows (page {:filters {:signal {:value "empty"}}}))))))))
+      (is (= 3 (count (role-rows (page {:filters {:signal {:value "empty"}}}))))))
+    (testing "a search in place replaces the filter links, so they keep it"
+      (let [nav (some #(when (and (vector? %) (= "roles-table-container-signals" (:id (second %)))) %)
+                      (tree-seq coll? seq (sut/list-fragment sut/roles-list signalled {:search "clerk"})))]
+        (is (= "true" (:hx-swap-oob (second nav))))
+        (is (some #(re-find #"search=clerk" (str (:href %))) (filter map? (tree-seq coll? seq nav))))))))
 
 (deftest ^:unit the-rights-page-shows-the-changes-to-rights
   (let [user    {:id (random-uuid) :email "ada@example.com"}

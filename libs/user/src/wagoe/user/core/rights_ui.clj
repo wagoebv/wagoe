@@ -163,15 +163,18 @@
 
 (defn- signal-filters
   "Links filtering the list on each signal `spec` offers, keeping the search
-   and sort, with how many items carry it."
-  [{:keys [url signals] :as spec} items table-query active]
+   and sort, with how many items carry it. A list's own search and sort
+   replace them out of band, so they keep the current ones."
+  [{:keys [id url signals] :as spec} items table-query active]
   (let [counts (frequencies (mapcat :signals items))
         tq     (list-query spec table-query)]
-    [:nav.signal-filters {:class "flex flex-wrap items-center gap-2" :aria-label [:t :user.hygiene/filter-label]}
+    [:nav.signal-filters {:id         (str id "-signals")
+                          :class      "flex flex-wrap items-center gap-2"
+                          :aria-label [:t :user.hygiene/filter-label]}
      (for [[s label] (cons [nil [:t :user.hygiene/all]]
                            (for [s signals] [s (list [:t (first (signal-labels s))] " " (get counts s 0))]))]
        [:a {:href         (table-ui/list-url url tq (signal-filter s))
-          :class        (str "btn btn-sm " (if (= s active) "btn-primary" "btn-ghost") (when s (str " signal-filter-" (name s))))
+            :class        (str "btn btn-sm " (if (= s active) "btn-primary" "btn-ghost") (when s (str " signal-filter-" (name s))))
             :aria-current (when (= s active) "true")}
         label])]))
 
@@ -206,14 +209,17 @@
                                  :empty-filtered (if (:search tq)
                                                    [:t :user.lists/no-matches {:search (:search tq)}]
                                                    [:t :user.hygiene/none])
-                                 :clear-label    [:t :admin/button-clear-search]})
+                                 :clear-label    (if (:search tq) [:t :admin/button-clear-search] [:t :user.hygiene/all])})
      :badge (table-ui/count-badge (str (:id spec) "-count") (count items) (:count-label spec))}))
 
 (defn list-fragment
   "What a list's own search and sort get back: the table, the count out of band."
   [spec items table-query]
-  (let [{:keys [table badge]} (list-parts spec items table-query (active-signal spec table-query))]
-    (list table (htmx/oob badge))))
+  (let [signal                (active-signal spec table-query)
+        {:keys [table badge]} (list-parts spec items table-query signal)]
+    (list table
+          (htmx/oob badge)
+          (when (seq (:signals spec)) (htmx/oob (signal-filters spec items table-query signal))))))
 
 (defn list-view
   "A list as the admin's entity lists have it: count, search and `actions`
@@ -706,7 +712,7 @@
                     (for [{:keys [at actor action group-id group-name] :as c} changes]
                       [:tr.timeline-entry
                        [:td (timestamp-text at)]
-                       [:td (or actor [:t :user.timeline/system])]
+                       [:td (or actor [:t :user/audit-actor-system])]
                        [:td [:t (keyword "common" (str "audit-" (name action)))] " "
                         (if group-id [:a {:href (group-path group-id)} group-name] group-name)]
                        [:td (change-effect c scope-info)]]))

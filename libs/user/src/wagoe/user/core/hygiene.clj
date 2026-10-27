@@ -21,9 +21,10 @@
 (defn near-duplicates
   "The code roles in `roles` whose permissions differ from managed `role`'s by
    at most one permission, added or missing: a managed role that is (almost)
-   a code role, which could be assigned instead."
+   a code role, which could be assigned instead. A role without permissions
+   is near nothing."
   [role roles]
-  (when (= :managed (:source role))
+  (when (and (= :managed (:source role)) (seq (:permissions role)))
     (let [ps (set (:permissions role))]
       (vec (for [r     roles
                  :let  [qs (set (:permissions r))]

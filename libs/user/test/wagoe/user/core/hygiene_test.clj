@@ -25,6 +25,8 @@
       (is (= [:orders/editor] (:near-duplicates (by-name :orders/clerk)))))
     (testing "two apart is not near"
       (is (empty? (:near-duplicates (by-name :orders/shipper)))))
+    (testing "an empty managed role is near nothing"
+      (is (nil? (sut/near-duplicates {:name :orders/draft :permissions #{} :source :managed} roles))))
     (testing "a code role is never a near duplicate"
       (is (nil? (:near-duplicates (by-name :orders/viewer)))))))
 

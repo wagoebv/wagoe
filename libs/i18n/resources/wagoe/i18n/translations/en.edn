@@ -563,7 +563,6 @@
  :user.timeline/heading "Changes to rights"
  :user.timeline/note "A change to Everyone is recorded once, on the admin who made it."
  :user.timeline/column-effect "Effect"
- :user.timeline/system "System"
  :user.timeline/empty "No changes recorded."
  :user.timeline/no-diff "Not recorded"
  :user.timeline/everyone {:one "Everyone: the rights of {count} user changed" :many "Everyone: the rights of {count} users changed"}
