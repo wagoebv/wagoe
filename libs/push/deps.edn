@@ -9,6 +9,8 @@
          cheshire/cheshire        {:mvn/version "6.2.0"}
          ring/ring-core           {:mvn/version "1.15.5"}
          com.google.auth/google-auth-library-oauth2-http {:mvn/version "1.52.0"}
+         ;; google-auth-library brings guava 33.6.0-jre: GHSA-xxph-c9ww-hj94, CVE-2026-102554 (BOU-861).
+         com.google.guava/guava {:mvn/version "33.7.2-jre"}
          wagoe/jobs             {:local/root "../jobs"}
          wagoe/platform         {:local/root "../platform"}
          wagoe/core             {:local/root "../core"}}

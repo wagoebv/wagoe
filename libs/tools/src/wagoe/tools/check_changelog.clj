@@ -237,8 +237,11 @@
    held; which item is which is a reviewer's job (BOU-579)."
   [changelog stability]
   (let [version (second (re-find #"Current version\s*\n\|\s*`(1\.\d+\.\d+(?:-rc-\d+)?)`" stability))
-        final?  (some? (re-matches #"1\.\d+\.\d+" (str version)))
-        current (some-> (re-find #"-rc-(\d+)$" (str version)) second parse-long)
+        ;; Only 1.0.0's candidates count breaks per candidate; 1.1.0-rc-1 is held
+        ;; to the 1.x rule like any release after 1.0.0.
+        pre-1?  (str/starts-with? (str version) "1.0.0-rc-")
+        final?  (and (some? version) (not pre-1?))
+        current (when pre-1? (some-> (re-find #"-rc-(\d+)$" (str version)) second parse-long))
         counted (for [[_ word v] (re-seq #"(?m)^\* \*(\S+)[^*\n]*? in `(1\.0\.0(?:-rc-\d+)?)`:\*" stability)]
                   [v (number word)])
         rcs     (into {} counted)

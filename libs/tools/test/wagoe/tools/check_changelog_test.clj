@@ -155,6 +155,17 @@
                              "### Breaking\n\n- **E** (X-5). Do e.")
                 page))))))
 
+(deftest ^:unit a-later-minors-candidate-is-held-to-the-1-0-0-rules
+  ;; 1.1.0-rc-1 was read as a 1.0.0 candidate and held to the rc-2 paragraph.
+  (let [page (str/replace (released-stability "Two" ["a" "b"] "Four" "seven")
+                          "| `1.0.0`\n" "| `1.1.0-rc-1`\n")]
+    (is (empty? (sut/stability-findings released-changelog page)))
+    (testing "and still refuses an unreleased break"
+      (is (seq (sut/stability-findings
+                (str/replace released-changelog "### Fixed\n\n- **D** (X-4)."
+                             "### Breaking\n\n- **E** (X-5). Do e.")
+                page))))))
+
 (deftest ^:unit the-shipped-stability-page-agrees-with-the-changelog
   (is (empty? (sut/stability-findings (slurp "CHANGELOG.md")
                                       (slurp "docs/modules/ROOT/pages/stability.adoc")))))

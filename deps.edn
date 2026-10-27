@@ -132,6 +132,8 @@
 
            ;; File Storage - AWS SDK for S3
            software.amazon.awssdk/s3                  {:mvn/version "2.54.17"}
+           ;; google-auth-library and the GCS client brings guava 33.6.0-jre: GHSA-xxph-c9ww-hj94, CVE-2026-102554 (BOU-861).
+           com.google.guava/guava {:mvn/version "33.7.2-jre"}
            software.amazon.awssdk/s3-transfer-manager {:mvn/version "2.54.17"}
 
            ;; File Storage - Google Cloud Storage (GCS adapter)
