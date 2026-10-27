@@ -581,6 +581,10 @@
                              (group-core/roles-holding (all-roles group-repository registry) permission)
                              false)))))
 
+  ports/IRoleAssignments
+  (all-assignments [_]
+    (role-holders group-repository (keys (all-roles group-repository registry)) false))
+
   ports/IRightsPreview
   (preview-change [this change]
     (let [{:keys [focal group] :as plan} (change-plan this change)

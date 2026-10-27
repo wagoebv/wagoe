@@ -70,7 +70,8 @@
 
         (let [page (:body (app (req admin :get path)))]
           (is (str/includes? page "ada@example.com"))
-          (is (str/includes? page "domain-id: <strong class=\"scope-value\">7</strong>")))
+          (is (str/includes? page "may-editor"))
+          (is (str/includes? page "<strong class=\"scope-value\">7</strong>")))
         (is (= #{:invoice/read :invoice/write} (set (map :permission (ports/user-grants gsvc ada)))))
 
         (testing "the signed-in admin is the actor"

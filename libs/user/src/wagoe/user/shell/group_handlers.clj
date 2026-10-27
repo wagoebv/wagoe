@@ -24,18 +24,22 @@
   {:user  (:user request)
    :flash (:flash request)})
 
+(defn fragment-response
+  "`(fragment)` for an htmx request targeting `target-id`, else `(page)`."
+  [request target-id fragment page]
+  ;; One URL, two bodies: a cache must not answer one with the other
+  (-> (html-response request (if (htmx/fragment-request? (:headers request) [target-id]) (fragment) (page)))
+      (response/header "Vary" htmx/vary)))
+
 (defn list-response
   "A list page's response from its URL: for its own search and sort (an htmx
    request for the list's container `spec`), `items` in the list alone, else
    `(page table-query)`."
   [request spec items page]
   (let [table-query (table-ui/parse-table-params (:query-params request))]
-    ;; One URL, two bodies: a cache must not answer one with the other
-    (-> (html-response request
-                       (if (htmx/fragment-request? (:headers request) [(:id spec)])
-                         (rights-ui/list-fragment spec items table-query)
-                         (page table-query)))
-        (response/header "Vary" htmx/vary))))
+    (fragment-response request (:id spec)
+                       #(rights-ui/list-fragment spec items table-query)
+                       #(page table-query))))
 
 (defn redirect [path flash-key]
   (assoc (response/redirect path :see-other) :flash {:success flash-key}))

@@ -122,10 +122,9 @@
         (let [page (:body (get-page app admin (str "/web/users/" (:id ada) "/rights")))]
           (is (str/includes? page "Finance"))
           (is (str/includes? page "invoice/read"))
-          (is (str/includes? page "invoice/viewer"))
+          (is (str/includes? page "may-viewer") "a code role's level, in a sentence")
           (testing "a scope from the user shows its source and resolved value, expanded as enforcement does"
-            (is (str/includes? page "Department: "))
-            (is (str/includes? page "scope-from-source"))
+            (is (str/includes? page "within-source"))
             (is (str/includes? page "<strong class=\"scope-value\">7, 70</strong>")))
           (is (not (str/includes? page "platform-admin-note"))))
         (is (str/includes? (:body (get-page app admin (str "/web/users/" (:id admin) "/rights")))
@@ -198,6 +197,34 @@
             (is (str/includes? body "explain-form"))
             (is (not (str/includes? body "explain-verdict")))))))))
 
+(deftest ^:integration the-access-overview-shows-groups-by-module
+  (with-app
+    (fn [{:keys [app gsvc admin]}]
+      (let [sales (ports/create-group gsvc {:name "Sales NL"})
+            desk  (ports/create-group gsvc {:name "Desk"})
+            get!  (fn [query headers]
+                    (app {:request-method :get :uri "/web/admin/access" :user admin :headers headers
+                          :query-params query}))]
+        (ports/add-group-role gsvc (:id sales) {:role :invoice/editor :scope {:domain-id 4}})
+        (ports/add-group-role gsvc (:id desk) {:role :invoice/viewer :scope {}})
+        (testing "the page: the superusers first, then the matrix"
+          (let [body (:body (get! {} {}))]
+            (is (str/includes? body "access-widest"))
+            (is (str/includes? body "admin@example.com"))
+            (is (str/includes? body "passes-every-check"))
+            (is (str/includes? body "level-editor"))
+            (is (str/includes? body "scoped"))
+            (is (str/includes? body "Desk"))
+            (is (str/includes? body "hx-push-url=\"true\""))))
+        (testing "a filter's request gets the matrix alone, narrowed"
+          (let [r    (get! {"group" (str (:id sales))} {"hx-request" "true" "hx-target" "access-matrix"})
+                body (:body r)]
+            (is (= 200 (:status r)))
+            (is (not (str/includes? body "access-widest")))
+            (is (str/includes? body "Sales NL"))
+            (is (not (str/includes? body ">Desk<")))
+            (is (= "HX-Request, HX-Target" (get-in r [:headers "Vary"])))))))))
+
 (deftest ^:integration ^:security only-admins-reach-the-rights-pages
   (with-app
     (fn [{:keys [app users]}]
@@ -206,7 +233,8 @@
         (doseq [[method uri] [[:get "/web/admin/roles"] [:post "/web/admin/roles"]
                               [:post "/web/admin/roles/duplicate"] [:get "/web/admin/permissions"]
                               [:get (str "/web/users/" (:id user) "/rights")]
-                              [:get (str "/web/users/" (:id user) "/explain")]]]
+                              [:get (str "/web/users/" (:id user) "/explain")]
+                              [:get "/web/admin/access"]]]
           (let [r (app (req user method uri {"name" "x/y"}))]
             (is (= 403 (:status r)) (str method " " uri))
             (is (nil? (get-in r [:headers "Location"])) (str method " " uri))))))))
