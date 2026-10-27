@@ -209,9 +209,15 @@
   (let [norm      #(into #{} (map (fn [r] {:permission (:permission r) :scope (or (:scope r) {})})) %)
         covered?  (fn [rights {:keys [permission scope] :as r}]
                     (some #(and (not= r %) (= permission (:permission %)) (covers? (:scope %) scope)) rights))
+        order     (juxt (comp str :permission) (comp str :scope))
+        ;; Of two covering each other, 42 and "42", the first in `order` stays
+        dropped?  (fn [rights r]
+                    (some #(and (not= r %) (= (:permission r) (:permission %)) (covers? (:scope %) (:scope r))
+                                (or (not (covers? (:scope r) (:scope %))) (neg? (compare (order %) (order r)))))
+                          rights))
         uncovered (fn [xs others]
                     (let [left (into #{} (remove #(or (contains? others %) (covered? others %))) xs)]
-                      (->> left (remove (partial covered? left)) (sort-by (juxt (comp str :permission) (comp str :scope))) vec)))
+                      (->> left (remove (partial dropped? left)) (sort-by order) vec)))
         b         (norm before)
         a         (norm after)]
     {:added (uncovered a b) :removed (uncovered b a)}))

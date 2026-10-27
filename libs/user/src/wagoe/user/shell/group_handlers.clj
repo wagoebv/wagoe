@@ -249,8 +249,8 @@
 (defn remove-member [group-service]
   (fn [request]
     (change group-service request :user.groups/flash-member-removed
-            (fn [id] {:op :remove-member :group-id id :user-id (path-uuid request :user-id)})
-            #(when (:user-id %) (ports/remove-group-member group-service (:group-id %) (:user-id %))))))
+            (fn [id] (when-let [user-id (path-uuid request :user-id)] {:op :remove-member :group-id id :user-id user-id}))
+            #(when % (ports/remove-group-member group-service (:group-id %) (:user-id %))))))
 
 (defn- parse-scope
   "The scope typed into the form, read as EDN; blank is {}."
@@ -296,5 +296,5 @@
 (defn remove-role [group-service]
   (fn [request]
     (change group-service request :user.groups/flash-role-removed
-            (fn [id] {:op :remove-role :group-id id :assignment-id (path-uuid request :assignment-id)})
-            #(when (:assignment-id %) (ports/remove-group-role group-service (:group-id %) (:assignment-id %))))))
+            (fn [id] (when-let [a-id (path-uuid request :assignment-id)] {:op :remove-role :group-id id :assignment-id a-id}))
+            #(when % (ports/remove-group-role group-service (:group-id %) (:assignment-id %))))))

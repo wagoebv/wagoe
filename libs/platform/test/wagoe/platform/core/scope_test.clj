@@ -138,4 +138,7 @@
                             [{:permission :a :scope {:domain-id #{42} :region #{"north"}}}]))))
   (is (= {:added [] :removed []}
          (sut/rights-diff [{:permission :a :scope nil :group-id 1}] [{:permission :a :scope {} :group-id 2}]))
-      "where a right comes from is no difference"))
+      "where a right comes from is no difference")
+  (is (= 1 (count (:added (sut/rights-diff [] [{:permission :a :scope {:domain-id #{42}}}
+                                               {:permission :a :scope {:domain-id #{"42"}}}]))))
+      "two rights covering each other are listed once, not dropped both"))

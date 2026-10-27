@@ -551,7 +551,14 @@
         (testing "each group holding the role, with its scope and members; Everyone without"
           (is (= [["Desk" {:domain-id 4} false [(:id bob)]] ["Everyone" {} true []]]
                  (map (juxt :group-name :scope :everyone? (comp (partial map :id) :members))
-                      (ports/role-holders svc [:orders/editor :orders/viewer])))))))))
+                      (ports/role-holders svc [:orders/editor :orders/viewer])))))
+        (testing "a member the provider still names keeps the group's roles when the stored membership goes"
+          (ports/add-group-role svc (:id newsroom) {:role :reports/viewer :scope {:domain-id 7}})
+          (ports/add-group-member svc (:id newsroom) (:id ada))
+          (is (= {:added [] :removed []}
+                 (select-keys (:user (ports/preview-change svc {:op :remove-member :group-id (:id newsroom)
+                                                                :user-id (:id ada)}))
+                              [:added :removed]))))))))
 
 (deftest ^:integration no-hook-no-provider-members
   (with-service nil

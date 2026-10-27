@@ -265,10 +265,10 @@
   "What `change` (see `IRightsPreview`) does, read before it is made: the
    `:group` or `:role` it changes, the `:users` it reaches and the one it names
    as `:focal`, the group's `:grants` it gives or takes, the `:touched`
-   permissions, `:roles` before and
+   permissions when they are not those grants', `:roles` before and
    `:roles-after`, and `:update`, what it does to a user's assignments.
    Throws as making the change would."
-  [{:keys [group-repository user-repository registry settings] :as svc} {:keys [op group-id user-id role] :as change}]
+  [{:keys [group-repository user-repository registry settings membership] :as svc} {:keys [op group-id user-id role] :as change}]
   (let [roles (all-roles group-repository registry)
         plan  {:roles roles :roles-after roles :update identity}]
     (case op
@@ -279,27 +279,26 @@
                       (throw (not-found "No such user" {:user-id user-id})))
             held  (ports/find-assignments group-repository group-id)
             grants (group-core/user-grants held roles)]
-        (assoc plan :group group :users [user] :focal user :grants grants
-               :touched (into #{} (map :permission) grants) :update #(into % held)))
+        (assoc plan :group group :users [user] :focal user :grants grants :update #(into % held)))
 
       (:remove-member :delete-group)
       (let [_      (when (= :delete-group op) (not-everyone! group-id))
             group  (ports/find-group group-repository group-id)
             user   (when (and group (= :remove-member op)) (ports/find-user-by-id user-repository user-id))
-            grants (if group (group-core/user-grants (ports/find-assignments group-repository group-id) roles) [])]
+            grants (if group (group-core/user-grants (ports/find-assignments group-repository group-id) roles) [])
+            ;; An identity provider still naming the group keeps its roles
+            kept?  (and user (contains? (provider-groups membership user-repository user) (:name group)))]
         (assoc plan :group group :focal user :grants grants
                :users (cond user                               [user]
                             (and group (= :delete-group op))   (ports/find-members group-repository group-id)
                             :else                              [])
-               :touched (into #{} (map :permission) grants)
-               :update (partial without-group group-id)))
+               :update (if kept? identity (partial without-group group-id))))
 
       :add-role
       (let [group (existing-group group-repository group-id)
             a     (assoc (checked-assignment settings roles (:assignment change) nil) :group-id group-id)
             grants (group-core/user-grants [a] roles)]
-        (assoc plan :group group :users (reached svc group-id) :assignment a :grants grants
-               :touched (into #{} (map :permission) grants) :update #(conj % a)))
+        (assoc plan :group group :users (reached svc group-id) :assignment a :grants grants :update #(conj % a)))
 
       :remove-role
       (let [group (ports/find-group group-repository group-id)
@@ -308,7 +307,7 @@
                           (ports/find-assignments group-repository group-id)))
             grants (if a (group-core/user-grants [a] roles) [])]
         (assoc plan :group group :users (if a (reached svc group-id) []) :assignment a :grants grants
-               :touched (into #{} (map :permission) grants) :update (partial without-one a)))
+               :update (partial without-one a)))
 
       (:update-role :delete-role)
       (let [before  (or (find-role group-repository role)
@@ -334,8 +333,8 @@
    stored memberships and Everyone, one query for all. None when no
    permission is touched."
   [{:keys [group-repository user-repository membership] :as svc}
-   {:keys [users focal touched roles roles-after update]}]
-  (when (seq touched)
+   {:keys [users focal grants roles roles-after update] :as plan}]
+  (when-let [touched (not-empty (or (:touched plan) (into #{} (map :permission) grants)))]
     (let [resolve  (or (:resolve svc) stored-resolve)
           others?  (some #(not (access/same-id? (:id focal) (:id %))) users)
           held-by  (when others?
