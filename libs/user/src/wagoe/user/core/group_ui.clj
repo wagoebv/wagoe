@@ -8,7 +8,6 @@
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.modal :as modal]
             [wagoe.user.core.group :as group]
-            [wagoe.user.core.hygiene :as hygiene]
             [wagoe.user.core.rights-ui :as rights-ui]))
 
 (def base-path rights-ui/groups-path)
@@ -73,11 +72,10 @@
                     :roles       :role-count}
      :search-text  #(str (:name %) " " (:description %))
      :signals      [:empty :single-member :everyone]
-     :signals-of   hygiene/group-signals
      :row          (fn [{:keys [id name description member-count role-count] :as g}]
                      (rights-ui/list-row (group-path id) {:class "group-row"} columns
                                          [(list [:a {:href (group-path id)} name]
-                                                (rights-ui/signal-badges (hygiene/group-signals g) g))
+                                                (rights-ui/signal-badges (:signals g) g))
                                           description
                                           (if (group/everyone? id)
                                             [:t :user.groups/members-everyone]
@@ -86,7 +84,7 @@
 
 (defn groups-page
   "Every group, searchable and sortable by `(:table-query opts)`, and a form
-   to create one."
+   to create one. `groups` carry their `hygiene/group-signals` as `:signals`."
   [groups opts]
   (rights-ui/list-page
    [:t :user.groups/page-title]

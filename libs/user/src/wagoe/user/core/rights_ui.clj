@@ -125,13 +125,13 @@
   [{:keys [signals]} table-query]
   (some #{(keyword (get-in table-query [:filters :signal :value]))} signals))
 
+(defn- signal-filter [signal]
+  (when signal {:signal {:op :eq :value (name signal)}}))
+
 (defn- list-query
-  "`table-query` sorted by `spec`'s default unless by one of its sort keys,
-   filtered on a signal `spec` offers."
-  [{:keys [sort-keys default-sort] :as spec} table-query]
-  (let [signal (active-signal spec table-query)
-        tq     (cond-> (select-keys table-query [:sort :dir :search])
-                 signal (assoc :filters {:signal {:op :eq :value (name signal)}}))]
+  "`table-query` sorted by `spec`'s default unless by one of its sort keys."
+  [{:keys [sort-keys default-sort]} table-query]
+  (let [tq (select-keys table-query [:sort :dir :search])]
     (if (contains? sort-keys (:sort tq))
       (merge {:dir :asc} tq)
       (assoc tq :sort default-sort :dir :asc))))
@@ -162,16 +162,18 @@
                              tone (str "signal-" (name s))))))
 
 (defn- signal-filters
-  "Links filtering the list on each signal `spec` offers, with how many items carry it."
-  [{:keys [url signals signals-of]} items active]
-  [:nav.signal-filters {:class "flex flex-wrap items-center gap-2" :aria-label [:t :user.hygiene/filter-label]}
-   (for [[s label] (cons [nil [:t :user.hygiene/all]]
-                         (for [s signals] [s (list [:t (first (signal-labels s))] " "
-                                                   (count (filter #(contains? (signals-of %) s) items)))]))]
-     [:a {:href         (if s (str url "?" (table-ui/encode-query-params {"filters[signal][value]" (name s)})) url)
+  "Links filtering the list on each signal `spec` offers, keeping the search
+   and sort, with how many items carry it."
+  [{:keys [url signals] :as spec} items table-query active]
+  (let [counts (frequencies (mapcat :signals items))
+        tq     (list-query spec table-query)]
+    [:nav.signal-filters {:class "flex flex-wrap items-center gap-2" :aria-label [:t :user.hygiene/filter-label]}
+     (for [[s label] (cons [nil [:t :user.hygiene/all]]
+                           (for [s signals] [s (list [:t (first (signal-labels s))] " " (get counts s 0))]))]
+       [:a {:href         (table-ui/list-url url tq (signal-filter s))
           :class        (str "btn btn-sm " (if (= s active) "btn-primary" "btn-ghost") (when s (str " signal-filter-" (name s))))
-          :aria-current (when (= s active) "true")}
-      label])])
+            :aria-current (when (= s active) "true")}
+        label])]))
 
 (defn list-row
   "A list row opening `href`: its `cells` under the `columns` labels, the
@@ -185,12 +187,12 @@
                                 :none-label [:t :user.lists/group-none]}))
 
 (defn- list-parts
-  "`items` searched and sorted for `spec`: the table and the count."
-  [{:keys [columns search-text sort-keys group-of row signals-of] :as spec} items table-query]
+  "`items` searched, sorted and filtered on `signal` for `spec`: the table and
+   the count."
+  [{:keys [columns search-text sort-keys group-of row] :as spec} items table-query signal]
   (let [tq     (list-query spec table-query)
-        signal (active-signal spec tq)
         items  (cond->> (table-ui/query-rows items tq {:search-text search-text :sort-keys sort-keys})
-                 signal (filter #(contains? (signals-of %) signal)))
+                 signal (filter #(contains? (:signals %) signal)))
         rows  (if group-of
                 (grouped items group-of row (inc (count columns)))
                 (map row items))]
@@ -198,8 +200,8 @@
                                  :url            (:url spec)
                                  :columns        columns
                                  :rows           rows
-                                 :table-query    (dissoc tq :filters)
-                                 :filters        (:filters tq)
+                                 :table-query    tq
+                                 :filters        (signal-filter signal)
                                  :empty          (:empty-text spec)
                                  :empty-filtered (if (:search tq)
                                                    [:t :user.lists/no-matches {:search (:search tq)}]
@@ -210,17 +212,17 @@
 (defn list-fragment
   "What a list's own search and sort get back: the table, the count out of band."
   [spec items table-query]
-  (let [{:keys [table badge]} (list-parts spec items table-query)]
+  (let [{:keys [table badge]} (list-parts spec items table-query (active-signal spec table-query))]
     (list table (htmx/oob badge))))
 
 (defn list-view
   "A list as the admin's entity lists have it: count, search and `actions`
    over the sortable table."
   [{:keys [id url placeholder signals] :as spec} items table-query & actions]
-  (let [{:keys [table badge]} (list-parts spec items table-query)
-        signal                (active-signal spec table-query)]
+  (let [signal                (active-signal spec table-query)
+        {:keys [table badge]} (list-parts spec items table-query signal)]
     (list
-     (when (seq signals) (signal-filters spec items signal))
+     (when (seq signals) (signal-filters spec items table-query signal))
      ;; The search sends it along; only a link changes it
      (when signal [:input {:type "hidden" :id (str id "-signal") :name "filters[signal][value]" :value (name signal)}])
      [:div.table-toolbar-container
@@ -458,7 +460,6 @@
      :search-text  #(str (group/permission-str (:name %)) " " (:description %))
      :group-of     #(module-of (:name %) (:module %))
      :signals      [:near-duplicate :unused :everyone]
-     :signals-of   :signals
      :row          (fn [{:keys [name description permissions source] :as role}]
                      (list-row (role-path name)
                                {:class (str "role-row role-" (clojure.core/name (or source :managed)))}
@@ -565,7 +566,6 @@
                                            (map group/permission-str roles))))
      :group-of     #(module-of (:permission %) (:module %))
      :signals      [:unheld :everyone]
-     :signals-of   :signals
      :row          (fn [{:keys [permission label roles signals] :as item}]
                      (list-row (permission-path permission) {:class "permission-row"} columns
                                [(list [:a {:href (permission-path permission)} (code permission)]
