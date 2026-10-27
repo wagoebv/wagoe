@@ -52,7 +52,7 @@
             (is (str/includes? (:body r) "error-name-taken"))))
 
         (testing "a member, by email"
-          (is (= 303 (:status (app (req admin :post (str path "/members") {"email" "ada@example.com"}))))))
+          (is (= 303 (:status (app (req admin :post (str path "/members") {"email" "ada@example.com" "confirm" "true"}))))))
         (testing "an unknown email is refused on the page"
           (let [r (app (req admin :post (str path "/members") {"email" "nobody@example.com"}))]
             (is (= 422 (:status r)))))
@@ -61,7 +61,7 @@
           (let [page (:body (app (req admin :get path)))]
             (is (str/includes? page "value=\"invoice/editor\"")))
           (is (= 303 (:status (app (req admin :post (str path "/roles")
-                                        {"role" "invoice/editor" "scope" "{:domain-id 7}"}))))))
+                                        {"role" "invoice/editor" "scope" "{:domain-id 7}" "confirm" "true"}))))))
         (testing "refused: no such role, not EDN, not a map"
           (doseq [form [{"role" "invoice/boss" "scope" ""}
                         {"role" "invoice/viewer" "scope" "{:domain-id"}
@@ -81,10 +81,10 @@
           (is (= 303 (:status (app (req admin :post path {"name" "Treasury" "description" ""})))))
           (is (= "Treasury" (:name (ports/get-group gsvc gid))))
           (let [a (first (:roles (ports/get-group gsvc gid)))]
-            (is (= 303 (:status (app (req admin :post (str path "/roles/" (:id a) "/remove")))))))
-          (is (= 303 (:status (app (req admin :post (str path "/members/" (:id ada) "/remove"))))))
+            (is (= 303 (:status (app (req admin :post (str path "/roles/" (:id a) "/remove") {"confirm" "true"}))))))
+          (is (= 303 (:status (app (req admin :post (str path "/members/" (:id ada) "/remove") {"confirm" "true"})))))
           (is (empty? (ports/user-grants gsvc ada)))
-          (is (= 303 (:status (app (req admin :post (str path "/delete"))))))
+          (is (= 303 (:status (app (req admin :post (str path "/delete") {"confirm" "true"})))))
           (is (nil? (ports/get-group gsvc gid)))
           (is (= 404 (:status (app (req admin :get path))))))))))
 
@@ -106,7 +106,7 @@
           (is (str/includes? (options "lovelace") "Ada Lovelace &lt;ada@example.com&gt;"))
           (is (not (str/includes? (options "lovelace") "grace@example.com"))))
         (testing "the picked user's id adds them, and a member is no longer offered"
-          (is (= 303 (:status (app (req admin :post (str path "/members") {"user-id" (str (:id ada))}))))))
+          (is (= 303 (:status (app (req admin :post (str path "/members") {"user-id" (str (:id ada)) "confirm" "true"}))))))
         (is (= [(:id ada)] (map :id (:members (ports/get-group gsvc (parse-uuid (last (str/split path #"/"))))))))
         (is (not (str/includes? (options "ada") (str (:id ada)))))
         (testing "an id that names nobody is refused on the page"
@@ -127,7 +127,7 @@
         (testing "each value is read as the schema says"
           (is (= 303 (:status (app (req admin :post (str path "/roles")
                                         {"role" "invoice/viewer" "scope-region" "north"
-                                         "scope-domain-id" "42"})))))
+                                         "scope-domain-id" "42" "confirm" "true"})))))
           (is (= [{:domain-id 42 :region "north"}] (map :scope (:roles (ports/get-group gsvc gid))))))
         (testing "a refused assignment comes back with what was entered"
           (let [r (app (req admin :post (str path "/roles")
@@ -141,7 +141,7 @@
                 "the role picked")))
         (testing "EDN typed beside the fields"
           (is (= 303 (:status (app (req admin :post (str path "/roles")
-                                        {"role" "invoice/editor" "scope" "{:region \"west\"}"})))))
+                                        {"role" "invoice/editor" "scope" "{:region \"west\"}" "confirm" "true"})))))
           (is (some #{{:region "west"}} (map :scope (:roles (ports/get-group gsvc gid))))))))))
 
 (deftest ^:integration ^:security only-admins-reach-the-pages

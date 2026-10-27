@@ -121,3 +121,24 @@
   (is (sut/source? :user/department))
   (is (not (sut/source? :department)))
   (is (not (sut/source? "user/department"))))
+
+(deftest ^:unit a-diff-counts-a-right-covered-elsewhere-as-held
+  (is (= {:added   [{:permission :orders/read :scope {}}
+                    {:permission :orders/refund :scope {:domain-id #{42} :region #{"north"}}}]
+          :removed [{:permission :orders/ship :scope {}}]}
+         (sut/rights-diff [{:permission :orders/read :scope {:domain-id #{42}}}
+                           {:permission :orders/ship :scope {}}]
+                          [{:permission :orders/read :scope {}}
+                           {:permission :orders/read :scope {:domain-id #{43}}}
+                           {:permission :orders/refund :scope {:domain-id #{42} :region #{"north"}}}]))
+      "domain 42 is not lost, everywhere covers it, and domain 43 is not listed beside everywhere")
+  (testing "a scope with another key is narrower; values compare as strings, as a path parameter arrives"
+    (is (= {:added [] :removed [{:permission :a :scope {:domain-id #{"42" 43}}}]}
+           (sut/rights-diff [{:permission :a :scope {:domain-id #{"42" 43}}}]
+                            [{:permission :a :scope {:domain-id #{42} :region #{"north"}}}]))))
+  (is (= {:added [] :removed []}
+         (sut/rights-diff [{:permission :a :scope nil :group-id 1}] [{:permission :a :scope {} :group-id 2}]))
+      "where a right comes from is no difference")
+  (is (= 1 (count (:added (sut/rights-diff [] [{:permission :a :scope {:domain-id #{42}}}
+                                               {:permission :a :scope {:domain-id #{"42"}}}]))))
+      "two rights covering each other are listed once, not dropped both"))

@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **Every group, assignment or managed-role change is previewed** (BOU-852): the admin pages show who gains and loses
+  which rights; a post without `confirm=true` only previews. The audit entry keeps each user's diff.
 - **Access explain: why a user may or may not use a permission** (BOU-851), at `/web/users/:id/explain`, linked from
   their Rights tab and from a 403; `IAccessExplain` at the REPL. It decides as the authorization interceptor does.
 - **Push `:callback-token-ttl-seconds` and `:refuse-legacy-callback-tokens?`** (BOU-850): the token lifetime, 7 days by

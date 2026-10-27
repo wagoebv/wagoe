@@ -371,23 +371,41 @@
            :scope      (pr-str scope)}
     role (assoc :role (group/permission-str role))))
 
+(defn- effective-record
+  "A user's effective rights diff, or for Everyone the change summed up, as stored."
+  [{:keys [added removed permissions affected-count]}]
+  (let [record (fn [right]
+                 ;; Values sorted, so an entry reads the same each time
+                 (grant-record (update right :scope update-vals #(apply sorted-set-by (fn [a b] (compare (str a) (str b))) %))))]
+    (cond-> {}
+      added          (assoc :added (mapv record added))
+      removed        (assoc :removed (mapv record removed))
+      permissions    (assoc :permissions (mapv #(update % :permission group/permission-str) permissions))
+      affected-count (assoc :affected-count affected-count))))
+
 (defn group-audit-entries
   "An entry for each of `members` whose rights changed: on :group-join or
    :group-leave the member who joined or left, gaining or losing the group's
    `grants`; on :grant-add or :grant-remove every member, gaining or losing
    the one grant. The log is per user, so a grant changed in an empty group
    records nothing: nobody's rights changed. A join lists the grants, so each
-   user's entries account for what they hold."
-  [action {:keys [actor-id actor-email ip-address user-agent]} group members grants]
-  (let [changes {:grants (mapv grant-record grants)}]
-    (for [{:keys [id email]} members]
-      {:action            action
-       :actor-id          actor-id
-       :actor-email       actor-email
-       :target-user-id    id
-       :target-user-email email
-       :changes           changes
-       :metadata          {:group-id (str (:id group)) :group-name (:name group)}
-       :ip-address        ip-address
-       :user-agent        user-agent
-       :result            :success})))
+   user's entries account for what they hold. `effective`, {user-id-string
+   diff}, adds what the change did to that member's effective rights
+   (BOU-852)."
+  ([action ctx group members grants]
+   (group-audit-entries action ctx group members grants {}))
+  ([action {:keys [actor-id actor-email ip-address user-agent]} group members grants effective]
+   (let [changes {:grants (mapv grant-record grants)}]
+     (for [{:keys [id email]} members]
+       {:action            action
+        :actor-id          actor-id
+        :actor-email       actor-email
+        :target-user-id    id
+        :target-user-email email
+        :changes           (if-let [diff (get effective (str id))]
+                             (assoc changes :effective (effective-record diff))
+                             changes)
+        :metadata          {:group-id (str (:id group)) :group-name (:name group)}
+        :ip-address        ip-address
+        :user-agent        user-agent
+        :result            :success}))))

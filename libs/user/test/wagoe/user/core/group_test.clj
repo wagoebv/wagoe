@@ -70,7 +70,29 @@
     (is (every? #(= :grant-add (:action %)) entries))
     (is (= {:grants [{:permission "invoice/approve" :scope "{:domain-id 1}"}]} (:changes (first entries))))
     (is (= {:group-id (str (:id group)) :group-name "Finance"} (:metadata (first entries))))
-    (is (empty? (audit/group-audit-entries :grant-add ctx group [] [{:permission :a :scope {}}])))))
+    (is (empty? (audit/group-audit-entries :grant-add ctx group [] [{:permission :a :scope {}}])))
+    (testing "an entry keeps what the change did to that member's effective rights"
+      (let [[a b] (audit/group-audit-entries :grant-add ctx group members [{:permission :a :scope {}}]
+                                             {(str (:id (first members)))
+                                              {:added [{:permission :a :scope {:domain-id #{70 7}}}] :removed []}})]
+        (is (= {:added [{:permission "a" :scope "{:domain-id #{7 70}}"}] :removed []} (get-in a [:changes :effective])))
+        (is (not (contains? (:changes b) :effective)))))))
+
+(deftest ^:unit a-preview-sums-up-each-users-diff
+  (let [diff   (fn [id added removed] {:user {:id id :email (str id "@example.com")} :added added :removed removed})
+        read   {:permission :invoice/read :scope {}}
+        write  {:permission :invoice/write :scope {}}
+        diffs  (into [(diff 1 [read write] []) (diff 2 [read] [write]) (diff 3 [] [])]
+                     (map #(diff % [read] [])) (range 10 (+ 10 sut/preview-page-size 5)))
+        result (sut/diff-summary diffs 1)]
+    (is (= (first diffs) (:user result)) "the user the change names")
+    (is (= (+ 1 sut/preview-page-size 5) (:affected-count result)) "the others whose rights change; 3's do not")
+    (is (= sut/preview-page-size (count (:affected result))))
+    (is (= {:id 2 :email "2@example.com"} (first (:affected result))))
+    (is (= [{:permission :invoice/read :added (+ 2 sut/preview-page-size 5) :removed 0}
+            {:permission :invoice/write :added 1 :removed 1}]
+           (:permissions result)))
+    (is (nil? (:user (sut/diff-summary diffs nil))))))
 
 (deftest ^:unit users-with-a-permission-in-a-scope
   (let [[a b] [(random-uuid) (random-uuid)]

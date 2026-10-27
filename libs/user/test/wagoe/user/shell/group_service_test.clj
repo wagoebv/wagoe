@@ -84,8 +84,8 @@
            (dissoc (:domain-id scopes) :schema)))
     (is (= :int (m/form (get-in scopes [:domain-id :schema])))))
   (is (= "Cost centre" (get-in (sut/declared-scopes
-                                 (sut/prepare-settings {:scope [:map [:centre {:title "Cost centre"} :string]]}))
-                                [:scopes :centre :label]))
+                                (sut/prepare-settings {:scope [:map [:centre {:title "Cost centre"} :string]]}))
+                               [:scopes :centre :label]))
       "a :title wins")
   (is (nil? (sut/declared-scopes (sut/prepare-settings {:scope [:map-of :keyword :any]})))))
 
@@ -551,10 +551,56 @@
         (testing "each group holding the role, with its scope and members; Everyone without"
           (is (= [["Desk" {:domain-id 4} false [(:id bob)]] ["Everyone" {} true []]]
                  (map (juxt :group-name :scope :everyone? (comp (partial map :id) :members))
-                      (ports/role-holders svc [:orders/editor :orders/viewer])))))))))
+                      (ports/role-holders svc [:orders/editor :orders/viewer])))))
+        (testing "a member the provider still names keeps the group's roles when the stored membership goes"
+          (ports/add-group-role svc (:id newsroom) {:role :reports/viewer :scope {:domain-id 7}})
+          (ports/add-group-member svc (:id newsroom) (:id ada))
+          (is (= {:added [] :removed []}
+                 (select-keys (:user (ports/preview-change svc {:op :remove-member :group-id (:id newsroom)
+                                                                :user-id (:id ada)}))
+                              [:added :removed]))))))))
 
 (deftest ^:integration no-hook-no-provider-members
   (with-service nil
     (fn [{:keys [svc user!]}]
       (user! "ada@example.com")
       (is (= [] (ports/provider-members svc (:id (ports/create-group svc {:name "Newsroom"}))))))))
+
+(deftest ^:integration a-preview-counts-only-users-whose-effective-rights-change
+  (with-service nil {:registry registry :resolve (partial authorization/resolve-rights registry)}
+    (fn [{:keys [svc audit user!]}]
+      (let [[ada bob cyd] (map user! ["ada@example.com" "bob@example.com" "cyd@example.com"])
+            sales         (ports/create-group svc {:name "Sales"})
+            ops           (ports/create-group svc {:name "Ops"})]
+        (ports/add-group-role svc (:id ops) {:role :orders/viewer})
+        (doseq [u [ada bob]] (ports/add-group-member svc (:id sales) (:id u)))
+        (ports/add-group-member svc (:id ops) (:id bob))
+        (testing "a role for a group: bob reads orders already, through Ops"
+          (let [p (ports/preview-change svc {:op :add-role :group-id (:id sales) :assignment {:role :orders/viewer}})]
+            (is (= 1 (:affected-count p)))
+            (is (= ["ada@example.com"] (map :email (:affected p))))
+            (is (= [{:permission :orders/read :added 1 :removed 0}] (:permissions p)))
+            (is (empty? (:roles (ports/get-group svc (:id sales)))) "nothing changed")))
+        (testing "a member: what they gain, and nobody else"
+          (let [p (ports/preview-change svc {:op :add-member :group-id (:id ops) :user-id (:id cyd)})]
+            (is (= [{:permission :orders/read :scope {}}] (get-in p [:user :added])))
+            (is (zero? (:affected-count p)))))
+        (testing "a group with no role: the user it names is shown gaining nothing"
+          (let [p (ports/preview-change svc {:op :add-member :group-id (:id (ports/create-group svc {:name "Idle"}))
+                                             :user-id (:id cyd)})]
+            (is (= {:user {:id (:id cyd) :email "cyd@example.com"} :added [] :removed []} (:user p)))))
+        (testing "a change refused is refused in its preview"
+          (is (= :role (:field (refusal #(ports/preview-change svc {:op :add-role :group-id (:id sales)
+                                                                    :assignment {:role :no/such}}))))))
+        (testing "a managed role changed: each holder's entry keeps their diff"
+          (ports/create-role svc {:name :sales/lead :permissions #{:reports/read}})
+          (ports/add-group-role svc (:id sales) {:role :sales/lead})
+          (ports/update-role svc {:name :sales/lead :permissions #{:reports/read :orders/write}})
+          (is (some #(= [{:permission "orders/write" :scope "{}"}] (get-in % [:changes :effective :added]))
+                    (ports/find-audit-logs-by-user audit (:id ada) {:limit 50}))))
+        (testing "Everyone reaches every user whose rights it changes"
+          (ports/ensure-everyone (:group-repository svc))
+          (let [p (ports/preview-change svc {:op :add-role :group-id group/everyone-id :assignment {:role :reports/viewer}})]
+            (is (:everyone? p))
+            (is (= ["cyd@example.com"] (map :email (:affected p)))
+                "ada and bob read reports already, through Sales")))))))

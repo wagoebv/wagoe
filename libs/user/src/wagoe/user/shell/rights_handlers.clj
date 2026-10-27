@@ -114,18 +114,28 @@
   (fn [request]
     (role-change group-service request
                  (fn [role]
-                   (ports/update-role group-service {:name        (:name role)
-                                                     :description (not-empty (form request "description"))
-                                                     :permissions (form-permissions request)})
-                   (redirect (rights-ui/role-path (:name role)) :user.roles/flash-saved)))))
+                   (let [data {:name        (:name role)
+                               :description (not-empty (form request "description"))
+                               :permissions (form-permissions request)}]
+                     (if (group-handlers/confirmed? request)
+                       (do (ports/update-role group-service data)
+                           (redirect (rights-ui/role-path (:name role)) :user.roles/flash-saved))
+                       (group-handlers/preview-response request group-service (assoc data :op :update-role :role (:name role))
+                                                        (rights-ui/role-path (:name role)))))))))
 
 (defn delete-role [group-service]
   (fn [request]
     (role-change group-service request
                  (fn [role]
-                   (if (ports/delete-role group-service (:name role))
+                   (cond
+                     (not (group-handlers/confirmed? request))
+                     (group-handlers/preview-response request group-service {:op :delete-role :role (:name role)}
+                                                      (rights-ui/role-path (:name role)))
+
+                     (ports/delete-role group-service (:name role))
                      (redirect rights-ui/roles-path :user.roles/flash-deleted)
-                     (not-found request :user.roles/not-found))))))
+
+                     :else (not-found request :user.roles/not-found))))))
 
 (defn duplicate-role
   "A managed role holding the permissions of the role named in the form, which

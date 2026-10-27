@@ -312,7 +312,9 @@
                                                 {:registry   permission-registry
                                                  :membership (:group-membership hooks)
                                                  :explain    (when permission-registry
-                                                               (partial authz-shell/explain permission-registry))})]
+                                                               (partial authz-shell/explain permission-registry))
+                                                 :resolve    (when permission-registry
+                                                               (partial authz-shell/resolve-rights permission-registry))})]
     ;; `migrate? false`: `wagoe upgrade authorization check` reads what the
     ;; migration would do without doing it.
     (when-not (false? migrate?) (group-service/migrate! svc))

@@ -7,6 +7,7 @@
             [malli.core :as m]
             [malli.error :as me]
             [wagoe.config :as config]
+            [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.scope :as scope]
             [wagoe.platform.ports.authorization :as authz]
             [wagoe.user.core.audit :as audit-core]
@@ -124,22 +125,26 @@
   (merge (into {} (map (fn [r] [(:name r) (assoc r :source :managed)])) (ports/find-roles repo))
          (update-vals (code-roles registry) #(assoc % :source :code))))
 
-(defn- group-grants [repo registry group-id]
-  (group-core/user-grants (ports/find-assignments repo group-id) (all-roles repo registry)))
-
 (defn- audit!
   "Record `action` for each of `members`, or, for a change to Everyone, once
-   for the actor: it reaches every user. A failed write warns and does not
-   undo the change, as for the user service's other entries, unless
-   `strict?`: then it throws, rolling back the transaction it is in."
+   for the actor: it reaches every user. `opts`: `:diffs`, as `user-diffs`
+   gives them, add what the change did to each member's effective rights; for
+   Everyone, counted per permission. A failed write warns and does not undo the
+   change, as for the user service's other entries, unless `:strict?`: then it
+   throws, rolling back the transaction it is in."
   ([audit-repository action group members grants]
-   (audit! audit-repository action group members grants false))
-  ([audit-repository action group members grants strict?]
-   (let [ctx     (user-service/effective-audit-context {})
-         members (if (group-core/everyone? (:id group))
-                   (when (:actor-id ctx) [{:id (:actor-id ctx) :email (:actor-email ctx)}])
-                   members)]
-     (doseq [entry (audit-core/group-audit-entries action ctx group members grants)]
+   (audit! audit-repository action group members grants {}))
+  ([audit-repository action group members grants {:keys [diffs strict?]}]
+   (let [ctx       (user-service/effective-audit-context {})
+         everyone? (group-core/everyone? (:id group))
+         members   (if everyone?
+                     (when (:actor-id ctx) [{:id (:actor-id ctx) :email (:actor-email ctx)}])
+                     members)
+         effective (if everyone?
+                     (when (seq diffs)
+                       {(str (:actor-id ctx)) (group-core/permission-counts diffs)})
+                     (into {} (map (fn [d] [(str (get-in d [:user :id])) d])) diffs))]
+     (doseq [entry (audit-core/group-audit-entries action ctx group members grants effective)]
        (try (ports/create-audit-log audit-repository entry)
             (catch Exception e
               (when strict? (throw e))
@@ -229,15 +234,143 @@
         (sort-by (juxt :group-name (comp str :role)))
         vec)))
 
+;; =============================================================================
+;; Effective rights diff (BOU-852)
+;; =============================================================================
+
+(defn- stored-resolve
+  "Rights resolved without a registry: each scope value stands for itself."
+  [_user rights]
+  (mapv (fn [r] (update r :scope #(update-vals (or % {}) hash-set))) rights))
+
+(defn- without-group [group-id assignments]
+  (into [] (remove #(access/same-id? group-id (:group-id %))) assignments))
+
+(defn- without-one
+  "`assignments` less one of `a`'s role and scope in its group."
+  [a assignments]
+  (let [[before [_ & after]] (split-with #(not (and (access/same-id? (:group-id a) (:group-id %))
+                                                    (= (group-core/assignment-key a) (group-core/assignment-key %))))
+                                         assignments)]
+    (into (vec before) after)))
+
+(defn- reached
+  "The users a role of `group-id` reaches: its members, or for Everyone every active user."
+  [{:keys [group-repository user-repository]} group-id]
+  (if (group-core/everyone? group-id)
+    (active-users user-repository (map identity))
+    (ports/find-members group-repository group-id)))
+
+(defn- change-plan
+  "What `change` (see `IRightsPreview`) does, read before it is made: the
+   `:group` or `:role` it changes, the `:users` it reaches and the one it names
+   as `:focal`, the group's `:grants` it gives or takes, the `:touched`
+   permissions when they are not those grants', `:roles` before and
+   `:roles-after`, and `:update`, what it does to a user's assignments.
+   Throws as making the change would."
+  [{:keys [group-repository user-repository registry settings membership] :as svc} {:keys [op group-id user-id role] :as change}]
+  (let [roles (all-roles group-repository registry)
+        plan  {:roles roles :roles-after roles :update identity}]
+    (case op
+      :add-member
+      (let [_     (not-everyone! group-id)
+            group (existing-group group-repository group-id)
+            user  (or (ports/find-user-by-id user-repository user-id)
+                      (throw (not-found "No such user" {:user-id user-id})))
+            held  (ports/find-assignments group-repository group-id)
+            grants (group-core/user-grants held roles)]
+        (assoc plan :group group :users [user] :focal user :grants grants :update #(into % held)))
+
+      (:remove-member :delete-group)
+      (let [_      (when (= :delete-group op) (not-everyone! group-id))
+            group  (ports/find-group group-repository group-id)
+            user   (when (and group (= :remove-member op)) (ports/find-user-by-id user-repository user-id))
+            grants (if group (group-core/user-grants (ports/find-assignments group-repository group-id) roles) [])
+            ;; An identity provider still naming the group keeps its roles
+            kept?  (and user (contains? (provider-groups membership user-repository user) (:name group)))]
+        (assoc plan :group group :focal user :grants grants
+               :users (cond user                               [user]
+                            (and group (= :delete-group op))   (ports/find-members group-repository group-id)
+                            :else                              [])
+               :update (if kept? identity (partial without-group group-id))))
+
+      :add-role
+      (let [group (existing-group group-repository group-id)
+            a     (assoc (checked-assignment settings roles (:assignment change) nil) :group-id group-id)
+            grants (group-core/user-grants [a] roles)]
+        (assoc plan :group group :users (reached svc group-id) :assignment a :grants grants :update #(conj % a)))
+
+      :remove-role
+      (let [group (ports/find-group group-repository group-id)
+            a     (when group
+                    (some #(when (access/same-id? (:assignment-id change) (:id %)) %)
+                          (ports/find-assignments group-repository group-id)))
+            grants (if a (group-core/user-grants [a] roles) [])]
+        (assoc plan :group group :users (if a (reached svc group-id) []) :assignment a :grants grants
+               :update (partial without-one a)))
+
+      (:update-role :delete-role)
+      (let [before  (or (find-role group-repository role)
+                        (throw (not-found "No such role" {:role role})))
+            after   (when (= :update-role op)
+                      (:permissions (role-data registry {:name role :description (:description change)
+                                                         :permissions (:permissions change)})))
+            holders (role-holders group-repository [role])]
+        (assoc plan :role before :holders holders
+               :users (if (some :everyone? holders)
+                        (active-users user-repository (map identity))
+                        (vals (into {} (map (juxt (comp str :id) identity)) (mapcat :members holders))))
+               :touched (set (concat (remove (set after) (:permissions before))
+                                     (remove (set (:permissions before)) after)))
+               :roles-after (if after (assoc-in roles [role :permissions] (set after)) (dissoc roles role)))))))
+
+(defn- user-diffs
+  "How the change `plan` describes alters each reached user's effective
+   rights, [{:user {:id :email} :added :removed}]: their rights before and
+   after, of the touched permissions, resolved as the authorization
+   interceptor resolves them and compared by `scope/rights-diff`. The focal
+   user's are read with their identity provider's groups; the others' from
+   stored memberships and Everyone, one query for all. None when no
+   permission is touched."
+  [{:keys [group-repository user-repository membership] :as svc}
+   {:keys [users focal grants roles roles-after update] :as plan}]
+  (when-let [touched (not-empty (or (:touched plan) (into #{} (map :permission) grants)))]
+    (let [resolve  (or (:resolve svc) stored-resolve)
+          others?  (some #(not (access/same-id? (:id focal) (:id %))) users)
+          held-by  (when others?
+                     (group-by (comp str :user-id)
+                               (ports/find-role-holders group-repository
+                                                        (into #{} (mapcat #(concat (group-core/roles-holding roles %)
+                                                                                   (group-core/roles-holding roles-after %)))
+                                                              touched))))
+          rights   (fn [assignments roles]
+                     (filterv (comp touched :permission) (group-core/user-grants assignments roles)))]
+      (mapv (fn [user]
+              (let [focal?   (access/same-id? (:id focal) (:id user))
+                    held     (if focal?
+                               (ports/find-user-assignments group-repository (:id user)
+                                                            (provider-groups membership user-repository user))
+                               (get held-by (str (:id user)) []))
+                    before   (rights held roles)
+                    after    (rights (update held) roles-after)
+                  ;; A source resolver reads the user, so give it the whole record
+                    user-map (if (and (not focal?) (some scope/source? (mapcat (comp vals :scope) (concat before after))))
+                               (or (ports/find-user-by-id user-repository (:id user)) user)
+                               user)]
+                (assoc (scope/rights-diff (resolve user-map before) (resolve user-map after))
+                       :user (select-keys user [:id :email]))))
+            users))))
+
 (defn- audit-role-change!
   "Audit what changing managed role `role-name` from `before` to `after`
    permissions does to every group holding it."
-  [repo audit-repository role-name before after]
-  (doseq [{:keys [group-id group-name scope members]} (role-holders repo [role-name])
+  [audit-repository role-name holders before after diffs]
+  (doseq [{:keys [group-id group-name scope members]} holders
           [action ps] [[:grant-remove (remove (set after) before)] [:grant-add (remove (set before) after)]]
           :when (seq ps)]
     (audit! audit-repository action {:id group-id :name group-name} members
-            (for [p (sort ps)] {:permission p :scope scope :role role-name}))))
+            (for [p (sort ps)] {:permission p :scope scope :role role-name})
+            {:diffs diffs})))
 
 ;; =============================================================================
 ;; Import
@@ -295,11 +428,11 @@
         (when-not (ports/insert-member repo (:id group) (:id user))
           (throw (ex-info "The group changed during the import; run it again"
                           {:type :conflict :group (:name group)}))))
-      (when (seq leave) (audit! audit-repository :group-leave group leave (grants-of held) true))
-      (when (seq remove) (audit! audit-repository :grant-remove group stay (grants-of remove) true))
-      (when (seq added) (audit! audit-repository :grant-add group stay (grants-of added) true))
+      (when (seq leave) (audit! audit-repository :group-leave group leave (grants-of held) {:strict? true}))
+      (when (seq remove) (audit! audit-repository :grant-remove group stay (grants-of remove) {:strict? true}))
+      (when (seq added) (audit! audit-repository :grant-add group stay (grants-of added) {:strict? true}))
       (when (seq join) (audit! audit-repository :group-join group join
-                               (grants-of (ports/find-assignments repo (:id group))) true))
+                               (grants-of (ports/find-assignments repo (:id group))) {:strict? true}))
       {:group         group
        :created?      (nil? existing)
        :joined        (mapv :id join)
@@ -448,6 +581,15 @@
                              (group-core/roles-holding (all-roles group-repository registry) permission)
                              false)))))
 
+  ports/IRightsPreview
+  (preview-change [this change]
+    (let [{:keys [focal group] :as plan} (change-plan this change)
+          summary (group-core/diff-summary (user-diffs this plan) (:id focal))]
+      (cond-> (assoc summary :everyone? (boolean (some-> group :id group-core/everyone?)))
+        ;; No permission touched: the user the change names still gains nothing
+        (and focal (nil? (:user summary)))
+        (assoc :user {:user (select-keys focal [:id :email]) :added [] :removed []}))))
+
   ports/IUserGroupService
 
   (list-groups [_]
@@ -468,33 +610,31 @@
     (or (ports/modify-group group-repository (assoc (group-data group) :id (:id group)))
         (throw (not-found "No such group" {:group-id (:id group)}))))
 
-  (delete-group [_ group-id]
-    (not-everyone! group-id)
-    (if-let [group (ports/find-group group-repository group-id)]
-      (let [members (ports/find-members group-repository group-id)
-            grants  (when (seq members) (group-grants group-repository registry group-id))
-            removed (ports/remove-group group-repository group-id)]
-        (when (and removed (seq members))
-          (audit! audit-repository :group-leave group members grants))
-        removed)
-      false))
+  (delete-group [this group-id]
+    (let [{:keys [group users] :as plan} (change-plan this {:op :delete-group :group-id group-id})]
+      (if group
+        (let [diffs   (user-diffs this plan)
+              removed (ports/remove-group group-repository group-id)]
+          (when (and removed (seq users))
+            (audit! audit-repository :group-leave group users (:grants plan) {:diffs diffs}))
+          removed)
+        false)))
 
-  (add-group-member [_ group-id user-id]
-    (not-everyone! group-id)
-    (let [group (existing-group group-repository group-id)
-          user  (or (ports/find-user-by-id user-repository user-id)
-                    (throw (not-found "No such user" {:user-id user-id})))
-          added (ports/insert-member group-repository group-id (:id user))]
+  (add-group-member [this group-id user-id]
+    (let [{:keys [group focal grants] :as plan} (change-plan this {:op :add-member :group-id group-id :user-id user-id})
+          diffs (user-diffs this plan)
+          added (ports/insert-member group-repository group-id (:id focal))]
       (when added
-        (audit! audit-repository :group-join group [user] (group-grants group-repository registry group-id)))
+        (audit! audit-repository :group-join group [focal] grants {:diffs diffs}))
       added))
 
-  (remove-group-member [_ group-id user-id]
-    (let [removed (ports/remove-member group-repository group-id user-id)]
+  (remove-group-member [this group-id user-id]
+    (let [{:keys [group focal grants] :as plan} (change-plan this {:op :remove-member :group-id group-id :user-id user-id})
+          diffs   (user-diffs this plan)
+          removed (ports/remove-member group-repository group-id user-id)]
       ;; A soft-deleted user holds nothing, so leaving changes nothing to audit.
-      (when-let [user (and removed (ports/find-user-by-id user-repository user-id))]
-        (audit! audit-repository :group-leave (ports/find-group group-repository group-id) [user]
-                (group-grants group-repository registry group-id)))
+      (when (and removed focal)
+        (audit! audit-repository :group-leave group [focal] grants {:diffs diffs}))
       removed))
 
   (list-roles [_]
@@ -506,39 +646,38 @@
   (create-role [_ role]
     (ports/insert-role group-repository (role-data registry role)))
 
-  (update-role [_ role]
-    (let [data   (role-data registry role)
-          before (find-role group-repository (:name data))]
-      (when-not before
-        (throw (not-found "No such role" {:role (:name data)})))
+  (update-role [this role]
+    (let [data  (role-data registry role)
+          {before :role :keys [holders] :as plan}
+          (change-plan this {:op :update-role :role (:name data) :description (:description data)
+                             :permissions (:permissions data)})
+          diffs (user-diffs this plan)]
       (ports/modify-role group-repository data)
-      (audit-role-change! group-repository audit-repository (:name data) (:permissions before) (:permissions data))
+      (audit-role-change! audit-repository (:name data) holders (:permissions before) (:permissions data) diffs)
       (assoc before :description (:description data) :permissions (:permissions data))))
 
-  (delete-role [_ role-name]
-    (if-let [role (find-role group-repository role-name)]
-      (do (audit-role-change! group-repository audit-repository role-name (:permissions role) #{})
-          (ports/remove-role group-repository role-name))
+  (delete-role [this role-name]
+    (if (find-role group-repository role-name)
+      (let [{role :role :keys [holders] :as plan} (change-plan this {:op :delete-role :role role-name})]
+        (audit-role-change! audit-repository role-name holders (:permissions role) #{} (user-diffs this plan))
+        (ports/remove-role group-repository role-name))
       false))
 
-  (add-group-role [_ group-id assignment]
-    (let [group  (existing-group group-repository group-id)
-          roles  (all-roles group-repository registry)
-          a      (checked-assignment settings roles assignment nil)
-          stored (ports/insert-assignment group-repository (assoc a :group-id group-id))]
-      (audit! audit-repository :grant-add group (ports/find-members group-repository group-id)
-              (group-core/user-grants [stored] roles))
+  (add-group-role [this group-id assignment]
+    (let [{:keys [group users assignment grants] :as plan}
+          (change-plan this {:op :add-role :group-id group-id :assignment assignment})
+          diffs  (user-diffs this plan)
+          stored (ports/insert-assignment group-repository assignment)]
+      (audit! audit-repository :grant-add group users grants {:diffs diffs})
       stored))
 
-  (remove-group-role [_ group-id assignment-id]
-    (let [group (ports/find-group group-repository group-id)
-          a     (when group
-                  (some #(when (= (str assignment-id) (str (:id %))) %)
-                        (ports/find-assignments group-repository group-id)))
-          grants  (when a (group-core/user-grants [a] (all-roles group-repository registry)))
-          removed (boolean (and a (ports/remove-assignment group-repository group-id (:id a))))]
+  (remove-group-role [this group-id assignment-id]
+    (let [{:keys [group users assignment grants] :as plan}
+          (change-plan this {:op :remove-role :group-id group-id :assignment-id assignment-id})
+          diffs   (user-diffs this plan)
+          removed (boolean (and assignment (ports/remove-assignment group-repository group-id (:id assignment))))]
       (when removed
-        (audit! audit-repository :grant-remove group (ports/find-members group-repository group-id) grants))
+        (audit! audit-repository :grant-remove group users grants {:diffs diffs}))
       removed))
 
   (add-group-grant [this group-id grant]
@@ -582,7 +721,7 @@
     (when-not (keyword? permission)
       (throw (ex-info "A permission is a keyword" {:type :validation-error :field :permission})))
     (let [roles (group-core/roles-holding (all-roles group-repository registry) permission)]
-      (into [] (comp (map #(-> % (dissoc :role) (assoc :permission permission))) (distinct))
+      (into [] (comp (map #(-> % (select-keys [:user-id :scope]) (assoc :permission permission))) (distinct))
             (ports/find-role-holders group-repository roles))))
 
   (role-holders [_ role-names]
@@ -616,11 +755,13 @@
   "A group service. `settings` is what `prepare-settings` returns. `opts`:
    `:registry`, the permission registry its code roles come from, and
    `:membership`, the hook `(fn [user] #{group-name …})` that adds groups an
-   identity provider names, and `:explain`,
-   `wagoe.platform.shell.authorization/explain` with the registry applied."
+   identity provider names, and `:explain` and `:resolve`,
+   `wagoe.platform.shell.authorization/explain` and `resolve-rights` with the
+   registry applied."
   ([group-repository user-repository audit-repository settings]
    (create-group-service group-repository user-repository audit-repository settings {}))
-  ([group-repository user-repository audit-repository settings {:keys [registry membership explain]}]
+  ([group-repository user-repository audit-repository settings {:keys [registry membership explain resolve]}]
    (cond-> (->UserGroupService group-repository user-repository audit-repository
                                (with-registry-permissions settings registry) registry membership)
-     explain (assoc :explain explain))))
+     explain (assoc :explain explain)
+     resolve (assoc :resolve resolve))))

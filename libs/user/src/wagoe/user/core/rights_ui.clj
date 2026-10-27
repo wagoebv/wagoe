@@ -685,3 +685,69 @@
                                 [:td (scope-view scope scope-info)]]))
                       [:p.empty-state [:t :user.explain/no-alternatives]]))))))
      opts)))
+
+;; =============================================================================
+;; Change preview (BOU-852)
+;; =============================================================================
+
+(defn- effective-scope-view
+  "A resolved scope, {key #{value}}, as text."
+  [scope {:keys [labels]}]
+  (if (empty? scope)
+    [:span.scope-everywhere [:t :user.rights/scope-everywhere]]
+    (into [:span.scope]
+          (interpose "; " (for [[k vs] (sort-by key scope)]
+                            [:span.scope-part (or (get labels k) (name k)) ": "
+                             [:strong.scope-value (values-str vs)]])))))
+
+(defn- hidden-fields
+  "`params`, form params, as hidden inputs: a vector is one per value."
+  [params]
+  (for [[k v] (sort-by key params)
+        v     (if (sequential? v) v [v])]
+    [:input {:type "hidden" :name k :value (str v)}]))
+
+(defn preview-page
+  "What a change does to effective rights before it is made, `preview` as
+   `preview-change` gives it, with a form posting `(:fields opts)` to
+   `(:action opts)` again, confirmed. `(:back opts)`: where cancel goes."
+  [{:keys [user permissions affected affected-count everyone?]} {:keys [action fields back scope-info] :as opts}]
+  (page
+   [:t :user.preview/page-title]
+   (list
+    (header [[[:t :user.preview/crumb-back] back] [[:t :user.preview/crumb]]] [:t :user.preview/heading])
+    (when user
+      (section [:t :user.preview/user-heading {:email (get-in user [:user :email])}]
+               (if (or (seq (:added user)) (seq (:removed user)))
+                 (table [[:t :user.permissions/column-permission] [:t :user.groups/field-scope] [:t :user.preview/column-change]]
+                        (for [[k badge tone] [[:added :user.preview/gains :success] [:removed :user.preview/loses :danger]]
+                              {:keys [permission scope]} (get user k)]
+                          [:tr {:class (str "preview-" (name k))}
+                           [:td [:a {:href (permission-path permission)} (code permission)]]
+                           [:td (effective-scope-view scope scope-info)]
+                           [:td (ui/tone-badge [:t badge] tone)]]))
+                 [:p.preview-unchanged [:t :user.preview/user-unchanged]])))
+    (section [:t :user.preview/others-heading]
+             (when everyone? [:p [:t :user.preview/everyone-note]])
+             (if (pos? affected-count)
+               (list [:p.preview-affected-count [:t :user.preview/also-affects {:count affected-count} affected-count]]
+                     [:ul.preview-affected
+                      (for [{:keys [id email]} affected]
+                        [:li [:a {:href (user-rights-path id)} email]])]
+                     (when (> affected-count (count affected))
+                       [:p [:t :user.preview/more {:count (- affected-count (count affected))}]]))
+               [:p.empty-state [:t :user.preview/no-others]])
+             (when (seq permissions)
+               (table [[:t :user.permissions/column-permission] [:t :user.preview/column-gain] [:t :user.preview/column-lose]]
+                      (for [{:keys [permission added removed]} permissions]
+                        [:tr.preview-permission
+                         [:td [:a {:href (permission-path permission)} (code permission)]]
+                         [:td added]
+                         [:td removed]]))))
+    [:form.preview-confirm-form {:method "post" :action action :class "flex flex-wrap items-center gap-2"}
+     (csrf/hidden-field)
+     (hidden-fields fields)
+     [:input {:type "hidden" :name "confirm" :value "true"}]
+     [:button.button.primary {:type "submit"} [:t :user.preview/button-confirm]]
+     [:a.button.secondary {:href back} [:t :common/button-cancel]]])
+   opts))

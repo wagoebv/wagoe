@@ -499,6 +499,11 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
   `IAccessExplain`: `wagoe.platform.shell.authorization/explain` reads and resolves the rights as the interceptor
   does and `core.scope/explain` decides with `route-decision`; a property test holds the two equal. A 403 from the
   interceptor links to it.
+- Every group, assignment and managed-role change on the admin pages posts twice (BOU-852): first a preview
+  (`IRightsPreview/preview-change`), then the same fields with `confirm=true`. The diff is
+  `core.scope/rights-diff` on rights resolved by `resolve-rights`; the group service writes each user's diff into
+  the change's audit entries under `:changes :effective`. Other members' rights are read in one
+  `find-role-holders` query; identity-provider groups count only for the user the change names.
 - The group service takes `:permission-registry`. When the registry declares
   scope keys, the scope schema is `wagoe.platform.core.scope/scope-schema` of
   them (`with-registry-scopes`); a `:map` `:groups :scope` is declared into the
