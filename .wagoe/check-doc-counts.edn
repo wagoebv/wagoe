@@ -6,7 +6,7 @@
 ;;
 ;; Before adding an entry, check the alternatives — they are usually right:
 ;;
-;;   * A historical document (changelog, ADR, delivered talk, dated design doc)
+;;   * A historical document (changelog, ADR, delivered talk)
 ;;     should be in `excluded-paths` in check_doc_counts.clj, not here. Those
 ;;     record what was true when written.
 ;;   * A number that is not a count of libraries — `HTTP 200 for each library`,
