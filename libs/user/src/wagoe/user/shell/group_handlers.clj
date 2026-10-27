@@ -78,7 +78,7 @@
      :entities (into {} (keep (fn [[k {:keys [entity]}]] (when entity [k entity]))) scopes)
      :sources  (some-> registry authz/scope-sources (update-vals :label))}))
 
-(defn- error-text
+(defn error-text
   "What to show for a refused change: the field's message, and the schema's
    explanation when there is one."
   [e]
@@ -105,7 +105,7 @@
           status)
     (not-found request)))
 
-(defn- refused?
+(defn refused?
   [e]
   (let [{:keys [type field]} (ex-data e)]
     (or (#{:validation-error :not-found} type)
@@ -262,6 +262,14 @@
             (fn [id] (when-let [user-id (path-uuid request :user-id)] {:op :remove-member :group-id id :user-id user-id}))
             #(when % (ports/remove-group-member group-service (:group-id %) (:user-id %))))))
 
+(defn decode-scope
+  "Scope `values` from a form, read as the declared scope schema reads a string."
+  [group-service values]
+  (when values
+    (if-let [schema (get-in group-service [:settings :scope-schema])]
+      (m/decode schema values (mt/string-transformer))
+      values)))
+
 (defn- parse-scope
   "The scope typed into the form, read as EDN; blank is {}."
   [s]
@@ -289,7 +297,7 @@
     ;; `nil` typed is no scope: a key picked beside it is still the scope
     (if (and (or values sources) (or (nil? scope) (map? scope)))
       (merge scope
-             (when values (m/decode (get-in group-service [:settings :scope-schema]) values (mt/string-transformer)))
+             (decode-scope group-service values)
              sources)
       scope)))
 
