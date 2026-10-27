@@ -135,20 +135,23 @@
 
 (defn record-route
   "The route `:scope` and path parameters that check `record`, {scope-key
-   value}: a parameter per key. `[:handler {}]` without one: held anywhere."
+   value}: a parameter per key. `:everywhere`: a route without `:scope`, which
+   needs the permission held everywhere. Nil: `:handler`, held anywhere."
   [record]
-  (if (seq record)
-    [(into {} (map (fn [k] [k (keyword "path" (name k))])) (keys record))
-     (update-keys record (comp keyword name))]
-    [:handler {}]))
+  (cond
+    (= :everywhere record) [nil {}]
+    (seq record)           [(into {} (map (fn [k] [k (keyword "path" (name k))])) (keys record))
+                            (update-keys record (comp keyword name))]
+    :else                  [:handler {}]))
 
 (defn route-record
-  "The record a route whose data says `route-scope` checks, from its
-   `path-params`; nil when it checks none."
+  "The record, as `record-route` reads it, that a route whose data says
+   `route-scope` checks, from its `path-params`."
   [route-scope path-params]
-  (when (map? route-scope)
-    (not-empty (into {} (keep (fn [[k p]] (when-some [v (get path-params (keyword (name p)))] [k v])))
-                     route-scope))))
+  (cond
+    (nil? route-scope)  :everywhere
+    (map? route-scope)  (not-empty (into {} (keep (fn [[k p]] (when-some [v (get path-params (keyword (name p)))] [k v])))
+                                         route-scope))))
 
 (defn- mismatch
   "Why `scope` does not admit `record`: per key, its allowed values and the
@@ -161,8 +164,8 @@
 
 (defn explain
   "Why a caller may or may not use `permission` on `record` ({scope-key
-   value}, nil for anywhere), decided by `route-decision` as a route checking
-   `record` decides it. `rights`: the caller's, resolved; `dropped`: those
+   value}, `:everywhere` or nil for anywhere: see `record-route`), decided by
+   `route-decision` as a route checking `record` decides it. `rights`: the caller's, resolved; `dropped`: those
    whose scope resolved to nothing. A platform admin holds everything.
 
    {:allowed? :via (:platform-admin or :rights) :error :paths [right]

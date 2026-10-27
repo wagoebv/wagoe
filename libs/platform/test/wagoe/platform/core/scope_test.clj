@@ -85,7 +85,10 @@
   (is (= [{:domain-id :path/domain-id} {:domain-id "42"}] (sut/record-route {:domain-id "42"})))
   (is (= [:handler {}] (sut/record-route nil)))
   (is (= {:domain-id "42"} (sut/route-record {:domain-id :path/domain-id} {:domain-id "42"})))
-  (is (nil? (sut/route-record :handler {:domain-id "42"}))))
+  (is (nil? (sut/route-record :handler {:domain-id "42"})))
+  (testing "a route without :scope asks for the permission everywhere"
+    (is (= :everywhere (sut/route-record nil {})))
+    (is (= [nil {}] (sut/record-route :everywhere)))))
 
 (deftest ^:unit explain-names-the-paths-and-the-near-misses
   (let [rights [{:permission :orders/read :scope {:domain-id #{42}} :group-name "Sales"}

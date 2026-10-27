@@ -29,6 +29,7 @@
 (def ^:private handler
   (router/compile-routes
    [["/api/anywhere" {:permission :orders/read :scope :handler :get {:handler ok}}]
+    ["/api/everywhere" {:permission :orders/read :get {:handler ok}}]
     ["/api/d/:domain-id" {:permission :orders/read :scope {:domain-id :path/domain-id} :get {:handler ok}}]
     ["/api/p/:department-id" {:permission :orders/read :scope {:department-id :path/department-id}
                               :get        {:handler ok}}]
@@ -40,17 +41,18 @@
     :authentication  {:middleware [(fn [h] (fn [req] (h (assoc req :user *user*))))]}
     :authorization   [(sut/authorization-middleware registry rights-source {:mode :enforce})]}))
 
-(defn- uri [{:keys [domain-id department-id]}]
+(defn- uri [{:keys [domain-id department-id] :as record}]
   (cond
+    (= :everywhere record)        "/api/everywhere"
     (and domain-id department-id) (str "/api/dp/" domain-id "/" department-id)
     domain-id                     (str "/api/d/" domain-id)
     department-id                 (str "/api/p/" department-id)
     :else                         "/api/anywhere"))
 
-(defn- status [user record]
+(defn- call [user record]
   (binding [*user* user]
-    (:status (handler {:request-method :get :uri (uri record) :scheme :http :server-name "localhost"
-                       :server-port 80 :headers {"accept" "application/json"}}))))
+    (handler {:request-method :get :uri (uri record) :scheme :http :server-name "localhost"
+              :server-port 80 :headers {"accept" "application/json"}})))
 
 (def ^:private value (gen/elements [1 2 10 11]))
 
@@ -71,14 +73,24 @@
       admin? (assoc :role :admin))))
 
 (def ^:private gen-record
-  (gen/let [domain (gen/one-of [(gen/return nil) value])
-            dept   (gen/one-of [(gen/return nil) value])]
-    (cond-> {} domain (assoc :domain-id (str domain)) dept (assoc :department-id (str dept)))))
+  (gen/one-of
+   [(gen/return :everywhere)
+    (gen/let [domain (gen/one-of [(gen/return nil) value])
+              dept   (gen/one-of [(gen/return nil) value])]
+      (cond-> {} domain (assoc :domain-id (str domain)) dept (assoc :department-id (str dept))))]))
 
 (defspec ^:property explain-decides-as-the-interceptor 300
   (prop/for-all [user gen-user record gen-record]
-                (= (= 200 (status user record))
-                   (:allowed? (sut/explain registry rights-source user :orders/read (not-empty record))))))
+                (let [{:keys [status] :as response} (call user record)
+                      refusal (:wagoe/refusal response)]
+                  (and (= (= 200 status)
+                          (:allowed? (sut/explain registry rights-source user :orders/read
+                                                  (if (map? record) (not-empty record) record))))
+                       ;; The 403 page's link asks what was refused
+                       (or (not= 403 status)
+                           (and (= :orders/read (:permission refusal))
+                                (false? (:allowed? (sut/explain registry rights-source user (:permission refusal)
+                                                                (:record refusal))))))))))
 
 (deftest ^:unit explain-keeps-where-a-right-came-from
   (let [user {:id "u" :domains #{} :rights [{:permission :orders/read :scope {:domain-id :user/domain} :group-name "A"}

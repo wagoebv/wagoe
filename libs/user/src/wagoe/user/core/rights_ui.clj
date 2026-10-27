@@ -31,13 +31,16 @@
 (defn user-rights-path [user-id] (str "/web/users/" user-id "/rights"))
 
 (defn explain-path
-  "The explain page for `user-id`, asking `permission` on `record`, {scope-key value}."
+  "The explain page for `user-id`, asking `permission` on `record`: {scope-key
+   value}, or `:everywhere` for a route without a scope."
   [user-id permission record]
   (str "/web/users/" user-id "/explain"
        (when permission
          (str "?" (table-ui/encode-query-params
                    (into {"permission" (group/permission-str permission)}
-                         (for [[k v] record] [(str "scope." (group/permission-str k)) (str v)])))))))
+                         (if (= :everywhere record)
+                           {"everywhere" "true"}
+                           (for [[k v] record] [(str "scope." (group/permission-str k)) (str v)]))))))))
 
 (defn page
   "`content` in the admin shell, `title` in its topbar."
@@ -596,7 +599,9 @@
                  [:t :user.explain/key-unchecked {:key label}]
                  [:t :user.explain/key-outside {:key label :value (str value) :allowed (values-str allowed)}]))))
 
-(defn- rights-table [rows scope-info why]
+(defn- rights-table
+  "`rows`, rights or `:misses`, with why each misses when `why` is the record asked."
+  [rows scope-info why]
   (table (cond-> [[:t :user.rights/column-group] [:t :user.explain/column-membership]
                   [:t :user.groups/field-role] [:t :user.groups/field-scope]]
            why (conj [:t :user.explain/column-why]))
@@ -607,9 +612,9 @@
                     [:td (group-source-badge (:membership r)) " " (membership-note r)]
                     [:td [:a {:href (role-path (:role r))} (code (:role r))]]
                     [:td (right-scope r (= :unresolved reason) scope-info)]]
-             why (conj [:td (if (= :unresolved reason)
-                              [:t :user.explain/unresolved]
-                              (mismatch-text (:keys row) (:labels scope-info)))])))))
+             why (conj [:td (cond (= :unresolved reason) [:t :user.explain/unresolved]
+                                  (= :everywhere why)    [:t :user.explain/not-everywhere]
+                                  :else                  (mismatch-text (:keys row) (:labels scope-info)))])))))
 
 (defn- explain-form [user-id registry scope-keys {:keys [permission record]}]
   [:form.explain-form {:method "get" :action (explain-path user-id nil nil) :class "space-y-3"}
@@ -624,14 +629,21 @@
          :let [id (str "explain-scope-" (name k))]]
      (list [:label {:for id} label]
            [:input {:id id :type "text" :class "input" :name (str "scope." (group/permission-str k))
-                    :value (some-> (get record k) str)}]))
+                    :value (when (map? record) (some-> (get record k) str))}]))
+   [:label.explain-everywhere {:class "flex items-center gap-2"}
+    [:input {:type "checkbox" :class "checkbox checkbox-sm" :name "everywhere" :value "true"
+             :checked (= :everywhere record)}]
+    [:t :user.explain/field-everywhere]]
    [:button {:type "submit" :class "btn btn-primary"} [:t :user.explain/submit]]])
 
 (defn- verdict [{:keys [allowed? via]} record]
-  [:div.explain-verdict {:class (if allowed? "alert alert-success" "alert alert-error") :role "status"}
-   [:t (cond (= :platform-admin via) :user.explain/yes-platform-admin
-             allowed?                (if (seq record) :user.explain/yes-record :user.explain/yes-anywhere)
-             :else                   (if (seq record) :user.explain/no-record :user.explain/no))]])
+  (let [asked (cond (= :everywhere record) :everywhere (seq record) :record :else :anywhere)]
+    [:div.explain-verdict {:class (if allowed? "alert alert-success" "alert alert-error") :role "status"}
+     [:t (cond (= :platform-admin via) :user.explain/yes-platform-admin
+               allowed?                ({:everywhere :user.explain/yes-everywhere :record :user.explain/yes-record
+                                         :anywhere   :user.explain/yes-anywhere} asked)
+               :else                   ({:everywhere :user.explain/no-everywhere :record :user.explain/no-record
+                                         :anywhere   :user.explain/no} asked))]]))
 
 (defn explain-page
   "Why `user` may or may not use the permission asked, `result` as
@@ -659,7 +671,7 @@
          (when (seq (:paths result))
            (section [:t :user.explain/paths-heading] (rights-table (:paths result) scope-info false)))
          (when (seq (:misses result))
-           (section [:t :user.explain/misses-heading] (rights-table (:misses result) scope-info true)))
+           (section [:t :user.explain/misses-heading] (rights-table (:misses result) scope-info (or (:record asked) true))))
          (when-not (:allowed? result)
            (section [:t :user.explain/alternatives-heading]
                     [:p [:t :user.explain/alternatives-hint]]

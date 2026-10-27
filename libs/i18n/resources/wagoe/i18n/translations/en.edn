@@ -143,6 +143,7 @@
  :user/text-no-account          "Don't have an account?"
  :user/button-create-account    "Create Account"
 
+
  :user/button-view-user         "View User"
  :user/button-delete-permanently "Permanently Delete"
 
@@ -495,6 +496,10 @@
  :user.explain/key-outside "{key}: {value} is outside {allowed}"
  :user.explain/unresolved "Its scope resolves to nothing for this user, so it gives no rights."
  :user.explain/error-page-link "Why was this refused? An administrator can open this link."
+ :user.explain/field-everywhere "Everywhere: as a route without a scope asks"
+ :user.explain/yes-everywhere "Yes, everywhere."
+ :user.explain/no-everywhere "No: not held everywhere, which this asks."
+ :user.explain/not-everywhere "Held only within this scope."
  :user.lists/group-none "Other"
  :user.lists/button-open "Open"
  :user.lists/no-matches "Nothing matches “{search}”."

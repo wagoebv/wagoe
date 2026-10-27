@@ -143,6 +143,7 @@
  :user/text-no-account          "Heeft u nog geen account?"
  :user/button-create-account    "Account aanmaken"
 
+
  :user/button-view-user         "Gebruiker bekijken"
  :user/button-delete-permanently "Permanent verwijderen"
 
@@ -495,6 +496,10 @@
  :user.explain/key-outside "{key}: {value} valt buiten {allowed}"
  :user.explain/unresolved "De scope levert voor deze gebruiker niets op, dus geeft geen rechten."
  :user.explain/error-page-link "Waarom geweigerd? Een beheerder kan deze link openen."
+ :user.explain/field-everywhere "Overal: zoals een route zonder scope vraagt"
+ :user.explain/yes-everywhere "Ja, overal."
+ :user.explain/no-everywhere "Nee: niet overal, en dat wordt hier gevraagd."
+ :user.explain/not-everywhere "Alleen binnen deze scope."
  :user.lists/group-none "Overig"
  :user.lists/button-open "Openen"
  :user.lists/no-matches "Niets komt overeen met “{search}”."

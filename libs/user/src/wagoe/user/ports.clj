@@ -496,7 +496,7 @@
 (defprotocol IAccessExplain
   (explain-access [this user permission record]))
   ;; Why `user`, a user map, may or may not use `permission` on `record`
-  ;; ({scope-key value}, nil for anywhere), decided as the authorization
+  ;; ({scope-key value}, :everywhere, or nil for anywhere), decided as the authorization
   ;; interceptor decides (wagoe.platform.core.scope/explain): {:allowed? :via
   ;; :paths :misses}, each right with its group's :membership (:member,
   ;; :provider or :everyone) and :stored-scope; refused, :alternatives too, the

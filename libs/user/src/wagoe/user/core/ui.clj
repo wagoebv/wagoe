@@ -1191,8 +1191,8 @@
                         (filter #(= "0" (second (first %))))
                         (filter #(> (count %) 1)))
             [start len] (some->> (seq runs)
-                                 (reduce #(if (> (count %2) (count %1)) %2 %1))
-                                 ((juxt ffirst count)))]
+                                (reduce #(if (> (count %2) (count %1)) %2 %1))
+                                ((juxt ffirst count)))]
         (if start
           (str (str/join ":" (subvec groups 0 start)) "::" (str/join ":" (subvec groups (+ start len))))
           (str/join ":" groups))))))
@@ -1446,8 +1446,9 @@
     (when correlation-id
       [:p.error-reference [:t :common/error-page-reference] " " [:code correlation-id]])
     ;; An authorization refusal: an admin opens why, or is sent this link
-    (when-let [{:keys [user-id permission record]} (when (:user-id refusal) refusal)]
+    (when-let [user-id (:user-id refusal)]
       [:p.error-explain
-       [:a {:href (rights-ui/explain-path user-id permission record)} [:t :user.explain/error-page-link]]])
+       [:a {:href (rights-ui/explain-path user-id (:permission refusal) (:record refusal))}
+        [:t :user.explain/error-page-link]]])
     [:a.btn.btn-primary {:href home/*path*} [:t :common/error-page-home]]]
    {:user user}))

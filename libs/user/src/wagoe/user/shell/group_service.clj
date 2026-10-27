@@ -217,17 +217,17 @@
     data))
 
 (defn- role-holders
-  "Every assignment of one of `role-names`, with its group's members; Everyone
-   lists none."
-  [repo role-names]
-  (->> (mapcat #(ports/find-role-assignments repo %) (distinct role-names))
-       (map (fn [{:keys [group-id] :as a}]
-              (let [everyone? (group-core/everyone? group-id)]
-                (assoc (select-keys a [:role :group-id :group-name :scope])
-                       :everyone? everyone?
-                       :members (if everyone? [] (ports/find-members repo group-id))))))
-       (sort-by (juxt :group-name (comp str :role)))
-       vec))
+  "Every assignment of one of `role-names`, with its group's members unless
+   `members?` is false; Everyone lists none."
+  ([repo role-names] (role-holders repo role-names true))
+  ([repo role-names members?]
+   (->> (mapcat #(ports/find-role-assignments repo %) (set role-names))
+        (map (fn [{:keys [group-id] :as a}]
+               (let [everyone? (group-core/everyone? group-id)]
+                 (cond-> (assoc (select-keys a [:role :group-id :group-name :scope]) :everyone? everyone?)
+                   members? (assoc :members (if everyone? [] (ports/find-members repo group-id)))))))
+        (sort-by (juxt :group-name (comp str :role)))
+        vec)))
 
 (defn- audit-role-change!
   "Audit what changing managed role `role-name` from `before` to `after`
@@ -444,14 +444,9 @@
                   (update :misses (partial mapv #(update % :right sourced))))
         (not (:allowed? result))
         (assoc :alternatives
-               ;; Without members: role-holders would read them per group
-               (->> (group-core/roles-holding (all-roles group-repository registry) permission)
-                    (mapcat #(ports/find-role-assignments group-repository %))
-                    (map (fn [{:keys [group-id] :as a}]
-                           (assoc (select-keys a [:role :group-id :group-name :scope])
-                                  :everyone? (group-core/everyone? group-id))))
-                    (sort-by (juxt :group-name (comp str :role)))
-                    vec)))))
+               (role-holders group-repository
+                             (group-core/roles-holding (all-roles group-repository registry) permission)
+                             false)))))
 
   ports/IUserGroupService
 

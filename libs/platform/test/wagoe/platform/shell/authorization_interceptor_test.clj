@@ -140,7 +140,7 @@
       (let [seen (atom nil)
             h    (handler :enforce {:error-page (fn [_ error] (reset! seen error) "page")})]
         (call h :get "/web/orders" "nobody" "text/html")
-        (is (= {:user-id "nobody" :permission :orders/read :record nil} (:refusal @seen)))))))
+        (is (= {:user-id "nobody" :permission :orders/read :record :everywhere} (:refusal @seen)))))))
 
 (deftest ^:integration rights-are-read-once-per-request-and-only-when-needed
   (let [h (handler :enforce)]
@@ -207,8 +207,8 @@
   (let [h      (handler :report)
         errors (atom 0)]
     (with-redefs [clojure.tools.logging/log* (fn [_ level _ message]
-                                               (when (and (= :error level) (re-find #"report failed" (str message)))
-                                                 (swap! errors inc)))]
+                                                (when (and (= :error level) (re-find #"report failed" (str message)))
+                                                  (swap! errors inc)))]
       (dotimes [_ 3] (is (= 200 (status h :get "/api/v1/orders" "boom")))))
     (is (= 1 @errors) "a repeat within the minute is not logged again"))
   (testing ":enforce lets it fail"

@@ -209,14 +209,17 @@
 
 (defn- asked
   "The permission and record the explain form asks: `permission`, and a
-   `scope.<key>` parameter per scope key the registry declares."
+   `scope.<key>` parameter per scope key the registry declares, or
+   `everywhere`, as a route without a scope asks."
   [request scope-keys]
   (let [params (:query-params request)]
     {:permission (group-core/parse-name (get params "permission"))
-     :record     (into {} (for [k scope-keys
-                                :let [v (some-> (get params (str "scope." (group-core/permission-str k))) str str/trim)]
-                                :when (seq v)]
-                            [k v]))}))
+     :record     (if (= "true" (get params "everywhere"))
+                   :everywhere
+                   (into {} (for [k scope-keys
+                                  :let [v (some-> (get params (str "scope." (group-core/permission-str k))) str str/trim)]
+                                  :when (seq v)]
+                              [k v])))}))
 
 (defn explain-access
   "GET /web/users/:id/explain — why the user may or may not use a permission,

@@ -176,6 +176,10 @@
             (is (str/includes? body "no-record"))
             (is (str/includes? body "key-outside"))
             (is (str/includes? body "explain-alternative"))))
+        (testing "everywhere, as a route without a scope asks: a scoped right does not do"
+          (let [body (page {"permission" "invoice/write" "everywhere" "true"})]
+            (is (str/includes? body "no-everywhere"))
+            (is (str/includes? body "not-everywhere"))))
         (testing "an identity provider group, with where to change it, and the resolved source"
           (let [body (page {"permission" "invoice/read"})]
             (is (str/includes? body "yes-anywhere"))
