@@ -23,7 +23,7 @@
     (admin/after-swap! pg (str "#" container) #(loc/dispatch-event input "search"))))
 
 (defn- titles [pg container]
-  (page/evaluate pg (str "Array.from(document.querySelectorAll('#" container " tbody td.c-title'))"
+  (page/evaluate pg (str "Array.from(document.querySelectorAll('#" container " tbody td.c-title > a'))"
                          ".map(td => td.textContent.trim())")))
 
 (defn- text [pg selector]
