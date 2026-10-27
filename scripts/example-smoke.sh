@@ -100,7 +100,7 @@ ok "the first admin, made with bb create-admin, gets in"
 # Everyone, every signed-in user's group (wagoe.user.core.group/everyone-id).
 # Given product/viewer, the user reads products and still may not write them.
 EVERYONE_ID=00000000-0000-0000-0000-000000000001
-CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${AUTH[@]}" --data-urlencode "role=product/viewer" \
+CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${AUTH[@]}" --data-urlencode "role=product/viewer" --data-urlencode "confirm=true" \
             "http://localhost:$PORT/web/admin/groups/$EVERYONE_ID/roles")
 [ "$CODE" = "303" ] || fail "giving Everyone product/viewer answered $CODE, expected 303"
 CODE=$(curl -s -o /dev/null -w '%{http_code}' "${USER_AUTH[@]}" "http://localhost:$PORT/api/v1/products")

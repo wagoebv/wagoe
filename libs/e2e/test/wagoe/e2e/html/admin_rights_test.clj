@@ -29,6 +29,12 @@
   (loc/click (page/locator pg "form.role-create-form button[type='submit']"))
   (page/wait-for-selector pg "form.role-edit-form" {:timeout 10000.0}))
 
+(defn- confirm!
+  "Confirm the change its preview shows."
+  [pg]
+  (page/wait-for-selector pg "form.preview-confirm-form" {:timeout 10000.0})
+  (loc/click (page/locator pg "form.preview-confirm-form button[type='submit']")))
+
 (deftest ^:integration ^:e2e roles-are-composed-and-duplicated
   (spel/with-testing-page [pg]
     (admin/login-as-admin! pg fx/*seed*)
@@ -70,9 +76,14 @@
       (loc/press (page/locator pg "#user-id") "ArrowDown")
       (loc/press (page/locator pg "#user-id") "Enter")
       (loc/click (page/locator pg "form.group-member-form button[type='submit']"))
+      (confirm! pg)
       (page/wait-for-selector pg "section.group-members table" {:timeout 10000.0}))
     (loc/select-option (page/locator pg "#group-role") "tenants/clerk")
     (loc/click (page/locator pg "form.group-role-form button[type='submit']"))
+    (testing "assigning the role previews what the member gains (BOU-852)"
+      (page/wait-for-selector pg "form.preview-confirm-form" {:timeout 10000.0})
+      (is (str/includes? (text pg "body") "admin.tenants/read")))
+    (confirm! pg)
     (page/wait-for-selector pg "section.group-roles table" {:timeout 10000.0})
 
     (testing "the user's admin page has a Rights tab"

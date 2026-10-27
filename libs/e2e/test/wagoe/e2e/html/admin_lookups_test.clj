@@ -77,7 +77,12 @@
         (loc/press (page/locator pg "#user-id") "Enter")
         (is (not (str/blank? (loc/input-value (page/locator pg "input[type='hidden'][name='user-id']"))))))
 
-      (testing "adding them lists them as a member"
+      (testing "adding them shows the rights it changes first (BOU-852)"
         (loc/click (page/locator pg "form.group-member-form button[type='submit']"))
+        (page/wait-for-selector pg "form.preview-confirm-form" {:timeout 10000.0})
+        (is (str/includes? (text pg "body") email)))
+
+      (testing "confirmed, they are listed as a member"
+        (loc/click (page/locator pg "form.preview-confirm-form button[type='submit']"))
         (page/wait-for-selector pg "section.group-members table" {:timeout 10000.0})
         (is (str/includes? (text pg "section.group-members table") email))))))
