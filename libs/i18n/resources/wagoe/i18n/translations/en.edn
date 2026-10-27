@@ -525,6 +525,7 @@
  :user.access/everyone-heading "Everyone"
  :user.access/everyone-empty "Everyone holds nothing."
  :user.access/superusers-heading "Superusers"
+ :user.access/superusers-empty "No platform admin."
  :user.access/passes-every-check "passes every check"
  :user.access/matrix-heading "Groups by module"
  :user.access/filter-module "Module"

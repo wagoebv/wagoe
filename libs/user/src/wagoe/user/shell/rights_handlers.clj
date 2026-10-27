@@ -259,8 +259,13 @@
 (defn- superusers
   "The platform admins, who pass every check."
   [user-service]
-  (->> (:users (ports/list-users user-service {:filter-role :admin :filter-active true
-                                               :sort-by :email :sort-direction :asc :limit 100}))
+  ;; Paged: tenant admins share the role and would push platform admins past one page
+  (->> (iterate #(+ % 100) 0)
+       (map #(:users (ports/list-users user-service {:filter-role :admin :filter-active true
+                                                     :sort-by :email :sort-direction :asc
+                                                     :limit 100 :offset %})))
+       (take-while seq)
+       (apply concat)
        (filter access/platform-admin?)))
 
 (defn access-overview

@@ -525,6 +525,7 @@
  :user.access/everyone-heading "Iedereen"
  :user.access/everyone-empty "Iedereen heeft niets."
  :user.access/superusers-heading "Superusers"
+ :user.access/superusers-empty "Geen platformbeheerder."
  :user.access/passes-every-check "passeert elke controle"
  :user.access/matrix-heading "Groepen per module"
  :user.access/filter-module "Module"

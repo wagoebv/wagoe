@@ -33,21 +33,24 @@
                  {:group g :cells (get cells (:id g) {})})
      :everyone (filter :everyone? holders)}))
 
-(defn- level-badge [{:keys [assignment]} roles]
+(defn- level-badge
+  "The role's level in its own module; in another, where it may give less,
+   the role by name."
+  [module {:keys [assignment]} roles]
   (let [role (get roles (:role assignment))]
     (list
-     (if-let [level (rights-ui/role-level role)]
+     (if-let [level (when (= module (namespace (:role assignment))) (rights-ui/role-level role))]
        (ui/tone-badge [:t (rights-ui/level-labels level)] :info)
        (ui/tone-badge (group/permission-str (:role assignment)) :neutral))
      (when (seq (:scope assignment))
        (list " " (ui/tone-badge [:t :user.access/scoped] :warning))))))
 
-(defn- cell [entries roles registry scope-info]
+(defn- cell [module entries roles registry scope-info]
   (if (empty? entries)
     [:td.access-cell.access-none [:span {:aria-hidden "true"} "–"] [:span.sr-only [:t :user.access/none]]]
     [:td.access-cell
      [:details
-      [:summary (interpose " " (for [e entries] [:span.access-level (level-badge e roles)]))]
+      [:summary (interpose " " (for [e entries] [:span.access-level (level-badge module e roles)]))]
       (for [{:keys [assignment permissions]} entries]
         [:div.access-entry {:class "space-y-1"}
          [:p (rights-ui/assignment-sentence assignment roles scope-info)]
@@ -66,7 +69,7 @@
       (for [{:keys [group cells]} rows]
         (into [:tr.access-row
                [:th {:scope "row"} [:a {:href (rights-ui/group-path (:id group))} (:name group)]]]
-              (for [m modules] (cell (get cells m) roles registry scope-info)))))
+              (for [m modules] (cell m (get cells m) roles registry scope-info)))))
      [:p.empty-state [:t :user.access/empty]])])
 
 (defn- filters [{:keys [module group]} modules groups]
@@ -88,10 +91,12 @@
                         (for [a everyone] [:li (rights-ui/assignment-sentence a roles scope-info)])]
                        [:p.empty-state [:t :user.access/everyone-empty]])
                      [:h3 [:t :user.access/superusers-heading]]
-                     [:ul.access-superusers
-                      (for [{:keys [id email]} superusers]
-                        [:li [:a {:href (rights-ui/user-rights-path id)} email] " "
-                         [:t :user.access/passes-every-check]])]))
+                     (if (seq superusers)
+                       [:ul.access-superusers
+                        (for [{:keys [id email]} superusers]
+                          [:li [:a {:href (rights-ui/user-rights-path id)} email] " "
+                           [:t :user.access/passes-every-check]])]
+                       [:p.empty-state [:t :user.access/superusers-empty]])))
 
 (defn page
   "The overview: Everyone and `superusers` first, then the filters and the
