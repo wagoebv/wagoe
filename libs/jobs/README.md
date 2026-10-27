@@ -41,7 +41,7 @@ Background job processing on Redis, your SQL database, or in memory, with:
 
 ```clojure
 ;; deps.edn — brings Jedis with it
-{:deps {com.wagoe/wagoe-jobs {:mvn/version "1.0.1"}}}
+{:deps {com.wagoe/wagoe-jobs {:mvn/version "1.1.0-rc-1"}}}
 ```
 
 In a Wagoe application, enabling `:wagoe/jobs` builds the queue, store, registry

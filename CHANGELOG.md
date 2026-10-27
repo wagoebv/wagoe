@@ -29,6 +29,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+## [1.1.0-rc-1] — 2026-10-27
+
 ### Added
 
 - **A group service of your own is checked at boot** (BOU-859): with the web UI on, one lacking a protocol beside

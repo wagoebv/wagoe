@@ -44,7 +44,7 @@ JWT-authenticated WebSocket support with:
 
 ```clojure
 ;; deps.edn
-{:deps {com.wagoe/wagoe-realtime {:mvn/version "1.0.1"}}}
+{:deps {com.wagoe/wagoe-realtime {:mvn/version "1.1.0-rc-1"}}}
 ```
 
 ### 2. Implement a JWT Verifier
@@ -1037,7 +1037,7 @@ clojure -M:test :realtime
 | `jedis` | 8.0.1 | Redis provider |
 | `nippy` | 3.9.0 | Redis bus serialisation |
 | `ring-core` | 1.15.5 | WebSocket and SSE handlers |
-| `wagoe/i18n` | 1.0.1 | Per-subscriber fragment rendering |
+| `wagoe/i18n` | 1.1.0-rc-1 | Per-subscriber fragment rendering |
 
 ---
 
@@ -1065,5 +1065,5 @@ Distributed under the Eclipse Public License version 2.0.
 ---
 
 **Last Updated**: 2026-02-04  
-**Version**: 1.0.1  
+**Version**: 1.1.0-rc-1  
 **Status**: Production Ready
