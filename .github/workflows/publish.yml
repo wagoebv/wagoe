@@ -245,12 +245,11 @@ jobs:
 
             See [CHANGELOG.md](https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md) for details.
           draft: false
-          # Never mark releases as prerelease: scripts/install.sh resolves
-          # WAGOE_TAG via /releases/latest, which excludes prereleases —
-          # an alpha marked prerelease is silently uninstallable (alpha-29
-          # never became "latest" for exactly this reason).
-          prerelease: false
-          make_latest: "true"
+          # scripts/install.sh installs /releases/latest, which skips
+          # prereleases. A version with a stage (1.1.0-rc-1) is a prerelease,
+          # so it never replaces the last final release as what users install.
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          make_latest: ${{ contains(steps.version.outputs.version, '-') && 'false' || 'true' }}
 
       - name: Summary
         run: |
