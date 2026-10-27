@@ -68,9 +68,13 @@ serves `:pilot` and warns once.
 ### 5. `:role` is `:admin` or nothing (BOU-771)
 
 Rights come from groups. A user map's `:role` is `:admin` or `nil`; a stored
-`user` or `viewer` reads as `nil`. At first boot users with role `:viewer` join a
-Readers group holding every module's `viewer` role, and group grants become
-roles. Only a platform admin sets or clears `:admin`.
+`user` or `viewer` reads as `nil`. At first boot the Everyone group, which
+every signed-in user is in, gets every module's `editor` role when there are
+users other than admins; users with role `:viewer` join a Readers group holding
+every module's `viewer` role; group grants become roles. Former viewers are in
+Everyone too, so under `:enforce` they can edit: trim Everyone's roles if they
+should not. `wagoe upgrade authorization check` prints the plan. Only a
+platform admin sets or clears `:admin`.
 
 Code that checks `(= :user (:role u))` or `:viewer` never matches now: check
 `(nil? (:role u))`, or better, a permission. A `:login-redirect` role map's
@@ -136,8 +140,8 @@ edit and soft-delete through the admin, delete permanently with
 ### 11. Group and role changes preview first (BOU-852)
 
 A POST to the group, role or grant pages under `/web/admin/groups`,
-`/web/admin/roles` and `/web/users/:id/grant` that changes rights answers 200
-with a preview and changes nothing. A script posting to them sends
+`/web/admin/roles` and `/web/users/:id/grant/role|group` that changes rights
+answers 200 with a preview and changes nothing. A script posting to them sends
 `confirm=true`:
 
 ```bash
@@ -151,10 +155,20 @@ app's own repository or service that lacks one Wagoe calls stops the boot with
 `WGE-107`, naming it; `bb guide error WGE-107` explains. Implement the protocol
 named.
 
-### 13. Smaller changes
+### 13. Run the migrations (BOU-551, BOU-849)
+
+`bb migrate up`: the tenant tables now ship as a library migration, and push
+callback rows gain `callback_id`.
+
+### 14. Smaller changes
 
 - An IMAP fetch without `:limit` takes 100 messages; pass a larger `:limit`.
-  `core.imap/filter-unread` and `filter-by-date` are gone (BOU-731).
+  `core.imap/filter-unread` and `filter-by-date` are gone. Pass the fetched
+  message to `mark-read!` and `delete-message!`:
+  `(mark-read! mb (:uid msg) msg)` (BOU-731).
+- `GET /api/v1/push/devices/:token` takes `?app-id=`; a token under two app-ids
+  answers 409 without it (BOU-847). Set `:callback-secret` in `:wagoe/push`, or
+  push warns at boot and callbacks record nothing (BOU-844).
 - `search/create-search-store` takes the adapter, not a db-type:
   `(create-search-store ds (:adapter db-ctx))` (BOU-450).
 - Tenant `:not-supported` and `:unsupported-database` errors carry `:engine`
