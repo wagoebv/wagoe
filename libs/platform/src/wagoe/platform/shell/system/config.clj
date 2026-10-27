@@ -160,7 +160,8 @@
          ;; feature the config asks for and does not get, and it used to say
          ;; nothing at all (BOU-477).
          _          (modules/assert-every-key-claimed! active known)
-         {:keys [components http auth search data-export retention authorization middleware routes job-handlers]}
+         {:keys [components http auth search data-export retention authorization middleware routes job-handlers
+                 recurring]}
          (modules/framework-module-config
           active
           {:config            config
@@ -180,7 +181,8 @@
           discovered-authz    :authorization
           discovered-mw       :middleware
           discovered-routes   :routes
-          discovered-handlers :job-handlers}
+          discovered-handlers :job-handlers
+          discovered-recurring :recurring}
          (modules/discover-module-config
           active known base-ns modules/require-wiring! requiring-resolve)
          auth   (modules/merge-auth auth :discovered discovered-auth)
@@ -212,7 +214,9 @@
        ;; config that has no registry, and a module that contributes handlers
        ;; without jobs enabled would fail the boot on a dangling ref.
        (contains? components :wagoe/job-registry)
-       (assoc-in [:wagoe/job-registry :handler-maps] (into (vec job-handlers) discovered-handlers))
+       (-> (assoc-in [:wagoe/job-registry :handler-maps] (into (vec job-handlers) discovered-handlers))
+           ;; A schedule set under :wagoe/jobs :recurring wins.
+           (update-in [:wagoe/job-scheduler :recurring] #(merge recurring discovered-recurring %)))
 
        ;; The modules :active switches on: what a boot migration applies, the
        ;; set `migrate up` reads (BOU-579), and, carried on the context, what

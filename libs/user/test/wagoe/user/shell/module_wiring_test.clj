@@ -91,25 +91,14 @@
 
 (deftest ^:unit expired-access-is-removed-on-the-jobs-module
   ;; BOU-856
-  (let [wired #(sut/ig-config nil {:config % :enabled #{:wagoe/user :wagoe/jobs}})]
-    (testing "without jobs, nothing is scheduled"
-      (let [g (sut/ig-config nil {:config {} :enabled #{:wagoe/user}})]
-        (is (empty? (:job-handlers g)))
-        (is (not (contains? (:components g) :wagoe.user/access-expiry-schedule)))))
-    (testing "with jobs, a handler and its schedule"
-      (let [g (wired {})]
-        (is (= [(ig/ref :wagoe.user/job-handlers)] (:job-handlers g)))
-        (is (= {:schedulers (ig/refset :wagoe/job-scheduler)}
-               (get-in g [:components :wagoe.user/access-expiry-schedule])))))
-    (testing "a schedule under :wagoe/jobs :recurring wins"
-      (let [g (wired {:active {:wagoe/jobs {:recurring {sut/access-expiry-job-type {:cron "0 * * * *"}}}}})]
-        (is (contains? (:components g) :wagoe.user/job-handlers))
-        (is (not (contains? (:components g) :wagoe.user/access-expiry-schedule)))))
-    (testing "the schedule reaches the scheduler, and a test system has none"
-      (let [s ((requiring-resolve 'wagoe.jobs.shell.recurring/create-scheduler) {})]
-        (ig/init-key :wagoe.user/access-expiry-schedule {:schedulers #{s}})
-        (is (contains? @(:schedules s) sut/access-expiry-job-type)))
-      (is (nil? (ig/init-key :wagoe.user/access-expiry-schedule {:schedulers #{}}))))
+  (testing "without jobs, nothing is scheduled"
+    (let [g (sut/ig-config nil {:config {} :enabled #{:wagoe/user}})]
+      (is (empty? (:job-handlers g)))
+      (is (empty? (:recurring g)))))
+  (let [g (sut/ig-config nil {:config {} :enabled #{:wagoe/user :wagoe/jobs}})]
+    (testing "with jobs, a handler and its default schedule"
+      (is (= [(ig/ref :wagoe.user/job-handlers)] (:job-handlers g)))
+      (is (= {sut/access-expiry-job-type sut/access-expiry-schedule} (:recurring g))))
     (testing "the handler counts what it removed"
       (let [handler (get (ig/init-key :wagoe.user/job-handlers
                                       {:group-service (reify wagoe.user.ports/ITimeBoundAccess

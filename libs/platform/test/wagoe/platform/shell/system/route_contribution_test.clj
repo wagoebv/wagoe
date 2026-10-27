@@ -193,7 +193,17 @@
                                        :wagoe/jobs     {:provider :memory}
                                        :wagoe/gadgets  {:enabled? true}}})]
     (is (some #{(integrant.core/ref :wagoe/gadgets-job-handlers)}
-              (get-in m [:wagoe/job-registry :handler-maps])))))
+              (get-in m [:wagoe/job-registry :handler-maps])))
+    (testing "and its schedules the scheduler, unless :wagoe/jobs :recurring sets one (BOU-856)"
+      (is (= {:cron "0 * * * *"} (get-in m [:wagoe/job-scheduler :recurring :gadgets/count])))
+      (is (= {:cron "5 * * * *"}
+             (get-in (sys/system-config {:wagoe/profile :test
+                                         :active {:wagoe/settings {}
+                                                  :wagoe/h2       {:memory true}
+                                                  :wagoe/jobs     {:provider :memory
+                                                                   :recurring {:gadgets/count {:cron "5 * * * *"}}}
+                                                  :wagoe/gadgets  {:enabled? true}}})
+                     [:wagoe/job-scheduler :recurring :gadgets/count]))))))
 
 ;; =============================================================================
 ;; Module tags (ADR-041)

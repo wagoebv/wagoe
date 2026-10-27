@@ -602,19 +602,19 @@
   [{:keys [group-repository user-repository audit-repository registry]} now]
   (let [{:keys [members assignments] :as removed} (ports/remove-expired group-repository now)
         roles    (all-roles group-repository registry)
+        ;; Per group, once: several rows of one group expire together
         group-of (memoize #(or (ports/find-group group-repository %) {:id %}))
+        grants   (memoize #(group-core/user-grants (ports/find-assignments group-repository %) roles))
+        members-of (memoize #(when-not (group-core/everyone? %) (ports/find-members group-repository %)))
         expired  #(assoc (expiry-metadata %) :reason "expired")]
     (doseq [{:keys [group-id user-id expires-at]} members
             ;; A soft-deleted user held nothing through it
             :let [user (ports/find-user-by-id user-repository user-id)]
             :when user]
-      (audit! audit-repository :group-leave (group-of group-id) [user]
-              (group-core/user-grants (ports/find-assignments group-repository group-id) roles)
+      (audit! audit-repository :group-leave (group-of group-id) [user] (grants group-id)
               {:metadata (expired expires-at)}))
-    (doseq [{:keys [group-id expires-at] :as a} assignments
-            :let [members (when-not (group-core/everyone? group-id)
-                            (ports/find-members group-repository group-id))]]
-      (audit! audit-repository :grant-remove (group-of group-id) members (group-core/user-grants [a] roles)
+    (doseq [{:keys [group-id expires-at] :as a} assignments]
+      (audit! audit-repository :grant-remove (group-of group-id) (members-of group-id) (group-core/user-grants [a] roles)
               {:metadata (expired expires-at)}))
     (when (or (seq members) (seq assignments))
       (log/info "Removed expired group access" {:members (count members) :assignments (count assignments)}))
@@ -640,8 +640,7 @@
           result  (explain svc user permission record)
           groups  (into {} (map (juxt :id identity)) (ports/user-groups svc user))
           sourced #(let [{:keys [source expires-at]} (get groups (:group-id %))]
-                     (cond-> (assoc % :membership source)
-                       expires-at (assoc :membership-expires-at expires-at)))]
+                     (assoc % :membership source :membership-expires-at expires-at))]
       (cond-> (-> result
                   (update :paths (partial mapv sourced))
                   (update :misses (partial mapv #(update % :right sourced))))

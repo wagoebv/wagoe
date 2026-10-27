@@ -233,6 +233,9 @@
   (db/create-index-if-not-exists! ctx "idx_user_group_grants_permission" :user_group_grants [:permission])
   (db/create-index-if-not-exists! ctx "uk_user_roles_name" :user_roles [:name] {:unique? true})
   (db/create-index-if-not-exists! ctx "idx_user_group_roles_role" :user_group_roles [:role])
+  ;; For the expiry job's scan (BOU-856)
+  (db/create-index-if-not-exists! ctx "idx_user_group_members_expires_at" :user_group_members [:expires_at])
+  (db/create-index-if-not-exists! ctx "idx_user_group_roles_expires_at" :user_group_roles [:expires_at])
   (widen-audit-action-check! ctx)
   (hash-plaintext-session-tokens! ctx)
 

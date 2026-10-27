@@ -86,8 +86,9 @@
    :where  [:and [:= :t.group_id :g.id] (unexpired :t.expires_at)]})
 
 (defn- delete-expired!
-  "Delete `rows` of `table` by id, each only while still expired at `now`:
-   one renewed meanwhile stays. Returns those deleted."
+  "Delete `rows` of `table` by id while still expired at `now`. Returns those
+   this call deleted, so each is audited once: a re-add or another node may
+   have removed one meanwhile."
   [ctx table rows now]
   (filterv #(pos? (db/execute-update! ctx {:delete-from table
                                            :where       [:and [:= :id (:id %)] [:<= :expires_at now]]}))
