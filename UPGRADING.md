@@ -65,6 +65,107 @@ relied on pico with daisy classes. `base-css` and `base-js` no longer compile;
 use `pilot-css` and `pilot-js`. `(ui-style/bundle :base)` still renders, but it
 serves `:pilot` and warns once.
 
+### 5. `:role` is `:admin` or nothing (BOU-771)
+
+Rights come from groups. A user map's `:role` is `:admin` or `nil`; a stored
+`user` or `viewer` reads as `nil`. At first boot users with role `:viewer` join a
+Readers group holding every module's `viewer` role, and group grants become
+roles. Only a platform admin sets or clears `:admin`.
+
+Code that checks `(= :user (:role u))` or `:viewer` never matches now: check
+`(nil? (:role u))`, or better, a permission. A `:login-redirect` role map's
+`:viewer` key is never used. Call `add-group-role`/`remove-group-role` where you
+called `add-group-grant`/`remove-group-grant`, and import `:roles [{:role :scope}]`
+rather than `:grants`.
+
+### 6. Config keys that went (BOU-765, BOU-771, BOU-773, BOU-774, BOU-781, BOU-847)
+
+All are still read until 2.0 unless noted; boot warns for most.
+
+| Key | Now |
+|---|---|
+| `:wagoe/admin :require-role` | nothing reads it; delete it (step 2) |
+| OIDC provider `:default-role` | put those users in a group |
+| `:wagoe/user :groups :scope` | a module's `:authorization :scopes` |
+| `:wagoe/geo-service :db` | `:cache? true` |
+| `:db` on `:wagoe.push/device-store` and `:analytics-store` | `:db-ctx` |
+| `:dashboard-extra-cards` | a `:description` on the module's nav item |
+| dev dashboard `:ig-config-fn` | not needed; Apply uses your `set-prep!` fn |
+
+`:export-requests-per-hour 0` means no limit now, and anything but a whole
+number fails boot (BOU-759).
+
+### 7. Run `wagoe upgrade` for the deprecations
+
+Every `### Deprecated` entry has a `wagoe upgrade` note. `wagoe upgrade` prints
+the rewrites it can make as a diff (`--apply` writes them) and lists the rest
+with what to do by hand.
+
+### 8. `environ`, `dotenv` and `javax.mail` are gone (BOU-457)
+
+`wagoe-platform` no longer brings in `environ` or `com.lambdaisland/dotenv`.
+Declare them in your own `deps.edn` if you require them.
+
+`wagoe-external` moved to Jakarta Mail 2 (Angus Mail). Code using `javax.mail`
+classes itself moves to `jakarta.mail`. SMTP and IMAP now check that the
+server's certificate names `:host`; for a self-signed or misnamed one, set
+`:ssl-trust` or `:check-server-identity? false` (BOU-741).
+
+### 9. Turning off MFA needs the password or a code (BOU-782)
+
+`POST /api/v1/auth/mfa/disable` without a body now fails. Send the user's
+password or a current TOTP or backup code; wrong ones count towards the
+lockout.
+
+```json
+{"password": "…"}
+{"code": "123456"}
+```
+
+`wagoe.user.shell.mfa/disable-mfa` takes the same proof and the request
+context: `(disable-mfa svc user-id {:password p} {:ip-address ip :user-agent ua})`.
+
+### 10. `/web/users` pages moved into the admin (BOU-766, BOU-804)
+
+`GET /web/users/:id` redirects to `/web/admin/users/:id`, which has the
+Details, Sessions and Rights tabs. `PUT` and `DELETE /web/users/:id` are gone:
+edit and soft-delete through the admin, delete permanently with
+`POST /web/users/:id/hard-delete`. `POST /web/users/bulk` takes `ids[]`, not
+`user-ids`. Update links, scripts and E2E tests that used them.
+
+### 11. Group and role changes preview first (BOU-852)
+
+A POST to the group, role or grant pages under `/web/admin/groups`,
+`/web/admin/roles` and `/web/users/:id/grant` that changes rights answers 200
+with a preview and changes nothing. A script posting to them sends
+`confirm=true`:
+
+```bash
+curl -X POST …/web/admin/groups/$ID/members -d user-id=$USER -d confirm=true …
+```
+
+### 12. Your own port implementations may need a new protocol (BOU-829)
+
+Methods 1.1 adds to a stable port are new protocols beside the old one. An
+app's own repository or service that lacks one Wagoe calls stops the boot with
+`WGE-107`, naming it; `bb guide error WGE-107` explains. Implement the protocol
+named.
+
+### 13. Smaller changes
+
+- An IMAP fetch without `:limit` takes 100 messages; pass a larger `:limit`.
+  `core.imap/filter-unread` and `filter-by-date` are gone (BOU-731).
+- `search/create-search-store` takes the adapter, not a db-type:
+  `(create-search-store ds (:adapter db-ctx))` (BOU-450).
+- Tenant `:not-supported` and `:unsupported-database` errors carry `:engine`
+  (`:h2`), not `:dialect` or `:database-type` (BOU-450).
+- A tenant update refuses `status: deleted`; use `DELETE /tenants/:id`. A
+  revoked membership is deleted and answers 404 (BOU-611).
+- Admin cells show a relation's title and an enum's `:options` label, not the
+  UUID or raw value; update E2E selectors that matched either (ADR-040).
+- The admin's CSS is one file, `/css/wagoe-admin.css`. A layout that lists the
+  old files loads `(ui-style/bundle :admin-pilot)` instead (BOU-808).
+
 ## beta-5 → beta-6 (error shapes)
 
 ### 1. `wagoe.user.shell.auth/authenticate-user` and the MFA shell return `:error` as a map (BOU-323)
