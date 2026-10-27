@@ -89,3 +89,6 @@ skills-lock.json
 *.orig
 *~
 
+
+# Local design notes from agent skills; not shipped docs.
+docs/superpowers/
