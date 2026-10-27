@@ -444,9 +444,14 @@
                   (update :misses (partial mapv #(update % :right sourced))))
         (not (:allowed? result))
         (assoc :alternatives
-               (mapv #(dissoc % :members)
-                     (role-holders group-repository
-                                   (vec (group-core/roles-holding (all-roles group-repository registry) permission))))))))
+               ;; Without members: role-holders would read them per group
+               (->> (group-core/roles-holding (all-roles group-repository registry) permission)
+                    (mapcat #(ports/find-role-assignments group-repository %))
+                    (map (fn [{:keys [group-id] :as a}]
+                           (assoc (select-keys a [:role :group-id :group-name :scope])
+                                  :everyone? (group-core/everyone? group-id))))
+                    (sort-by (juxt :group-name (comp str :role)))
+                    vec)))))
 
   ports/IUserGroupService
 

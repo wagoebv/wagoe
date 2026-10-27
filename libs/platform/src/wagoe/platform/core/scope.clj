@@ -64,14 +64,15 @@
   [scopes]
   (boolean (some empty? scopes)))
 
+(defn- allows?
+  "Whether `v` is one of `allowed`, compared as strings, as a path parameter arrives."
+  [allowed v]
+  (boolean (some #(access/same-id? v %) allowed)))
+
 (defn- admits?
-  "Whether `scope` admits `values`: each of its keys has a value, inside it.
-   Compared as strings, as a path parameter arrives."
+  "Whether `scope` admits `values`: each of its keys has a value, inside it."
   [scope values]
-  (every? (fn [[k allowed]]
-            (let [v (get values k)]
-              (some #(access/same-id? v %) allowed)))
-          scope))
+  (every? (fn [[k allowed]] (allows? allowed (get values k))) scope))
 
 (defn in-scope?
   "Whether one of `scopes` admits `values`, {scope-key value}: a record's or a
@@ -155,7 +156,7 @@
   [scope record]
   (into {} (for [[k allowed] scope
                  :let [v (get record k)]
-                 :when (not-any? #(access/same-id? v %) allowed)]
+                 :when (not (allows? allowed v))]
              [k {:allowed allowed :value v}])))
 
 (defn explain
@@ -172,13 +173,14 @@
     (let [[route-scope params] (record-route record)
           decide   #(route-decision (scopes-for % permission) route-scope params)
           held     (filterv #(= permission (:permission %)) rights)
-          admits?  #(nil? (:error (decide [%])))
+          {admitted true missed false} (group-by #(nil? (:error (decide [%]))) held)
           {:keys [error]} (decide held)]
       {:allowed? (nil? error)
        :via      :rights
        :error    error
-       :paths    (filterv admits? held)
-       :misses   (into (vec (for [r held :when (not (admits? r))]
-                              {:right r :reason :scope-mismatch :keys (mismatch (or (:scope r) {}) record)}))
-                       (for [r dropped :when (= permission (:permission r))]
-                         {:right r :reason :unresolved}))})))
+       :paths    (vec admitted)
+       :misses   (-> []
+                     (into (map (fn [r] {:right r :reason :scope-mismatch :keys (mismatch (or (:scope r) {}) record)}))
+                           missed)
+                     (into (comp (filter #(= permission (:permission %))) (map (fn [r] {:right r :reason :unresolved})))
+                           dropped))})))

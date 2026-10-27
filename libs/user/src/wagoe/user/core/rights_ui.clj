@@ -628,15 +628,10 @@
    [:button {:type "submit" :class "btn btn-primary"} [:t :user.explain/submit]]])
 
 (defn- verdict [{:keys [allowed? via]} record]
-  (cond
-    (= :platform-admin via)
-    [:div.explain-verdict {:class "alert alert-success" :role "status"} [:t :user.explain/yes-platform-admin]]
-    allowed?
-    [:div.explain-verdict {:class "alert alert-success" :role "status"}
-     [:t (if (seq record) :user.explain/yes-record :user.explain/yes-anywhere)]]
-    :else
-    [:div.explain-verdict {:class "alert alert-error" :role "status"}
-     [:t (if (seq record) :user.explain/no-record :user.explain/no)]]))
+  [:div.explain-verdict {:class (if allowed? "alert alert-success" "alert alert-error") :role "status"}
+   [:t (cond (= :platform-admin via) :user.explain/yes-platform-admin
+             allowed?                (if (seq record) :user.explain/yes-record :user.explain/yes-anywhere)
+             :else                   (if (seq record) :user.explain/no-record :user.explain/no))]])
 
 (defn explain-page
   "Why `user` may or may not use the permission asked, `result` as
