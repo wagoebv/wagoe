@@ -30,17 +30,35 @@
 
 (defn user-rights-path [user-id] (str "/web/users/" user-id "/rights"))
 
+(defn asking-params
+  "`permission` on `record`, {scope-key value} or `:everywhere`, as the asking
+   forms post them."
+  [permission record]
+  (into {"permission" (group/permission-str permission)}
+        (if (= :everywhere record)
+          {"everywhere" "true"}
+          (for [[k v] record] [(str "scope." (group/permission-str k)) (str v)]))))
+
+(defn- asking-path [page user-id permission record]
+  (str "/web/users/" user-id page
+       (when permission
+         (str "?" (table-ui/encode-query-params (asking-params permission record))))))
+
 (defn explain-path
   "The explain page for `user-id`, asking `permission` on `record`: {scope-key
    value}, or `:everywhere` for a route without a scope."
   [user-id permission record]
-  (str "/web/users/" user-id "/explain"
-       (when permission
-         (str "?" (table-ui/encode-query-params
-                   (into {"permission" (group/permission-str permission)}
-                         (if (= :everywhere record)
-                           {"everywhere" "true"}
-                           (for [[k v] record] [(str "scope." (group/permission-str k)) (str v)]))))))))
+  (asking-path "/explain" user-id permission record))
+
+(defn grant-path
+  "The grant wizard for `user-id`, giving `permission` in `scope`, {scope-key
+   value}, {} or nil for everywhere (BOU-853)."
+  [user-id permission scope]
+  (asking-path "/grant" user-id permission scope))
+
+(def grant-bulk-path
+  "Who a permission would refuse, and the smallest fix for each (BOU-853)."
+  (str permissions-path "/grant"))
 
 (defn page
   "`content` in the admin shell, `title` in its topbar."
@@ -101,7 +119,7 @@
   [headers rows]
   (table-of "data-table table" headers rows))
 
-(defn- code [x] [:code (group/permission-str x)])
+(defn code [x] [:code (group/permission-str x)])
 
 ;; =============================================================================
 ;; Lists: groups, roles and permissions in the shared data-table
@@ -538,7 +556,9 @@
     (page
      [:t :user.permissions/permission-page-title {:name p}]
      (list
-      (header [[[:t :user.permissions/page-title] permissions-path] [p]] (code permission))
+      (header [[[:t :user.permissions/page-title] permissions-path] [p]] (code permission)
+              [:a.button.secondary {:href (str grant-bulk-path "?" (table-ui/encode-query-params {"permission" p}))}
+               [:t :user.grant/open-bulk]])
       (when (or label module)
         [:p label (when module (list " · " [:t :user.roles/from-module {:module (name module)}]))])
       (section [:t :user.permissions/roles-heading]
@@ -675,25 +695,32 @@
                                   (= :everywhere why)    [:t :user.explain/not-everywhere]
                                   :else                  (mismatch-text (:keys row) (:labels scope-info)))])))))
 
-(defn- explain-form [user-id registry scope-keys {:keys [permission record]}]
-  [:form.explain-form {:method "get" :action (explain-path user-id nil nil) :class "space-y-3"}
-   [:label {:for "explain-permission"} [:t :user.explain/field-permission]]
-   [:select#explain-permission {:name "permission" :required true :class "select"}
-    [:option {:value ""} [:t :user.explain/pick-permission]]
-    (for [p (sort-by group/permission-str (keys registry))
-          :let [v (group/permission-str p)]]
-      [:option {:value v :selected (= p permission)} v])]
-   [:p [:t :user.explain/record-hint]]
-   (for [[k label] scope-keys
-         :let [id (str "explain-scope-" (name k))]]
-     (list [:label {:for id} label]
-           [:input {:id id :type "text" :class "input" :name (str "scope." (group/permission-str k))
-                    :value (when (map? record) (some-> (get record k) str))}]))
-   [:label.explain-everywhere {:class "flex items-center gap-2"}
-    [:input {:type "checkbox" :class "checkbox checkbox-sm" :name "everywhere" :value "true"
-             :checked (= :everywhere record)}]
-    [:t :user.explain/field-everywhere]]
-   [:button {:type "submit" :class "btn btn-primary"} [:t :user.explain/submit]]])
+(defn asking-form
+  "The form posting to `action` a permission on a record, `kind` `:explain`
+   or `:grant` (BOU-853): granting asks no `everywhere`, an empty scope is
+   everywhere. `inputs` go before its button."
+  [kind action registry scope-keys {:keys [permission record]} & inputs]
+  (let [prefix (name kind)]
+    [:form {:method "get" :action action :class (str prefix "-form space-y-3")}
+     [:label {:for (str prefix "-permission")} [:t :user.explain/field-permission]]
+     [:select {:id (str prefix "-permission") :name "permission" :required true :class "select"}
+      [:option {:value ""} [:t :user.explain/pick-permission]]
+      (for [p (sort-by group/permission-str (keys registry))
+            :let [v (group/permission-str p)]]
+        [:option {:value v :selected (= p permission)} v])]
+     [:p [:t (if (= :grant kind) :user.grant/scope-hint :user.explain/record-hint)]]
+     (for [[k label] scope-keys
+           :let [id (str prefix "-scope-" (name k))]]
+       (list [:label {:for id} label]
+             [:input {:id id :type "text" :class "input" :name (str "scope." (group/permission-str k))
+                      :value (when (map? record) (some-> (get record k) str))}]))
+     (when (= :explain kind)
+       [:label.explain-everywhere {:class "flex items-center gap-2"}
+        [:input {:type "checkbox" :class "checkbox checkbox-sm" :name "everywhere" :value "true"
+                 :checked (= :everywhere record)}]
+        [:t :user.explain/field-everywhere]])
+     inputs
+     [:button {:type "submit" :class "btn btn-primary"} [:t (if (= :grant kind) :user.grant/submit :user.explain/submit)]]]))
 
 (defn- verdict [{:keys [allowed? via]} record]
   (let [asked (cond (= :everywhere record) :everywhere (seq record) :record :else :anywhere)]
@@ -723,7 +750,7 @@
               n)
       (user-tabs (:id user) :rights)
       (section [:t :user.explain/heading]
-               (explain-form (:id user) (:registry opts) (sort-by key (:labels scope-info)) asked))
+               (asking-form :explain (explain-path (:id user) nil nil) (:registry opts) (sort-by key (:labels scope-info)) asked))
       (when result
         (list
          (verdict result (:record asked))
@@ -734,6 +761,9 @@
          (when-not (:allowed? result)
            (section [:t :user.explain/alternatives-heading]
                     [:p [:t :user.explain/alternatives-hint]]
+                    [:a.button.primary.explain-grant
+                     {:href (grant-path (:id user) (:permission asked) (when (map? (:record asked)) (:record asked)))}
+                     [:t :user.grant/open]]
                     (if (seq (:alternatives result))
                       (table [[:t :user.rights/column-group] [:t :user.groups/field-role] [:t :user.groups/field-scope]]
                              (for [{:keys [group-id group-name role scope everyone?]} (:alternatives result)]
@@ -749,7 +779,7 @@
 ;; Change preview (BOU-852)
 ;; =============================================================================
 
-(defn- effective-scope-view
+(defn effective-scope-view
   "A resolved scope, {key #{value}}, as text."
   [scope {:keys [labels]}]
   (if (empty? scope)
@@ -759,50 +789,57 @@
                             [:span.scope-part (or (get labels k) (name k)) ": "
                              [:strong.scope-value (values-str vs)]])))))
 
-(defn- hidden-fields
+(defn hidden-fields
   "`params`, form params, as hidden inputs: a vector is one per value."
   [params]
   (for [[k v] (sort-by key params)
         v     (if (sequential? v) v [v])]
     [:input {:type "hidden" :name k :value (str v)}]))
 
+(defn preview-sections
+  "What a change does to effective rights, `preview` as `preview-change`
+   gives it: the named user's gains and losses, and the other users'."
+  [{:keys [user permissions affected affected-count everyone?]} scope-info]
+  (list
+   (when user
+     (section [:t :user.preview/user-heading {:email (get-in user [:user :email])}]
+              (if (or (seq (:added user)) (seq (:removed user)))
+                (table [[:t :user.permissions/column-permission] [:t :user.groups/field-scope] [:t :user.preview/column-change]]
+                       (for [[k badge tone] [[:added :user.preview/gains :success] [:removed :user.preview/loses :danger]]
+                             {:keys [permission scope]} (get user k)]
+                         [:tr {:class (str "preview-" (name k))}
+                          [:td [:a {:href (permission-path permission)} (code permission)]]
+                          [:td (effective-scope-view scope scope-info)]
+                          [:td (ui/tone-badge [:t badge] tone)]]))
+                [:p.preview-unchanged [:t :user.preview/user-unchanged]])))
+   (section [:t :user.preview/others-heading]
+            (when everyone? [:p [:t :user.preview/everyone-note]])
+            (if (pos? affected-count)
+              (list [:p.preview-affected-count [:t :user.preview/also-affects {:count affected-count} affected-count]]
+                    [:ul.preview-affected
+                     (for [{:keys [id email]} affected]
+                       [:li [:a {:href (user-rights-path id)} email]])]
+                    (when (> affected-count (count affected))
+                      [:p [:t :user.preview/more {:count (- affected-count (count affected))}]]))
+              [:p.empty-state [:t :user.preview/no-others]])
+            (when (seq permissions)
+              (table [[:t :user.permissions/column-permission] [:t :user.preview/column-gain] [:t :user.preview/column-lose]]
+                     (for [{:keys [permission added removed]} permissions]
+                       [:tr.preview-permission
+                        [:td [:a {:href (permission-path permission)} (code permission)]]
+                        [:td added]
+                        [:td removed]]))))))
+
 (defn preview-page
   "What a change does to effective rights before it is made, `preview` as
    `preview-change` gives it, with a form posting `(:fields opts)` to
    `(:action opts)` again, confirmed. `(:back opts)`: where cancel goes."
-  [{:keys [user permissions affected affected-count everyone?]} {:keys [action fields back scope-info] :as opts}]
+  [preview {:keys [action fields back scope-info] :as opts}]
   (page
    [:t :user.preview/page-title]
    (list
     (header [[[:t :user.preview/crumb-back] back] [[:t :user.preview/crumb]]] [:t :user.preview/heading])
-    (when user
-      (section [:t :user.preview/user-heading {:email (get-in user [:user :email])}]
-               (if (or (seq (:added user)) (seq (:removed user)))
-                 (table [[:t :user.permissions/column-permission] [:t :user.groups/field-scope] [:t :user.preview/column-change]]
-                        (for [[k badge tone] [[:added :user.preview/gains :success] [:removed :user.preview/loses :danger]]
-                              {:keys [permission scope]} (get user k)]
-                          [:tr {:class (str "preview-" (name k))}
-                           [:td [:a {:href (permission-path permission)} (code permission)]]
-                           [:td (effective-scope-view scope scope-info)]
-                           [:td (ui/tone-badge [:t badge] tone)]]))
-                 [:p.preview-unchanged [:t :user.preview/user-unchanged]])))
-    (section [:t :user.preview/others-heading]
-             (when everyone? [:p [:t :user.preview/everyone-note]])
-             (if (pos? affected-count)
-               (list [:p.preview-affected-count [:t :user.preview/also-affects {:count affected-count} affected-count]]
-                     [:ul.preview-affected
-                      (for [{:keys [id email]} affected]
-                        [:li [:a {:href (user-rights-path id)} email]])]
-                     (when (> affected-count (count affected))
-                       [:p [:t :user.preview/more {:count (- affected-count (count affected))}]]))
-               [:p.empty-state [:t :user.preview/no-others]])
-             (when (seq permissions)
-               (table [[:t :user.permissions/column-permission] [:t :user.preview/column-gain] [:t :user.preview/column-lose]]
-                      (for [{:keys [permission added removed]} permissions]
-                        [:tr.preview-permission
-                         [:td [:a {:href (permission-path permission)} (code permission)]]
-                         [:td added]
-                         [:td removed]]))))
+    (preview-sections preview scope-info)
     [:form.preview-confirm-form {:method "post" :action action :class "flex flex-wrap items-center gap-2"}
      (csrf/hidden-field)
      (hidden-fields fields)

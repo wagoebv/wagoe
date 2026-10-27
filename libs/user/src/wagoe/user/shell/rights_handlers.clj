@@ -7,6 +7,7 @@
             [wagoe.platform.core.scope :as scope]
             [wagoe.platform.ports.authorization :as authz]
             [wagoe.user.core.access-ui :as access-ui]
+            [wagoe.user.core.grant-ui :as grant-ui]
             [wagoe.user.core.group :as group-core]
             [wagoe.user.core.rights-ui :as rights-ui]
             [wagoe.user.ports :as ports]
@@ -200,11 +201,14 @@
                             (log/warn e "A scope source failed to resolve for the rights page" {:key k :source src})
                             :error))]))))
 
+(defn- user-of [user-service request]
+  (some->> (get-in request [:path-params :id]) str parse-uuid (ports/get-user-by-id user-service)))
+
 (defn user-rights
   "GET /web/users/:id/rights — the user's groups and effective permissions."
   [user-service group-service]
   (fn [request]
-    (if-let [user (some->> (get-in request [:path-params :id]) str parse-uuid (ports/get-user-by-id user-service))]
+    (if-let [user (user-of user-service request)]
       ;; Groups and grants both ask the membership hook: ask it once
       (let [group-service (cond-> group-service (:membership group-service) (update :membership memoize))
             grants        (ports/user-grants group-service user)]
@@ -220,27 +224,26 @@
       (not-found request :user.rights/user-not-found))))
 
 (defn- asked
-  "The permission and record the explain form asks: `permission`, and a
-   `scope.<key>` parameter per scope key the registry declares, or
-   `everywhere`, as a route without a scope asks."
-  [request scope-keys]
-  (let [params (:query-params request)]
-    {:permission (group-core/parse-name (get params "permission"))
-     :record     (if (= "true" (get params "everywhere"))
-                   :everywhere
-                   (into {} (for [k scope-keys
-                                  :let [v (some-> (get params (str "scope." (group-core/permission-str k))) str str/trim)]
-                                  :when (seq v)]
-                              [k v])))}))
+  "The permission and record `params` ask: `permission`, and a `scope.<key>`
+   parameter per scope key the registry declares, or `everywhere`, as a route
+   without a scope asks."
+  [params scope-keys]
+  {:permission (group-core/parse-name (get params "permission"))
+   :record     (if (= "true" (get params "everywhere"))
+                 :everywhere
+                 (into {} (for [k scope-keys
+                                :let [v (some-> (get params (str "scope." (group-core/permission-str k))) str str/trim)]
+                                :when (seq v)]
+                            [k v])))})
 
 (defn explain-access
   "GET /web/users/:id/explain — why the user may or may not use a permission,
    on a record when its scope keys are given (BOU-851)."
   [user-service group-service]
   (fn [request]
-    (if-let [user (some->> (get-in request [:path-params :id]) str parse-uuid (ports/get-user-by-id user-service))]
+    (if-let [user (user-of user-service request)]
       (let [scope-info (group-handlers/scope-info group-service)
-            {:keys [permission record] :as q} (asked request (keys (:labels scope-info)))]
+            {:keys [permission record] :as q} (asked (:query-params request) (keys (:labels scope-info)))]
         (html-response request
                        (rights-ui/explain-page user
                                                (when permission
@@ -286,3 +289,116 @@
        #(access-ui/page ov (superusers user-service)
                         (assoc (page-opts request) :filters filters :roles roles
                                :registry registry :scope-info scope-info))))))
+
+;; =============================================================================
+;; Grant wizard (BOU-853)
+;; =============================================================================
+
+(defn- asked-scope
+  "The permission and scope `params` ask, the scope's values read as the
+   declared scope schema reads a form's: {} is everywhere."
+  [group-service params]
+  (let [{:keys [permission record]} (asked params (keys (:labels (group-handlers/scope-info group-service))))]
+    {:permission permission
+     :record     (if (and (map? record) (seq record)) (group-handlers/decode-scope group-service record) {})}))
+
+(defn- wizard-opts [request group-service q opts]
+  (merge (page-opts request)
+         {:asked      q
+          :registry   (registry-permissions group-service)
+          :scope-info (group-handlers/scope-info group-service)}
+         opts))
+
+(defn- grant-response
+  "The wizard for the user in the path, asking what `params` ask; a refused
+   question shows why."
+  [request user-service group-service params status opts]
+  (if-let [user (user-of user-service request)]
+    (let [{:keys [permission record] :as q} (asked-scope group-service params)
+          [result error] (try [(when permission (ports/grant-options group-service user permission record))]
+                              (catch clojure.lang.ExceptionInfo e
+                                (if (group-handlers/refused? e) [nil (group-handlers/error-text e)] (throw e))))]
+      (html-response request
+                     (grant-ui/grant-page user result (wizard-opts request group-service q
+                                                                   (cond-> opts error (assoc :error error))))
+                     (if error 422 status)))
+    (not-found request :user.rights/user-not-found)))
+
+(defn grant-wizard
+  "GET /web/users/:id/grant — the ways to give the user a permission, and
+   nothing more, through groups."
+  [user-service group-service]
+  (fn [request]
+    (grant-response request user-service group-service (:query-params request) 200 {})))
+
+(defn grant-role
+  "POST /web/users/:id/grant/role — a managed role holding only the permission
+   asked; then back to the wizard, which offers to assign it."
+  [user-service group-service]
+  (fn [request]
+    (let [{:keys [permission record]} (asked-scope group-service (:form-params request))]
+      (if-let [user (user-of user-service request)]
+        (try
+          (ports/create-role group-service {:name (form request "name") :permissions #{permission}})
+          (redirect (rights-ui/grant-path (:id user) permission record) :user.grant/flash-role-created)
+          (catch clojure.lang.ExceptionInfo e
+            (if (refused? e)
+              (grant-response request user-service group-service (:form-params request) 422 {:error (error-text e)})
+              (throw e))))
+        (not-found request :user.rights/user-not-found)))))
+
+(defn grant-group
+  "POST /web/users/:id/grant/group — the last option: a group holding only
+   the user and the assignment, named and with its purpose said."
+  [user-service group-service]
+  (fn [request]
+    (let [{:keys [record]} (asked-scope group-service (:form-params request))
+          user        (user-of user-service request)
+          assignment  {:role (group-core/parse-name (form request "role")) :scope record}
+          description (not-empty (form request "description"))
+          retry       #(grant-response request user-service group-service (:form-params request) 422 {:error %})]
+      (cond
+        (nil? user)        (not-found request :user.rights/user-not-found)
+        ;; Unconfirmed, as on the group pages (BOU-852): the wizard shows its preview
+        (not (group-handlers/confirmed? request))
+        (grant-response request user-service group-service (:form-params request) 200 {})
+        (nil? description) (retry [:t :user.grant/error-purpose])
+        :else
+        (try
+          ;; Refuse the assignment before the group exists
+          (ports/preview-change group-service {:op :new-group :user-id (:id user) :assignment assignment})
+          (let [g (ports/create-group group-service {:name (form request "name") :description description})]
+            (ports/add-group-member group-service (:id g) (:id user))
+            (ports/add-group-role group-service (:id g) assignment)
+            (redirect (rights-ui/group-path (:id g)) :user.grant/flash-group-created))
+          (catch clojure.lang.ExceptionInfo e
+            (if (group-handlers/refused? e) (retry (group-handlers/error-text e)) (throw e))))))))
+
+(defn- named-users
+  "The users `text` names, ids or emails separated by space, comma or line,
+   or pasted as a log's `:user-id #uuid \"..\"`, at most
+   `group-core/preview-page-size`, and what named nobody."
+  [user-service text]
+  (let [found (for [s (take group-core/preview-page-size (distinct (remove str/blank? (remove #{"#uuid" ":user-id"} (str/split (str text) #"[\s,;\"{}]+")))))]
+                [s (if-let [id (parse-uuid s)]
+                     (ports/get-user-by-id user-service id)
+                     (ports/get-user-by-email user-service s))])]
+    [(distinct (keep second found)) (keep (fn [[s u]] (when-not u s)) found)]))
+
+(defn grant-bulk
+  "GET /web/admin/permissions/grant — of the users pasted, those the
+   permission asked refuses, each with its smallest fix. Under `:report`
+   a refusal is only logged, so the users come from the log."
+  [user-service group-service]
+  (fn [request]
+    (let [params (:query-params request)
+          {:keys [permission record] :as q} (asked-scope group-service params)
+          [users unknown] (if permission (named-users user-service (get params "users")) [[] []])
+          [rows error] (try [(mapv (fn [u] {:user u :result (ports/grant-options group-service u permission record)}) users)]
+                            (catch clojure.lang.ExceptionInfo e
+                              (if (group-handlers/refused? e) [[] (group-handlers/error-text e)] (throw e))))]
+      (html-response request
+                     (grant-ui/bulk-page rows (if error [] unknown)
+                                         (wizard-opts request group-service q (cond-> {:users (get params "users")}
+                                                                                error (assoc :error error))))
+                     (if error 422 200)))))
