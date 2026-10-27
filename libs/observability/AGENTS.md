@@ -94,7 +94,7 @@ The interceptor automatically:
 - Logs start and completion at debug; a failure at error for a 5xx, warn for 401/403, else info
 - Records latency metrics
 - Reports a 5xx failure to the error reporter; a typed 4xx is not reported
-- Adds breadcrumbs for distributed tracing
+- Adds breadcrumbs, the error context a later report carries
 
 ### Persistence Layer
 
