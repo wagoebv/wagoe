@@ -232,7 +232,7 @@
 
 (def ^:private no-graph
   {:components {} :http {} :auth {} :search {} :data-export {} :retention {}
-   :authorization {} :middleware [] :routes [] :job-handlers []})
+   :authorization {} :middleware [] :routes [] :job-handlers [] :recurring {}})
 
 (defn- merge-slots
   "`part` over `acc`, refusing a key both set. Each is one slot on `target`,
@@ -295,7 +295,7 @@
    `:wagoe/payments` for `:wagoe/payment-provider`, so keys one library owns
    are one module."
   ([acc k graph] (add-graph acc k k graph))
-  ([acc k module {:keys [components http auth search data-export retention authorization routes job-handlers]}]
+  ([acc k module {:keys [components http auth search data-export retention authorization routes job-handlers recurring]}]
    (-> acc
        (update :components #(merge-slots "the system config" % k components))
        (update :http merge-http k (dissoc http :extra-middleware))
@@ -307,7 +307,8 @@
        (cond-> (contains? http :extra-middleware)
          (update :middleware conj (:extra-middleware http)))
        (update :routes into (map #(module-routes-ref module %)) routes)
-       (update :job-handlers into job-handlers))))
+       (update :job-handlers into job-handlers)
+       (update :recurring #(merge-slots ":wagoe/job-scheduler :recurring" % k recurring)))))
 
 (defn- scaffold-components
   "The four keys a scaffolded module `k` gets: what `module_wiring.clj`
@@ -614,7 +615,9 @@
    `:job-handlers` is the same arrangement for background work: refs to
    components that return `{job-type handler-fn}`, which reach the job registry
    as one collection. Jobs can no more name the modules with handlers than the
-   HTTP handler can name the modules with routes (BOU-418).
+   HTTP handler can name the modules with routes (BOU-418). `:recurring`,
+   {job-type {:cron ..}}, are the schedules those handlers default to; one
+   under `:wagoe/jobs :recurring` wins (BOU-856).
 
    `ctx` is what a module may need from the application and cannot know:
    `:config` (the whole loaded map), `:validation-config`, and `:enabled` — the

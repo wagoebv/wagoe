@@ -125,6 +125,14 @@
     (scope-refusal scope scope-schema)
     (refusal :role "No such role" nil)))
 
+(defn expiry-refusal
+  "Nil when `expires-at`, an Instant or nil for never, is after `now`, else a
+   :validation-error on :expires-at: an end already passed would give
+   nothing (BOU-856)."
+  [expires-at now]
+  (when (and expires-at (not (.isAfter ^java.time.Instant expires-at now)))
+    (refusal :expires-at "The expiry date has passed" nil)))
+
 (defn role-refusal
   "Nil when managed `role` may be stored beside `code-roles`, holding only
    `known` permissions, else a :validation-error naming the field."
@@ -144,7 +152,7 @@
   (into []
         (comp (mapcat (fn [{:keys [role] :as a}]
                         (for [p (sort (get-in roles [role :permissions]))]
-                          (assoc (select-keys a [:group-id :group-name :role :scope]) :permission p))))
+                          (assoc (select-keys a [:group-id :group-name :role :scope :expires-at]) :permission p))))
               (distinct))
         assignments))
 

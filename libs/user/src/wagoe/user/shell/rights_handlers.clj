@@ -387,10 +387,12 @@
         (nil? description) (retry [:t :user.grant/error-purpose])
         :else
         (try
-          ;; Refuse the assignment before the group exists
-          (ports/preview-change group-service {:op :new-group :user-id (:id user) :assignment assignment})
-          (let [g (ports/create-group group-service {:name (form request "name") :description description})]
-            (ports/add-group-member group-service (:id g) (:id user))
+          ;; Refuse the assignment and the expiry before the group exists
+          (let [expires-at (group-handlers/form-expiry request)
+                _ (ports/preview-change group-service {:op :new-group :user-id (:id user) :assignment assignment
+                                                       :expires-at expires-at})
+                g (ports/create-group group-service {:name (form request "name") :description description})]
+            (ports/add-group-member-until group-service (:id g) (:id user) expires-at)
             (ports/add-group-role group-service (:id g) assignment)
             (redirect (rights-ui/group-path (:id g)) :user.grant/flash-group-created))
           (catch clojure.lang.ExceptionInfo e

@@ -10,4 +10,5 @@
 (defn ig-config [settings _ctx]
   {:components   {:wagoe/gadgets              settings
                   :wagoe/gadgets-job-handlers {}}
-   :job-handlers [(ig/ref :wagoe/gadgets-job-handlers)]})
+   :job-handlers [(ig/ref :wagoe/gadgets-job-handlers)]
+   :recurring    {:gadgets/count {:cron "0 * * * *"}}})

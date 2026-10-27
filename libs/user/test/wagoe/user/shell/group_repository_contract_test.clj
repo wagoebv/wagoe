@@ -11,7 +11,9 @@
             [wagoe.user.core.group :as group]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.group-persistence :as sut]
-            [wagoe.user.shell.persistence :as persistence]))
+            [wagoe.user.shell.persistence :as persistence])
+  (:import (java.time Instant)
+           (java.time.temporal ChronoUnit)))
 
 (defn- user! [users email]
   (ports/create-user users {:email email :name "Member" :role :user :active true :password-hash "x"}))
@@ -215,3 +217,47 @@
                        (index-names ctx "user_group_roles")))
       (is (contains? (index-names ctx "user_roles") "uk_user_roles_name"))
       (is (contains? (index-names ctx "user_groups") "uk_user_groups_name")))))
+
+(deftest ^:contract expired-access-counts-for-nothing-until-removed
+  ;; BOU-856: every read leaves an expired row out at once; remove-expired
+  ;; deletes it later.
+  (test-db/with-db "user_group_expiry"
+    (fn [ctx]
+      (persistence/initialize-user-schema! ctx)
+      (let [users     (persistence/create-user-repository ctx)
+            repo      (sut/create-group-repository ctx)
+            [ada bob] (map #(user! users (str % "@example.com")) ["ada" "bob"])
+            finance   (ports/insert-group repo {:name "Finance"})
+            ;; Whole seconds: not every engine keeps more
+            now       (.truncatedTo (Instant/now) ChronoUnit/SECONDS)
+            past      (.minusSeconds now 60)
+            future    (.plusSeconds now 3600)]
+        (is (true? (ports/insert-member-until repo (:id finance) (:id ada) past)))
+        (is (true? (ports/insert-member-until repo (:id finance) (:id bob) future)))
+        (let [lapsed (ports/insert-assignment repo {:group-id (:id finance) :role :a/old :scope {} :expires-at past})]
+          (ports/insert-assignment repo {:group-id (:id finance) :role :a/new :scope {} :expires-at future})
+          (testing "reads leave the expired out, and carry the end of the rest"
+            (is (= [["bob@example.com" future]] (map (juxt :email :expires-at) (ports/find-members repo (:id finance)))))
+            (is (= [[:a/new future]] (map (juxt :role :expires-at) (ports/find-assignments repo (:id finance)))))
+            (is (= [:a/new] (map :role (ports/find-role-assignments repo :a/new))))
+            (is (empty? (ports/find-role-assignments repo :a/old)))
+            (is (empty? (ports/find-user-groups repo (:id ada))))
+            (is (= [future] (map :expires-at (ports/find-user-groups repo (:id bob)))))
+            (is (empty? (ports/find-user-assignments repo (:id ada) nil)))
+            (is (= [:a/new] (map :role (ports/find-user-assignments repo (:id bob) nil))))
+            (is (= #{(:id bob)} (set (map :user-id (ports/find-role-holders repo #{:a/old :a/new})))))
+            (is (= [[1 1]] (map (juxt :member-count :role-count) (ports/find-groups repo)))))
+
+          (testing "an expired membership is replaced by a new one"
+            (is (true? (ports/insert-member repo (:id finance) (:id ada))))
+            (is (= 2 (count (ports/find-members repo (:id finance)))))
+            (ports/remove-member repo (:id finance) (:id ada))
+            (ports/insert-member-until repo (:id finance) (:id ada) past))
+
+          (testing "remove-expired deletes only what has expired, and says what"
+            (let [{:keys [members assignments]} (ports/remove-expired repo (Instant/now))]
+              (is (= [{:group-id (:id finance) :user-id (:id ada) :expires-at past}] members))
+              (is (= [(:id lapsed)] (map :id assignments))))
+            (is (= 1 (count-rows ctx "user_group_members" "group_id" (:id finance))))
+            (is (= 1 (count-rows ctx "user_group_roles" "group_id" (:id finance))))
+            (is (= {:members [] :assignments []} (ports/remove-expired repo (Instant/now))))))))))

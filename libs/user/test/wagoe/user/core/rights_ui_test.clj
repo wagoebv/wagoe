@@ -129,7 +129,13 @@
              (say {:role :orders/clerk :scope {}}))))
     (testing "several keys joined"
       (is (= [:user.access/within " " "7" " " :user.access/and " " :user.access/within " " "42"]
-             (drop 4 (say {:role :orders/editor :scope {:domain-id 42 :dept 7}})))))))
+             (drop 4 (say {:role :orders/editor :scope {:domain-id 42 :dept 7}})))))
+    (testing "one that ends says when (BOU-856)"
+      (is (= [:user.access/everywhere " " :user.access/expires-on]
+             (drop 4 (say {:role :orders/editor :scope {} :expires-at (java.time.Instant/parse "2026-11-15T00:00:00Z")}))))
+      (is (= [:t :user.access/expires-on {:date "2026-11-15"}]
+             (last (sut/expiry-note (java.time.Instant/parse "2026-11-15T00:00:00Z")))))
+      (is (nil? (sut/expiry-note nil))))))
 
 (deftest ^:unit detail-table-cells-are-labelled-for-a-narrow-screen
   (let [page (sut/rights-page {:id 1 :name "Ada"} [{:id 2 :name "Sales" :source :member}] [] {})

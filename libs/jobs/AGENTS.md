@@ -85,7 +85,9 @@ the way routes are contributed:
 
 Guard it on `:wagoe/jobs` being enabled: without jobs there is no registry, and
 a ref to one is a dangling ref that fails the boot. `libs/push` is the worked
-example.
+example. A recurring handler also lists its default schedule under
+`:recurring {job-type {:cron "*/15 * * * *"}}`; one under `:wagoe/jobs
+:recurring` wins (BOU-856, the user module's `:wagoe.user/expire-access`).
 
 Until BOU-418 this namespace wired none of this — `:wagoe/jobs` was a settings
 passthrough, so `java -jar wagoe.jar worker` booted and processed nothing.

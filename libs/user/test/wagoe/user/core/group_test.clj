@@ -118,3 +118,15 @@
     (testing "importing what is there changes nothing"
       (is (= {:join [] :leave [] :stay [a b] :add [] :remove []}
              (sut/import-changes current {:members [a b] :roles (map #(dissoc % :id) [kept extra])} true))))))
+
+(deftest ^:unit an-expiry-must-lie-ahead
+  (let [now (java.time.Instant/parse "2026-10-27T12:00:00Z")]
+    (is (nil? (sut/expiry-refusal nil now)) "none is for good")
+    (is (nil? (sut/expiry-refusal (.plusSeconds now 1) now)))
+    (doseq [t [now (.minusSeconds now 1)]]
+      (is (= :expires-at (get-in (sut/expiry-refusal t now) [:error :field])) (str t)))))
+
+(deftest ^:unit a-grant-keeps-when-its-assignment-ends
+  (let [t (java.time.Instant/parse "2026-11-15T00:00:00Z")]
+    (is (= [{:permission :a/b :role :r :scope {} :group-id 1 :expires-at t}]
+           (sut/user-grants [{:role :r :scope {} :group-id 1 :expires-at t}] {:r {:permissions #{:a/b}}})))))

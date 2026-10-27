@@ -558,7 +558,9 @@
                         (:exclude-group-members options)
                         (conj [:not [:in :a.id {:select [:user_id]
                                                 :from   [:user_group_members]
-                                                :where  [:= :group_id (type-conversion/uuid->string (:exclude-group-members options))]}]]))
+                                                :where  [:and [:= :group_id (type-conversion/uuid->string (:exclude-group-members options))]
+                                                         ;; An expired member may be added again (BOU-856)
+                                                         [:or [:= :expires_at nil] [:> :expires_at (java.time.Instant/now)]]]}]]))
 
           where-clause (when (seq where-parts)
                          (if (= 1 (count where-parts))

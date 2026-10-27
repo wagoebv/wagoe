@@ -174,7 +174,9 @@
    [:id :uuid]
    [:group-id {:references :user_groups :on-delete :cascade} :uuid]
    [:user-id {:references :auth_users :on-delete :cascade} :uuid]
-   [:created-at inst?]])
+   [:created-at inst?]
+   ;; Nil is for good. Once passed it counts for nothing (BOU-856).
+   [:expires-at {:optional true} [:maybe inst?]]])
 
 (def UserGroupGrant
   "Schema for a permission a group holds, in a scope. Wagoe interprets
@@ -209,7 +211,8 @@
    [:group-id {:references :user_groups :on-delete :cascade} :uuid]
    [:role :string]
    [:scope {:column-type :text} :map]
-   [:created-at inst?]])
+   [:created-at inst?]
+   [:expires-at {:optional true} [:maybe inst?]]])
 
 (def RoleRequest
   "What creating or changing a managed role takes."

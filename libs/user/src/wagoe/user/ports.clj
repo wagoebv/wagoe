@@ -265,6 +265,19 @@
   ;; Calls (f repo), every read and write on repo in one transaction: committed
   ;; when f returns, rolled back when it throws. Returns what f returns.
 
+(defprotocol IAccessExpiry
+  "Memberships and assignments that end (BOU-856). An assignment takes its end
+   as :expires-at in `insert-assignment`. Once passed, every read of
+   IUserGroupRepository leaves the row out; `remove-expired` deletes it."
+  (insert-member-until [this group-id user-id expires-at])
+  ;; insert-member ending at `expires-at`, nil for never. An expired
+  ;; membership of the pair is replaced. Returns true, or false when the user
+  ;; is a member already.
+
+  (remove-expired [this now]))
+  ;; Deletes what expired at or before `now`. Returns what it deleted:
+  ;; {:members [{:group-id :user-id :expires-at}] :assignments [assignment]}.
+
 ;; =============================================================================
 ;; Service
 ;; =============================================================================
@@ -529,6 +542,17 @@
   ;; wagoe.user.core.grant/rank of joining a group, a narrower assignment to one
   ;; of the user's groups, a new managed role and a new group, each previewed
   ;; with preview-change. BOU-853.
+
+(defprotocol ITimeBoundAccess
+  (add-group-member-until [this group-id user-id expires-at])
+  ;; add-group-member, the membership ending at `expires-at`, an Instant in
+  ;; the future. An assignment ends at the :expires-at add-group-role is given.
+  ;; Refused when the repository lacks IAccessExpiry. BOU-856.
+
+  (expire-access! [this now]))
+  ;; Removes the memberships and assignments that expired at or before `now`,
+  ;; auditing each as a leave or a removed role. They gave nothing already:
+  ;; every read leaves them out. Returns IAccessExpiry/remove-expired's result.
 
 ;; =============================================================================
 ;; Sign-in hooks

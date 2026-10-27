@@ -16,7 +16,8 @@
             [wagoe.user.shell.group-persistence :as group-persistence]
             [wagoe.user.shell.group-service :as sut]
             [wagoe.user.shell.persistence :as persistence]
-            [wagoe.user.shell.service :as user-service]))
+            [wagoe.user.shell.service :as user-service])
+  (:import (java.time Instant)))
 
 (def permissions
   "Named by a symbol in the test's settings, as an application would."
@@ -604,3 +605,39 @@
             (is (:everyone? p))
             (is (= ["cyd@example.com"] (map :email (:affected p)))
                 "ada and bob read reports already, through Sales")))))))
+
+(deftest ^:integration time-bound-access-ends-by-itself
+  ;; BOU-856: a stand-in's access, given until a date
+  (with-service nil
+    (fn [{:keys [svc audit user!]}]
+      (let [ada     (user! "ada@example.com")
+            bob     (user! "bob@example.com")
+            g       (ports/create-group svc {:name "Stand-ins"})
+            repo    (:group-repository svc)
+            later   (.plusSeconds (Instant/now) 3600)
+            past    (.minusSeconds (Instant/now) 60)
+            field   #(try (%) nil (catch clojure.lang.ExceptionInfo e (:field (ex-data e))))
+            entries (fn [user action]
+                      (filter #(= action (:action %)) (ports/find-audit-logs-by-user audit (:id user) {:limit 50})))]
+        (ports/add-group-grant svc (:id g) {:permission :invoice/approve :scope {}})
+        (testing "a date passed already is refused"
+          (is (= :expires-at (field #(ports/add-group-member-until svc (:id g) (:id ada) past))))
+          (is (= :expires-at (field #(ports/add-group-role svc (:id g) {:role :invoice/approve :expires-at past}))))
+          (is (empty? (:members (ports/get-group svc (:id g))))))
+        (testing "until then it gives what the group holds, and the join says when it ends"
+          (is (true? (ports/add-group-member-until svc (:id g) (:id ada) later)))
+          (is (= [:invoice/approve] (map :permission (ports/user-grants svc ada))))
+          (is (= (str later) (get-in (first (entries ada :group-join)) [:metadata :expires-at]))))
+        (testing "expired, it gives nothing at once"
+          (ports/insert-member-until repo (:id g) (:id bob) past)
+          (ports/insert-assignment repo {:group-id (:id g) :role :invoice/approve :scope {:domain-id 1} :expires-at past})
+          (is (empty? (ports/user-grants svc bob)))
+          (is (= [{}] (map :scope (ports/user-grants svc ada)))))
+        (testing "the job removes it, audited as expired"
+          (let [{:keys [members assignments]} (ports/expire-access! svc (Instant/now))]
+            (is (= [(:id bob)] (map :user-id members)))
+            (is (= [{:domain-id 1}] (map :scope assignments))))
+          (is (= "expired" (get-in (first (entries bob :group-leave)) [:metadata :reason])))
+          (is (= "expired" (get-in (first (entries ada :grant-remove)) [:metadata :reason]))
+              "a removed role is audited for the members it reached")
+          (is (= [:invoice/approve] (map :permission (ports/user-grants svc ada))) "the rest stays"))))))

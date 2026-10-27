@@ -3,6 +3,7 @@
             [clojure.test :refer [deftest is testing]]
             [clojure.tools.logging.test :as log-test]
             [wagoe.user.shell.auth-persistence]
+            [wagoe.user.ports]
             [integrant.core :as ig]))
 
 (deftest ^:unit user-http-middleware-is-a-seq-the-handler-can-thread
@@ -87,3 +88,21 @@
       (sut/ig-config nil {:config config :enabled #{:wagoe/user :wagoe/admin}})
       (is (not (log-test/logged? 'wagoe.user.shell.module-wiring :warn #":dashboard-extra-cards"))
           "the admin shows them, and warns itself"))))
+
+(deftest ^:unit expired-access-is-removed-on-the-jobs-module
+  ;; BOU-856
+  (testing "without jobs, nothing is scheduled"
+    (let [g (sut/ig-config nil {:config {} :enabled #{:wagoe/user}})]
+      (is (empty? (:job-handlers g)))
+      (is (empty? (:recurring g)))))
+  (let [g (sut/ig-config nil {:config {} :enabled #{:wagoe/user :wagoe/jobs}})]
+    (testing "with jobs, a handler and its default schedule"
+      (is (= [(ig/ref :wagoe.user/job-handlers)] (:job-handlers g)))
+      (is (= {sut/access-expiry-job-type sut/access-expiry-schedule} (:recurring g))))
+    (testing "the handler counts what it removed"
+      (let [handler (get (ig/init-key :wagoe.user/job-handlers
+                                      {:group-service (reify wagoe.user.ports/ITimeBoundAccess
+                                                        (add-group-member-until [_ _ _ _] nil)
+                                                        (expire-access! [_ _] {:members [{}] :assignments []}))})
+                         sut/access-expiry-job-type)]
+        (is (= {:success? true :result {:members 1 :assignments 0}} (handler {})))))))

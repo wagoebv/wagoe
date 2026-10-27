@@ -85,7 +85,8 @@
   (let [{:keys [type field errors]} (ex-data e)]
     (list [:t (or ({:role       :user.groups/error-role
                     :scope      :user.groups/error-scope
-                    :email      :user.groups/error-no-user} field)
+                    :email      :user.groups/error-no-user
+                    :expires-at :user.groups/error-expires-at} field)
                   ({:not-found :user.groups/not-found} type)
                   (when (= [:conflict :name] [type field]) :user.groups/error-name-taken)
                   :user.groups/error-name)]
@@ -219,11 +220,21 @@
              (some->> (form request "email") not-empty (ports/get-user-by-email user-service))))
       (throw (ex-info "No such user" {:type :not-found :field :email}))))
 
+(defn form-expiry
+  "The expiry date the form gives, `yyyy-mm-dd`, as the Instant that day
+   starts in UTC; nil when blank. Throws :validation-error on :expires-at."
+  [request]
+  (when-let [s (not-empty (form request "expires-at"))]
+    (try (.toInstant (.atStartOfDay (java.time.LocalDate/parse s) java.time.ZoneOffset/UTC))
+         (catch java.time.format.DateTimeParseException _
+           (throw (ex-info "Not a date" {:type :validation-error :field :expires-at}))))))
+
 (defn add-member [user-service group-service]
   (fn [request]
     (change group-service request :user.groups/flash-member-added
-            (fn [id] {:op :add-member :group-id id :user-id (member-id user-service request)})
-            #(ports/add-group-member group-service (:group-id %) (:user-id %)))))
+            (fn [id] {:op :add-member :group-id id :user-id (member-id user-service request)
+                      :expires-at (form-expiry request)})
+            #(ports/add-group-member-until group-service (:group-id %) (:user-id %) (:expires-at %)))))
 
 (defn- user-label [{:keys [name email]}]
   (if (str/blank? name) email (str name " <" email ">")))
@@ -302,8 +313,10 @@
       scope)))
 
 (defn- form-assignment [group-service request]
-  {:role  (group-core/parse-name (form request "role"))
-   :scope (form-scope group-service request)})
+  (let [expires-at (form-expiry request)]
+    (cond-> {:role  (group-core/parse-name (form request "role"))
+             :scope (form-scope group-service request)}
+      expires-at (assoc :expires-at expires-at))))
 
 (defn add-role [group-service]
   (fn [request]

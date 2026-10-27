@@ -1,0 +1,5 @@
+;; expires_at on user_group_members and user_group_roles, on a database created
+;; before (BOU-856). The same idempotent definition adds the columns.
+{:ns      wagoe.user.shell.user-tables
+ :up-fn   "up"
+ :down-fn "down"}
