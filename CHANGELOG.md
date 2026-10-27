@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Group memberships and role assignments can end on a date** (BOU-856), set on the group page and in the grant
   wizard; expired access counts for nothing at once. With `:wagoe/jobs` on, a job removes it every 15 minutes.
+- **Authorization hygiene signals and a rights timeline** (BOU-855): the groups, roles and permissions lists badge and
+  filter empty groups, unused or near-duplicate roles, unheld permissions and Everyone; the Rights tab lists changes.
 - **Grant wizard: give a user one permission, and nothing more** (BOU-853), at `/web/users/:id/grant`, linked from a
   refused explain: options through groups, ranked by what else they give, each previewed. `IGrantOptions` at the REPL.
 - **Access overview: groups by modules** (BOU-854), at `/web/admin/access`, with Everyone and the superusers first.

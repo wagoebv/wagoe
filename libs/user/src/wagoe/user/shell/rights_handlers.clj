@@ -7,8 +7,10 @@
             [wagoe.platform.core.scope :as scope]
             [wagoe.platform.ports.authorization :as authz]
             [wagoe.user.core.access-ui :as access-ui]
+            [wagoe.user.core.audit :as audit]
             [wagoe.user.core.grant-ui :as grant-ui]
             [wagoe.user.core.group :as group-core]
+            [wagoe.user.core.hygiene :as hygiene]
             [wagoe.user.core.rights-ui :as rights-ui]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.group-handlers :as group-handlers]
@@ -52,15 +54,20 @@
 ;; Roles
 ;; =============================================================================
 
+(defn- signalled-roles
+  "Every role with its hygiene signals (BOU-855)."
+  [group-service]
+  (hygiene/role-signals (ports/list-roles group-service) (ports/all-assignments group-service)))
+
 (defn- roles-page [request group-service status opts]
   (html-response request
-                 (rights-ui/roles-page (ports/list-roles group-service) (registry-permissions group-service)
+                 (rights-ui/roles-page (signalled-roles group-service) (registry-permissions group-service)
                                        (merge (page-opts request) opts))
                  status))
 
 (defn list-roles [group-service]
   (fn [request]
-    (let [roles (ports/list-roles group-service)]
+    (let [roles (signalled-roles group-service)]
       (group-handlers/list-response
        request rights-ui/roles-list roles
        #(rights-ui/roles-page roles (registry-permissions group-service)
@@ -158,11 +165,11 @@
 
 (defn list-permissions [group-service]
   (fn [request]
-    (let [registry (registry-permissions group-service)
-          roles    (ports/list-roles group-service)]
+    (let [items (rights-ui/permission-items (registry-permissions group-service) (ports/list-roles group-service)
+                                            (ports/all-assignments group-service))]
       (group-handlers/list-response
-       request rights-ui/permissions-list (rights-ui/permission-items registry roles)
-       #(rights-ui/permissions-page registry roles (assoc (page-opts request) :table-query %))))))
+       request rights-ui/permissions-list items
+       #(rights-ui/permissions-page items (assoc (page-opts request) :table-query %))))))
 
 (defn show-permission [group-service]
   (fn [request]
@@ -201,11 +208,25 @@
                             (log/warn e "A scope source failed to resolve for the rights page" {:key k :source src})
                             :error))]))))
 
+(def ^:private timeline-size 50)
+
+(defn- rights-changes
+  "The newest audit entries of changes to the user's rights, one query per
+   action: the log filters on one."
+  [user-service user-id]
+  (audit/rights-timeline
+   (mapcat #(:audit-logs (ports/list-audit-logs user-service {:filter-target-user-id user-id :filter-action %
+                                                               :sort-by :created-at :sort-direction :desc
+                                                               :limit timeline-size :count? false}))
+           audit/rights-actions)
+   timeline-size))
+
 (defn- user-of [user-service request]
   (some->> (get-in request [:path-params :id]) str parse-uuid (ports/get-user-by-id user-service)))
 
 (defn user-rights
-  "GET /web/users/:id/rights — the user's groups and effective permissions."
+  "GET /web/users/:id/rights — the user's groups, effective permissions and
+   the changes to them."
   [user-service group-service]
   (fn [request]
     (if-let [user (user-of user-service request)]
@@ -218,6 +239,7 @@
                                                      :registry (registry-permissions group-service)
                                                      :roles (rights-ui/role-index (ports/list-roles group-service))
                                                      :platform-admin? (access/platform-admin? user)
+                                                     :changes (rights-changes user-service (:id user))
                                                      :scope-info (assoc (group-handlers/scope-info group-service)
                                                                         :resolved (resolve-sources group-service user grants))))
                        200))

@@ -71,9 +71,11 @@
                     :members     #(when-not (group/everyone? (:id %)) (:member-count %))
                     :roles       :role-count}
      :search-text  #(str (:name %) " " (:description %))
-     :row          (fn [{:keys [id name description member-count role-count]}]
+     :signals      [:empty :single-member :everyone]
+     :row          (fn [{:keys [id name description member-count role-count] :as g}]
                      (rights-ui/list-row (group-path id) {:class "group-row"} columns
-                                         [[:a {:href (group-path id)} name]
+                                         [(list [:a {:href (group-path id)} name]
+                                                (rights-ui/signal-badges (:signals g) g))
                                           description
                                           (if (group/everyone? id)
                                             [:t :user.groups/members-everyone]
@@ -82,7 +84,7 @@
 
 (defn groups-page
   "Every group, searchable and sortable by `(:table-query opts)`, and a form
-   to create one."
+   to create one. `groups` carry their `hygiene/group-signals` as `:signals`."
   [groups opts]
   (rights-ui/list-page
    [:t :user.groups/page-title]

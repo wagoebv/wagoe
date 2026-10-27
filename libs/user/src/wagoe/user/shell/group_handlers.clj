@@ -15,6 +15,7 @@
             [wagoe.shared.ui.core.table :as table-ui]
             [wagoe.user.core.group :as group-core]
             [wagoe.user.core.group-ui :as group-ui]
+            [wagoe.user.core.hygiene :as hygiene]
             [wagoe.user.core.rights-ui :as rights-ui]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.web-handlers :refer [html-response]]))
@@ -111,9 +112,14 @@
     (or (#{:validation-error :not-found} type)
         (= [:conflict :name] [type field]))))
 
+(defn- signalled-groups
+  "Every group with its hygiene signals (BOU-855)."
+  [group-service]
+  (map #(assoc % :signals (hygiene/group-signals %)) (ports/list-groups group-service)))
+
 (defn list-page [group-service]
   (fn [request]
-    (let [groups (ports/list-groups group-service)]
+    (let [groups (signalled-groups group-service)]
       (list-response request group-ui/groups-list groups
                      #(group-ui/groups-page groups (assoc (page-opts request) :table-query %))))))
 
@@ -126,7 +132,7 @@
         (catch clojure.lang.ExceptionInfo e
           (if (refused? e)
             (html-response request
-                  (group-ui/groups-page (ports/list-groups group-service)
+                  (group-ui/groups-page (signalled-groups group-service)
                                         (assoc (page-opts request) :error (error-text e) :form data))
                   422)
             (throw e)))))))
