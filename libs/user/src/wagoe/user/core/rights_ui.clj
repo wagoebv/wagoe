@@ -235,6 +235,58 @@
                [:span.scope-part label ": " (scope-value (get entities k) v)]))))))
 
 ;; =============================================================================
+;; Assignments as sentences (BOU-854)
+;; =============================================================================
+
+(def ^:private levels #{"viewer" "editor" "manager"})
+
+(defn role-level
+  "\"viewer\", \"editor\" or \"manager\" for one of a module's code roles,
+   `role` as `list-roles` gives it; nil for any other role."
+  [{:keys [name source]}]
+  (when (and (= :code source) (keyword? name) (namespace name))
+    (levels (clojure.core/name name))))
+
+(defn- scope-phrase
+  "\"everywhere\", or where `scope` holds: each fixed value by its record's
+   title, each user source by its label and, when resolved, its values."
+  [scope {:keys [labels entities sources resolved]}]
+  (if (empty? scope)
+    [:t :user.access/everywhere]
+    (interpose
+     (list " " [:t :user.access/and] " ")
+     (for [[k v] (sort-by key scope)
+           :let [label (or (get labels k) (name k))]]
+       (if (scope/source? v)
+         (let [r (get resolved [k v] ::none)]
+           (list [:t :user.access/within-source {:key label :source (get sources v (group/permission-str v))}]
+                 (cond (= ::none r) nil
+                       (= :error r)  (list " " [:span.scope-unresolved [:t :user.rights/scope-resolve-failed]])
+                       (empty? r)    (list " " [:span.scope-unresolved [:t :user.rights/scope-resolved-none]])
+                       :else         (list " (" [:strong.scope-value (values-str r)] ")"))))
+         (list [:t :user.access/within {:key label}] " " (scope-value (get entities k) v)))))))
+
+(defn assignment-sentence
+  "`assignment`, {:group-id :group-name :role :scope}, as a sentence: \"Sales
+   may edit orders within Department Noord\". `roles`: {role-name role} as
+   `list-roles` gives them, to read a code role's level."
+  [{:keys [group-id group-name role scope]} roles scope-info]
+  (let [level (role-level (get roles role))]
+    [:span.access-sentence
+     (if group-id [:a {:href (group-path group-id)} group-name] group-name)
+     " "
+     (if level
+       [:a {:href (role-path role)} [:t (keyword "user.access" (str "may-" level)) {:module (namespace role)}]]
+       (list [:t :user.access/holds-role] " " [:a {:href (role-path role)} (code role)]))
+     " "
+     (scope-phrase scope scope-info)]))
+
+(defn role-index
+  "`roles`, as `list-roles` gives them, by name."
+  [roles]
+  (into {} (map (juxt :name identity)) roles))
+
+;; =============================================================================
 ;; Permission checklist
 ;; =============================================================================
 
@@ -515,14 +567,12 @@
 
 (def ^:private rights-columns
   [{:field :permissions :label [:t :user.roles/column-permissions]}
-   {:field :role :label [:t :user.groups/field-role]}
-   {:field :group :label [:t :user.rights/column-group]}
-   {:field :scope :label [:t :user.groups/field-scope]}])
+   {:field :assignment :label [:t :user.access/column-assignment]}])
 
 (defn- rights-rows
   "`grants` by module: a row per role a group gives, with the permissions it
    gives in that module, so the group shows once per role."
-  [grants registry scope-info]
+  [grants registry roles scope-info]
   (let [module-of-grant #(module-of (:permission %) (get-in registry [(:permission %) :module]))
         role-grants     (->> grants
                              (group-by (juxt module-of-grant :role :group-id :group-name :scope))
@@ -530,14 +580,12 @@
                                     {:module m :role role :group-id group-id :group-name group-name :scope scope
                                      :permissions (sort-by group/permission-str (distinct (map :permission gs)))}))
                              (sort-by (juxt (comp group/permission-str :role) (comp str :group-name))))
-        row             (fn [{:keys [role group-id group-name scope permissions]}]
+        row             (fn [{:keys [permissions] :as a}]
                           (into [:tr.rights-permission]
                                 (table-ui/column-cells
                                  rights-columns
                                  [(interpose " " (for [p permissions] [:a {:href (permission-path p)} (code p)]))
-                                  [:a {:href (role-path role)} (code role)]
-                                  [:a {:href (group-path group-id)} group-name]
-                                  (scope-view scope scope-info)])))]
+                                  (assignment-sentence a roles scope-info)])))]
     (grouped role-grants :module row (count rights-columns))))
 
 (defn rights-page
@@ -545,7 +593,8 @@
    effective permissions, each with the group, role and scope it comes from.
    `grants` as `user-grants` gives them; `(:scope-info opts)` as `scope-view`
    reads it; `(:registry opts)`, the declared permissions, places each in its
-   module. `(:platform-admin? opts)`: the user passes every check."
+   module; `(:roles opts)`, as `role-index` gives them, words each assignment.
+   `(:platform-admin? opts)`: the user passes every check."
   [user groups grants opts]
   (let [n (or (not-empty (:name user)) (:email user))]
     (page
@@ -568,7 +617,7 @@
       (section [:t :user.rights/permissions-heading]
                (if (seq grants)
                  (table (map :label rights-columns)
-                        (rights-rows grants (:registry opts) (:scope-info opts)))
+                        (rights-rows grants (:registry opts) (:roles opts) (:scope-info opts)))
                  [:p.empty-state [:t :user.rights/permissions-empty]])))
      opts)))
 

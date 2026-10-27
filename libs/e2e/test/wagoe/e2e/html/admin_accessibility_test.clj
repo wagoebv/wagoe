@@ -76,7 +76,7 @@
     (doseq [scheme [:light :dark]
             [w h]  [[1280 800] [390 844]]
             path   ["/web/admin/groups" "/web/admin/roles" "/web/admin/permissions"
-                    "/web/audit" "/web/admin/workflows"
+                    "/web/admin/access" "/web/audit" "/web/admin/workflows"
                     (str "/web/users/" (-> fx/*seed* :user :id) "/rights")]]
       (page/emulate-media! pg {:color-scheme scheme})
       (page/set-viewport-size! pg w h)

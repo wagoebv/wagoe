@@ -198,14 +198,15 @@
                               [:t :user.groups/button-show-provider-members]]])))
       (rights-ui/section [:t :user.groups/roles-heading] {:class "group-roles"}
                          (if (seq roles)
-                           (rights-ui/action-table [[:t :user.groups/field-role] [:t :user.groups/field-scope] ""]
-                                            (for [a roles]
-                                              [:tr
-                                               [:td {:data-label [:t :user.groups/field-role]}
-                                                [:a {:href (rights-ui/role-path (:role a))} [:code (group/permission-str (:role a))]]]
-                                               [:td {:data-label [:t :user.groups/field-scope]}
-                                                (rights-ui/scope-view (:scope a) (:scope-info opts))]
-                                               [:td.actions-cell (remove-button (str path "/roles/" (:id a) "/remove"))]]))
+                           (rights-ui/action-table [[:t :user.access/column-assignment] ""]
+                                            (let [index (rights-ui/role-index assignable)]
+                                              (for [a roles]
+                                                [:tr
+                                                 [:td {:data-label [:t :user.access/column-assignment]}
+                                                  ;; Its own page: the name, not a link
+                                                  (rights-ui/assignment-sentence (-> a (dissoc :group-id) (assoc :group-name name))
+                                                                                 index (:scope-info opts))]
+                                                 [:td.actions-cell (remove-button (str path "/roles/" (:id a) "/remove"))]])))
                            [:p.empty-state [:t :user.groups/roles-empty]])
                          [:form.group-role-form {:method "post" :action (str path "/roles") :class "space-y-2"}
                           (csrf/hidden-field)

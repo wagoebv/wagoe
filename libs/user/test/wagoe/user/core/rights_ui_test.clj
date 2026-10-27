@@ -95,11 +95,41 @@
         registry {:admin.users/read {:module :admin} :admin.users/write {:module :admin}}
         rows     (rows-of (sut/rights-page {:id 1 :name "Ada"} [] grants {:registry registry}))]
     (is (= [["admin"]
-            ["admin.users/read" " " "admin.users/write" "admin.users/editor" "Everyone" :user.rights/scope-everywhere]
+            ["admin.users/read" " " "admin.users/write" "Everyone" " " :user.access/holds-role " " "admin.users/editor" " " :user.access/everywhere]
             ["orders"]
-            ["orders/read" "orders/clerk" "Everyone" :user.rights/scope-everywhere]]
+            ["orders/read" "Everyone" " " :user.access/holds-role " " "orders/clerk" " " :user.access/everywhere]]
            (map second rows))
         "by module, one row per role, not per permission")))
+
+(deftest ^:unit an-assignment-reads-as-a-sentence
+  (let [index (sut/role-index (conj roles {:name :orders/editor :permissions #{:orders/write} :source :code}))
+        info  {:labels {:dept "Department" :domain-id "Domain"} :sources {:user/department "department"}
+               :entities {:domain-id :domains}}
+        text  (fn [node] (->> (tree-seq #(and (coll? %) (not (map? %))) seq node)
+                              (keep #(cond (string? %) %
+                                           (and (vector? %) (= :t (first %))) (second %)))
+                              vec))
+        say   #(text (sut/assignment-sentence (merge {:group-id 1 :group-name "Sales NL"} %) index info))]
+    (testing "a code role's level, as a verb on its module"
+      (is (= ["Sales NL" " " :user.access/may-editor " " :user.access/everywhere]
+             (say {:role :orders/editor :scope {}}))))
+    (testing "a fixed value by its record, looked up for its title"
+      (is (= ["Sales NL" " " :user.access/may-editor " " :user.access/within " " "42"]
+             (say {:role :orders/editor :scope {:domain-id 42}})))
+      (is (some #(and (map? %) (= "/web/admin/domains/lookup?id=42" (:hx-get %)))
+                (tree-seq coll? seq (sut/assignment-sentence {:role :orders/editor :scope {:domain-id 42}} index info)))))
+    (testing "a user source, with what it resolved to"
+      (is (= ["Sales NL" " " :user.access/may-editor " " :user.access/within-source]
+             (say {:role :orders/editor :scope {:dept :user/department}})))
+      (is (= [:user.access/within-source " (" "3, 7" ")"]
+             (drop 4 (text (sut/assignment-sentence {:group-name "Sales NL" :role :orders/editor :scope {:dept :user/department}}
+                                                    index (assoc info :resolved {[:dept :user/department] #{7 3}})))))))
+    (testing "a managed role by its name"
+      (is (= ["Sales NL" " " :user.access/holds-role " " "orders/clerk" " " :user.access/everywhere]
+             (say {:role :orders/clerk :scope {}}))))
+    (testing "several keys joined"
+      (is (= [:user.access/within " " "7" " " :user.access/and " " :user.access/within " " "42"]
+             (drop 4 (say {:role :orders/editor :scope {:domain-id 42 :dept 7}})))))))
 
 (deftest ^:unit detail-table-cells-are-labelled-for-a-narrow-screen
   (let [page (sut/rights-page {:id 1 :name "Ada"} [{:id 2 :name "Sales" :source :member}] [] {})

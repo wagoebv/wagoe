@@ -3,9 +3,12 @@
    go through the group service, so they are checked and audited."
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [ring.util.response :as response]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.scope :as scope]
             [wagoe.platform.ports.authorization :as authz]
+            [wagoe.shared.ui.core.htmx :as htmx]
+            [wagoe.user.core.access-ui :as access-ui]
             [wagoe.user.core.group :as group-core]
             [wagoe.user.core.rights-ui :as rights-ui]
             [wagoe.user.ports :as ports]
@@ -211,6 +214,7 @@
                        (rights-ui/rights-page user (ports/user-groups group-service user) grants
                                               (assoc (page-opts request)
                                                      :registry (registry-permissions group-service)
+                                                     :roles (rights-ui/role-index (ports/list-roles group-service))
                                                      :platform-admin? (access/platform-admin? user)
                                                      :scope-info (assoc (group-handlers/scope-info group-service)
                                                                         :resolved (resolve-sources group-service user grants))))
@@ -249,3 +253,37 @@
                                                       :scope-info scope-info))
                        200))
       (not-found request :user.rights/user-not-found))))
+
+;; =============================================================================
+;; Access overview (BOU-854)
+;; =============================================================================
+
+(defn- superusers
+  "The platform admins, who pass every check."
+  [user-service]
+  (->> (:users (ports/list-users user-service {:filter-role :admin :filter-active true
+                                               :sort-by :email :sort-direction :asc :limit 100}))
+       (filter access/platform-admin?)))
+
+(defn access-overview
+  "GET /web/admin/access — groups by modules; `module` and `group` filter it,
+   and a filter's htmx request gets the matrix alone."
+  [user-service group-service]
+  (fn [request]
+    (let [registry   (registry-permissions group-service)
+          roles      (ports/list-roles group-service)
+          index      (rights-ui/role-index roles)
+          groups     (ports/list-groups group-service)
+          params     (:query-params request)
+          filters    {:module (not-empty (get params "module")) :group (not-empty (get params "group"))}
+          ov         (access-ui/overview groups (ports/role-holders group-service (map :name roles))
+                                         index registry filters)
+          scope-info (group-handlers/scope-info group-service)]
+      (-> (html-response request
+                         (if (htmx/fragment-request? (:headers request) [access-ui/matrix-id])
+                           (access-ui/matrix ov index registry scope-info)
+                           (access-ui/page groups ov (superusers user-service)
+                                           (assoc (page-opts request) :filters filters :roles index
+                                                  :registry registry :scope-info scope-info)))
+                         200)
+          (response/header "Vary" htmx/vary)))))
