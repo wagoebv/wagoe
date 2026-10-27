@@ -90,7 +90,7 @@ The recommended way to add observability is to wrap operations with interceptors
 ```
 
 The interceptor automatically:
-- Logs operation start, success, and failure
+- Logs start and completion at debug, a failure at its status's level
 - Records latency metrics
 - Captures exceptions to the error reporter
 - Adds breadcrumbs for distributed tracing
@@ -170,6 +170,20 @@ The interceptor automatically:
   (set-extra!      [this extra])
   (current-context [this]))
 ```
+
+### IErrorContextReset and IErrorContextScope
+
+```clojure
+(defprotocol IErrorContextReset
+  (reset-context! [this]))          ; drop this thread's breadcrumbs, user, tags, extra
+
+(defprotocol IErrorContextScope
+  (with-clean-context [this f]))    ; run f with empty context, then restore the old one
+```
+
+Both default to no-ops. Implement them when your context is per-thread: the
+platform wraps each HTTP request, job, event handler and realtime handler in
+them, so pooled threads do not carry context from one run into the next.
 
 ### IMetricsEmitter
 
@@ -334,6 +348,7 @@ The default for every signal. No configuration beyond `{:provider :no-op}`.
                         :environment "prod"
                         :release     #env APP_RELEASE
                         :sample-rate 1.0
+                        :max-breadcrumbs 100   ; newest kept, per component
                         :filtering   {:min-severity :warning
                                       :exclude-exceptions ["java.io.IOException"]}}
 ```
@@ -393,7 +408,7 @@ HTTP handler
 - Wrap operations at boundaries only — avoid duplicating interceptor execution inside already-instrumented paths.
 - Keep PII out of logs and breadcrumbs — sanitize before passing `params` to interceptors.
 - No-op adapters are used in tests automatically; never hardcode provider-specific calls in core.
-- `add-breadcrumb!` is thread-local in most implementations — don't share error context across threads.
+- Sentry context (breadcrumbs, user, tags, extra) is per thread, cleared per HTTP request and scoped per job, event handler and realtime handler. Work you hand to another thread starts without it.
 
 ---
 
