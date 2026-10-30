@@ -4,7 +4,8 @@
    The file lists in these cases are real: they are the shapes of the thirty
    pull requests that merged between 2026-08-05 and 2026-08-16 without one
    CHANGELOG entry between them."
-  (:require [clojure.string :as str]
+  (:require [clojure.edn]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [wagoe.tools.check-changelog :as sut]))
 
@@ -169,6 +170,17 @@
 (deftest ^:unit the-shipped-stability-page-agrees-with-the-changelog
   (is (empty? (sut/stability-findings (slurp "CHANGELOG.md")
                                       (slurp "docs/modules/ROOT/pages/stability.adoc")))))
+
+(deftest ^:unit upgrade-since-names-a-release
+  (let [changelog "## [Unreleased]\n\n## [1.1.0-rc-1] — 2026-10-27\n"]
+    (is (= ["BOU-2: 1.0.2"]
+           (sut/upgrades-with-unknown-since changelog [{:ticket "BOU-1" :since "1.1.0-rc-1"}
+                                                       {:ticket "BOU-2" :since "1.0.2"}
+                                                       {:ticket "BOU-3" :since "Unreleased"}])))
+    (is (empty? (sut/upgrades-with-unknown-since
+                 (slurp "CHANGELOG.md")
+                 (clojure.edn/read-string (slurp sut/upgrades-path))))
+        "the shipped table names only real releases")))
 
 (deftest ^:unit every-deprecation-has-an-upgrade-entry
   (let [changelog (str "## [Unreleased]\n\n### Deprecated\n\n"

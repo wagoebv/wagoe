@@ -7,7 +7,8 @@ mode you'd see without it, and the fix.
 
 > **Quick check:** after bumping versions, run `wagoe doctor`. Its
 > `upgrade-wiring` check names any namespace that moved between releases and
-> says where it went.
+> says where it went. Before deploying, `bb doctor --env prod` also catches
+> rate limiting with no active cache (BOU-456).
 
 ## 1.0.x → 1.1.0
 
@@ -57,8 +58,9 @@ each refusal `:enforce` would make. Map scope keys on an entity with `:scope`
 authorization`) moves an app from `:off` to `:enforce` and names each user who
 would lose access. See
 [Upgrading an existing app to permissions](docs/modules/guides/pages/upgrade-authorization.adoc).
-An older app copies the `upgrade` task from a new app's `bb.edn`, and the
-`authz-report` command from its `main.clj` (BOU-794, BOU-786).
+An older app copies the `upgrade` task from
+[`examples/shop/bb.edn`](examples/shop/bb.edn) and the `authz-report` command
+from [`main.clj`](examples/shop/src/shop/main.clj) (BOU-794, BOU-786).
 
 Before you switch, give whoever reads push stats `push/read` (BOU-786). A test
 that signs in under `:enforce` uses `wagoe.test/sign-in-as!`; a user without a
@@ -168,19 +170,13 @@ app implements a port itself, add the protocol beside it; boot stops with
 | `ITenantMembershipRepository` | `ITenantMembershipDeletion` |
 | `ISearchEngine` | `ISearchDefinitions` |
 | `IRealtimeService`, for `sse/sse-handler` | `IIdentifiedConnections` |
-
-A job store without `IDeadLetterRetention` cannot run `:jobs/dead-letter`
-retention, and boot fails if you configure it (BOU-738). In incubating
-libraries: an `IAudienceRepository` adds `create-audience` and
-`update-audience` (BOU-746), and a workflow engine the `tx` arity of
-`start-workflow!` and `transition!` (BOU-575). Optional: an error context
-implementing `IErrorContextReset` is cleared per request (BOU-843).
+| `IJobStore`, with `:jobs/dead-letter` retention | `IDeadLetterRetention` (BOU-738) |
+| `IAudienceRepository` (incubating) | `create-audience`, `update-audience` (BOU-746) |
+| workflow engine (incubating) | the `tx` arity of `start-workflow!` and `transition!` (BOU-575) |
 
 ### 13. Run the migrations, and fix what blocks them
 
-`bb migrate up` (boot runs some of them): 1.1 adds tables and columns in user,
-tenant, storage, push, search, geo and the audit trail, and the tenant tables
-ship as a library migration (BOU-551). Then:
+Set `WAG_ENV` first (step 18), then run `bb migrate up` (BOU-551). Then:
 
 - An app migration whose id a library's uses stops boot and `migrate up`:
   rename yours (BOU-717).
@@ -207,7 +203,7 @@ shares one rate-limit bucket and audit IP. Read the address from the request's
 :wagoe/http {:trusted-proxies ["10.0.0.0/8"]}
 ```
 
-The rate limiter ignores `X-Api-Key` now: buckets are the signed-in user, else
+The rate limiter ignores `X-Api-Key`: buckets are the signed-in user, else
 the client IP (BOU-690).
 
 ### 16. Security fixes that need config or code
@@ -227,7 +223,8 @@ the client IP (BOU-690).
 
 ### 17. Bring `admin/users.edn` up to date
 
-Compare yours with a new app's. Updates and deletes go through the user
+Compare yours with
+[the shipped one](libs/tools/resources/wagoe/tools/admin/users.edn). Updates and deletes go through the user
 service only with `:writer :user` and `:tenant-id :login-count :last-login` in
 `:readonly-fields` (BOU-665). Also new: `:detail-tabs
 wagoe.user.core.rights-ui/detail-tabs` for the Sessions and Rights tabs
@@ -260,23 +257,25 @@ wagoe.user.core.rights-ui/detail-tabs` for the Sessions and Rights tabs
 - MySQL `:connection-params` and `:sql-mode` take effect now; check them
   (BOU-647).
 - OpenStreetMap geocoding wants `:user-agent` with a contact (BOU-709).
-- Add `--enable-native-access=ALL-UNNAMED` to your aliases' `:jvm-opts`, and
-  `:manifest {"Enable-Native-Access" "ALL-UNNAMED"}` to `b/uber`, to silence
-  the SQLite warnings (BOU-593).
-- Run `bb doctor --env prod` before deploying: rate limiting needs an active
-  cache in prod (BOU-456).
+- Optional, silences SQLite warnings: `--enable-native-access=ALL-UNNAMED` in
+  your aliases' `:jvm-opts`, and `:manifest {"Enable-Native-Access"
+  "ALL-UNNAMED"}` on `b/uber` (BOU-593).
 - Typed 4xx errors log at INFO, or WARN for 401/403. Re-check alerts on
   "HTTP request failed" (BOU-704).
-- Push: point clients at `/api/v1/push` (BOU-838). Set
-  `:refuse-legacy-callback-tokens? true` once no app version holds 1.0 tokens
-  (BOU-850).
+- Push: point clients at `/api/v1/push` (BOU-838), and pass `?app-id=` to
+  `GET /api/v1/push/devices/:token`; a token under two app-ids answers 409
+  without it (BOU-847). Set `:callback-secret` in `:wagoe/push`, or callbacks
+  record nothing (BOU-844). Set `:refuse-legacy-callback-tokens? true` once no
+  app version holds 1.0 tokens (BOU-850).
 
 ### 19. API clients and CLI scripts
 
 - `POST /api/v1/auth/login` and `/api/v1/sessions` answer 401 to wrong
   credentials and 429 to a locked account, not 200: check the status, not
   `authenticated` (BOU-691). `/api/v1/sessions` refuses a `{userId}` body;
-  send email and password (BOU-690).
+  send email and password (BOU-690). Read the camelCase keys in `user` and
+  `session` (`session.sessionToken`); the kebab-case ones go in 2.0 (BOU-737,
+  BOU-582).
 - The audience API takes camelCase keys and preview needs `audienceId`; create
   on a taken id is 409, update of an unknown one 404 (BOU-746). An audience
   with both `:filters` and `:compose` is refused: give it `:filters []`
@@ -310,13 +309,12 @@ wagoe.user.core.rights-ui/detail-tabs` for the Sessions and Rights tabs
   namespace's `enum-fields` (BOU-656).
 - Lower and upper case with `wagoe.core.utils.text`; clj-kondo flags
   `clojure.string`'s (BOU-732).
-- Tests: add `com.wagoe/wagoe-test` to the `:test` alias (BOU-677). The REPL's
-  `explain-entity` is one line in a new app's `dev/user.clj` (BOU-805). E2E
-  tests clicking `th.sortable-header` click its button (BOU-803).
+- Add `com.wagoe/wagoe-test` to the `:test` alias (BOU-677).
+- Copy `explain-entity` and its `call` helper from
+  [`examples/shop/dev/user.clj`](examples/shop/dev/user.clj) (BOU-805).
+- E2E tests clicking `th.sortable-header` click its button (BOU-803).
 - Admin lists start newest first; set `:default-sort` to keep another order
   (BOU-802).
-- An admin entity's `:module` moves it out of "Other" in the sidebar
-  (BOU-777).
 
 ### 21. Workarounds that can go
 
@@ -337,16 +335,10 @@ check before enqueueing (`:unique-key`) (BOU-834).
 
 ### 23. Smaller changes
 
-- API clients of `POST /api/v1/auth/login` and `POST /api/v1/sessions` read the
-  camelCase keys in `user` and `session` (`session.sessionToken`, not
-  `session.session-token`). The kebab-case ones go in 2.0 (BOU-737, BOU-582).
 - An IMAP fetch without `:limit` takes 100 messages; pass a larger `:limit`.
   `core.imap/filter-unread` and `filter-by-date` are gone. Pass the fetched
   message to `mark-read!` and `delete-message!`:
   `(mark-read! mb (:uid msg) msg)` (BOU-731).
-- `GET /api/v1/push/devices/:token` takes `?app-id=`; a token under two app-ids
-  answers 409 without it (BOU-847). Set `:callback-secret` in `:wagoe/push`, or
-  push warns at boot and callbacks record nothing (BOU-844).
 - `search/create-search-store` takes the adapter, not a db-type:
   `(create-search-store ds (:adapter db-ctx))` (BOU-450).
 - Tenant `:not-supported` and `:unsupported-database` errors carry `:engine`

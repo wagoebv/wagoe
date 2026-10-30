@@ -315,13 +315,28 @@
          (remove known)
          distinct)))
 
+(defn upgrades-with-unknown-since
+  "`upgrades` entries whose :since names no `## [x]` heading, as `ticket: since`.
+   `Unreleased` is a heading, for a deprecation not yet shipped."
+  [changelog upgrades]
+  (let [headings (set (map second (re-seq #"(?m)^## \[([^\]]+)\]" changelog)))]
+    (keep (fn [{:keys [ticket since]}]
+            (when-not (headings since) (str ticket ": " since)))
+          upgrades)))
+
 (defn- report-upgrades
-  "Prints the deprecations `wagoe upgrade` does not know and returns whether any."
+  "Prints the deprecations `wagoe upgrade` does not know, and entries naming a
+   release that does not exist, and returns whether any."
   []
-  (report-findings (str "Deprecations with no entry in " upgrades-path ":")
-                   (deprecations-without-upgrade (slurp changelog-path)
-                                                 (edn/read-string (slurp upgrades-path)))
-                   "Add a rewrite, or a :manual reason a rewrite cannot do it."))
+  (let [changelog (slurp changelog-path)
+        upgrades  (edn/read-string (slurp upgrades-path))
+        unknown?  (report-findings (str "Deprecations with no entry in " upgrades-path ":")
+                                   (deprecations-without-upgrade changelog upgrades)
+                                   "Add a rewrite, or a :manual reason a rewrite cannot do it.")
+        bad-since? (report-findings (str "Entries in " upgrades-path " whose :since is no release:")
+                                    (upgrades-with-unknown-since changelog upgrades)
+                                    "Name a `## [x]` heading of CHANGELOG.md, or Unreleased.")]
+    (or unknown? bad-since?)))
 
 (defn- base-ref
   "What to compare against. `CHANGELOG_BASE` wins, so CI can name the PR base."
