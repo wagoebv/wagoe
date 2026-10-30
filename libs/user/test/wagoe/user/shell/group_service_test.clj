@@ -803,3 +803,70 @@
           (is (= (frequencies (ports/rights-changes (assoc svc :audit-actions? false) ada 10))
                  (frequencies (ports/rights-changes svc ada 10))))
           (is (= 1 (count (ports/rights-changes svc ada 1)))))))))
+
+(deftest ^:integration an-expiry-records-what-it-took
+  ;; BOU-911: reads ignore what expired before the job removes it, so the diff is of adding it back
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc user!]}]
+      (let [repo (:group-repository svc)
+            past (.minusSeconds (Instant/now) 60)
+            [ada bob cyd] (mapv user! ["ada@example.com" "bob@example.com" "cyd@example.com"])
+            ops  (ports/create-group svc {:name "Ops"})
+            desk (ports/create-group svc {:name "Desk"})]
+        (ports/ensure-everyone repo)
+        (ports/insert-assignment repo {:group-id (:id ops) :role :orders/viewer :scope {}})
+        (ports/insert-member repo (:id ops) (:id bob))
+        (ports/insert-assignment repo {:group-id group/everyone-id :role :orders/viewer :scope {} :expires-at past})
+        (ports/insert-assignment repo {:group-id (:id desk) :role :reports/viewer :scope {}})
+        (ports/insert-member-until repo (:id desk) (:id cyd) past)
+        (ports/expire-access! svc (Instant/now))
+        (testing "Everyone's, on the timeline of a user it changed"
+          (is (= [[:grant-remove [{:permission :orders/read :added 0 :removed 2}] 2]]
+                 (map (juxt :action :permissions :affected-count) (ports/rights-changes svc ada 10)))
+              "ada and cyd lose it; bob reads orders through Ops"))
+        (testing "a membership's, on the member's"
+          (is (= [[:group-leave [{:permission :reports/read :scope {}}]]]
+                 (map (juxt :action :removed) (filter (comp #{:group-leave} :action) (ports/rights-changes svc cyd 10))))))))))
+
+(deftest ^:unit newest-changes-pages-until-it-has-n-changes
+  (let [edit  (for [i (range 7)] {:id i :metadata {:change-id "e"}})
+        log   (vec (concat edit [{:id 7} {:id 8} {:id 9}]))
+        pages (atom 0)
+        read  (fn [{:keys [limit offset]}] (swap! pages inc) (take limit (drop offset log)))]
+    (is (= 9 (count (#'sut/newest-changes read 3 3))) "the edit and two more")
+    (is (= 3 @pages))
+    (is (= 10 (count (#'sut/newest-changes read 3 50))) "to the end of the log")
+    (is (= 10 (count (#'sut/newest-changes #(take (:limit %) (drop (max 0 (dec (:offset %))) log)) 3 50)))
+        "an entry read twice counts once")
+    (is (= 3 (count (#'sut/newest-changes #(take (:limit %) log) 3 50))) "a repository ignoring :offset ends")))
+
+(deftest ^:integration a-member-leaving-with-an-expired-role-loses-it
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc user!]}]
+      (let [repo (:group-repository svc)
+            past (.minusSeconds (Instant/now) 60)
+            ada  (user! "ada@example.com")
+            desk (ports/create-group svc {:name "Desk"})]
+        (ports/insert-assignment repo {:group-id (:id desk) :role :reports/viewer :scope {} :expires-at past})
+        (ports/insert-member-until repo (:id desk) (:id ada) past)
+        (ports/expire-access! svc (Instant/now))
+        (is (= [[:group-leave [{:permission :reports/read :scope {}}]]]
+               (map (juxt :action :removed) (ports/rights-changes svc ada 10))))))))
+
+(deftest ^:integration a-role-edit-over-many-groups-hides-no-older-change
+  ;; BOU-911: its entries, one per group, collapse into one change, so they do not fill the timeline
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc user!]}]
+      (let [repo   (:group-repository svc)
+            ada    (user! "ada@example.com")
+            groups (doall (for [i (range 60)] (ports/create-group svc {:name (str "G" i)})))]
+        (ports/create-role svc {:name :sales/lead :permissions #{:reports/read}})
+        (doseq [g groups]
+          (ports/insert-member repo (:id g) (:id ada))
+          (ports/insert-assignment repo {:group-id (:id g) :role :sales/lead :scope {}}))
+        (ports/add-group-role svc (:id (first groups)) {:role :orders/viewer})
+        (Thread/sleep 5)
+        (ports/update-role svc {:name :sales/lead :permissions #{:orders/write}})
+        (doseq [svc [svc (assoc svc :audit-actions? false)]]
+          (is (= [:role-edit :grant-add] (map :action (ports/rights-changes svc ada 10)))
+              (str "audit-actions? " (:audit-actions? svc))))))))
