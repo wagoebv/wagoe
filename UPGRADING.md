@@ -169,10 +169,15 @@ app implements a port itself, add the protocol beside it; boot stops with
 | `IUserService` | `IUserDeletion`, `IUserSessionRevocation` |
 | `ITenantMembershipRepository` | `ITenantMembershipDeletion` |
 | `ISearchEngine` | `ISearchDefinitions` |
+| `IUserAuditRepository` | `IUserAuditRetention` |
 | `IRealtimeService`, for `sse/sse-handler` | `IIdentifiedConnections` |
-| `IJobStore`, with `:jobs/dead-letter` retention | `IDeadLetterRetention` (BOU-738) |
-| `IAudienceRepository` (incubating) | `create-audience`, `update-audience` (BOU-746) |
-| workflow engine (incubating) | the `tx` arity of `start-workflow!` and `transition!` (BOU-575) |
+
+Not checked as `WGE-107`: a job store without `IDeadLetterRetention` fails boot
+only if `:jobs/dead-letter` retention is configured (BOU-738). In incubating
+libraries, methods were added, and a custom implementation fails on first
+call: an `IAudienceRepository` adds `create-audience` and `update-audience`
+(BOU-746), a workflow engine the `tx` arity of `start-workflow!` and
+`transition!` (BOU-575).
 
 ### 13. Run the migrations, and fix what blocks them
 
@@ -234,12 +239,13 @@ wagoe.user.core.rights-ui/detail-tabs` for the Sessions and Rights tabs
 ### 18. Config and environment
 
 - Only `WAG_ENV` picks the profile; `-Denv`, `ENV` and `ENVIRONMENT` are
-  ignored, and a blank one means dev. Set it where you relied on them,
-  `clojure -M:prod:migrate` included (BOU-686, BOU-530).
-- `:wagoe/email` takes flat keys with `:provider :smtp`. A config from the
-  email README, `wagoe add email` or `bb setup --email smtp` that used
-  `:wagoe.external/smtp` logged mail instead of sending it: move those keys
-  (BOU-824, BOU-822, BOU-818). Storage is `{:provider :local :root …}` (BOU-646).
+  ignored, and a blank one means dev (`bb db:reset` wants it named). Set it
+  where you relied on them, `clojure -M:prod:migrate` included (BOU-686,
+  BOU-530).
+- `:wagoe/email` takes flat keys with `:provider :smtp`; without them it logs
+  mail instead of sending it. From the email README: lift the `:smtp` map's
+  keys up (BOU-824). From `wagoe add email` or `bb setup --email smtp`: move
+  the `:wagoe.external/smtp` settings there (BOU-822, BOU-818). Storage is `{:provider :local :root …}` (BOU-646).
 - A module enabled only in code: put its key in `:active`, or tenant schemas
   and migrations skip it. Without `:wagoe/user` there, run `wagoe add user`
   (BOU-757, BOU-667). Re-run `wagoe add <module>` to fill keys it missed

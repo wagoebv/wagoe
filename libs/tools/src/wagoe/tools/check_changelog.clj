@@ -315,13 +315,26 @@
          (remove known)
          distinct)))
 
+(defn- deprecation-releases
+  "Ticket -> the `## [x]` headings whose `### Deprecated` section cites it."
+  [changelog]
+  (->> (str/split changelog #"(?m)^(?=## \[)")
+       (mapcat (fn [release]
+                 (when-let [heading (second (re-find #"^## \[([^\]]+)\]" release))]
+                   (for [[_ section] (re-seq deprecated-section-re release)
+                         ticket      (re-seq #"BOU-\d+" section)]
+                     [ticket heading]))))
+       (reduce (fn [m [t h]] (update m t (fnil conj #{}) h)) {})))
+
 (defn upgrades-with-unknown-since
-  "`upgrades` entries whose :since names no `## [x]` heading, as `ticket: since`.
-   `Unreleased` is a heading, for a deprecation not yet shipped."
+  "`upgrades` entries whose :since is not the release that deprecated their
+   ticket, as `ticket: since`. One no `### Deprecated` entry cites names any
+   `## [x]` heading."
   [changelog upgrades]
-  (let [headings (set (map second (re-seq #"(?m)^## \[([^\]]+)\]" changelog)))]
+  (let [releases (deprecation-releases changelog)
+        headings (set (map second (re-seq #"(?m)^## \[([^\]]+)\]" changelog)))]
     (keep (fn [{:keys [ticket since]}]
-            (when-not (headings since) (str ticket ": " since)))
+            (when-not ((get releases ticket headings) since) (str ticket ": " since)))
           upgrades)))
 
 (defn- report-upgrades
@@ -335,7 +348,7 @@
                                    "Add a rewrite, or a :manual reason a rewrite cannot do it.")
         bad-since? (report-findings (str "Entries in " upgrades-path " whose :since is no release:")
                                     (upgrades-with-unknown-since changelog upgrades)
-                                    "Name a `## [x]` heading of CHANGELOG.md, or Unreleased.")]
+                                    "Name the `## [x]` heading its `### Deprecated` entry sits under.")]
     (or unknown? bad-since?)))
 
 (defn- base-ref

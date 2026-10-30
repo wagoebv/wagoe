@@ -4,8 +4,7 @@
    The file lists in these cases are real: they are the shapes of the thirty
    pull requests that merged between 2026-08-05 and 2026-08-16 without one
    CHANGELOG entry between them."
-  (:require [clojure.edn]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [wagoe.tools.check-changelog :as sut]))
 
@@ -171,16 +170,18 @@
   (is (empty? (sut/stability-findings (slurp "CHANGELOG.md")
                                       (slurp "docs/modules/ROOT/pages/stability.adoc")))))
 
-(deftest ^:unit upgrade-since-names-a-release
-  (let [changelog "## [Unreleased]\n\n## [1.1.0-rc-1] — 2026-10-27\n"]
-    (is (= ["BOU-2: 1.0.2"]
-           (sut/upgrades-with-unknown-since changelog [{:ticket "BOU-1" :since "1.1.0-rc-1"}
-                                                       {:ticket "BOU-2" :since "1.0.2"}
-                                                       {:ticket "BOU-3" :since "Unreleased"}])))
-    (is (empty? (sut/upgrades-with-unknown-since
-                 (slurp "CHANGELOG.md")
-                 (clojure.edn/read-string (slurp sut/upgrades-path))))
-        "the shipped table names only real releases")))
+(deftest ^:unit upgrade-since-names-the-deprecating-release
+  (let [changelog (str "## [Unreleased]\n\n### Deprecated\n\n- **New** (BOU-3).\n\n"
+                       "## [1.1.0-rc-1] — 2026-10-27\n\n### Deprecated\n\n- **Old** (BOU-1).\n\n"
+                       "## [1.0.1] — 2026-10-07\n\n### Fixed\n\n- **Fix** (BOU-1).\n")]
+    (is (empty? (sut/upgrades-with-unknown-since changelog [{:ticket "BOU-1" :since "1.1.0-rc-1"}
+                                                            {:ticket "BOU-3" :since "Unreleased"}
+                                                            {:ticket "BOU-9" :since "1.0.1"}])))
+    (is (= ["BOU-1: 1.0.1" "BOU-3: 1.1.0-rc-1" "BOU-9: 1.0.2"]
+           (sut/upgrades-with-unknown-since changelog [{:ticket "BOU-1" :since "1.0.1"}
+                                                       {:ticket "BOU-3" :since "1.1.0-rc-1"}
+                                                       {:ticket "BOU-9" :since "1.0.2"}]))
+        "a release that did not deprecate it, or one that never shipped")))
 
 (deftest ^:unit every-deprecation-has-an-upgrade-entry
   (let [changelog (str "## [Unreleased]\n\n### Deprecated\n\n"

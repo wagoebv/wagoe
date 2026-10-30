@@ -111,10 +111,10 @@
 (defn explain-push-definition [d] (push-definition-explainer d))
 (defn valid-device-info?
   "Deprecated, goes in 2.0: the routes declare DeviceInfo as `:parameters`."
-  {:deprecated "1.1.0"}
+  {:deprecated "1.1.0-rc-1"}
   [d] (device-info-validator d))
 
 (defn valid-callback?
   "Deprecated, goes in 2.0: the routes declare CallbackPayload as `:parameters`."
-  {:deprecated "1.1.0"}
+  {:deprecated "1.1.0-rc-1"}
   [d] (callback-payload-validator d))
