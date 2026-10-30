@@ -509,6 +509,8 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
   theirs, a managed role holding only it, and a new group of one, each a `preview-change`, ranked by
   `core.grant/rank`. Joins and assignments apply through the group pages; the new group needs a name and a purpose.
   `/web/admin/permissions/grant` runs it for users pasted from `:report` log lines, which are not stored.
+  An option whose preview is refused carries `:refused` and offers nothing to apply; the new group is made in one
+  transaction by `IGrantGroup/create-grant-group` (BOU-863).
 - A membership or an assignment may end (BOU-856): `:expires-at` on `add-group-role`'s assignment,
   `ITimeBoundAccess/add-group-member-until` for a membership. Every `IUserGroupRepository` read leaves an expired
   row out, so enforcement, explain, previews and the wizard stop counting it at once. The recurring job

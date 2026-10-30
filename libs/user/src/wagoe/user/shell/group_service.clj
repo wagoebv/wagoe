@@ -127,6 +127,17 @@
   (merge (into {} (map (fn [r] [(:name r) (assoc r :source :managed)])) (ports/find-roles repo))
          (update-vals (code-roles registry) #(assoc % :source :code))))
 
+(defn- roles-of
+  "Every role, as `all-roles`, or the snapshot `with-roles` took."
+  [svc]
+  (or (::roles svc) (all-roles (:group-repository svc) (:registry svc))))
+
+(defn with-roles
+  "`svc` reading every role once, for a page of previews and grant options
+   that changes nothing. A group service of another kind is returned as it is."
+  [svc]
+  (if (:group-repository svc) (assoc svc ::roles (roles-of svc)) svc))
+
 (defn- audit!
   "Record `action` for each of `members`, or, for a change to Everyone, once
    for the actor: it reaches every user. `opts`: `:diffs`, as `user-diffs`
@@ -286,7 +297,7 @@
    `:roles-after`, and `:update`, what it does to a user's assignments.
    Throws as making the change would."
   [{:keys [group-repository user-repository registry settings membership] :as svc} {:keys [op group-id user-id role] :as change}]
-  (let [roles (all-roles group-repository registry)
+  (let [roles (roles-of svc)
         plan  {:roles roles :roles-after roles :update identity}]
     (case op
       :add-member
@@ -623,6 +634,32 @@
               {:diffs diffs :metadata (expiry-metadata expires-at)}))
     added))
 
+(defn- offer
+  "`option` with the preview of `change`, or with :refused, the refusal's
+   ex-data, when the change would be refused: one bad option leaves the rest."
+  [svc option change]
+  (try (assoc option :preview (ports/preview-change svc change))
+       (catch clojure.lang.ExceptionInfo e
+         (let [refusal (ex-data e)]
+           (if (#{:validation-error :not-found} (:type refusal))
+             (assoc option :refused refusal)
+             (throw e))))))
+
+(defn- create-grant-group!
+  "The group of one the grant wizard offers, made in one transaction."
+  [svc group user-id assignment expires-at]
+  ;; Refused before anything is written, as the wizard previewed it. No role
+  ;; changes here, so the three checks share one read of them.
+  (let [svc (with-roles svc)]
+    (change-plan svc {:op :new-group :user-id user-id :assignment assignment :expires-at expires-at})
+    (ports/in-transaction (:group-repository svc)
+                          (fn [repo]
+                            (let [svc (assoc svc :group-repository repo)
+                                  g   (ports/insert-group repo (group-data group))]
+                              (add-member! svc (:id g) user-id expires-at)
+                              (ports/add-group-role svc (:id g) assignment)
+                              g)))))
+
 (defn- expire!
   "Remove what expired by `now`, auditing each as a leave or a removed role
    without an effective-rights diff: reads ignored it from the moment it
@@ -675,7 +712,7 @@
         (not (:allowed? result))
         (assoc :alternatives
                (role-holders group-repository
-                             (group-core/roles-holding (all-roles group-repository registry) permission)
+                             (group-core/roles-holding (roles-of this) permission)
                              false)))))
 
   ports/IRoleAssignments
@@ -694,14 +731,14 @@
 
   ports/IGrantOptions
   (grant-options [this user permission scope]
-    (let [;; Every preview asks the membership hook for this user: ask it once
-          this    (cond-> this membership (update :membership memoize))
+    (let [;; Every preview asks the membership hook for this user, and reads the roles: once
+          this    (cond-> (with-roles this) membership (update :membership memoize))
+          roles   (::roles this)
           explain (ports/explain-access this user permission (if (empty? scope) :everywhere scope))
-          roles   (all-roles group-repository registry)
           role    (grant-core/smallest-role roles permission)
           exact?  (= #{permission} (get-in roles [role :permissions]))
           a       {:role role :scope scope}
-          preview #(ports/preview-change this %)
+          offer   (partial offer this)
           mine    (filterv #(= :member (:source %)) (ports/user-groups this user))
           mine?   (into #{} (map (comp str :id)) mine)]
       {:explain explain
@@ -712,17 +749,20 @@
                    (concat
                     (for [[gid [{:keys [group-name]}]] (group-by :group-id (:alternatives explain))
                           :when (not (or (group-core/everyone? gid) (mine? (str gid))))]
-                      {:kind :join :group {:id gid :name group-name}
-                       :preview (preview {:op :add-member :group-id gid :user-id (:id user)})})
+                      (offer {:kind :join :group {:id gid :name group-name}}
+                             {:op :add-member :group-id gid :user-id (:id user)}))
                     (when role
                       (for [g mine]
-                        {:kind :narrow :group (select-keys g [:id :name]) :assignment a
-                         :preview (preview {:op :add-role :group-id (:id g) :assignment a :user-id (:id user)})}))
+                        (offer {:kind :narrow :group (select-keys g [:id :name]) :assignment a}
+                               {:op :add-role :group-id (:id g) :assignment a :user-id (:id user)})))
                     (when-not exact? [{:kind :new-role}])
                     (when role
-                      [{:kind :new-group :assignment a
-                        :preview (preview {:op :new-group :user-id (:id user) :assignment a})}]))
+                      [(offer {:kind :new-group :assignment a} {:op :new-group :user-id (:id user) :assignment a})]))
                    permission scope))}))
+
+  ports/IGrantGroup
+  (create-grant-group [this group user-id assignment expires-at]
+    (create-grant-group! this group user-id assignment expires-at))
 
   ports/ITimeBoundAccess
   (add-group-member-until [this group-id user-id expires-at]

@@ -14,6 +14,7 @@
             [wagoe.user.core.rights-ui :as rights-ui]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.group-handlers :as group-handlers]
+            [wagoe.user.shell.group-service :as group-service]
             [wagoe.user.shell.web-handlers :refer [html-response]]))
 
 (def ^:private page-opts group-handlers/page-opts)
@@ -331,13 +332,19 @@
           :scope-info (group-handlers/scope-info group-service)}
          opts))
 
+(defn- grant-options
+  "`grant-options`, each refused option's reason put into words."
+  [group-service user permission record]
+  (update (ports/grant-options group-service user permission record) :options
+          (partial mapv #(cond-> % (:refused %) (update :refused group-handlers/refusal-text)))))
+
 (defn- grant-response
   "The wizard for the user in the path, asking what `params` ask; a refused
    question shows why."
   [request user-service group-service params status opts]
   (if-let [user (user-of user-service request)]
     (let [{:keys [permission record] :as q} (asked-scope group-service params)
-          [result error] (try [(when permission (ports/grant-options group-service user permission record))]
+          [result error] (try [(when permission (grant-options group-service user permission record))]
                               (catch clojure.lang.ExceptionInfo e
                                 (if (group-handlers/refused? e) [nil (group-handlers/error-text e)] (throw e))))]
       (html-response request
@@ -369,34 +376,42 @@
               (throw e))))
         (not-found request :user.rights/user-not-found)))))
 
+(defn- three-writes
+  "The new group of one for a group service without `IGrantGroup`: the
+   assignment and the expiry are refused before the group exists."
+  [group-service group user-id assignment expires-at]
+  (ports/preview-change group-service {:op :new-group :user-id user-id :assignment assignment :expires-at expires-at})
+  (let [g (ports/create-group group-service group)]
+    (ports/add-group-member-until group-service (:id g) user-id expires-at)
+    (ports/add-group-role group-service (:id g) assignment)
+    g))
+
 (defn grant-group
   "POST /web/users/:id/grant/group — the last option: a group holding only
    the user and the assignment, named and with its purpose said."
   [user-service group-service]
-  (fn [request]
-    (let [{:keys [record]} (asked-scope group-service (:form-params request))
-          user        (user-of user-service request)
-          assignment  {:role (group-core/parse-name (form request "role")) :scope record}
-          description (not-empty (form request "description"))
-          retry       #(grant-response request user-service group-service (:form-params request) 422 {:error %})]
-      (cond
-        (nil? user)        (not-found request :user.rights/user-not-found)
-        ;; Unconfirmed, as on the group pages (BOU-852): the wizard shows its preview
-        (not (group-handlers/confirmed? request))
-        (grant-response request user-service group-service (:form-params request) 200 {})
-        (nil? description) (retry [:t :user.grant/error-purpose])
-        :else
-        (try
-          ;; Refuse the assignment and the expiry before the group exists
-          (let [expires-at (group-handlers/form-expiry request)
-                _ (ports/preview-change group-service {:op :new-group :user-id (:id user) :assignment assignment
-                                                       :expires-at expires-at})
-                g (ports/create-group group-service {:name (form request "name") :description description})]
-            (ports/add-group-member-until group-service (:id g) (:id user) expires-at)
-            (ports/add-group-role group-service (:id g) assignment)
-            (redirect (rights-ui/group-path (:id g)) :user.grant/flash-group-created))
-          (catch clojure.lang.ExceptionInfo e
-            (if (group-handlers/refused? e) (retry (group-handlers/error-text e)) (throw e))))))))
+  ;; Asked once: a group service without it takes three writes (Convention 5)
+  (let [create! (if (satisfies? ports/IGrantGroup group-service) ports/create-grant-group three-writes)]
+    (fn [request]
+      (let [{:keys [record]} (asked-scope group-service (:form-params request))
+            user        (user-of user-service request)
+            assignment  {:role (group-core/parse-name (form request "role")) :scope record}
+            description (not-empty (form request "description"))
+            retry       #(grant-response request user-service group-service (:form-params request) 422 {:error %})]
+        (cond
+          (nil? user)        (not-found request :user.rights/user-not-found)
+          ;; Unconfirmed, as on the group pages (BOU-852): the wizard shows its preview
+          (not (group-handlers/confirmed? request))
+          (grant-response request user-service group-service (:form-params request) 200 {})
+          (nil? description) (retry [:t :user.grant/error-purpose])
+          :else
+          (try
+            (let [expires-at (group-handlers/form-expiry request)
+                  group      {:name (form request "name") :description description}
+                  g          (create! group-service group (:id user) assignment expires-at)]
+              (redirect (rights-ui/group-path (:id g)) :user.grant/flash-group-created))
+            (catch clojure.lang.ExceptionInfo e
+              (if (group-handlers/refused? e) (retry (group-handlers/error-text e)) (throw e)))))))))
 
 (defn- named-users
   "The users `text` names, ids or emails separated by space, comma or line,
@@ -418,7 +433,9 @@
     (let [params (:query-params request)
           {:keys [permission record] :as q} (asked-scope group-service params)
           [users unknown] (if permission (named-users user-service (get params "users")) [[] []])
-          [rows error] (try [(mapv (fn [u] {:user u :result (ports/grant-options group-service u permission record)}) users)]
+          ;; The roles are read once for every user, not per option per user
+          svc    (cond-> group-service (seq users) group-service/with-roles)
+          [rows error] (try [(mapv (fn [u] {:user u :result (grant-options svc u permission record)}) users)]
                             (catch clojure.lang.ExceptionInfo e
                               (if (group-handlers/refused? e) [[] (group-handlers/error-text e)] (throw e))))]
       (html-response request

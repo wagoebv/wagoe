@@ -78,19 +78,23 @@
      :entities (into {} (keep (fn [[k {:keys [entity]}]] (when entity [k entity]))) scopes)
      :sources  (some-> registry authz/scope-sources (update-vals :label))}))
 
+(defn refusal-text
+  "What to show for a refusal's ex-data: the field's message, and the
+   schema's explanation when there is one."
+  [{:keys [type field errors]}]
+  (list [:t (or ({:role       :user.groups/error-role
+                  :scope      :user.groups/error-scope
+                  :email      :user.groups/error-no-user
+                  :expires-at :user.groups/error-expires-at} field)
+                ({:not-found :user.groups/not-found} type)
+                (when (= [:conflict :name] [type field]) :user.groups/error-name-taken)
+                :user.groups/error-name)]
+        (when errors [:code " " (pr-str errors)])))
+
 (defn error-text
-  "What to show for a refused change: the field's message, and the schema's
-   explanation when there is one."
+  "What to show for a refused change."
   [e]
-  (let [{:keys [type field errors]} (ex-data e)]
-    (list [:t (or ({:role       :user.groups/error-role
-                    :scope      :user.groups/error-scope
-                    :email      :user.groups/error-no-user
-                    :expires-at :user.groups/error-expires-at} field)
-                  ({:not-found :user.groups/not-found} type)
-                  (when (= [:conflict :name] [type field]) :user.groups/error-name-taken)
-                  :user.groups/error-name)]
-          (when errors [:code " " (pr-str errors)]))))
+  (refusal-text (ex-data e)))
 
 (defn- not-found [request]
   (html-response request [:p [:t :user.groups/not-found]] 404))
