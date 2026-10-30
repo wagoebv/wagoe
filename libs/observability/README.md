@@ -197,7 +197,7 @@ libs/observability/src/wagoe/observability/
 | `org.clojure/tools.logging` | 1.3.1 | Logging abstraction |
 | `ch.qos.logback/logback-classic` | 1.6.3 | SLF4J implementation |
 | `io.sentry/sentry-clj` | 8.34.247 | Sentry integration |
-| `io.opentelemetry/opentelemetry-sdk`, `-exporter-otlp` | 1.66.0 | OTLP traces and metrics |
+| `io.opentelemetry/opentelemetry-sdk`, `-exporter-otlp` | 1.67.0 | OTLP traces and metrics |
 | `metosin/malli` | 0.20.1 | Config schemas |
 | `cheshire/cheshire` | 6.2.0 | JSON logging |
 
