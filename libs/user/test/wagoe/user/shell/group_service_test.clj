@@ -11,6 +11,7 @@
             [support.test-db :as test-db]
             [wagoe.platform.core.authorization :as authz-core]
             [wagoe.platform.shell.authorization :as authorization]
+            [wagoe.user.core.audit :as audit-core]
             [wagoe.user.core.group :as group]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.group-persistence :as group-persistence]
@@ -605,6 +606,50 @@
             (is (:everyone? p))
             (is (= ["cyd@example.com"] (map :email (:affected p)))
                 "ada and bob read reports already, through Sales")))))))
+
+(deftest ^:integration a-preview-reports-only-what-is-gained
+  ;; BOU-864
+  (testing "an inactive member is left out"
+    (with-service nil {:registry registry}
+      (fn [{:keys [svc users user!]}]
+        (let [ada   (user! "ada@example.com")
+              sales (ports/create-group svc {:name "Sales"})
+              ops   (ports/create-group svc {:name "Ops"})]
+          (ports/add-group-role svc (:id ops) {:role :orders/viewer})
+          (doseq [g [sales ops]] (ports/add-group-member svc (:id g) (:id ada)))
+          (ports/update-user users {:id (:id ada) :active false})
+          (is (zero? (:affected-count (ports/preview-change svc {:op :add-role :group-id (:id sales)
+                                                                 :assignment {:role :orders/viewer}}))))))))
+  (testing "another user's identity-provider groups count"
+    (with-service nil {:registry registry :membership (fn [user] (when (= "bob@example.com" (:email user))
+                                                                   #{"Newsroom"}))}
+      (fn [{:keys [svc user!]}]
+        (let [[ada bob] (map user! ["ada@example.com" "bob@example.com"])
+              sales     (ports/create-group svc {:name "Sales"})
+              newsroom  (ports/create-group svc {:name "Newsroom"})]
+          (ports/add-group-role svc (:id newsroom) {:role :orders/viewer})
+          (doseq [u [ada bob]] (ports/add-group-member svc (:id sales) (:id u)))
+          (is (= ["ada@example.com"]
+                 (map :email (:affected (ports/preview-change svc {:op :add-role :group-id (:id sales)
+                                                                   :assignment {:role :orders/viewer}}))))
+              "bob reads orders already, through the provider's Newsroom"))))))
+
+(deftest ^:integration a-role-edit-shows-once-on-the-rights-timeline
+  ;; BOU-864: audited per group holding the role, and per added and removed permission
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc audit user!]}]
+      (let [ada (user! "ada@example.com")]
+        (ports/create-role svc {:name :sales/lead :permissions #{:reports/read}})
+        (doseq [n ["Sales" "Desk"]
+                :let [g (ports/create-group svc {:name n})]]
+          (ports/add-group-member svc (:id g) (:id ada))
+          (ports/add-group-role svc (:id g) {:role :sales/lead}))
+        (ports/update-role svc {:name :sales/lead :permissions #{:orders/write}})
+        (let [timeline (audit-core/rights-timeline (ports/find-audit-logs-by-user audit (:id ada) {:limit 50}) 50)
+              edits    (filter #(= :role-edit (:action %)) timeline)]
+          (is (= 1 (count edits)))
+          (is (= [:sales/lead [{:permission :orders/write :scope {}}] [{:permission :reports/read :scope {}}]]
+                 ((juxt :role :added :removed) (first edits)))))))))
 
 (deftest ^:integration time-bound-access-ends-by-itself
   ;; BOU-856: a stand-in's access, given until a date

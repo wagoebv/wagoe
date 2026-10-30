@@ -368,33 +368,53 @@
    rights, [{:user {:id :email} :added :removed}]: their rights before and
    after, of the touched permissions, resolved as the authorization
    interceptor resolves them and compared by `scope/rights-diff`. The focal
-   user's are read with their identity provider's groups; the others' from
-   stored memberships and Everyone, one query for all. None when no
-   permission is touched."
+   user's are read with their identity provider's groups in one query; the
+   others' from stored memberships and Everyone, one query for all, and the
+   groups the membership hook names, one query per group. An inactive user's
+   are read as the focal user's: the one query reads only active users. None
+   when no permission is touched."
   [{:keys [group-repository user-repository membership] :as svc}
    {:keys [users focal grants roles roles-after update] :as plan}]
   (when-let [touched (not-empty (or (:touched plan) (into #{} (map :permission) grants)))]
     (let [resolve  (or (:resolve svc) stored-resolve)
-          others?  (some #(not (access/same-id? (:id focal) (:id %))) users)
+          focal?   #(access/same-id? (:id focal) (:id %))
+          ;; Read one by one
+          own?     #(or (focal? %) (false? (:active? %)))
+          others?  (some (complement own?) users)
           held-by  (when others?
                      (group-by (comp str :user-id)
                                (ports/find-role-holders group-repository
                                                         (into #{} (mapcat #(concat (group-core/roles-holding roles %)
                                                                                    (group-core/roles-holding roles-after %)))
                                                               touched))))
+          ;; A provider group's assignments, by name, read once per group
+          provided (when (and others? membership)
+                     (let [ids (delay (into {} (map (juxt :name :id)) (ports/find-groups group-repository)))]
+                       (memoize #(some->> (get @ids %) (ports/find-assignments group-repository)))))
+          ;; find-members gives part of a user, without :active
+          record   #(if (contains? % :active) % (ports/find-user-by-id user-repository (:id %)))
           rights   (fn [assignments roles]
                      (filterv (comp touched :permission) (group-core/user-grants assignments roles)))]
       (mapv (fn [user]
-              (let [focal?   (access/same-id? (:id focal) (:id user))
-                    held     (if focal?
+              (let [focal?   (focal? user)
+                    own?     (own? user)
+                    stored   (get held-by (str (:id user)) [])
+                    full     (when (and provided (not own?)) (record user))
+                    held     (cond
+                               own?
                                (ports/find-user-assignments group-repository (:id user)
-                                                            (provider-groups membership user-repository user))
-                               (get held-by (str (:id user)) []))
+                                                            (provider-groups membership user-repository
+                                                                             (if focal? user (:id user))))
+                               full
+                               (let [mine (set (map (comp str :group-id) stored))]
+                                 (into stored (comp (mapcat provided) (remove (comp mine str :group-id)))
+                                       (provider-groups membership user-repository full)))
+                               :else stored)
                     before   (rights held roles)
                     after    (rights (update held) roles-after)
-                  ;; A source resolver reads the user, so give it the whole record
+                    ;; A source resolver reads the user, so give it the whole record
                     user-map (if (and (not focal?) (some scope/source? (mapcat (comp vals :scope) (concat before after))))
-                               (or (ports/find-user-by-id user-repository (:id user)) user)
+                               (or full (record user) user)
                                user)]
                 (assoc (scope/rights-diff (resolve user-map before) (resolve user-map after))
                        :user (select-keys user [:id :email]))))
@@ -402,14 +422,16 @@
 
 (defn- audit-role-change!
   "Audit what changing managed role `role-name` from `before` to `after`
-   permissions does to every group holding it."
+   permissions does to every group holding it, the entries sharing a
+   `:change-id` so a user's rights timeline shows the edit once."
   [audit-repository role-name holders before after diffs]
-  (doseq [{:keys [group-id group-name scope members]} holders
-          [action ps] [[:grant-remove (remove (set after) before)] [:grant-add (remove (set before) after)]]
-          :when (seq ps)]
-    (audit! audit-repository action {:id group-id :name group-name} members
-            (for [p (sort ps)] {:permission p :scope scope :role role-name})
-            {:diffs diffs})))
+  (let [metadata {:change-id (str (random-uuid)) :role (group-core/permission-str role-name)}]
+    (doseq [{:keys [group-id group-name scope members]} holders
+            [action ps] [[:grant-remove (remove (set after) before)] [:grant-add (remove (set before) after)]]
+            :when (seq ps)]
+      (audit! audit-repository action {:id group-id :name group-name} members
+              (for [p (sort ps)] {:permission p :scope scope :role role-name})
+              {:diffs diffs :metadata metadata}))))
 
 ;; =============================================================================
 ;; Import

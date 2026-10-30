@@ -175,8 +175,10 @@
         (pos? (db/execute-update! tx {:delete-from :user_groups :where [:= :id id]})))))
 
   (find-members [_ group-id]
-    (mapv (fn [row] (with-expiry {:id (tc/string->uuid (:id row)) :email (:email row) :name (:name row)} row))
-          (db/execute-query! ctx {:select   [:a.id :a.email :u.name :m.expires_at]
+    (mapv (fn [row] (with-expiry {:id (tc/string->uuid (:id row)) :email (:email row) :name (:name row)
+                                  :active? (protocols/db->boolean (:adapter ctx) (:active row))}
+                                 row))
+          (db/execute-query! ctx {:select   [:a.id :a.email :u.name :a.active :m.expires_at]
                                   :from     [[:user_group_members :m]]
                                   :join     [[:auth_users :a] [:= :a.id :m.user_id]]
                                   :left-join [[:users :u] [:= :u.id :m.user_id]]

@@ -142,3 +142,23 @@
   (is (= 1 (count (:added (sut/rights-diff [] [{:permission :a :scope {:domain-id #{42}}}
                                                {:permission :a :scope {:domain-id #{"42"}}}]))))
       "two rights covering each other are listed once, not dropped both"))
+
+(deftest ^:unit a-right-two-others-cover-together-is-held
+  ;; BOU-864
+  (let [before [{:permission :a :scope {:domain-id #{42}}}
+                {:permission :a :scope {:domain-id #{43} :region #{"north"}}}
+                {:permission :a :scope {:domain-id #{43}}}]]
+    (is (= [] (:added (sut/rights-diff before [{:permission :a :scope {:domain-id #{42 "43"}}}]))))
+    (is (= [] (:added (sut/rights-diff [{:permission :a :scope {:domain-id #{42}}}
+                                        {:permission :a :scope {:region #{"north"}}}]
+                                       [{:permission :a :scope {:domain-id #{42 43} :region #{"north"}}}])))
+        "domain 42 by the first, the north of 43 by the second"))
+  (testing "together they still leave a value out"
+    (is (= [{:permission :a :scope {:domain-id #{42 43 44}}}]
+           (:added (sut/rights-diff [{:permission :a :scope {:domain-id #{42}}} {:permission :a :scope {:domain-id #{43}}}]
+                                    [{:permission :a :scope {:domain-id #{42 43 44}}}])))))
+  (testing "a right with a key the covered one lacks covers none of it"
+    (is (= [{:permission :a :scope {:domain-id #{42 43}}}]
+           (:added (sut/rights-diff [{:permission :a :scope {:domain-id #{42}}}
+                                     {:permission :a :scope {:domain-id #{43} :region #{"north"}}}]
+                                    [{:permission :a :scope {:domain-id #{42 43}}}]))))))

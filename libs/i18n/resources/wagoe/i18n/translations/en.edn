@@ -66,6 +66,7 @@
  :common/audit-group-leave "Left group"
  :common/audit-grant-add "Grant added"
  :common/audit-grant-remove "Grant removed"
+ :common/audit-role-edit "Role edited"
  :common/audit-data-export "Data exported"
  :common/audit-mfa-disabled "Two-factor turned off"
  :common/audit-all-results  "All Results"
