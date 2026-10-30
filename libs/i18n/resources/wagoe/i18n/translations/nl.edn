@@ -66,6 +66,7 @@
  :common/audit-group-leave "Groep verlaten"
  :common/audit-grant-add "Recht toegekend"
  :common/audit-grant-remove "Recht ingetrokken"
+ :common/audit-role-edit "Rol aangepast"
  :common/audit-data-export "Gegevens geëxporteerd"
  :common/audit-mfa-disabled "Tweestapsverificatie uitgezet"
  :common/audit-all-results  "Alle resultaten"
