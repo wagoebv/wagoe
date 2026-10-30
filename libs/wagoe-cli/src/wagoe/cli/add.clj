@@ -241,33 +241,36 @@
     "dev"  (or dev-config-snippet config-snippet)
     config-snippet))
 
+(defn- profile-file [env] (str "resources/conf/" env "/config.edn"))
+
+(defn- profile-path
+  "Profile `env`'s config.edn relative to `dir`, or, when that file is only an
+   `#include`, the file it includes, followed as Aero does (BOU-867)."
+  [dir env]
+  (loop [path (profile-file env) seen #{}]
+    (let [v  (try (edn/read-string {:readers {'include #(hash-map ::include %)}
+                                    :default (fn [_ v] v)}
+                                   (slurp (io/file dir path)))
+                  (catch Exception _ nil))
+          to (when-let [target (and (map? v) (::include v))]
+               (when (string? target)
+                 (str (.normalize (.toPath (io/file (.getParent (io/file path)) target))))))]
+      (if (and to (not (seen to)) (.exists (io/file dir to)))
+        (recur to (conj seen path))
+        path))))
+
 (defn project-name
   "The project's name: dev's :wagoe/settings :name less its profile suffix,
    as `bb setup` reads it, else the directory's name."
   [dir]
   (or (try
         (some-> (get-in (edn/read-string {:default (fn [_ v] v)}
-                                         (slurp (io/file dir "resources/conf/dev/config.edn")))
+                                         (slurp (io/file dir (profile-path dir "dev"))))
                         [:active :wagoe/settings :name])
                 (str/replace #"-(dev|development|test)$" "")
                 not-empty)
         (catch Exception _ nil))
       (.getName (.getAbsoluteFile (io/file dir)))))
-
-(defn- profile-path
-  "Profile `env`'s config.edn relative to `dir`, or, when that file is only an
-   `#include`, the file it includes, followed as Aero does (BOU-867)."
-  [dir env]
-  (loop [path (str "resources/conf/" env "/config.edn") seen #{}]
-    (let [v (try (edn/read-string {:readers {'include #(vector ::include %)}
-                                   :default (fn [_ v] v)}
-                                  (slurp (io/file dir path)))
-                 (catch Exception _ nil))
-          to (when (and (vector? v) (= ::include (first v)) (string? (second v)))
-               (str (.normalize (.toPath (io/file (.getParent (io/file path)) (second v))))))]
-      (if (and to (not (seen to)) (.exists (io/file dir to)))
-        (recur to (conj seen path))
-        path))))
 
 (defn- target-profiles
   "The existing profiles `module` belongs in, sorted, each with its snippet and
@@ -275,15 +278,13 @@
    `#include`. A profile including another profile is that profile, so it is
    left out. A dev-scoped module goes in dev only; no profile is ever created."
   [dir {:keys [scope] :as module}]
-  (let [envs  (filter #(.exists (io/file dir "resources/conf" % "config.edn"))
-                      (sort (.list (io/file dir "resources/conf"))))
-        paths (into {} (map (juxt identity #(profile-path dir %))) envs)
-        own   (set (map #(str "resources/conf/" % "/config.edn") envs))]
+  (let [envs (filter #(.exists (io/file dir (profile-file %)))
+                     (sort (.list (io/file dir "resources/conf"))))
+        own  (set (map profile-file envs))]
     (for [env   envs
-          :let  [path (paths env)]
+          :let  [path (profile-path dir env)]
           :when (and (or (not= :dev scope) (= "dev" env))
-                     (or (= path (str "resources/conf/" env "/config.edn"))
-                         (not (own path))))
+                     (or (= path (profile-file env)) (not (own path))))
           :let  [snippet (some-> (snippet-for module env)
                                  (str/replace "{{project-name}}" (project-name dir)))]
           :when (seq snippet)]
@@ -371,7 +372,7 @@
 (defn- switched-on?
   "Whether `module-key` is in dev's :active or in the code's :extra-modules."
   [dir module-key]
-  (let [dev (io/file dir "resources/conf/dev/config.edn")
+  (let [dev (io/file dir (profile-path dir "dev"))
         k   (str module-key)]
     (or (contains? (extra-modules dir) k)
         (and (.exists dev) (empty? (absent (slurp dev) [{:k module-key}]))))))

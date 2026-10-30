@@ -454,11 +454,11 @@
       (is (= "#include \"../prod/config.edn\"\n"
              (slurp (io/file tmp "resources/conf/acc/config.edn"))))
       (is (add/installed? tmp module true))
+      (spit (io/file tmp "deps.edn")
+            (str "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"} "
+                 (:clojars module) " {:mvn/version \"1.0.0\"}}}"))
       (is (= :enabled (some (fn [[m state]] (when (= "jobs" (:name m)) state))
-                            (do (spit (io/file tmp "deps.edn")
-                                      (str "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"} "
-                                           (:clojars module) " {:mvn/version \"1.0.0\"}}}"))
-                                (add/module-states tmp)))))
+                            (add/module-states tmp))))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
