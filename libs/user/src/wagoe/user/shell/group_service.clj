@@ -249,18 +249,23 @@
       (throw (ex-info (:message error) error)))
     data))
 
-(defn- role-holders
-  "Every assignment of one of `role-names`, with its group's members unless
+(defn- holders
+  "`assignments` as role-holders lists them, with each group's members unless
    `members?` is false; Everyone lists none."
+  [repo assignments members?]
+  (->> assignments
+       (map (fn [{:keys [group-id] :as a}]
+              (let [everyone? (group-core/everyone? group-id)]
+                (cond-> (assoc (select-keys a [:role :group-id :group-name :scope :expires-at]) :everyone? everyone?)
+                  members? (assoc :members (if everyone? [] (ports/find-members repo group-id)))))))
+       (sort-by (juxt :group-name (comp str :role)))
+       vec))
+
+(defn- role-holders
+  "Every assignment of one of `role-names`, as `holders` gives them."
   ([repo role-names] (role-holders repo role-names true))
   ([repo role-names members?]
-   (->> (mapcat #(ports/find-role-assignments repo %) (set role-names))
-        (map (fn [{:keys [group-id] :as a}]
-               (let [everyone? (group-core/everyone? group-id)]
-                 (cond-> (assoc (select-keys a [:role :group-id :group-name :scope :expires-at]) :everyone? everyone?)
-                   members? (assoc :members (if everyone? [] (ports/find-members repo group-id)))))))
-        (sort-by (juxt :group-name (comp str :role)))
-        vec)))
+   (holders repo (mapcat #(ports/find-role-assignments repo %) (set role-names)) members?)))
 
 ;; =============================================================================
 ;; Effective rights diff (BOU-852)
@@ -720,13 +725,7 @@
     (let [roles (roles-of this)]
       (if (:all-assignments? this)
         ;; One query, not one per role; a role no longer known gives nothing
-        (->> (ports/find-all-assignments group-repository)
-             (filter (comp roles :role))
-             (mapv (fn [{:keys [group-id] :as a}]
-                     (assoc (select-keys a [:role :group-id :group-name :scope :expires-at])
-                            :everyone? (group-core/everyone? group-id))))
-             (sort-by (juxt :group-name (comp str :role)))
-             vec)
+        (holders group-repository (filter (comp roles :role) (ports/find-all-assignments group-repository)) false)
         (role-holders group-repository (keys roles) false))))
 
   ports/IRightsTimeline

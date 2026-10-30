@@ -228,7 +228,7 @@
   (find-assignments [_ group-id]
     (mapv db->assignment (db/execute-query! ctx {:select   [:*]
                                                  :from     [[(current :user_group_roles) :a]]
-                                                 :where    [:= :group_id (id-str group-id)]
+                                                 :where    [:= :a.group_id (id-str group-id)]
                                                  :order-by [[:created_at :asc] [:id :asc]]})))
 
   (find-role-assignments [_ role-name]
@@ -363,8 +363,7 @@
   (find-all-assignments [_]
     (mapv db->assignment (db/execute-query! ctx {:select   [:a.* [:g.name :group-name]]
                                                  :from     [[(current :user_group_roles) :a]]
-                                                 :join     [[:user_groups :g] [:= :g.id :a.group_id]]
-                                                 :order-by [[:g.name :asc] [:a.created_at :asc]]})))
+                                                 :join     [[:user_groups :g] [:= :g.id :a.group_id]]})))
 
   ports/IAccessExpiry
   (insert-member-until [_ group-id user-id expires-at]
