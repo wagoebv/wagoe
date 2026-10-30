@@ -371,7 +371,7 @@
 
       (:update-role :delete-role)
       (let [before  (or (find-role group-repository role)
-                        (throw (not-found "No such role" {:role role})))
+                        (throw (not-found "No such role" {:field :role :role role})))
             after   (when (= :update-role op)
                       (:permissions (role-data registry {:name role :description (:description change)
                                                          :permissions (:permissions change)})))

@@ -188,7 +188,9 @@
   ;; BOU-915
   (is (= [:t :user.groups/error-user-not-found]
          (first (group-handlers/refusal-text {:type :not-found :field :user :user-id 1}))))
-  (is (= [:t :user.groups/not-found] (first (group-handlers/refusal-text {:type :not-found :group-id 1})))))
+  (is (= [:t :user.groups/error-role] (first (group-handlers/refusal-text {:type :not-found :field :role}))))
+  (is (= [:t :user.groups/not-found] (first (group-handlers/refusal-text {:type :not-found :group-id 1}))))
+  (is (= [:t :user.groups/error-name-taken] (first (group-handlers/refusal-text {:type :conflict :field :name})))))
 
 (deftest ^:unit the-web-ui-switch-turns-the-group-pages-off-too
   (let [usvc (reify ports/IUserService)

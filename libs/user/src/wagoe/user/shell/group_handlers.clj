@@ -86,8 +86,8 @@
                   :email      :user.groups/error-no-user
                   :user       :user.groups/error-user-not-found
                   :expires-at :user.groups/error-expires-at} field)
-                ({:not-found :user.groups/not-found} type)
-                (when (= [:conflict :name] [type field]) :user.groups/error-name-taken)
+                ;; The one :conflict group-core/refusal? lets through is a name taken
+                ({:not-found :user.groups/not-found :conflict :user.groups/error-name-taken} type)
                 :user.groups/error-name)]
         (when errors [:code " " (pr-str errors)])))
 
