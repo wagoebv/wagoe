@@ -135,6 +135,11 @@
   ;; Entries where the user is the target. options: {:limit :offset :sort-by
   ;; :sort-direction}. Returns a seq of entries.
 
+(defprotocol IUserAuditActions
+  (find-audit-logs-with-actions [this actions options]))
+  ;; find-audit-logs of entries whose action is one of `actions`, a set, in
+  ;; one query. options as find-audit-logs, less :filter-action. BOU-865.
+
 (defprotocol IUserAuditRetention
   (delete-audit-logs-before [this cutoff]))
   ;; Removes every entry created before `cutoff`, an Instant: the audit-log
@@ -264,6 +269,10 @@
   (in-transaction [this f]))
   ;; Calls (f repo), every read and write on repo in one transaction: committed
   ;; when f returns, rolled back when it throws. Returns what f returns.
+
+(defprotocol IAllAssignments
+  (find-all-assignments [this]))
+  ;; Every assignment, each with :group-name, in one query. BOU-865.
 
 (defprotocol IAccessExpiry
   "Memberships and assignments that end (BOU-856). An assignment takes its end
@@ -519,6 +528,12 @@
   (all-assignments [this]))
   ;; Every role assignment, {:role :group-id :group-name :scope :everyone?},
   ;; without members: what the access overview reads. BOU-854.
+
+(defprotocol IRightsTimeline
+  (rights-changes [this user n]))
+  ;; The newest `n` changes to `user`'s rights, a user map, Everyone's since
+  ;; their :created-at included, as wagoe.user.core.audit/rights-timeline
+  ;; gives them. BOU-865.
 
 (defprotocol IRightsPreview
   (preview-change [this change]))

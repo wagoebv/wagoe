@@ -191,9 +191,26 @@
                   :action :grant-add :group-name "Everyone" :added [] :removed []
                   :permissions [{:permission :orders/read :added 3 :removed 0}] :affected-count 3}]
         shown   (text (sut/rights-page user [] [] {:changes changes :scope-info {:labels {:dept "Department"}}}))]
-    (is (some #{"2026-10-03 10:00:00"} shown))
+    (is (some #{"2026-10-03 10:00:00 UTC"} shown) "the zone said (BOU-865)")
     (is (some #{:common/audit-group-join} shown))
     (is (some #{:user.preview/gains} shown))
     (is (some #{"Department"} shown))
     (is (some #{:user.timeline/everyone} shown))
     (is (some #{:user.timeline/empty} (text (sut/rights-page user [] [] {}))))))
+
+(deftest ^:unit a-role-reads-in-the-module-it-is-declared-in
+  ;; BOU-865: as the overview's column names it, not its name's namespace
+  (let [index (sut/role-index [{:name :admin.users/editor :source :code :module :wagoe/admin :permissions #{}}])]
+    (is (some #(= [:t :user.access/may-editor {:module "admin"}] %)
+              (tree-seq coll? seq (sut/assignment-sentence {:group-name "Ops" :role :admin.users/editor :scope {}}
+                                                           index {}))))))
+
+(deftest ^:unit explain-says-the-authorization-mode
+  ;; BOU-865: under :report and :off a no refuses nothing
+  (let [user   {:id (random-uuid) :email "ada@example.com"}
+        result {:allowed? false :paths [] :misses []}
+        shown  #(text (sut/explain-page user result {:asked {:permission :orders/read} :mode %}))]
+    (is (some #{:user.explain/mode-report} (shown :report)))
+    (is (some #{:user.explain/mode-off} (shown :off)))
+    (is (some #{:user.explain/mode-enforce} (shown :enforce)))
+    (is (not-any? #{:user.explain/mode-report :user.explain/mode-off :user.explain/mode-enforce} (shown nil)))))

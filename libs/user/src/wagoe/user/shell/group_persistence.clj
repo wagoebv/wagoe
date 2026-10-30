@@ -20,11 +20,12 @@
   [m row]
   (if-let [t (:expires-at row)] (assoc m :expires-at (tc/string->instant t)) m))
 
-(defn- unexpired
-  "Whether `column`, an expires_at, has not passed: an expired row counts for
-   nothing from that moment, before `remove-expired` deletes it (BOU-856)."
-  [column]
-  [:or [:= column nil] [:> column (Instant/now)]])
+(defn- current
+  "`table`, user_group_members or user_group_roles, less its expired rows, as
+   a FROM source: an expired row counts for nothing from that moment, before
+   `remove-expired` deletes it (BOU-856). Every read goes through it."
+  [table]
+  {:select [:*] :from [table] :where [:or [:= :expires_at nil] [:> :expires_at (Instant/now)]]})
 
 (defn- db->group [row]
   (when row
@@ -76,14 +77,14 @@
   "The group's live members, as a subquery of `find-groups`."
   []
   {:select [[[:count :*]]]
-   :from   [[:user_group_members :m]]
+   :from   [[(current :user_group_members) :m]]
    :join   [[:auth_users :a] [:= :a.id :m.user_id]]
-   :where  [:and [:= :m.group_id :g.id] [:= :a.deleted_at nil] (unexpired :m.expires_at)]})
+   :where  [:and [:= :m.group_id :g.id] [:= :a.deleted_at nil]]})
 
 (defn- role-count []
   {:select [[[:count :*]]]
-   :from   [[:user_group_roles :t]]
-   :where  [:and [:= :t.group_id :g.id] (unexpired :t.expires_at)]})
+   :from   [[(current :user_group_roles) :t]]
+   :where  [:= :t.group_id :g.id]})
 
 (defn- delete-expired!
   "Delete `rows` of `table` by id while still expired at `now`. Returns those
@@ -179,11 +180,10 @@
                                   :active? (protocols/db->boolean (:adapter ctx) (:active row))}
                                  row))
           (db/execute-query! ctx {:select   [:a.id :a.email :u.name :a.active :m.expires_at]
-                                  :from     [[:user_group_members :m]]
+                                  :from     [[(current :user_group_members) :m]]
                                   :join     [[:auth_users :a] [:= :a.id :m.user_id]]
                                   :left-join [[:users :u] [:= :u.id :m.user_id]]
-                                  :where    [:and [:= :m.group_id (id-str group-id)] [:= :a.deleted_at nil]
-                                             (unexpired :m.expires_at)]
+                                  :where    [:and [:= :m.group_id (id-str group-id)] [:= :a.deleted_at nil]]
                                   :order-by [[:a.email :asc]]})))
 
   (insert-member [_ group-id user-id]
@@ -227,17 +227,15 @@
 
   (find-assignments [_ group-id]
     (mapv db->assignment (db/execute-query! ctx {:select   [:*]
-                                                 :from     [:user_group_roles]
-                                                 :where    [:and [:= :group_id (id-str group-id)]
-                                                            (unexpired :expires_at)]
+                                                 :from     [[(current :user_group_roles) :a]]
+                                                 :where    [:= :a.group_id (id-str group-id)]
                                                  :order-by [[:created_at :asc] [:id :asc]]})))
 
   (find-role-assignments [_ role-name]
     (mapv db->assignment (db/execute-query! ctx {:select   [:a.* [:g.name :group-name]]
-                                                 :from     [[:user_group_roles :a]]
+                                                 :from     [[(current :user_group_roles) :a]]
                                                  :join     [[:user_groups :g] [:= :g.id :a.group_id]]
-                                                 :where    [:and [:= :a.role (group/permission-str role-name)]
-                                                            (unexpired :a.expires_at)]
+                                                 :where    [:= :a.role (group/permission-str role-name)]
                                                  :order-by [[:g.name :asc]]})))
 
   (insert-assignment [_ assignment]
@@ -264,21 +262,21 @@
       (mapv db->assignment
             (db/execute-query! ctx {:select    [:a.id :a.group_id :a.role :a.scope :a.created_at :a.expires_at
                                                 [:g.name :group-name] [:r.permissions :role-permissions]]
-                                    :from      [[:user_group_roles :a]]
+                                    :from      [[(current :user_group_roles) :a]]
                                     :join      [[:user_groups :g] [:= :g.id :a.group_id]]
                                     :left-join [[:user_roles :r] [:= :r.name :a.role]]
-                                    :where     [:and (live-user id) (unexpired :a.expires_at)
+                                    :where     [:and (live-user id)
                                                 (cond-> [:or [:= :g.id (str group/everyone-id)]
-                                                         [:in :g.id {:select [:group_id] :from [:user_group_members]
-                                                                     :where  [:and [:= :user_id id]
-                                                                              (unexpired :expires_at)]}]]
+                                                         [:in :g.id {:select [:m.group_id]
+                                                                     :from   [[(current :user_group_members) :m]]
+                                                                     :where  [:= :m.user_id id]}]]
                                                   (seq group-names) (conj [:in :g.name (vec group-names)]))]
                                     :order-by  [[:g.name :asc] [:a.created_at :asc]]}))))
 
   (find-role-holders [_ role-names]
     (if (empty? role-names)
       []
-      (let [active [:and [:= :a.active (protocols/boolean->db (:adapter ctx) true)] (unexpired :r.expires_at)]
+      (let [active [:= :a.active (protocols/boolean->db (:adapter ctx) true)]
             roles  [:in :r.role (mapv group/permission-str role-names)]]
         (mapv (fn [row] {:user-id  (tc/string->uuid (:user-id row))
                          :group-id (tc/string->uuid (:group-id row))
@@ -288,13 +286,13 @@
                ;; UNION ALL: a scope is TEXT, which not every engine compares;
                ;; permission-holders makes them distinct.
                ctx {:union-all [{:select [:m.user_id :r.group_id :r.role :r.scope]
-                                 :from   [[:user_group_roles :r]]
-                                 :join   [[:user_group_members :m] [:= :m.group_id :r.group_id]
+                                 :from   [[(current :user_group_roles) :r]]
+                                 :join   [[(current :user_group_members) :m] [:= :m.group_id :r.group_id]
                                           [:auth_users :a] [:= :a.id :m.user_id]]
-                                 :where  [:and roles [:= :a.deleted_at nil] active (unexpired :m.expires_at)]}
+                                 :where  [:and roles [:= :a.deleted_at nil] active]}
                                 ;; Everyone: every user, without a membership row.
                                 {:select [[:a.id :user_id] :r.group_id :r.role :r.scope]
-                                 :from   [[:user_group_roles :r]]
+                                 :from   [[(current :user_group_roles) :r]]
                                  :join   [[:auth_users :a] [:= :r.group_id (str group/everyone-id)]]
                                  :where  [:and roles [:= :a.deleted_at nil] active]}]})))))
 
@@ -344,10 +342,9 @@
     (mapv db->group (db/execute-query! ctx {:select   [:g.id :g.name :g.description :g.created_at :g.updated_at
                                                        :m.expires_at]
                                             :from     [[:user_groups :g]]
-                                            :join     [[:user_group_members :m] [:= :m.group_id :g.id]
+                                            :join     [[(current :user_group_members) :m] [:= :m.group_id :g.id]
                                                        [:auth_users :a] [:= :a.id :m.user_id]]
-                                            :where    [:and [:= :m.user_id (id-str user-id)] [:= :a.deleted_at nil]
-                                                       (unexpired :m.expires_at)]
+                                            :where    [:and [:= :m.user_id (id-str user-id)] [:= :a.deleted_at nil]]
                                             :order-by [[:g.name :asc]]})))
 
   (ensure-tables [_]
@@ -361,6 +358,12 @@
   (in-transaction [this f]
     (db/with-transaction [tx ctx]
       (f (assoc this :ctx tx))))
+
+  ports/IAllAssignments
+  (find-all-assignments [_]
+    (mapv db->assignment (db/execute-query! ctx {:select   [:a.* [:g.name :group-name]]
+                                                 :from     [[(current :user_group_roles) :a]]
+                                                 :join     [[:user_groups :g] [:= :g.id :a.group_id]]})))
 
   ports/IAccessExpiry
   (insert-member-until [_ group-id user-id expires-at]

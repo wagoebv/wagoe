@@ -875,7 +875,8 @@
                    (route "/users/:id/rights"
                           {:get {:handler (rights-handlers/user-rights user-service group-service)}})
                    (route "/users/:id/explain"
-                          {:get {:handler (rights-handlers/explain-access user-service group-service)}})
+                          {:get {:handler (rights-handlers/explain-access user-service group-service
+                                                                         (or (get-in config [:active :wagoe/authorization :mode]) :off))}})
                    (route "/users/:id/grant"
                           {:get {:handler (rights-handlers/grant-wizard user-service group-service)}})
                    (route "/users/:id/grant/role"

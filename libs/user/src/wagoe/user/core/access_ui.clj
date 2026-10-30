@@ -39,7 +39,7 @@
   [module {:keys [assignment]} roles]
   (let [role (get roles (:role assignment))]
     (list
-     (if-let [level (when (= module (namespace (:role assignment))) (rights-ui/role-level role))]
+     (if-let [level (when (= module (rights-ui/role-module roles (:role assignment))) (rights-ui/role-level role))]
        (ui/tone-badge [:t (rights-ui/level-labels level)] :info)
        (ui/tone-badge (group/permission-str (:role assignment)) :neutral))
      (when (seq (:scope assignment))

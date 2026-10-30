@@ -777,3 +777,29 @@
           (is (= [:join :new-group] (map :kind options)))
           (is (= :scope (get-in (last options) [:refused :field])))
           (is (nil? (:preview (last options)))))))))
+
+(deftest ^:integration the-access-pages-read-in-one-query
+  ;; BOU-865: every assignment at once, every rights action at once; the same as one query per role or action
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc user!]}]
+      (let [ada  (user! "ada@example.com")
+            ops  (ports/create-group svc {:name "Ops"})
+            ends (.plusSeconds (Instant/now) 3600)]
+        (ports/add-group-member svc (:id ops) (:id ada))
+        (ports/add-group-role svc (:id ops) {:role :orders/viewer})
+        (ports/add-group-role svc (:id ops) {:role :reports/editor :scope {:domain-id 4} :expires-at ends})
+        (ports/insert-assignment (:group-repository svc) {:group-id (:id ops) :role :reports/viewer :scope {}
+                                                          :expires-at (.minusSeconds (Instant/now) 60)})
+        (ports/remove-group-member svc (:id ops) (:id ada))
+        (testing "assignments"
+          (is (:all-assignments? svc))
+          (is (= [:orders/viewer :reports/editor] (map :role (ports/all-assignments svc))) "an expired one left out")
+          (is (= (ports/all-assignments (assoc svc :all-assignments? false)) (ports/all-assignments svc))))
+        (testing "the rights timeline"
+          (is (:audit-actions? svc))
+          (is (= {:group-join 1 :grant-add 2 :group-leave 1}
+                 (frequencies (map :action (ports/rights-changes svc ada 10)))))
+          ;; Entries written in one millisecond come in either order
+          (is (= (frequencies (ports/rights-changes (assoc svc :audit-actions? false) ada 10))
+                 (frequencies (ports/rights-changes svc ada 10))))
+          (is (= 1 (count (ports/rights-changes svc ada 1)))))))))
