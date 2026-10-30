@@ -441,6 +441,27 @@
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
+(deftest ^:integration a-profile-that-includes-another-is-judged-by-it
+  ;; acc was only `#include "../prod/config.edn"`, so every optional module
+  ;; read as not switched on (BOU-867).
+  (let [tmp    (with-profiles! "include")
+        module (cat/find-module "jobs")]
+    (try
+      (io/make-parents (io/file tmp "resources/conf/acc/config.edn"))
+      (spit (io/file tmp "resources/conf/acc/config.edn") "#include \"../prod/config.edn\"\n")
+      (is (= ["dev" "prod" "test"]
+             (map first (add/patch-configs! tmp module))))
+      (is (= "#include \"../prod/config.edn\"\n"
+             (slurp (io/file tmp "resources/conf/acc/config.edn"))))
+      (is (add/installed? tmp module true))
+      (is (= :enabled (some (fn [[m state]] (when (= "jobs" (:name m)) state))
+                            (do (spit (io/file tmp "deps.edn")
+                                      (str "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"} "
+                                           (:clojars module) " {:mvn/version \"1.0.0\"}}}"))
+                                (add/module-states tmp)))))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
 (deftest ^:integration devtools-enables-the-dashboard-in-dev-only
   (let [tmp (with-profiles! "devtools")]
     (try

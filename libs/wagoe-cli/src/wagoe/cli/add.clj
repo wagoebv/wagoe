@@ -254,27 +254,50 @@
         (catch Exception _ nil))
       (.getName (.getAbsoluteFile (io/file dir)))))
 
+(defn- profile-path
+  "Profile `env`'s config.edn relative to `dir`, or, when that file is only an
+   `#include`, the file it includes, followed as Aero does (BOU-867)."
+  [dir env]
+  (loop [path (str "resources/conf/" env "/config.edn") seen #{}]
+    (let [v (try (edn/read-string {:readers {'include #(vector ::include %)}
+                                   :default (fn [_ v] v)}
+                                  (slurp (io/file dir path)))
+                 (catch Exception _ nil))
+          to (when (and (vector? v) (= ::include (first v)) (string? (second v)))
+               (str (.normalize (.toPath (io/file (.getParent (io/file path)) (second v))))))]
+      (if (and to (not (seen to)) (.exists (io/file dir to)))
+        (recur to (conj seen path))
+        path))))
+
 (defn- target-profiles
-  "The existing profiles `module` belongs in, sorted, each with its snippet. A
-   dev-scoped module goes in dev only; no profile is ever created."
+  "The existing profiles `module` belongs in, sorted, each with its snippet and
+   the config file to read: the one it includes when the profile is only an
+   `#include`. A profile including another profile is that profile, so it is
+   left out. A dev-scoped module goes in dev only; no profile is ever created."
   [dir {:keys [scope] :as module}]
-  (for [env   (sort (.list (io/file dir "resources/conf")))
-        :when (and (.exists (io/file dir "resources/conf" env "config.edn"))
-                   (or (not= :dev scope) (= "dev" env)))
-        :let  [snippet (some-> (snippet-for module env)
-                               (str/replace "{{project-name}}" (project-name dir)))]
-        :when (seq snippet)]
-    [env snippet]))
+  (let [envs  (filter #(.exists (io/file dir "resources/conf" % "config.edn"))
+                      (sort (.list (io/file dir "resources/conf"))))
+        paths (into {} (map (juxt identity #(profile-path dir %))) envs)
+        own   (set (map #(str "resources/conf/" % "/config.edn") envs))]
+    (for [env   envs
+          :let  [path (paths env)]
+          :when (and (or (not= :dev scope) (= "dev" env))
+                     (or (= path (str "resources/conf/" env "/config.edn"))
+                         (not (own path))))
+          :let  [snippet (some-> (snippet-for module env)
+                                 (str/replace "{{project-name}}" (project-name dir)))]
+          :when (seq snippet)]
+      [env snippet path])))
 
 (def ^:private database-keys
   [:wagoe/postgresql :wagoe/sqlite :wagoe/h2 :wagoe/mysql])
 
 (defn- active-database
-  "The database key in profile `env`'s :active map, or nil."
-  [dir env]
+  "The database key in the :active map of config file `path`, or nil."
+  [dir path]
   (try
     (let [active (:active (edn/read-string {:default (fn [_ v] v)}
-                                           (slurp (io/file dir "resources/conf" env "config.edn"))))]
+                                           (slurp (io/file dir path))))]
       (first (filter #(contains? active %) database-keys)))
     (catch Exception _ nil)))
 
@@ -284,8 +307,8 @@
    says `:allow-h2? true`, as tenant's test snippet does (BOU-576)."
   [dir {:keys [databases] :as module}]
   (when (seq databases)
-    (vec (for [[env snippet] (target-profiles dir module)
-               :let  [db (active-database dir env)]
+    (vec (for [[env snippet path] (target-profiles dir module)
+               :let  [db (active-database dir path)]
                :when (and db
                           (not (contains? databases (keyword (name db))))
                           (not (and (= :wagoe/h2 db) (str/includes? snippet ":allow-h2? true"))))]
@@ -299,8 +322,8 @@
    [[env result]], result as `patch-config!` returns it. Only dev and test
    were written, so a module was missing under WAG_ENV=prod (BOU-529)."
   [dir module]
-  (vec (for [[env snippet] (target-profiles dir module)]
-         [env (patch-config! dir (str "resources/conf/" env "/config.edn") snippet)])))
+  (vec (for [[env snippet path] (target-profiles dir module)]
+         [env (patch-config! dir path snippet)])))
 
 (defn installed?
   "Whether `module` needs nothing more: its dep is there and every profile it
@@ -308,8 +331,8 @@
    never got a module added before it (BOU-564)."
   [dir module dep-present?]
   (and dep-present?
-       (every? (fn [[env snippet]]
-                 (let [text (slurp (io/file dir "resources/conf" env "config.edn"))]
+       (every? (fn [[_ snippet path]]
+                 (let [text (slurp (io/file dir path))]
                    (empty? (absent text (snippet-entries snippet)))))
                (target-profiles dir module))))
 
