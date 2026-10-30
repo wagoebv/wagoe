@@ -29,6 +29,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`agents:update` and `wagoe add` read a profile that is only an `#include` as the profile it includes** (BOU-867),
+  so its active modules no longer show as not switched on. Nothing to change.
+
 ## [1.1.0-rc-1] — 2026-10-27
 
 ### Added
