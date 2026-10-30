@@ -645,12 +645,14 @@
         (testing "a user the preview names is diffed"
           (is (= [{:permission :orders/read :scope {}}]
                  (get-in (ports/preview-change svc (assoc add :user-id (:id ada))) [:user :added])))
-          (is (= [] (get-in (ports/preview-change svc (assoc add :user-id (:id bob))) [:user :added]))))
+          (is (= [] (get-in (ports/preview-change svc (assoc add :user-id (:id bob))) [:user :added])))
+          (is (= 4 (:affected-count (ports/preview-change svc (assoc add :user-id (:id (last more))))))
+              "an inactive user named takes nobody from the count"))
         (testing "a role Everyone holds, edited"
           (ports/create-role svc {:name :sales/lead :permissions #{:reports/read}})
           (ports/add-group-role svc group/everyone-id {:role :sales/lead})
           (is (= 5 (:affected-count (ports/preview-change svc {:op :update-role :role :sales/lead
-                                                                :permissions #{:orders/write}})))))
+                                                               :permissions #{:orders/write}})))))
         (is (= [] @pages) "no page of users is read")
         (testing "it shows on an affected user's rights timeline, filed under Everyone"
           (ports/add-group-role svc group/everyone-id {:role :orders/viewer})

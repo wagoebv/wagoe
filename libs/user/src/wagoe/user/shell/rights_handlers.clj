@@ -223,8 +223,7 @@
                                                         after (assoc :filter-created-after after)))))]
     (audit/rights-timeline
      (concat (mapcat #(entries id %) audit/rights-actions)
-             (when created-at
-               (mapcat #(entries group-core/everyone-id % created-at) [:grant-add :grant-remove])))
+             (mapcat #(entries group-core/everyone-id % created-at) [:grant-add :grant-remove]))
      timeline-size)))
 
 (defn- user-of [user-service request]

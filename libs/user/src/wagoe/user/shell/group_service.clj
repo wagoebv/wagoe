@@ -292,7 +292,7 @@
    Throws as making the change would."
   [{:keys [group-repository user-repository registry settings membership] :as svc} {:keys [op group-id user-id role] :as change}]
   (let [roles (all-roles group-repository registry)
-        ;; A change naming no user still names one for the preview (BOU-853)
+        ;; The user a preview names when the change names none (BOU-853)
         plan  {:roles roles :roles-after roles :update identity :named-id user-id}]
     (case op
       :add-member
@@ -395,7 +395,8 @@
    {:keys [focal grants roles roles-after update everyone? named-id] :as plan}]
   (when-let [touched (not-empty (or (:touched plan) (into #{} (map :permission) grants)))]
     (let [resolve  (or (:resolve svc) stored-resolve)
-          active?  #(not (false? (:active? %)))
+          ;; find-members says :active?, a user record :active
+          active?  #(not (false? (get % :active? (:active %))))
           focal?   #(access/same-id? (:id focal) (:id %))
           ;; Read one by one
           own?     #(or (focal? %) (not (active? %)))
@@ -734,7 +735,7 @@
     (let [{:keys [focal group] :as plan} (change-plan this change)
           ;; A role change names no user, unless the change does (BOU-853)
           summary (group-core/diff-summary (user-diffs this plan) (or (:id focal) (:user-id change)))]
-      (cond-> (assoc summary :everyone? (boolean (some-> group :id group-core/everyone?)))
+      (cond-> (assoc summary :everyone? (boolean (or (:everyone? plan) (some-> group :id group-core/everyone?))))
         ;; No permission touched: the user the change names still gains nothing
         (and focal (nil? (:user summary)))
         (assoc :user {:user (select-keys focal [:id :email]) :added [] :removed []}))))
