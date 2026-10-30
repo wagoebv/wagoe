@@ -186,7 +186,7 @@
 
 (deftest ^:unit a-missing-user-is-not-a-missing-group
   ;; BOU-915
-  (is (= [:t :user.groups/error-user-not-found]
+  (is (= [:t :user.rights/user-not-found]
          (first (group-handlers/refusal-text {:type :not-found :field :user :user-id 1}))))
   (is (= [:t :user.groups/error-role] (first (group-handlers/refusal-text {:type :not-found :field :role}))))
   (is (= [:t :user.groups/not-found] (first (group-handlers/refusal-text {:type :not-found :group-id 1}))))

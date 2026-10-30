@@ -84,10 +84,10 @@
   (list [:t (or ({:role       :user.groups/error-role
                   :scope      :user.groups/error-scope
                   :email      :user.groups/error-no-user
-                  :user       :user.groups/error-user-not-found
+                  :user       :user.rights/user-not-found
                   :expires-at :user.groups/error-expires-at} field)
-                ;; The one :conflict group-core/refusal? lets through is a name taken
-                ({:not-found :user.groups/not-found :conflict :user.groups/error-name-taken} type)
+                ({:not-found :user.groups/not-found} type)
+                (when (= [:conflict :name] [type field]) :user.groups/error-name-taken)
                 :user.groups/error-name)]
         (when errors [:code " " (pr-str errors)])))
 
