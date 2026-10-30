@@ -315,13 +315,41 @@
          (remove known)
          distinct)))
 
+(defn- deprecation-releases
+  "Ticket -> the `## [x]` headings whose `### Deprecated` section cites it."
+  [changelog]
+  (->> (str/split changelog #"(?m)^(?=## \[)")
+       (mapcat (fn [release]
+                 (when-let [heading (second (re-find #"^## \[([^\]]+)\]" release))]
+                   (for [[_ section] (re-seq deprecated-section-re release)
+                         ticket      (re-seq #"BOU-\d+" section)]
+                     [ticket heading]))))
+       (reduce (fn [m [t h]] (update m t (fnil conj #{}) h)) {})))
+
+(defn upgrades-with-unknown-since
+  "`upgrades` entries whose :since is not the release that deprecated their
+   ticket, as `ticket: since`. One no `### Deprecated` entry cites names any
+   `## [x]` heading."
+  [changelog upgrades]
+  (let [releases (deprecation-releases changelog)
+        headings (set (map second (re-seq #"(?m)^## \[([^\]]+)\]" changelog)))]
+    (keep (fn [{:keys [ticket since]}]
+            (when-not ((get releases ticket headings) since) (str ticket ": " since)))
+          upgrades)))
+
 (defn- report-upgrades
-  "Prints the deprecations `wagoe upgrade` does not know and returns whether any."
+  "Prints the deprecations `wagoe upgrade` does not know, and entries naming a
+   release that does not exist, and returns whether any."
   []
-  (report-findings (str "Deprecations with no entry in " upgrades-path ":")
-                   (deprecations-without-upgrade (slurp changelog-path)
-                                                 (edn/read-string (slurp upgrades-path)))
-                   "Add a rewrite, or a :manual reason a rewrite cannot do it."))
+  (let [changelog (slurp changelog-path)
+        upgrades  (edn/read-string (slurp upgrades-path))
+        unknown?  (report-findings (str "Deprecations with no entry in " upgrades-path ":")
+                                   (deprecations-without-upgrade changelog upgrades)
+                                   "Add a rewrite, or a :manual reason a rewrite cannot do it.")
+        bad-since? (report-findings (str "Entries in " upgrades-path " whose :since is no release:")
+                                    (upgrades-with-unknown-since changelog upgrades)
+                                    "Name the `## [x]` heading its `### Deprecated` entry sits under.")]
+    (or unknown? bad-since?)))
 
 (defn- base-ref
   "What to compare against. `CHANGELOG_BASE` wins, so CI can name the PR base."
