@@ -422,3 +422,21 @@
             (is (str/includes? body "ada@example.com"))
             (is (not (str/includes? body ">bob@example.com<")) "Bob may already")
             (is (str/includes? body "nobody@example.com"))))))))
+
+(deftest ^:integration a-refused-option-does-not-break-the-wizard
+  ;; BOU-863: a domain the scope schema refuses refuses the new group, not the join
+  (with-app
+    (fn [{:keys [users usvc gsvc admin]}]
+      (let [ada     (ports/create-user users {:email "ada@example.com" :name "Ada" :role :user :active true
+                                              :password-hash "x"})
+            finance (ports/create-group gsvc {:name "Finance"})
+            r       (explain (rights-handlers/grant-wizard usvc gsvc) admin ada
+                             {"permission" "invoice/write" "scope.domain-id" "x"})]
+        (ports/add-group-role gsvc (:id finance) {:role :invoice/editor :scope {}})
+        (let [r (explain (rights-handlers/grant-wizard usvc gsvc) admin ada
+                         {"permission" "invoice/write" "scope.domain-id" "x"})]
+          (is (= 200 (:status r)))
+          (is (str/includes? (:body r) "grant-join"))
+          (is (str/includes? (:body r) "grant-refused"))
+          (is (str/includes? (:body r) "error-scope")))
+        (is (= 200 (:status r)) "no option at all but the refused one")))))

@@ -537,6 +537,7 @@
  :user.grant/new-role-hint "Geen rol bevat alleen {permission}. Er een maken verandert niemands rechten; deze pagina biedt daarna aan hem toe te wijzen."
  :user.grant/new-group-heading "Een nieuwe groep met alleen hen"
  :user.grant/new-group-hint "Alleen als niets hierboven past. Geef de groep een naam en zeg waarvoor ze is."
+ :user.grant/refused "Hier niet mogelijk:"
  :user.grant/field-purpose "Doel"
  :user.grant/error-purpose "Zeg waarvoor de groep is."
  :user.grant/flash-role-created "Rol gemaakt. Kies een optie die hem toewijst."

@@ -37,8 +37,9 @@
     :new-group [:t :user.grant/new-group-heading]))
 
 (defn- option
-  "One ranked option, `n` its place."
-  [n {:keys [kind group assignment preview] :as o} user-id permission scope scope-info]
+  "One ranked option, `n` its place. A refused one says why, its `:refused`
+   as the shell put it into words, and offers nothing to apply (BOU-863)."
+  [n {:keys [kind group assignment preview refused] :as o} user-id permission scope scope-info]
   (let [{:keys [role]} assignment
         required       {:required true :class "input"}
         ;; A stand-in's access ends by itself (BOU-856)
@@ -46,36 +47,38 @@
     (rights-ui/section
      [:span (str n ". ") (title o)]
      {:class (str "grant-option grant-" (name kind))}
-     (case kind
-       :join      (list (extra o scope-info)
-                        (rights-ui/preview-sections preview scope-info)
-                        (apply-form (str (group-ui/group-path (:id group)) "/members")
-                                    {"user-id" user-id "confirm" "true"}
-                                    expiry))
-       :narrow    (list (assignment-line assignment scope-info)
-                        (extra o scope-info)
-                        (rights-ui/preview-sections preview scope-info)
-                        (apply-form (str (group-ui/group-path (:id group)) "/roles")
-                                    (into {"role" (group/permission-str role) "confirm" "true"}
-                                          (for [[k v] scope] [(name (group-ui/scope-lookup-field k)) v]))
-                                    expiry))
-       :new-role  (list [:p [:t :user.grant/new-role-hint {:permission (group/permission-str permission)}]]
-                        (apply-form (str (rights-ui/grant-path user-id nil nil) "/role") (rights-ui/asking-params permission scope)
-                                    [:label {:for "grant-role-name"} [:t :user.groups/field-name]]
-                                    [:input (assoc required :id "grant-role-name" :name "name"
-                                                   :value (group/permission-str permission))]))
-       :new-group (list [:p [:t :user.grant/new-group-hint]]
-                        (assignment-line assignment scope-info)
-                        (rights-ui/preview-sections preview scope-info)
-                        (apply-form (str (rights-ui/grant-path user-id nil nil) "/group")
-                                    (assoc (rights-ui/asking-params permission scope)
-                                           "role" (group/permission-str role) "confirm" "true")
-                                    [:label {:for "grant-group-name"} [:t :user.groups/field-name]]
-                                    [:input (assoc required :id "grant-group-name" :name "name")]
-                                    [:label {:for "grant-group-purpose"} [:t :user.grant/field-purpose]]
-                                    [:textarea (assoc required :id "grant-group-purpose" :name "description"
-                                                      :class "textarea")]
-                                    expiry))))))
+     (if refused
+       [:p.grant-refused {:class "alert alert-warning"} [:t :user.grant/refused] " " refused]
+       (case kind
+         :join      (list (extra o scope-info)
+                          (rights-ui/preview-sections preview scope-info)
+                          (apply-form (str (group-ui/group-path (:id group)) "/members")
+                                      {"user-id" user-id "confirm" "true"}
+                                      expiry))
+         :narrow    (list (assignment-line assignment scope-info)
+                          (extra o scope-info)
+                          (rights-ui/preview-sections preview scope-info)
+                          (apply-form (str (group-ui/group-path (:id group)) "/roles")
+                                      (into {"role" (group/permission-str role) "confirm" "true"}
+                                            (for [[k v] scope] [(name (group-ui/scope-lookup-field k)) v]))
+                                      expiry))
+         :new-role  (list [:p [:t :user.grant/new-role-hint {:permission (group/permission-str permission)}]]
+                          (apply-form (str (rights-ui/grant-path user-id nil nil) "/role") (rights-ui/asking-params permission scope)
+                                      [:label {:for "grant-role-name"} [:t :user.groups/field-name]]
+                                      [:input (assoc required :id "grant-role-name" :name "name"
+                                                     :value (group/permission-str permission))]))
+         :new-group (list [:p [:t :user.grant/new-group-hint]]
+                          (assignment-line assignment scope-info)
+                          (rights-ui/preview-sections preview scope-info)
+                          (apply-form (str (rights-ui/grant-path user-id nil nil) "/group")
+                                      (assoc (rights-ui/asking-params permission scope)
+                                             "role" (group/permission-str role) "confirm" "true")
+                                      [:label {:for "grant-group-name"} [:t :user.groups/field-name]]
+                                      [:input (assoc required :id "grant-group-name" :name "name")]
+                                      [:label {:for "grant-group-purpose"} [:t :user.grant/field-purpose]]
+                                      [:textarea (assoc required :id "grant-group-purpose" :name "description"
+                                                        :class "textarea")]
+                                      expiry)))))))
 
 (defn grant-page
   "Ways to give `user` the permission asked, `result` as `grant-options`

@@ -537,6 +537,7 @@
  :user.grant/new-role-hint "No role holds only {permission}. Creating one changes nobody's rights; this page then offers to assign it."
  :user.grant/new-group-heading "A new group with only them"
  :user.grant/new-group-hint "Only when nothing above fits. Name the group and say what it is for."
+ :user.grant/refused "Not possible here:"
  :user.grant/field-purpose "Purpose"
  :user.grant/error-purpose "Say what the group is for."
  :user.grant/flash-role-created "Role created. Pick an option that assigns it."

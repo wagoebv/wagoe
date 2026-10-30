@@ -50,3 +50,11 @@
     (is (= ["Exact" "Everywhere"] [(get-in a [:group :name]) (get-in b [:group :name])]))
     (is (= [[] [{:permission :invoice/read :scope {}}]] [(:extra a) (:extra b)]))
     (is (= [0 1] [(:radius a) (:radius b)]))))
+
+(deftest ^:unit a-refused-option-is-dropped-unless-a-last-resort
+  ;; BOU-863
+  (let [refused {:type :validation-error :field :scope}]
+    (is (= [:new-group]
+           (map :kind (sut/rank [{:kind :narrow :group {:name "Desk"} :refused refused}
+                                 {:kind :new-group :refused refused}]
+                                :invoice/read {:domain-id "x"}))))))

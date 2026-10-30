@@ -641,3 +641,41 @@
           (is (= "expired" (get-in (first (entries ada :grant-remove)) [:metadata :reason]))
               "a removed role is audited for the members it reached")
           (is (= [:invoice/approve] (map :permission (ports/user-grants svc ada))) "the rest stays"))))))
+
+(deftest ^:integration a-new-group-of-one-is-one-transaction
+  ;; BOU-863: an assignment failing after its preview passed leaves no group behind
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc audit user! ctx]}]
+      (let [ada        (user! "ada@example.com")
+            g          {:name "Ada reads" :description "Audit"}
+            ada-reads? #(some (comp #{"Ada reads"} :name) (ports/list-groups svc))
+            sql!       #(jdbc/execute! (:datasource ctx) [%])]
+        ;; The database refuses the assignment the checks let through
+        (sql! "ALTER TABLE user_group_roles ADD CONSTRAINT no_orders_viewer CHECK (role <> 'orders/viewer')")
+        (is (thrown? Exception (ports/create-grant-group svc g (:id ada) {:role :orders/viewer :scope {}} nil)))
+        (sql! "ALTER TABLE user_group_roles DROP CONSTRAINT no_orders_viewer")
+        (is (not (ada-reads?)))
+        (is (empty? (ports/user-grants svc ada)))
+        (testing "refused before anything is written"
+          (is (= :role (:field (refusal #(ports/create-grant-group svc g (:id ada) {:role :no/such} nil)))))
+          (is (not (ada-reads?))))
+        (testing "made, it holds the user and the role, audited"
+          (let [made (ports/create-grant-group svc g (:id ada) {:role :orders/viewer :scope {}} nil)]
+            (is (= ["ada@example.com"] (map :email (:members (ports/get-group svc (:id made))))))
+            (is (= #{:orders/read} (permissions-of (ports/user-grants svc ada))))
+            (is (= [:grant-add :group-join] (actions audit ada)))))))))
+
+(deftest ^:integration a-refused-option-leaves-the-others
+  ;; BOU-863: a scope the schema refuses refuses the assignments, not the joins
+  (with-service {:scope [:map [:domain-id {:optional true} :int]]}
+    {:registry registry :explain (partial authorization/explain registry)}
+    (fn [{:keys [svc user!]}]
+      (let [ada  (user! "ada@example.com")
+            ops  (ports/create-group svc {:name "Ops"})
+            mine (ports/create-group svc {:name "Mine"})]
+        (ports/add-group-role svc (:id ops) {:role :orders/viewer})
+        (ports/add-group-member svc (:id mine) (:id ada))
+        (let [{:keys [options]} (ports/grant-options svc ada :orders/read {:domain-id "x"})]
+          (is (= [:join :new-group] (map :kind options)))
+          (is (= :scope (get-in (last options) [:refused :field])))
+          (is (nil? (:preview (last options)))))))))

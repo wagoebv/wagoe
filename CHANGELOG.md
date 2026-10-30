@@ -29,6 +29,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Grant wizard: a new group of one is made in one transaction, and a refused option no longer breaks the page**
+  (BOU-863). A group service of your own can implement `IGrantGroup` to get the same.
+
 ## [1.1.0-rc-1] — 2026-10-27
 
 ### Added
