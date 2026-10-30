@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **User forms, filters, role badges and bulk actions say "No role" where they said "User"** (BOU-917).
+  Nothing to do, unless your own catalogue overrides `:common/role-user`.
 - **Rights timeline: an expiry records what it took, and a role edit over many groups hides no older change**
   (BOU-911). Nothing to do.
 - **OpenTelemetry 1.67.0 in `wagoe-observability`** (BOU-914): 1.66.0 has a known vulnerability in

@@ -57,7 +57,7 @@
         (is (= :span (first role-cell)))
         (is (str/includes? (get-in role-cell [1 :class]) "user-role-badge"))
         (is (str/includes? (get-in role-cell [1 :class]) "c-badge tone-info"))
-        (is (= "Admin" (nth role-cell 2))))
+        (is (= [:t :common/role-admin] (nth role-cell 2))))
 
       ;; Status badge cell
       (let [status-cell (nth row 3)]
@@ -69,9 +69,9 @@
 
   (testing "generates correct table row for inactive user"
     (let [row (ui/user-row inactive-user)]
-      ;; Role badge: user
+      ;; Role badge: no role
       (let [role-cell (nth row 2)]
-        (is (= "User" (nth role-cell 2))))
+        (is (= [:t :common/role-user] (nth role-cell 2))))
 
       ;; Status badge: inactive
       (let [status-cell (nth row 3)]
@@ -79,12 +79,11 @@
         (is (str/includes? (get-in status-cell [1 :class]) "user-status-badge"))
         (is (str/includes? (get-in status-cell [1 :class]) "ui-badge-warning")))))
 
-  (testing "handles different role types"
+  (testing "a legacy :viewer has no role either (BOU-771)"
     (let [viewer-user (assoc sample-user :role :viewer)
           row         (ui/user-row viewer-user)
           role-cell   (nth row 2)]
-      ;; Capitalized label for viewer role
-      (is (= "Viewer" (nth role-cell 2))))))
+      (is (= [:t :common/role-user] (nth role-cell 2))))))
 
 (deftest ^:unit users-table-test
   (testing "generates table with users wrapped in container"

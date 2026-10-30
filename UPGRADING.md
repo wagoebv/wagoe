@@ -235,6 +235,8 @@ service only with `:writer :user` and `:tenant-id :login-count :last-login` in
 wagoe.user.core.rights-ui/detail-tabs` for the Sessions and Rights tabs
 (BOU-775, BOU-787), `:icon :users` (BOU-809), `{:options-source :timezones}` on
 `:timezone` (BOU-804), and `:role` options without `:viewer` (step 5).
+`:user` keeps its `[:t :common/role-user]` label, which now reads "No role"
+(BOU-917).
 
 ### 18. Config and environment
 

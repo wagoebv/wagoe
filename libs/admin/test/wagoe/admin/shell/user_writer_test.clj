@@ -4,6 +4,8 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
+            [malli.core :as m]
+            [malli.util :as mu]
             [support.test-db :as test-db]
             [wagoe.admin.ports :as ports]
             [wagoe.admin.shell.http.handlers.crud :as crud]
@@ -15,6 +17,7 @@
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
             [wagoe.test.logging :refer [with-silent-logging]]
             [wagoe.user.ports :as user-ports]
+            [wagoe.user.schema :as user-schema]
             [wagoe.user.shell.persistence :as persistence]
             [wagoe.user.shell.service :as user-service])
   (:import [java.time Instant]
@@ -277,3 +280,39 @@
           (is (pos? (admins)) "an admin remains")
           (.update-user repo {:id (:id a) :role :admin})
           (.update-user repo {:id (:id c) :role :user}))))))
+
+(def ^:private role-options (get-in shipped [:users :fields :role :options]))
+
+(deftest ^:unit role-options-are-what-the-user-service-accepts
+  ;; Since BOU-771 :user means no role; labelled "User" it read as a role (BOU-917).
+  (let [accepted (->> (m/children (mu/get (m/schema user-schema/UpdateUserRequest) :role))
+                      first m/children set)]
+    (is (= accepted (set (map first role-options))))
+    (let [[_ k] (get (into {} role-options) :user)
+          en    (edn/read-string (slurp "libs/i18n/resources/wagoe/i18n/translations/en.edn"))]
+      (is (= "No role" (get en k))))))
+
+(deftest ^:integration each-role-option-saves-and-the-no-role-filter-finds-non-admins
+  (let [{:keys [admin schema config users] :as sys} (system)
+        boss    (user! sys "boss@example.com" :admin)
+        u       (user! sys "u@example.com" :admin)
+        cleared (user! sys "cleared@example.com" :admin)
+        _       (user! sys "legacy@example.com" :user)
+        handler (crud/update-entity-handler admin schema config)
+        save    (fn [value]
+                  (:status (handler {:request-method :put
+                                     :uri            (str "/web/admin/users/" (:id u))
+                                     :user           boss
+                                     :path-params    {:entity "users" :id (str (:id u))}
+                                     :form-params    {"role" (name value)}})))]
+    (doseq [[value _] role-options]
+      (testing (name value)
+        (is (= 200 (save value)))
+        (is (= (when (= :admin value) :admin) (:role (user-ports/get-user-by-id users (:id u)))))))
+    (as boss #(user-ports/update-user-profile users {:id (:id cleared) :role nil}))
+    (let [listed (fn [value]
+                   (->> (ports/list-entities admin :users {:limit 50 :filters {:role {:op :eq :value (name value)}}})
+                        :records (map :email) set))]
+      (is (= #{"u@example.com" "cleared@example.com" "legacy@example.com"} (listed :user))
+          "set to no role from the form or the service, or stored as \"user\" before")
+      (is (= #{"boss@example.com"} (listed :admin))))))
