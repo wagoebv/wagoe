@@ -46,14 +46,14 @@
 (defn generate-callback-token
   "Deprecated, goes in 2.0: the token covers the id alone, so it verifies for
    any notification and device and never expires. Use `callback-token`."
-  {:deprecated "1.0.2"}
+  {:deprecated "1.1.0"}
   [callback-secret provider-message-id]
   (hmac-sha256 callback-secret provider-message-id))
 
 (defn verify-callback-token
   "Deprecated, goes in 2.0: checks only a `generate-callback-token` token.
    Use `callback-verdict`."
-  {:deprecated "1.0.2"}
+  {:deprecated "1.1.0"}
   [callback-secret provider-message-id callback-token]
   (legacy-token-valid? callback-secret provider-message-id callback-token))
 

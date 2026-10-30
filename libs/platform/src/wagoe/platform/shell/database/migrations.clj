@@ -563,7 +563,7 @@
 
    Deprecated: `create-migration` writes the files itself through
    `write-migration-pair!` and no longer calls migratus/create."
-  {:deprecated "1.0.2"}
+  {:deprecated "1.1.0"}
   [read-config]
   (assoc read-config :migration-dir project-migration-dir))
 

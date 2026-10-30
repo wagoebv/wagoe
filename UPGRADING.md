@@ -9,7 +9,7 @@ mode you'd see without it, and the fix.
 > `upgrade-wiring` check names any namespace that moved between releases and
 > says where it went.
 
-## 1.0.x → unreleased (OpenAPI 3.1)
+## 1.0.x → 1.1.0
 
 ### 1. API docs moved from Swagger 2.0 to OpenAPI 3.1 (BOU-462)
 
@@ -57,6 +57,12 @@ each refusal `:enforce` would make. Map scope keys on an entity with `:scope`
 authorization`) moves an app from `:off` to `:enforce` and names each user who
 would lose access. See
 [Upgrading an existing app to permissions](docs/modules/guides/pages/upgrade-authorization.adoc).
+An older app copies the `upgrade` task from a new app's `bb.edn`, and the
+`authz-report` command from its `main.clj` (BOU-794, BOU-786).
+
+Before you switch, give whoever reads push stats `push/read` (BOU-786). A test
+that signs in under `:enforce` uses `wagoe.test/sign-in-as!`; a user without a
+role gets 403 (BOU-788).
 
 ### 4. The `:base` CSS bundle is gone; pages use `:pilot` (BOU-457, BOU-458)
 
@@ -148,19 +154,188 @@ answers 200 with a preview and changes nothing. A script posting to them sends
 curl -X POST …/web/admin/groups/$ID/members -d user-id=$USER -d confirm=true …
 ```
 
-### 12. Your own port implementations may need a new protocol (BOU-829)
+### 12. Your own port implementations need the new protocols (BOU-829)
 
-Methods 1.1 adds to a stable port are new protocols beside the old one. An
-app's own repository or service that lacks one Wagoe calls stops the boot with
-`WGE-107`, naming it; `bb guide error WGE-107` explains. Implement the protocol
-named.
+Methods 1.1 adds to a stable port are new protocols beside the old one. If your
+app implements a port itself, add the protocol beside it; boot stops with
+`WGE-107` naming any one missing (`bb guide error WGE-107`).
 
-### 13. Run the migrations (BOU-551, BOU-849)
+| Your own | Adds |
+|---|---|
+| `IUserRepository` | `ILoginAttempts`, `IBackupCodes`, `IAdminLock` |
+| `IUserSessionRepository` | `IUserSessionInvalidation` |
+| `IUserService` | `IUserDeletion`, `IUserSessionRevocation` |
+| `ITenantMembershipRepository` | `ITenantMembershipDeletion` |
+| `ISearchEngine` | `ISearchDefinitions` |
+| `IRealtimeService`, for `sse/sse-handler` | `IIdentifiedConnections` |
 
-`bb migrate up`: the tenant tables now ship as a library migration, and push
-callback rows gain `callback_id`.
+A job store without `IDeadLetterRetention` cannot run `:jobs/dead-letter`
+retention, and boot fails if you configure it (BOU-738). In incubating
+libraries: an `IAudienceRepository` adds `create-audience` and
+`update-audience` (BOU-746), and a workflow engine the `tx` arity of
+`start-workflow!` and `transition!` (BOU-575). Optional: an error context
+implementing `IErrorContextReset` is cleared per request (BOU-843).
 
-### 14. Smaller changes
+### 13. Run the migrations, and fix what blocks them
+
+`bb migrate up` (boot runs some of them): 1.1 adds tables and columns in user,
+tenant, storage, push, search, geo and the audit trail, and the tenant tables
+ship as a library migration (BOU-551). Then:
+
+- An app migration whose id a library's uses stops boot and `migrate up`:
+  rename yours (BOU-717).
+- Tenant membership keys are added only once no orphaned membership rows remain;
+  boot names them, delete them (BOU-611).
+- On MySQL, delete a `schema_migrations` row with id -1 a failed run left
+  (BOU-544).
+- Search on PostgreSQL gets `pg_trgm`; the default suggest `:threshold` is 0.3
+  (BOU-661).
+
+### 14. Upgrade every replica at once (BOU-696, BOU-689)
+
+Session tokens are stored as their SHA-256, hashed in place at boot; a rollback
+signs everyone out. Jobs on the `:db` and `:redis` queues are stored as
+transit, which older workers cannot read.
+
+### 15. Behind a proxy, set `:trusted-proxies` (BOU-671, BOU-695)
+
+`X-Forwarded-For` is read only from listed proxies; without them every client
+shares one rate-limit bucket and audit IP. Read the address from the request's
+`:client-ip`, and refuse a nil one where you authorise by address.
+
+```clojure
+:wagoe/http {:trusted-proxies ["10.0.0.0/8"]}
+```
+
+The rate limiter ignores `X-Api-Key` now: buckets are the signed-in user, else
+the client IP (BOU-690).
+
+### 16. Security fixes that need config or code
+
+- The search API serves an index only with `:api? true` or an
+  `:api {:authorize …}` hook on its definition. Add one to each index
+  `/api/v1/search/:index-id` should serve (BOU-706).
+- PDF reports escape data. Wrap strings holding HTML or entities such as
+  `&nbsp;` in `hiccup2.core/raw`; images load only from `data:` URIs
+  (BOU-675, BOU-687).
+- Audience filters take only allowlisted fields; list your own columns in
+  `:wagoe/audience {:filter-fields #{...}}` (BOU-745).
+- Workflow reads and starts need `:admin` or `workflow/read`. Give readers a
+  role holding it; in a tenant, scoped `{:tenant-id <id>}` (BOU-748, BOU-751).
+- In an app where only admins add users, set `:wagoe/user {:registration false}`
+  (BOU-739).
+
+### 17. Bring `admin/users.edn` up to date
+
+Compare yours with a new app's. Updates and deletes go through the user
+service only with `:writer :user` and `:tenant-id :login-count :last-login` in
+`:readonly-fields` (BOU-665). Also new: `:detail-tabs
+wagoe.user.core.rights-ui/detail-tabs` for the Sessions and Rights tabs
+(BOU-775, BOU-787), `:icon :users` (BOU-809), `{:options-source :timezones}` on
+`:timezone` (BOU-804), and `:role` options without `:viewer` (step 5).
+
+### 18. Config and environment
+
+- Only `WAG_ENV` picks the profile; `-Denv`, `ENV` and `ENVIRONMENT` are
+  ignored, and a blank one means dev. Set it where you relied on them,
+  `clojure -M:prod:migrate` included (BOU-686, BOU-530).
+- `:wagoe/email` takes flat keys with `:provider :smtp`. A config from the
+  email README, `wagoe add email` or `bb setup --email smtp` that used
+  `:wagoe.external/smtp` logged mail instead of sending it: move those keys
+  (BOU-824, BOU-822, BOU-818). Storage is `{:provider :local :root …}` (BOU-646).
+- A module enabled only in code: put its key in `:active`, or tenant schemas
+  and migrations skip it. Without `:wagoe/user` there, run `wagoe add user`
+  (BOU-757, BOU-667). Re-run `wagoe add <module>` to fill keys it missed
+  (BOU-742, BOU-584).
+- If your config reads `WAG_WEB_UI_ENABLED`, copy `:features {:user-web-ui
+  {:enabled? #boolean #or [#env WAG_WEB_UI_ENABLED "true"]}}` from the shipped
+  one (BOU-711).
+- Request bodies over 32 MB, and multipart files over 10 MB or 100 parts, get
+  a 413. Raise them with `:wagoe/http {:max-request-body …}` and
+  `:wagoe/router {:multipart {:max-file-size … :max-file-count …}}`
+  (BOU-644, BOU-641).
+- A parent route's `:interceptors` and `:skip-interceptors?` now apply to its
+  children; a skip drops CSRF and rate limiting from them. Check yours
+  (BOU-642).
+- MySQL `:connection-params` and `:sql-mode` take effect now; check them
+  (BOU-647).
+- OpenStreetMap geocoding wants `:user-agent` with a contact (BOU-709).
+- Add `--enable-native-access=ALL-UNNAMED` to your aliases' `:jvm-opts`, and
+  `:manifest {"Enable-Native-Access" "ALL-UNNAMED"}` to `b/uber`, to silence
+  the SQLite warnings (BOU-593).
+- Run `bb doctor --env prod` before deploying: rate limiting needs an active
+  cache in prod (BOU-456).
+- Typed 4xx errors log at INFO, or WARN for 401/403. Re-check alerts on
+  "HTTP request failed" (BOU-704).
+- Push: point clients at `/api/v1/push` (BOU-838). Set
+  `:refuse-legacy-callback-tokens? true` once no app version holds 1.0 tokens
+  (BOU-850).
+
+### 19. API clients and CLI scripts
+
+- `POST /api/v1/auth/login` and `/api/v1/sessions` answer 401 to wrong
+  credentials and 429 to a locked account, not 200: check the status, not
+  `authenticated` (BOU-691). `/api/v1/sessions` refuses a `{userId}` body;
+  send email and password (BOU-690).
+- The audience API takes camelCase keys and preview needs `audienceId`; create
+  on a taken id is 409, update of an unknown one 404 (BOU-746). An audience
+  with both `:filters` and `:compose` is refused: give it `:filters []`
+  (BOU-744).
+- `wagoe session list`, `invalidate` and `create` are gone (BOU-691, BOU-692).
+
+### 20. Code changes
+
+- `layout/modal` is gone; use `wagoe.shared.ui.core.modal/modal` (BOU-753).
+- Reports: `service/generate-async` is gone; call the `ReportServiceProtocol`
+  that `:wagoe/reports` is (BOU-674).
+- Calendar: `:wagoe/calendar` is a `CalendarAdapterProtocol`; serve its export
+  with `core.feed/ical-response` (BOU-703). `event/all-day?` reads only
+  `:all-day?`; set it where you relied on UTC midnight (BOU-707). A custom
+  catalogue adds `:calendar/month-*` and `:calendar/all-day` (BOU-702).
+- `migrate-tenant!` and `migrate-all-tenants!` take the boot
+  `:wagoe/db-context` first; `get-active-db-config` is gone (BOU-694).
+- A `build-where` value is literal; for a pattern call
+  `(like adapter :email :starts-with q)` (BOU-684).
+- Push `get-devices-by-platform` pages with `:after-id`, not `:offset`
+  (BOU-683).
+- Pass an `Instant`, not an ISO string, to a timestamp column (BOU-655).
+- Storage `file-exists?` throws when it cannot check; catch it if you call it
+  (BOU-749).
+- A hand-built interceptor `:system` map names `:metrics-emitter`, not
+  `:metrics` (BOU-727). An event bus or realtime service built by hand takes
+  `:error-reporter` (BOU-848).
+- Your own `data-table` with a checkbox or actions column adds
+  `checkbox-header`/`checkbox-cell` or `actions-header`/`actions-cell` (BOU-595).
+- A `bb scaffold field` enum added before 1.1 goes into its persistence
+  namespace's `enum-fields` (BOU-656).
+- Lower and upper case with `wagoe.core.utils.text`; clj-kondo flags
+  `clojure.string`'s (BOU-732).
+- Tests: add `com.wagoe/wagoe-test` to the `:test` alias (BOU-677). The REPL's
+  `explain-entity` is one line in a new app's `dev/user.clj` (BOU-805). E2E
+  tests clicking `th.sortable-header` click its button (BOU-803).
+- Admin lists start newest first; set `:default-sort` to keep another order
+  (BOU-802).
+- An admin entity's `:module` moves it out of "Other" in the sidebar
+  (BOU-777).
+
+### 21. Workarounds that can go
+
+Refs added to `[:wagoe/job-registry :handler-maps]` for an app module's jobs
+(BOU-636), multipart decoding added by hand (BOU-638), per-handler job outcome
+wrappers (BOU-832), your own job staleness check (`:expect-success`) and status
+check before enqueueing (`:unique-key`) (BOU-834).
+
+### 22. Data to check once
+
+- Users deactivated before 1.1 stay hidden; restore one by clearing
+  `deleted_at` in `auth_users` (BOU-681).
+- Re-run tenant jobs whose writes landed in `public` (BOU-605).
+- SQLite: look for orphaned rows written while foreign keys were off (BOU-606).
+- Delete old `.spool-*.tmp` files in the local storage root (BOU-759).
+- Re-import iCal feeds in US zones (BOU-723).
+- Ran on a Turkish-locale JVM? Re-lower stored emails (BOU-732).
+
+### 23. Smaller changes
 
 - API clients of `POST /api/v1/auth/login` and `POST /api/v1/sessions` read the
   camelCase keys in `user` and `session` (`session.sessionToken`, not
