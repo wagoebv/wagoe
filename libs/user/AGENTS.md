@@ -523,8 +523,9 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
 - Audit is per user: `:group-join`/`:group-leave` for the member,
   `:grant-add`/`:grant-remove` for every member when an assignment or a managed
   role's permissions change, so a change in an empty group writes nothing. A
-  change to Everyone writes one entry, for the actor. A role edit's entries share
-  a `:change-id`, so the rights timeline shows it once (BOU-864).
+  change to Everyone writes one entry, its target the Everyone group, which
+  every rights timeline reads (BOU-862). A role edit's entries share a
+  `:change-id`, so the rights timeline shows it once (BOU-864).
 - Tables `user_groups`, `user_group_members`, `user_roles`, `user_group_roles`, and
   `user_group_grants` (kept, marked, until 2.0). Keys cascade from `auth_users`
   and `user_groups`; the repository deletes explicitly too, for SQLite connections

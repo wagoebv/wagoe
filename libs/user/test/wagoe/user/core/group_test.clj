@@ -94,6 +94,16 @@
            (:permissions result)))
     (is (nil? (:user (sut/diff-summary diffs nil))))))
 
+(deftest ^:unit a-diff-with-a-count-stands-for-that-many-users
+  ;; BOU-862: Everyone's users without another way to the permission, as one
+  (let [read   {:permission :invoice/read :scope {}}
+        result (sut/diff-summary [{:user {:id 1 :email "a@example.com"} :added [read] :removed []}
+                                  {:added [read] :removed [] :count 1000}]
+                                 nil)]
+    (is (= 1001 (:affected-count result)))
+    (is (= [{:permission :invoice/read :added 1001 :removed 0}] (:permissions result)))
+    (is (= [{:id 1 :email "a@example.com"}] (:affected result)) "only named users are listed")))
+
 (deftest ^:unit users-with-a-permission-in-a-scope
   (let [[a b] [(random-uuid) (random-uuid)]
         holders [{:user-id a :scope {:domain-id 1}} {:user-id a :scope {:domain-id 2}}

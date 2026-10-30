@@ -604,8 +604,61 @@
           (ports/ensure-everyone (:group-repository svc))
           (let [p (ports/preview-change svc {:op :add-role :group-id group/everyone-id :assignment {:role :reports/viewer}})]
             (is (:everyone? p))
-            (is (= ["cyd@example.com"] (map :email (:affected p)))
-                "ada and bob read reports already, through Sales")))))))
+            (is (= 1 (:affected-count p)) "ada and bob read reports already, through Sales")))))))
+
+(defn- paging-users
+  "`users`, recording each page `find-users` reads of more than one user."
+  [users pages]
+  (reify ports/IUserRepository
+    (find-user-by-id [_ id] (ports/find-user-by-id users id))
+    (find-user-by-email [_ email] (ports/find-user-by-email users email))
+    (find-users [_ opts] (when (< 1 (:limit opts 1)) (swap! pages conj opts)) (ports/find-users users opts))
+    (create-user [_ u] (ports/create-user users u))
+    (update-user [_ u] (ports/update-user users u))
+    (soft-delete-user [_ id] (ports/soft-delete-user users id))
+    (hard-delete-user [_ id] (ports/hard-delete-user users id))))
+
+(deftest ^:integration an-everyone-change-is-one-baseline-user-and-a-count
+  ;; BOU-862
+  (test-db/with-db "user_group_service"
+    (fn [ctx]
+      (persistence/initialize-user-schema! ctx)
+      (let [pages (atom [])
+            users (paging-users (persistence/create-user-repository ctx) pages)
+            audit (persistence/create-audit-repository ctx {:default-limit 50 :max-limit 100})
+            svc   (sut/create-group-service (group-persistence/create-group-repository ctx) users audit
+                                            (sut/prepare-settings nil) {:registry registry})
+            [ada bob & more] (doall (for [i (range 6)]
+                                      (ports/create-user users {:email (str "u" i "@example.com") :name "U" :role :user
+                                                                :active true :password-hash "x"})))
+            ops   (ports/create-group svc {:name "Ops"})
+            add   {:op :add-role :group-id group/everyone-id :assignment {:role :orders/viewer}}]
+        (ports/ensure-everyone (:group-repository svc))
+        (ports/add-group-role svc (:id ops) {:role :orders/viewer})
+        (ports/add-group-member svc (:id ops) (:id bob))
+        (ports/update-user users {:id (:id (last more)) :active false})
+        (testing "the users holding it elsewhere, and the rest counted"
+          (let [p (ports/preview-change svc add)]
+            (is (= 4 (:affected-count p)) "not bob, who reads orders through Ops, nor the inactive user")
+            (is (= [{:permission :orders/read :added 4 :removed 0}] (:permissions p)))
+            (is (= [] (:affected p)))))
+        (testing "a user the preview names is diffed"
+          (is (= [{:permission :orders/read :scope {}}]
+                 (get-in (ports/preview-change svc (assoc add :user-id (:id ada))) [:user :added])))
+          (is (= [] (get-in (ports/preview-change svc (assoc add :user-id (:id bob))) [:user :added])))
+          (is (= 4 (:affected-count (ports/preview-change svc (assoc add :user-id (:id (last more))))))
+              "an inactive user named takes nobody from the count"))
+        (testing "a role Everyone holds, edited"
+          (ports/create-role svc {:name :sales/lead :permissions #{:reports/read}})
+          (ports/add-group-role svc group/everyone-id {:role :sales/lead})
+          (is (= 5 (:affected-count (ports/preview-change svc {:op :update-role :role :sales/lead
+                                                               :permissions #{:orders/write}})))))
+        (is (= [] @pages) "no page of users is read")
+        (testing "it shows on an affected user's rights timeline, filed under Everyone"
+          (ports/add-group-role svc group/everyone-id {:role :orders/viewer})
+          (is (= [:grant-add :grant-add]
+                 (map :action (ports/find-audit-logs-by-user audit group/everyone-id {:limit 50}))))
+          (is (empty? (ports/find-audit-logs-by-user audit (:id ada) {:limit 50}))))))))
 
 (deftest ^:integration a-preview-reports-only-what-is-gained
   ;; BOU-864

@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A change to Everyone previews without reading every user, and shows on each user's rights timeline** (BOU-862).
+  Its audit entry now targets the Everyone group, not the admin. Nothing to do.
 - **Grant wizard: a new group of one is made in one transaction, and a refused option no longer breaks the page**
   (BOU-863). A group service of your own can implement `IGrantGroup` to get the same.
 - **Rights previews no longer over-report gains** (BOU-864): inactive members, rights two scopes cover together and
