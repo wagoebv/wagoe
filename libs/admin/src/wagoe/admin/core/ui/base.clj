@@ -376,7 +376,7 @@
   (some (fn [[k label]] (when (= (value-name value) (value-name k)) label))
         (:options field-config)))
 
-(defn ^{:deprecated "1.0.2"} render-field-value
+(defn ^{:deprecated "1.1.0-rc-1"} render-field-value
   "Deprecated: no admin page renders through this any more. Use
    `wagoe.admin.core.ui.cells/cell`, which renders by display role (ADR-040).
 

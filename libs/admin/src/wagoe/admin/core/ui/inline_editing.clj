@@ -9,7 +9,7 @@
             [wagoe.shared.ui.core.icons :as icons]
             [clojure.string :as str]))
 
-(defn ^{:deprecated "1.0.2"} render-inline-edit-cell
+(defn ^{:deprecated "1.1.0-rc-1"} render-inline-edit-cell
   "Deprecated: use `list/field-cell`, which has the record and its overview.
    This knows only the field, so a relation shows its id and a title no link.
 

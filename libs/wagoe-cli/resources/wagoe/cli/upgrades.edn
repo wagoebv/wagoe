@@ -28,96 +28,96 @@
   :manual "The port takes the queue component as its first argument, which the old call has no value for."}
 
  {:ticket "BOU-682"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   "wagoe.user.shell.middleware/jwt-authentication-middleware and protect-with-jwt without a user service."
   :manual "Pass the user service as the first argument: (jwt-authentication-middleware user-service handler). A rewrite has no user service to pass."}
 
  {:ticket "BOU-684"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   "wagoe.platform.ports.database/like with a LIKE pattern."
   :manual "Pass a mode and the raw value: (like adapter :email :contains q). A rewrite cannot tell which % are wildcards."}
 
  {:ticket "BOU-705"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   "wagoe.search.shell.registry: defsearch, register-search! and the global registry."
   :manual "Bind definitions with wagoe.search.core.index/defsearch and hand them to :wagoe/search, under :indexes in config or a module's :search part. A rewrite cannot tell which module owns an index."}
 
  {:ticket "BOU-462"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   "/swagger.json and :swagger route docs (Swagger 2.0). The API docs are OpenAPI 3.1 at /openapi.json."
   :manual "Move :swagger to :openapi, with a parameter's :type under :schema and a response's :schema under :content \"application/json\". Point clients at /openapi.json. A rewrite cannot reach parameter vectors built at runtime."}
 
  {:ticket "BOU-458"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   "The :base CSS bundle was removed: pico.min.css, tokens-openprops.css, open-props, base-css and base-js. (bundle :base) serves :pilot."
   :manual "Replace base-css with pilot-css, drop :css (ui-style/bundle :base), and restyle pages that relied on pico's element styling with daisy classes. A rewrite cannot see what a page looks like."}
 
  {:ticket "BOU-737"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   "Kebab-case keys in the user and session maps of the POST /auth/login and POST /sessions response."
   :manual "Read the camelCase twin instead: session.sessionToken, not session.session-token. The readers are API clients, outside the project."}
 
  {:ticket "BOU-761"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   "wagoe.shared.ui.core.alpine/sidebar-store-init, a second sidebar store that needs the unbundled Alpine Persist plugin."
   :manual "Drop sidebar-store-init and load (ui-style/bundle :admin-pilot), whose admin-ux.js registers the store. A rewrite cannot see the page's scripts."}
 
  {:ticket "BOU-771"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   "Group grants (add-group-grant, remove-group-grant, import :grants), :role :user, and the OIDC provider's :default-role. Boot moves grants onto roles; the user_group_grants rows stay until 2.0."
   :manual "Call add-group-role / remove-group-role and import :roles [{:role :scope}], drop :role :user and :default-role. A grant names a permission and an assignment a role, which a rewrite cannot choose."}
 
  {:ticket "BOU-774"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   ":require-role in the :wagoe/admin config. Nothing reads it; under :wagoe/authorization :report or :enforce the admin reads admin.<entity>/read|write."
   :manual "Delete :require-role from :wagoe/admin. The rewrites rename or revalue a key; none removes one."}
 
  {:ticket "BOU-782"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   "POST /api/auth/mfa/disable without a body. It needs {\"password\": …} or {\"code\": …}, a current TOTP or backup code; wrong ones count towards the lockout. wagoe.user.shell.mfa/disable-mfa takes the same proof and the request context."
   :manual "Send the user's password or a current code from the client, and pass {:password …} or {:code …} plus {:ip-address :user-agent} to disable-mfa. The proof comes from the user, which a rewrite does not have."}
 
  {:ticket    "BOU-796"
-  :since     "1.0.2"
+  :since     "1.1.0-rc-1"
   :note      "wagoe.shared.ui.core.alpine/mobile-menu-toggle-attrs is sidebar-toggle-attrs, which works at every width. sidebar-attrs returns {} and can stay until 2.0."
   :fn-rename {wagoe.shared.ui.core.alpine/mobile-menu-toggle-attrs wagoe.shared.ui.core.alpine/sidebar-toggle-attrs}}
 
  {:ticket "BOU-813"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   "wagoe.platform.shell.database.migrations/create-config, the config migratus/create needed. create-migration writes the files itself now."
   :manual "Call create-migration to make a migration pair. A rewrite cannot replace a config that fed migratus/create."}
 
  {:ticket "BOU-799"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   "wagoe.admin.core.ui/render-field-value is wagoe.admin.core.ui.cells/cell; render-inline-edit-cell is field-cell."
   :manual "Both take the record and its entity config, not one value and its field config."}
 
  {:ticket "BOU-765"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   ":dashboard-extra-cards, Hiccup cards for the old /web/dashboard page. The admin dashboard shows them until 2.0."
   :manual "Give a module's nav item a :description; it gets a dashboard card. A rewrite cannot turn Hiccup into a nav item."}
 
  {:ticket "BOU-755"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   "window.AdminUX.showToast and .flash-messages banners. Both feed the shared-ui toast region until 2.0."
   :manual "Send HX-Trigger {\"showToast\": {\"type\": ..., \"message\": ...}} or a shared-ui toast out of band. The rewrites do not touch JavaScript or markup."}
 
  {:ticket "BOU-753"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   "window.AdminUX.showConfirmModal, and hx-confirm with data-confirm-title/-label/-cancel on a delete. Both ask in a native <dialog> until 2.0."
   :manual "Render wagoe.shared.ui.core.modal/confirm-modal and put confirm-attrs on the element that sends the request. The rewrites do not touch JavaScript."}
 
  {:ticket "BOU-838"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   ":wagoe.push/routes, the /api/push route vector an app mounted by hand. The push module now mounts its routes under /api/v1/push."
   :manual "Before 2.0, remove the hand-written mounting and point clients at /api/v1/push. A rewrite cannot find where an app spliced the vector into its routes."}
 
  {:ticket "BOU-847"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   "wagoe.push.schema/valid-device-info? and valid-callback?, and :db on :wagoe.push/device-store and :wagoe.push/analytics-store. All work until 2.0."
   :manual "Validate against wagoe.push.schema/DeviceInfo or CallbackPayload with malli, and rename :db to :db-ctx where your config sets the push stores. A rewrite cannot tell push's :db from another component's."}
 
  {:ticket "BOU-849"
-  :since  "1.0.2"
+  :since  "1.1.0-rc-1"
   :note   "wagoe.push.shell.service/generate-callback-token, verify-callback-token and the 3-arity with-callback: a token over the id alone, valid for any push and never expiring. Still accepted until 2.0."
   :manual "Mint tokens with callback-token and check them with callback-verdict, or call with-callback with the device. The arguments differ, so no rewrite."}]
