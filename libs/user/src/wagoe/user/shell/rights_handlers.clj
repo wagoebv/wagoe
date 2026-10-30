@@ -36,9 +36,6 @@
   (when role-name
     (some #(when (= role-name (:name %)) %) (ports/list-roles group-service))))
 
-(defn- refused? [e]
-  (#{:validation-error :conflict :not-found} (:type (ex-data e))))
-
 (defn- error-text [e]
   (let [{:keys [type field errors]} (ex-data e)]
     (list [:t (cond
@@ -82,7 +79,7 @@
         (let [role (ports/create-role group-service data)]
           (redirect (rights-ui/role-path (:name role)) :user.roles/flash-created))
         (catch clojure.lang.ExceptionInfo e
-          (if (refused? e)
+          (if (group-handlers/refused? e)
             (roles-page request group-service 422 {:error (error-text e) :form data})
             (throw e)))))))
 
@@ -109,7 +106,7 @@
     (try
       (f role)
       (catch clojure.lang.ExceptionInfo e
-        (if (refused? e)
+        (if (group-handlers/refused? e)
           (do (log/info "Role change refused" (select-keys (ex-data e) [:type :field]))
               (role-page request group-service role 422
                          {:error (error-text e)
@@ -375,7 +372,7 @@
           (ports/create-role group-service {:name (form request "name") :permissions #{permission}})
           (redirect (rights-ui/grant-path (:id user) permission record) :user.grant/flash-role-created)
           (catch clojure.lang.ExceptionInfo e
-            (if (refused? e)
+            (if (group-handlers/refused? e)
               (grant-response request user-service group-service (:form-params request) 422 {:error (error-text e)})
               (throw e))))
         (not-found request :user.rights/user-not-found)))))

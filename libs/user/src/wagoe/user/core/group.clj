@@ -77,6 +77,14 @@
     (or (vector? x) (set? x) (seq? x)) (every? edn-value? x)
     :else false))
 
+(defn refusal?
+  "Whether a group or role change failing with ex-data `data` was refused, to
+   be shown to the admin: input refused, something it names missing, or a
+   name taken. Any other :conflict, a write losing a race, is raised."
+  [{:keys [type field]}]
+  (boolean (or (#{:validation-error :not-found} type)
+               (= [:conflict :name] [type field]))))
+
 (defn- refusal [field message errors]
   {:error {:type    :validation-error
            :field   field
@@ -243,7 +251,7 @@
   [diffs]
   (let [changed (filter changed? diffs)
         counts  (fn [k] (apply merge-with + {} (for [d changed p (distinct (map :permission (get d k)))]
-                                                {p (weight d)})))
+                                                 {p (weight d)})))
         added   (counts :added)
         removed (counts :removed)]
     {:permissions    (vec (for [p (sort-by str (distinct (concat (keys added) (keys removed))))]

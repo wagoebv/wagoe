@@ -144,7 +144,6 @@
  :user/text-no-account          "Don't have an account?"
  :user/button-create-account    "Create Account"
 
-
  :user/button-view-user         "View User"
  :user/button-delete-permanently "Permanently Delete"
 
@@ -387,6 +386,7 @@
  :user.groups/error-scope "The scope must be an EDN map this application accepts."
  :user.groups/error-expires-at "Give an expiry date in the future."
  :user.groups/error-no-user "Pick a user from the list."
+ :user.groups/error-user-not-found "That user does not exist."
  :user.groups/not-found "That group does not exist."
  :user.groups/flash-created "Group created."
  :user.groups/flash-saved "Group saved."

@@ -328,7 +328,7 @@
             until (checked-expiry! svc (:expires-at change))
             group (existing-group group-repository group-id)
             user  (or (ports/find-user-by-id user-repository user-id)
-                      (throw (not-found "No such user" {:user-id user-id})))
+                      (throw (not-found "No such user" {:field :user :user-id user-id})))
             held  (ports/find-assignments group-repository group-id)]
         (assoc (join-plan plan group user held) :expires-at until))
 
@@ -347,7 +347,7 @@
 
       :new-group
       (let [user (or (ports/find-user-by-id user-repository user-id)
-                     (throw (not-found "No such user" {:user-id user-id})))
+                     (throw (not-found "No such user" {:field :user :user-id user-id})))
             a    (checked-assignment settings roles (:assignment change) nil)
             _    (checked-expiry! svc (:expires-at change))]
         (assoc plan :users [user] :focal user :grants (group-core/user-grants [a] roles) :update #(conj % a)))
@@ -702,7 +702,7 @@
   (try (assoc option :preview (ports/preview-change svc change))
        (catch clojure.lang.ExceptionInfo e
          (let [refusal (ex-data e)]
-           (if (#{:validation-error :not-found} (:type refusal))
+           (if (group-core/refusal? refusal)
              (assoc option :refused refusal)
              (throw e))))))
 

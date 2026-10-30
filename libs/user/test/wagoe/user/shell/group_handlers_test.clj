@@ -8,6 +8,7 @@
             [wagoe.platform.shell.authorization :as authz]
             [wagoe.user.core.group :as group]
             [wagoe.user.ports :as ports]
+            [wagoe.user.shell.group-handlers :as group-handlers]
             [wagoe.user.shell.group-persistence :as group-persistence]
             [wagoe.user.shell.group-service :as group-service]
             [wagoe.user.shell.http :as http]
@@ -182,6 +183,12 @@
             (is (= 403 (:status r)) (str method " " uri))
             (is (nil? (get-in r [:headers "Location"])) (str method " " uri))))
         (is (empty? (ports/list-groups gsvc)))))))
+
+(deftest ^:unit a-missing-user-is-not-a-missing-group
+  ;; BOU-915
+  (is (= [:t :user.groups/error-user-not-found]
+         (first (group-handlers/refusal-text {:type :not-found :field :user :user-id 1}))))
+  (is (= [:t :user.groups/not-found] (first (group-handlers/refusal-text {:type :not-found :group-id 1})))))
 
 (deftest ^:unit the-web-ui-switch-turns-the-group-pages-off-too
   (let [usvc (reify ports/IUserService)

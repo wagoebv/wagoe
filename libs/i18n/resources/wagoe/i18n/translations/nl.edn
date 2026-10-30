@@ -144,7 +144,6 @@
  :user/text-no-account          "Heeft u nog geen account?"
  :user/button-create-account    "Account aanmaken"
 
-
  :user/button-view-user         "Gebruiker bekijken"
  :user/button-delete-permanently "Permanent verwijderen"
 
@@ -387,6 +386,7 @@
  :user.groups/error-scope "Het bereik moet een EDN-map zijn die deze applicatie accepteert."
  :user.groups/error-expires-at "Geef een vervaldatum in de toekomst."
  :user.groups/error-no-user "Kies een gebruiker uit de lijst."
+ :user.groups/error-user-not-found "Die gebruiker bestaat niet."
  :user.groups/not-found "Die groep bestaat niet."
  :user.groups/flash-created "Groep aangemaakt."
  :user.groups/flash-saved "Groep opgeslagen."
