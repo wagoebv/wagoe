@@ -41,7 +41,7 @@ Simple, robust email delivery with:
 
 ```clojure
 ;; deps.edn
-{:deps {com.wagoe/wagoe-email {:mvn/version "1.1.0-rc-1"}}}
+{:deps {com.wagoe/wagoe-email {:mvn/version "1.1.0"}}}
 ```
 
 ### 2. Create SMTP Sender
@@ -473,8 +473,8 @@ For high-volume email sending with automatic retries and monitoring, integrate w
 
 ```clojure
 ;; deps.edn
-{:deps {com.wagoe/wagoe-email {:mvn/version "1.1.0-rc-1"}
-        com.wagoe/wagoe-jobs {:mvn/version "1.1.0-rc-1"}}}   ; brings Jedis
+{:deps {com.wagoe/wagoe-email {:mvn/version "1.1.0"}
+        com.wagoe/wagoe-jobs {:mvn/version "1.1.0"}}}   ; brings Jedis
 ```
 
 ### 2. Setup Job Queue

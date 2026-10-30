@@ -29,6 +29,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-10-30
+
 ### Fixed
 
 - **User forms, filters, role badges and bulk actions say "No role" where they said "User"** (BOU-917).
