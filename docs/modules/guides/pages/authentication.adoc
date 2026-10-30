@@ -40,8 +40,10 @@ Response:
 }
 ----
 
-`user` and `session` also carry each key in kebab-case (`session-token`,
-`expires-at`). Those are deprecated and go in 2.0; read the camelCase ones.
+`user` and `session` also carry their multi-word keys in kebab-case
+(`session-token`, `expires-at`). Those are deprecated and go in 2.0; read the
+camelCase ones.
+
 `POST /api/v1/sessions` answers the same. A refused login is an error in the
 standard shape (`{"error": {"type", "message", "correlation-id"}}`):
 
