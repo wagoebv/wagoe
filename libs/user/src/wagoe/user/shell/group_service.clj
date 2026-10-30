@@ -722,9 +722,14 @@
                               g)))))
 
 (defn- undone
-  "`plan`'s diffs reversed: what undoing the change it describes does."
+  "`plan`'s diffs reversed: what undoing the change it describes does. None,
+   with a warning, when they cannot be read: the rows are already deleted, so
+   the entry is still written."
   [svc plan]
-  (mapv #(assoc % :added (:removed %) :removed (:added %)) (user-diffs svc plan)))
+  (try (mapv #(assoc % :added (:removed %) :removed (:added %)) (user-diffs svc plan))
+       (catch Exception e
+         (log/warn e "Could not diff an expiry" {:group-id (get-in plan [:group :id])})
+         nil)))
 
 (defn- expire!
   "Remove what expired by `now`, auditing each as a leave or a removed role
@@ -739,7 +744,10 @@
         svc      (cond-> svc membership (update :membership memoize))
         ;; Per group, once: several rows of one group expire together
         group-of (memoize #(or (ports/find-group group-repository %) {:id %}))
-        held     (memoize #(ports/find-assignments group-repository %))
+        ;; With the group's roles that expired in this run: a member leaving
+        ;; with them loses them, and their own entries no longer reach the member
+        expired-roles (group-by (comp str :group-id) assignments)
+        held     (memoize #(into (vec (ports/find-assignments group-repository %)) (get expired-roles (str %))))
         members-of (memoize (partial reached svc))
         expired  #(assoc (expiry-metadata %) :reason "expired")]
     (doseq [{:keys [group-id user-id expires-at]} members
@@ -765,14 +773,15 @@
   "Audit entries, newest first, `(read {:limit :offset})` a page of them, read
    until they record `n` changes or run out: a role edit writes an entry per
    group, so a page can hold one change (BOU-911). By id, so an entry an
-   offset shift reads twice counts once."
+   offset shift reads twice counts once; a page with nothing new ends it, so
+   a repository that ignores :offset cannot loop."
   [read page n]
   (loop [offset 0 acc {}]
-    (let [xs  (vec (read {:limit page :offset offset}))
-          acc (into acc (map (juxt :id identity)) xs)]
-      (if (or (< (count xs) page) (<= n (audit-core/change-count (vals acc))))
-        (vals acc)
-        (recur (+ offset page) acc)))))
+    (let [xs   (vec (read {:limit page :offset offset}))
+          acc' (into acc (map (juxt #(:id % %) identity)) xs)]
+      (if (or (< (count xs) page) (= (count acc') (count acc)) (<= n (audit-core/change-count (vals acc'))))
+        (vals acc')
+        (recur (+ offset page) acc')))))
 
 (defn rights-timeline
   "The newest `n` changes to `user`'s rights, as `audit-core/rights-timeline`

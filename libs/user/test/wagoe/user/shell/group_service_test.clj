@@ -837,7 +837,21 @@
     (is (= 3 @pages))
     (is (= 10 (count (#'sut/newest-changes read 3 50))) "to the end of the log")
     (is (= 10 (count (#'sut/newest-changes #(take (:limit %) (drop (max 0 (dec (:offset %))) log)) 3 50)))
-        "an entry read twice counts once")))
+        "an entry read twice counts once")
+    (is (= 3 (count (#'sut/newest-changes #(take (:limit %) log) 3 50))) "a repository ignoring :offset ends")))
+
+(deftest ^:integration a-member-leaving-with-an-expired-role-loses-it
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc user!]}]
+      (let [repo (:group-repository svc)
+            past (.minusSeconds (Instant/now) 60)
+            ada  (user! "ada@example.com")
+            desk (ports/create-group svc {:name "Desk"})]
+        (ports/insert-assignment repo {:group-id (:id desk) :role :reports/viewer :scope {} :expires-at past})
+        (ports/insert-member-until repo (:id desk) (:id ada) past)
+        (ports/expire-access! svc (Instant/now))
+        (is (= [[:group-leave [{:permission :reports/read :scope {}}]]]
+               (map (juxt :action :removed) (ports/rights-changes svc ada 10))))))))
 
 (deftest ^:integration a-role-edit-over-many-groups-hides-no-older-change
   ;; BOU-911: its entries, one per group, collapse into one change, so they do not fill the timeline
