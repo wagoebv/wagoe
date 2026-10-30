@@ -250,19 +250,24 @@
       (throw (ex-info (:message error) error)))
     data))
 
-(defn- role-holders
-  "Every assignment of one of `role-names`, with its group's members unless
+(defn- holders
+  "`assignments` as role-holders lists them, with each group's members unless
    `members?` is false; Everyone lists none."
+  [repo assignments members?]
+  (let [members (memoize #(ports/find-members repo %))]
+    (->> assignments
+         (map (fn [{:keys [group-id] :as a}]
+                (let [everyone? (group-core/everyone? group-id)]
+                  (cond-> (assoc (select-keys a [:role :group-id :group-name :scope :expires-at]) :everyone? everyone?)
+                    members? (assoc :members (if everyone? [] (members group-id)))))))
+         (sort-by (juxt :group-name (comp str :role)))
+         vec)))
+
+(defn- role-holders
+  "Every assignment of one of `role-names`, as `holders` gives them."
   ([repo role-names] (role-holders repo role-names true))
   ([repo role-names members?]
-   (let [members (memoize #(ports/find-members repo %))]
-     (->> (mapcat #(ports/find-role-assignments repo %) (set role-names))
-          (map (fn [{:keys [group-id] :as a}]
-                 (let [everyone? (group-core/everyone? group-id)]
-                   (cond-> (assoc (select-keys a [:role :group-id :group-name :scope :expires-at]) :everyone? everyone?)
-                     members? (assoc :members (if everyone? [] (members group-id)))))))
-          (sort-by (juxt :group-name (comp str :role)))
-          vec))))
+   (holders repo (mapcat #(ports/find-role-assignments repo %) (set role-names)) members?)))
 
 (defn- unique-by-id [users]
   (vals (into {} (map (juxt (comp str :id) identity)) users)))
@@ -764,8 +769,30 @@
                              false)))))
 
   ports/IRoleAssignments
-  (all-assignments [_]
-    (role-holders group-repository (keys (all-roles group-repository registry)) false))
+  (all-assignments [this]
+    (let [roles (roles-of this)]
+      (if (:all-assignments? this)
+        ;; One query, not one per role; a role no longer known gives nothing
+        (holders group-repository (filter (comp roles :role) (ports/find-all-assignments group-repository)) false)
+        (role-holders group-repository (keys roles) false))))
+
+  ports/IRightsTimeline
+  (rights-changes [this {:keys [id created-at]} n]
+    (let [entries (fn [target actions after]
+                    (let [opts (cond-> {:filter-target-user-id target :sort-by :created-at :sort-direction :desc
+                                        :limit n :count? false}
+                                 after (assoc :filter-created-after after))]
+                      (if (:audit-actions? this)
+                        ;; As many entries as the per-action path reads: a role edit's entries collapse into one
+                        (:audit-logs (ports/find-audit-logs-with-actions audit-repository (set actions)
+                                                                         (update opts :limit * (count actions))))
+                        (mapcat #(:audit-logs (ports/find-audit-logs audit-repository (assoc opts :filter-action %)))
+                                actions))))]
+      (audit-core/rights-timeline
+       ;; Everyone's since the user was created, filed under the group, count too (BOU-862)
+       (concat (entries id audit-core/rights-actions nil)
+               (entries group-core/everyone-id [:grant-add :grant-remove] created-at))
+       n)))
 
   ports/IRightsPreview
   (preview-change [this change]
@@ -990,7 +1017,9 @@
   ([group-repository user-repository audit-repository settings {:keys [registry membership explain resolve]}]
    (cond-> (assoc (->UserGroupService group-repository user-repository audit-repository
                                       (with-registry-permissions settings registry) registry membership)
-                  ;; Asked once: a repository without it keeps no expiry (Convention 5)
-                  :expiry? (satisfies? ports/IAccessExpiry group-repository))
+                  ;; Asked once: a repository without one takes the old path (Convention 5)
+                  :expiry? (satisfies? ports/IAccessExpiry group-repository)
+                  :all-assignments? (satisfies? ports/IAllAssignments group-repository)
+                  :audit-actions? (satisfies? ports/IUserAuditActions audit-repository))
      explain (assoc :explain explain)
      resolve (assoc :resolve resolve))))

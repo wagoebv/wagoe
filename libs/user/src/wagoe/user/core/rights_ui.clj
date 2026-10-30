@@ -138,6 +138,12 @@
   [registry p]
   (module-of p (get-in registry [p :module])))
 
+(defn role-module
+  "The module role `role-name` belongs to, `roles` as `role-index` gives
+   them: the access overview's column, not its name's namespace."
+  [roles role-name]
+  (module-of role-name (get-in roles [role-name :module])))
+
 (defn- active-signal
   "The signal `table-query` filters on, when `spec` offers it."
   [{:keys [signals]} table-query]
@@ -386,7 +392,7 @@
      (if group-id [:a {:href (group-path group-id)} group-name] group-name)
      " "
      (if level
-       [:a {:href (role-path role)} [:t (level-verbs level) {:module (namespace role)}]]
+       [:a {:href (role-path role)} [:t (level-verbs level) {:module (role-module roles role)}]]
        (list [:t :user.access/holds-role] " " [:a {:href (role-path role)} (code role)]))
      " "
      (scope-phrase scope scope-info)
@@ -711,7 +717,7 @@
     (grouped role-grants :module row (count rights-columns))))
 
 (defn- timestamp-text [at]
-  (some-> at str (str/replace "T" " ") (str/replace #"(\.\d+)?Z$" "")))
+  (some-> at str (str/replace "T" " ") (str/replace #"(\.\d+)?Z$" " UTC")))
 
 (defn effective-scope-view
   "A resolved scope, {key #{value}}, as text."
@@ -878,11 +884,17 @@
                :else                   ({:everywhere :user.explain/no-everywhere :record :user.explain/no-record
                                          :anywhere   :user.explain/no} asked))]]))
 
+(defn- mode-note
+  "What a no means under `mode`, the `:wagoe/authorization :mode` (BOU-865)."
+  [mode]
+  (when-let [k ({:enforce :user.explain/mode-enforce :report :user.explain/mode-report :off :user.explain/mode-off} mode)]
+    [:p.explain-mode {:class (str "explain-mode-" (name mode))} [:t k]]))
+
 (defn explain-page
   "Why `user` may or may not use the permission asked, `result` as
    `explain-access` gives it, nil before one is asked. `opts`: `:asked`
    {:permission :record}, `:registry` the permissions to pick from,
-   `:scope-info` as `scope-view` reads it."
+   `:scope-info` as `scope-view` reads it, `:mode` the authorization mode."
   [user result opts]
   (let [n          (or (not-empty (:name user)) (:email user))
         scope-info (:scope-info opts)
@@ -901,6 +913,7 @@
       (when result
         (list
          (verdict result (:record asked))
+         (mode-note (:mode opts))
          (when (seq (:paths result))
            (section [:t :user.explain/paths-heading] (rights-table (:paths result) scope-info false)))
          (when (seq (:misses result))

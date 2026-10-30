@@ -28,6 +28,14 @@
                    :scope-sources {:user/department {:label   "The member's department"
                                                      :resolve (fn [user] (:departments user))}}}}))
 
+(deftest ^:unit rights-resolve-into-kept-and-dropped
+  ;; BOU-865
+  (let [kept    {:permission :orders/read :scope {:department-id :user/department}}
+        dropped {:permission :orders/write :scope {:domain-id :user/domain}}]
+    (is (= {:kept    [{:permission :orders/read :scope {:department-id #{10}}}]
+            :dropped [dropped]}
+           (sut/resolve-rights-split registry {:departments #{10}} [kept dropped])))))
+
 (deftest ^:unit rights-resolve-per-user
   (let [assignment [{:permission :orders/read :scope {:department-id :user/department}}]]
     (testing "one group, each member their own department"

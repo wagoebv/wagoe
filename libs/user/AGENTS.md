@@ -498,7 +498,8 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
 - `/web/users/:id/explain?permission=..&scope.<key>=..` answers why a user may or may not (BOU-851), through
   `IAccessExplain`: `wagoe.platform.shell.authorization/explain` reads and resolves the rights as the interceptor
   does and `core.scope/explain` decides with `route-decision`; a property test holds the two equal. A 403 from the
-  interceptor links to it.
+  interceptor links to it. The page says the `:wagoe/authorization :mode`: under `:report` and `:off` a no refuses
+  nothing (BOU-865).
 - Every group, assignment and managed-role change on the admin pages posts twice (BOU-852): first a preview
   (`IRightsPreview/preview-change`), then the same fields with `confirm=true`. The diff is
   `core.scope/rights-diff` on rights resolved by `resolve-rights`; the group service writes each user's diff into
@@ -516,6 +517,9 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
   row out, so enforcement, explain, previews and the wizard stop counting it at once. The recurring job
   `:wagoe.user/expire-access` (every 15 minutes, on `:wagoe/jobs`; `:wagoe/jobs :recurring` overrides it) deletes it
   through `IAccessExpiry/remove-expired` and audits a `:group-leave` or `:grant-remove` with `:reason "expired"`.
+  Reads go through `current`, the one place the expiry filter lives. `IAllAssignments` (repository),
+  `IUserAuditActions` (audit repository) and `IRightsTimeline` (group service) make the access overview and the
+  rights timeline one query each (BOU-865); without them, the old query per role or action.
 - The group service takes `:permission-registry`. When the registry declares
   scope keys, the scope schema is `wagoe.platform.core.scope/scope-schema` of
   them (`with-registry-scopes`); a `:map` `:groups :scope` is declared into the
