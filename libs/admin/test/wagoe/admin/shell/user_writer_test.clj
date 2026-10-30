@@ -288,7 +288,9 @@
   (let [accepted (->> (m/children (mu/get (m/schema user-schema/UpdateUserRequest) :role))
                       first m/children set)]
     (is (= accepted (set (map first role-options))))
-    (is (= [:t :common/role-none] (second (first (filter #(= :user (first %)) role-options)))))))
+    (let [[_ k] (get (into {} role-options) :user)
+          en    (edn/read-string (slurp "libs/i18n/resources/wagoe/i18n/translations/en.edn"))]
+      (is (= "No role" (get en k))))))
 
 (deftest ^:integration each-role-option-saves-and-the-no-role-filter-finds-non-admins
   (let [{:keys [admin schema config users] :as sys} (system)
@@ -306,7 +308,7 @@
     (doseq [[value _] role-options]
       (testing (name value)
         (is (= 200 (save value)))
-        (is (= ({:admin :admin} value) (:role (user-ports/get-user-by-id users (:id u)))))))
+        (is (= (when (= :admin value) :admin) (:role (user-ports/get-user-by-id users (:id u)))))))
     (as boss #(user-ports/update-user-profile users {:id (:id cleared) :role nil}))
     (let [listed (fn [value]
                    (->> (ports/list-entities admin :users {:limit 50 :filters {:role {:op :eq :value (name value)}}})

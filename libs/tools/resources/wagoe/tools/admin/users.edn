@@ -47,8 +47,7 @@
                 :label [:t :admin.users/field-role]
                 :help-text [:t :admin.users/role-help]
                 :options [[:admin [:t :common/role-admin]]
-                          ;; :user is what the column stores for no role (BOU-771)
-                          [:user  [:t :common/role-none]]]
+                          [:user  [:t :common/role-user]]]
                 :filterable true}
    :active     {:type :boolean :label [:t :admin.users/field-active]  :filterable true}
    :created-at {:type :instant :label [:t :admin.users/field-created] :filterable true}

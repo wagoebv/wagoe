@@ -33,8 +33,7 @@
  :common/button-search      "Zoeken"
 
  :common/filter-all-roles   "Alle rollen"
- :common/role-user          "Gebruiker"
- :common/role-none          "Geen rol"
+ :common/role-user          "Geen rol"
  :common/role-admin         "Admin"
  :common/role-viewer        "Kijker"
 
@@ -169,7 +168,7 @@
  :user/bulk-action-activate     "Activeren"
  :user/bulk-action-delete       "Verwijderen"
  :user/bulk-action-role-admin   "Rol wijzigen naar admin"
- :user/bulk-action-role-user    "Rol wijzigen naar gebruiker"
+ :user/bulk-action-role-user    "Adminrol verwijderen"
  :user/button-apply-bulk        "Toepassen op geselecteerde"
 
  :user/filter-placeholder-email "E-mail zoeken..."

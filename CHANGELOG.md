@@ -31,8 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
-- **The admin's users list and form say "No role" where they said "User"** (BOU-917). A copied
-  `admin/users.edn` can label `:user` with `[:t :common/role-none]`.
+- **User forms, filters and bulk actions say "No role" where they said "User"** (BOU-917).
+  Nothing to do, unless your own catalogue overrides `:common/role-user`.
 - **OpenTelemetry 1.67.0 in `wagoe-observability`** (BOU-914): 1.66.0 has a known vulnerability in
   `opentelemetry-api`. Nothing to do.
 - **A change to Everyone previews without reading every user, and shows on each user's rights timeline** (BOU-862).
