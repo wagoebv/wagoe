@@ -1,9 +1,9 @@
 (ns wagoe.cli.add
-  (:require [clojure.edn :as edn]
-            [clojure.java.io :as io]
+  (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [wagoe.cli.catalogue :as cat]
             [wagoe.cli.config-edn :as config-edn]
+            [wagoe.cli.profile :as profile]
             [wagoe.cli.templates :as templates]))
 
 ;; ─── Project detection ────────────────────────────────────────────────────────
@@ -163,82 +163,6 @@
                    (str "$1\n         " entry "\n         ")))
           :deps))))
 
-;; ─── Reading a profile ───────────────────────────────────────────────────────
-
-(defn- profile-file [env] (str "resources/conf/" env "/config.edn"))
-
-(defn- include-target
-  "The existing file `target`, included from `path`, names, relative to `dir`
-   with forward slashes: next to `path`, else on the classpath under
-   resources/, the order wagoe.config resolves it in. Nil when neither exists."
-  [dir path target]
-  (let [root (.normalize (.toAbsolutePath (.toPath (io/file dir))))
-        from (.getParent (.resolve root ^String path))]
-    (some (fn [^java.nio.file.Path p]
-            (let [p (.normalize p)]
-              (when (.exists (.toFile p))
-                (str/replace (str (.relativize root p)) "\\" "/"))))
-          (cond-> [(.resolve from ^String target)]
-            (not (.isAbsolute (io/file target))) (conj (.resolve root (str "resources/" target)))))))
-
-(defn- read-tagged
-  "`text` read as EDN with its tags left as tagged literals, or nil."
-  [text]
-  (try (edn/read-string {:default tagged-literal} text) (catch Exception _ nil)))
-
-(defn- include-of
-  "What `text` includes when it is only an `#include`, else nil."
-  [text]
-  (let [v (some-> text read-tagged)]
-    (when (and (tagged-literal? v) (= 'include (:tag v)) (string? (:form v)))
-      (:form v))))
-
-(defn- read-config
-  "Config `text` of the file at `path`, read as Aero would as far as its keys
-   go: `#include` read from the file it names, `#merge` merged, `#ref` looked
-   up; any other tag is its value. Nil when it does not read."
-  ([dir path text] (read-config dir path text #{path}))
-  ([dir path text seen]
-   (try
-     (when-let [form (some-> text read-tagged)]
-       (letfn [(walk [root x]
-                 (cond
-                   (tagged-literal? x)
-                   (let [v (walk root (:form x))]
-                     (case (:tag x)
-                       include (when-let [to (and (string? v) (include-target dir path v))]
-                                 (when-not (seen to)
-                                   (read-config dir to (slurp (io/file dir to)) (conj seen to))))
-                       merge   (when (and (sequential? v) (every? #(or (nil? %) (map? %)) v))
-                                 (apply merge v))
-                       ref     (when (sequential? v) (get-in root v))
-                       v))
-                   (map? x)    (into {} (map (fn [[k v]] [(walk root k) (walk root v)])) x)
-                   (vector? x) (mapv #(walk root %) x)
-                   :else       x))]
-         ;; Refs resolve against the whole file, so twice: the second pass
-         ;; looks them up in the first.
-         (walk (walk nil form) form)))
-     (catch Exception _ nil))))
-
-(defn- reader
-  "A function of a path in `dir` to {:path :text :config}, each file read once."
-  [dir]
-  (memoize (fn [path]
-             (let [text (try (slurp (io/file dir path)) (catch Exception _ nil))]
-               {:path path :text text :config (some->> text (read-config dir path))}))))
-
-(defn profile-path
-  "Profile `env`'s config.edn relative to `dir`, or, when that file is only an
-   `#include`, the file it includes, followed as Aero does (BOU-867)."
-  ([dir env] (profile-path dir env (reader dir)))
-  ([dir env read]
-   (loop [path (profile-file env) seen #{}]
-     (let [to (some->> (include-of (:text (read path))) (include-target dir path))]
-       (if (and to (not (seen to)))
-         (recur to (conj seen path))
-         path)))))
-
 ;; ─── config.edn patching ─────────────────────────────────────────────────────
 
 (defn- snippet-entries
@@ -259,11 +183,11 @@
     (when (map? active) (set (keys active)))))
 
 (defn- absent
-  "The `entries` whose key is not in the :active of `profile`, as `reader`
+  "The `entries` whose key is not in the :active of `profile`, as `profile/profile`
    returns it. A key parked under :inactive does not count. Text that does
    not read as EDN falls back to the text editor's reading of :active."
   [{:keys [text config]} entries]
-  (let [ks (active-keys config)]
+  (let [ks (active-keys @config)]
     (remove (fn [{:keys [k]}]
               (and k
                    (if ks
@@ -301,11 +225,11 @@
   [dir relative-path snippet]
   (let [f        (io/file dir relative-path)
         content  (slurp f)
-        current  {:text content :config (read-config dir relative-path content)}
+        current  (profile/profile dir relative-path content)
         entries  (snippet-entries snippet)
         missing  (absent current entries)
-        target   (include-of content)
-        base     (if target (own-file (:config current) target) content)
+        target   (:include current)
+        base     (if target (own-file @(:config current) target) content)
         section  (if (config-edn/section base additions) additions ":active")
         result   (fn [r] (cond-> {:result  r
                                   :added   (if (= :added r) (mapv :k missing) [])
@@ -314,7 +238,7 @@
     (if (empty? missing)
       (result :present)
       (let [out    (reduce #(config-edn/append-entry %1 section (:text %2)) base missing)
-            out-ks (active-keys (read-config dir relative-path out))]
+            out-ks (active-keys (profile/read-config dir relative-path out))]
         (cond
           ;; append-entry returns the text unchanged when there is no :active map.
           (= out base) (result :no-active)
@@ -324,7 +248,7 @@
           ;; among the editor's entries, not merely somewhere in :active's text.
           (if out-ks
             (every? #(contains? out-ks (:k %)) entries)
-            (and (nil? (:config current))
+            (and (nil? @(:config current))
                  (let [written (set (map :key (config-edn/entries out ":active")))]
                    (every? #(written (str (:k %))) entries))))
           (do (spit f out) (result :added))
@@ -342,9 +266,9 @@
 (defn project-name
   "The project's name: dev's :wagoe/settings :name less its profile suffix,
    as `bb setup` reads it, else the directory's name."
-  ([dir] (project-name dir (reader dir)))
+  ([dir] (project-name dir (profile/reader dir)))
   ([dir read]
-   (or (some-> (get-in (:config (read (profile-path dir "dev" read))) [:active :wagoe/settings :name])
+   (or (some-> (get-in @(:config (read (profile/profile-path dir "dev" read))) [:active :wagoe/settings :name])
                str
                (str/replace #"-(dev|development|test)$" "")
                not-empty)
@@ -356,16 +280,16 @@
    `#include`. A profile including another profile is that profile, so it is
    left out. A dev-scoped module goes in dev only, and in dev's own file,
    since what dev includes may be prod's. No profile is ever created."
-  ([dir module] (target-profiles dir module (reader dir)))
+  ([dir module] (target-profiles dir module (profile/reader dir)))
   ([dir {:keys [scope] :as module} read]
-   (let [envs  (filter #(.exists (io/file dir (profile-file %)))
+   (let [envs  (filter #(.exists (io/file dir (profile/profile-file %)))
                        (sort (.list (io/file dir "resources/conf"))))
-         own   (set (map profile-file envs))
+         own   (set (map profile/profile-file envs))
          pname (delay (project-name dir read))]
      (for [env   envs
-           :let  [path (if (= :dev scope) (profile-file env) (profile-path dir env read))]
+           :let  [path (if (= :dev scope) (profile/profile-file env) (profile/profile-path dir env read))]
            :when (and (or (not= :dev scope) (= "dev" env))
-                      (or (= path (profile-file env)) (not (own path))))
+                      (or (= path (profile/profile-file env)) (not (own path))))
            :let  [snippet (when-let [s (snippet-for module env)]
                             (cond-> s
                               (str/includes? s "{{project-name}}") (str/replace "{{project-name}}" @pname)))]
@@ -379,19 +303,19 @@
   "One line per profile `module` goes in whose active database it cannot boot
    on, per the catalogue's :databases. H2 passes where the module's snippet
    says `:allow-h2? true`, as tenant's test snippet does (BOU-576)."
-  [dir {:keys [databases] :as module}]
-  (when (seq databases)
-    (let [read (reader dir)]
-      (vec (for [[env snippet path] (target-profiles dir module read)
-                 :let  [active (:active (:config (read path)))
-                        db     (first (filter #(contains? active %) database-keys))]
-                 :when (and db
-                            (not (contains? databases (keyword (name db))))
-                            (not (and (= :wagoe/h2 db) (str/includes? snippet ":allow-h2? true"))))]
-             (str env " runs on " db ", and " (:name module) " needs "
-                  (str/join " or " (map #(str ":wagoe/" (name %)) (sort databases)))
-                  ": the app will refuse to boot in " env " until " path
-                  " switches its :active database."))))))
+  ([dir module] (database-warnings dir module (profile/reader dir)))
+  ([dir {:keys [databases] :as module} read]
+   (when (seq databases)
+     (vec (for [[env snippet path] (target-profiles dir module read)
+                :let  [active (:active @(:config (read path)))
+                       db     (first (filter #(contains? active %) database-keys))]
+                :when (and db
+                           (not (contains? databases (keyword (name db))))
+                           (not (and (= :wagoe/h2 db) (str/includes? snippet ":allow-h2? true"))))]
+            (str env " runs on " db ", and " (:name module) " needs "
+                 (str/join " or " (map #(str ":wagoe/" (name %)) (sort databases)))
+                 ": the app will refuse to boot in " env " until " path
+                 " switches its :active database."))))))
 
 (defn patch-configs!
   "Patch every existing resources/conf/<profile>/config.edn. Returns
@@ -405,7 +329,7 @@
   "Whether `module` needs nothing more: its dep is there and every profile it
    belongs in has its key. Dev alone was checked, so a prod created later
    never got a module added before it (BOU-564)."
-  ([dir module dep-present?] (installed? dir module dep-present? (reader dir)))
+  ([dir module dep-present?] (installed? dir module dep-present? (profile/reader dir)))
   ([dir module dep-present? read]
    (and dep-present?
         (every? (fn [[_ snippet path]]
@@ -448,7 +372,7 @@
   "Whether `module-key` is in dev's :active or in the code's :extra-modules."
   [dir module-key read extra]
   (or (contains? extra (str module-key))
-      (let [dev (read (profile-path dir "dev" read))]
+      (let [dev (read (profile/profile-path dir "dev" read))]
         (and (:text dev) (empty? (absent dev [{:k module-key}]))))))
 
 (defn module-states
@@ -459,7 +383,7 @@
    key in every profile."
   [dir]
   (let [deps  (slurp (io/file dir "deps.edn"))
-        read  (reader dir)
+        read  (profile/reader dir)
         extra (delay (extra-modules dir))]
     (for [m (:modules (cat/load-catalogue))
           :let [dep (dep-coords deps (:clojars m) (:scope m))]]
@@ -539,7 +463,9 @@
               ;; A module is "installed" when its dep is present AND its config key is
               ;; in every profile it belongs in. Requiring dep-present? prevents false
               ;; positives when two modules share a config key.
-              wired?       (installed? dir module dep-present?)]
+              ;; Nothing is written before patch-configs!, so one reader serves both.
+              read         (profile/reader dir)
+              wired?       (installed? dir module dep-present? read)]
           (cond
             ;; A core module's version moves with the rest of Wagoe, and
             ;; switching it on touches config only (BOU-667).
@@ -555,7 +481,7 @@
             :else
             (do
               ;; Before anything is written, so the boot refusal is no surprise.
-              (when-let [lines (seq (database-warnings dir module))]
+              (when-let [lines (seq (database-warnings dir module read))]
                 (println (str "Warning: " module-name " runs on PostgreSQL only. Installing anyway."))
                 (doseq [line lines] (println (str "  " line)))
                 (println))

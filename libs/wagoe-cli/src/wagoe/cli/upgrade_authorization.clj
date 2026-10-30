@@ -10,9 +10,9 @@
             [clojure.string :as str]
             [rewrite-clj.node :as n]
             [rewrite-clj.zip :as z]
-            [wagoe.cli.add :as add]
             [wagoe.cli.catalogue :as cat]
             [wagoe.cli.config-edn :as config-edn]
+            [wagoe.cli.profile :as profile]
             [wagoe.cli.upgrade :as upgrade]))
 
 ;; ─── config.edn ──────────────────────────────────────────────────────────────
@@ -400,7 +400,7 @@
   (let [{:keys [step error env log help?] :as opts} (parse-args args)
         env  (let [e (or env (not-empty (System/getenv "WAG_ENV")) "dev")] (get env-aliases e e))
         ;; An include-only profile is the file it includes (BOU-910).
-        path (io/file dir (add/profile-path dir env))
+        path (io/file dir (profile/profile-path dir env))
         deps (read-deps dir)
         app  (config-ns dir deps)]
     (cond
