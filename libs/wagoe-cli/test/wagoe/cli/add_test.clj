@@ -619,3 +619,53 @@
       (is (not (add/installed? tmp module true)))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+;; BOU-910 -----------------------------------------------------------------------
+
+(defn- load-active
+  "Profile `env`'s :active as the app loads it, through wagoe.config."
+  [dir env]
+  (:active ((requiring-resolve 'wagoe.config/read-config-resource)
+            (.toURL (io/file dir "resources/conf" env "config.edn"))
+            (keyword env))))
+
+(deftest ^:integration a-dev-only-module-gives-an-include-only-dev-its-own-file
+  ;; dev was only `#include "../prod/config.edn"`, so devtools had no profile
+  ;; to go in and `wagoe add devtools` wrote nothing (BOU-910).
+  (let [tmp      (with-profiles! "dev-include")
+        prod     "{:active {:wagoe/settings {:name \"shop\"}\n          :wagoe/h2 {}}\n :inactive {:wagoe/sqlite {}}}\n"
+        devtools (cat/find-module "devtools")
+        home     (System/getProperty "user.dir")]
+    (try
+      (spit (io/file tmp "resources/conf/prod/config.edn") prod)
+      (spit (io/file tmp "resources/conf/dev/config.edn") "#include \"../prod/config.edn\"\n")
+      (spit (io/file tmp "deps.edn")
+            "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"}}\n :aliases {:repl {:extra-deps {}}}}\n")
+      (is (not (add/installed? tmp devtools false)))
+      (System/setProperty "user.dir" tmp)
+      (let [out (with-out-str (add/-main ["devtools"]))]
+        (is (not (str/includes? out "already installed")))
+        (is (str/includes? out "dev now has its own config.edn")))
+      (is (= prod (slurp (io/file tmp "resources/conf/prod/config.edn"))) "prod is never written")
+      (is (str/includes? (slurp (io/file tmp "resources/conf/dev/config.edn"))
+                         "#include \"../prod/config.edn\"")
+          "dev keeps the include")
+      (is (= #{:wagoe/settings :wagoe/h2 :wagoe/dashboard} (set (keys (load-active tmp "dev")))))
+      (is (= {:port 9999} (:wagoe/dashboard (load-active tmp "dev"))))
+      (is (add/installed? tmp devtools true))
+
+      (testing "what prod gets later, dev gets too"
+        (add/patch-configs! tmp (cat/find-module "jobs"))
+        (is (contains? (load-active tmp "prod") :wagoe/jobs))
+        (is (= #{:wagoe/settings :wagoe/h2 :wagoe/dashboard :wagoe/jobs}
+               (set (keys (load-active tmp "dev"))))))
+
+      (testing "a second dev-only key goes into dev's additions"
+        (is (= :added (:result (add/patch-config! tmp "resources/conf/dev/config.edn"
+                                                  "  :wagoe/extra\n  {}\n"))))
+        (is (contains? (load-active tmp "dev") :wagoe/extra))
+        (is (= :present (:result (add/patch-config! tmp "resources/conf/dev/config.edn"
+                                                    "  :wagoe/extra\n  {}\n")))))
+      (finally
+        (System/setProperty "user.dir" home)
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))

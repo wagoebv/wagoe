@@ -37,6 +37,8 @@ for what is public API, what is internal, and how deprecations are announced.
   other users' identity-provider groups count; a role edit is one rights-timeline entry. Nothing to do.
 - **`agents:update` and `wagoe add` read a profile that is only an `#include` as the profile it includes** (BOU-867),
   so its active modules no longer show as not switched on. Nothing to change.
+- **`wagoe upgrade authorization --env` and dev-only modules follow an include-only profile** (BOU-910): `wagoe add
+  devtools` gives an include-only dev its own file that keeps the include. Nothing to change.
 
 ## [1.1.0-rc-1] — 2026-10-27
 

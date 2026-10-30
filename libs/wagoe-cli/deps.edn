@@ -8,7 +8,9 @@
  {:test  {:extra-paths ["test"]
           :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
                         ;; To load a generated project's logback.xml in new-test.
-                        ch.qos.logback/logback-classic {:mvn/version "1.6.3"}}
+                        ch.qos.logback/logback-classic {:mvn/version "1.6.3"}
+                        ;; To load a config.edn `wagoe add` rewrote the way the app does.
+                        wagoe/config {:local/root "../config"}}
           :main-opts   ["-m" "kaocha.runner"]}
   :build {:replace-deps {io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177d"}
                          slipset/deps-deploy {:mvn/version "0.2.5"}}
