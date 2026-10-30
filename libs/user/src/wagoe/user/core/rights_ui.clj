@@ -750,12 +750,14 @@
            [:p [:t :user.timeline/note]]
            (if (seq changes)
              (table [[:t :common/audit-timestamp] [:t :common/audit-actor] [:t :common/audit-action] [:t :user.timeline/column-effect]]
-                    (for [{:keys [at actor action group-id group-name] :as c} changes]
+                    (for [{:keys [at actor action group-id group-name role] :as c} changes]
                       [:tr.timeline-entry
                        [:td (timestamp-text at)]
                        [:td (or actor [:t :user/audit-actor-system])]
                        [:td [:t (keyword "common" (str "audit-" (name action)))] " "
-                        (if group-id [:a {:href (group-path group-id)} group-name] group-name)]
+                        (cond role     [:a {:href (role-path role)} (code role)]
+                              group-id [:a {:href (group-path group-id)} group-name]
+                              :else    group-name)]
                        [:td (change-effect c scope-info)]]))
              [:p.empty-state [:t :user.timeline/empty]])))
 

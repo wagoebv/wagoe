@@ -427,21 +427,39 @@
     {:permission (group/parse-name permission)
      :scope      (if (map? m) m scope)}))
 
+(defn- one-per-change
+  "`entries` with each change audited in several, sharing a `:change-id` (a
+   role edit: per group holding the role, per permission added and removed),
+   kept once, where its newest is: the entry with the user's own diff, as a
+   `:role-change`."
+  [entries]
+  (let [by-change (group-by (comp :change-id :metadata) entries)
+        own-diff? #(nil? (get-in % [:changes :effective :permissions]))]
+    (keep (fn [{:keys [metadata] :as e}]
+            (let [same (get by-change (:change-id metadata))]
+              (cond (nil? (:change-id metadata)) e
+                    (identical? e (first same))  (assoc (or (first (filter own-diff? same)) e)
+                                                        :action :role-change :created-at (:created-at e)))))
+          entries)))
+
 (defn rights-timeline
   "The newest `n` of `entries`, audit entries of `rights-actions`, newest
-   first, each {:at :actor :action :group-id :group-name :added :removed},
-   the rights the change gave and took (BOU-852). A change to Everyone has
+   first, each {:at :actor :action :group-id :group-name :role :added
+   :removed}, the rights the change gave and took (BOU-852). A role edit is
+   one `:role-change` naming the `:role` (BOU-864). A change to Everyone has
    :permissions and :affected-count instead; an entry from before BOU-852
    none of these."
   [entries n]
   (for [{:keys [created-at actor-email action metadata changes]}
-        (take n (sort-by :created-at #(compare %2 %1) entries))
-        :let [{:keys [added removed permissions affected-count]} (:effective changes)]]
+        (take n (one-per-change (sort-by :created-at #(compare %2 %1) entries)))
+        :let [{:keys [added removed permissions affected-count]} (:effective changes)
+              role (some-> (:role metadata) group/parse-name)]]
     {:at             created-at
      :actor          actor-email
      :action         action
-     :group-id       (:group-id metadata)
-     :group-name     (:group-name metadata)
+     :group-id       (when-not role (:group-id metadata))
+     :group-name     (when-not role (:group-name metadata))
+     :role           role
      :added          (mapv stored-right added)
      :removed        (mapv stored-right removed)
      :permissions    (mapv #(update % :permission group/parse-name) permissions)

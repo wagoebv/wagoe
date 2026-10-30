@@ -29,6 +29,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Rights previews no longer over-report gains** (BOU-864): inactive members, rights two scopes cover together and
+  other users' identity-provider groups count; a role edit is one rights-timeline entry. Nothing to do.
+
 ## [1.1.0-rc-1] — 2026-10-27
 
 ### Added

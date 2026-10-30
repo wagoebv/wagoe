@@ -357,15 +357,18 @@
    rights, [{:user {:id :email} :added :removed}]: their rights before and
    after, of the touched permissions, resolved as the authorization
    interceptor resolves them and compared by `scope/rights-diff`. The focal
-   user's are read with their identity provider's groups; the others' from
-   stored memberships and Everyone, one query for all. None when no
+   user's are read with their identity provider's groups, and so are the
+   others' when there is a membership hook; without one, from stored
+   memberships and Everyone, one query for all. An inactive user other than
+   the focal one is left out, as Everyone leaves them out. None when no
    permission is touched."
   [{:keys [group-repository user-repository membership] :as svc}
    {:keys [users focal grants roles roles-after update] :as plan}]
   (when-let [touched (not-empty (or (:touched plan) (into #{} (map :permission) grants)))]
     (let [resolve  (or (:resolve svc) stored-resolve)
-          others?  (some #(not (access/same-id? (:id focal) (:id %))) users)
-          held-by  (when others?
+          focal?   #(access/same-id? (:id focal) (:id %))
+          users    (remove #(and (false? (:active? %)) (not (focal? %))) users)
+          held-by  (when (and (not membership) (some (complement focal?) users))
                      (group-by (comp str :user-id)
                                (ports/find-role-holders group-repository
                                                         (into #{} (mapcat #(concat (group-core/roles-holding roles %)
@@ -374,14 +377,16 @@
           rights   (fn [assignments roles]
                      (filterv (comp touched :permission) (group-core/user-grants assignments roles)))]
       (mapv (fn [user]
-              (let [focal?   (access/same-id? (:id focal) (:id user))
-                    held     (if focal?
+              (let [focal?   (focal? user)
+                    held     (if (or focal? membership)
+                               ;; Another user's record, as the hook reads it, by id
                                (ports/find-user-assignments group-repository (:id user)
-                                                            (provider-groups membership user-repository user))
+                                                            (provider-groups membership user-repository
+                                                                             (if focal? user (:id user))))
                                (get held-by (str (:id user)) []))
                     before   (rights held roles)
                     after    (rights (update held) roles-after)
-                  ;; A source resolver reads the user, so give it the whole record
+                    ;; A source resolver reads the user, so give it the whole record
                     user-map (if (and (not focal?) (some scope/source? (mapcat (comp vals :scope) (concat before after))))
                                (or (ports/find-user-by-id user-repository (:id user)) user)
                                user)]
@@ -391,14 +396,16 @@
 
 (defn- audit-role-change!
   "Audit what changing managed role `role-name` from `before` to `after`
-   permissions does to every group holding it."
+   permissions does to every group holding it, the entries sharing a
+   `:change-id` so a user's rights timeline shows the edit once."
   [audit-repository role-name holders before after diffs]
-  (doseq [{:keys [group-id group-name scope members]} holders
-          [action ps] [[:grant-remove (remove (set after) before)] [:grant-add (remove (set before) after)]]
-          :when (seq ps)]
-    (audit! audit-repository action {:id group-id :name group-name} members
-            (for [p (sort ps)] {:permission p :scope scope :role role-name})
-            {:diffs diffs})))
+  (let [metadata {:change-id (str (random-uuid)) :role (group-core/permission-str role-name)}]
+    (doseq [{:keys [group-id group-name scope members]} holders
+            [action ps] [[:grant-remove (remove (set after) before)] [:grant-add (remove (set before) after)]]
+            :when (seq ps)]
+      (audit! audit-repository action {:id group-id :name group-name} members
+              (for [p (sort ps)] {:permission p :scope scope :role role-name})
+              {:diffs diffs :metadata metadata}))))
 
 ;; =============================================================================
 ;; Import

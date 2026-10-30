@@ -438,3 +438,23 @@
       (is (= [{:permission :orders/read :added 3 :removed 0}] (:permissions (second timeline)))))
     (testing "an entry from before the diffs has none"
       (is (= [[] []] ((juxt :added :removed) (first (audit/rights-timeline [old] 1))))))))
+
+(deftest ^:unit a-role-edit-is-one-timeline-entry
+  ;; BOU-864: audited per group holding the role and per added and removed permission
+  (let [user  {:id test-target-id :email test-target-email}
+        ctx   {:actor-id test-actor-id :actor-email test-actor-email}
+        diff  {(str test-target-id) {:added [{:permission :orders/write :scope {}}]}}
+        entry (fn [action group-name at]
+                (-> (first (audit/group-audit-entries action ctx {:id (UUID/randomUUID) :name group-name} [user] [] diff))
+                    (update :metadata assoc :change-id "c1" :role "sales/lead")
+                    (assoc :created-at (java.time.Instant/parse at))))
+        other (-> (first (audit/group-audit-entries :group-join ctx {:id (UUID/randomUUID) :name "Ops"} [user] []))
+                  (assoc :created-at (java.time.Instant/parse "2026-10-01T09:00:00Z")))
+        timeline (audit/rights-timeline [(entry :grant-remove "Sales" "2026-10-01T10:00:00Z")
+                                         (entry :grant-add "Sales" "2026-10-01T10:00:00Z")
+                                         (entry :grant-add "Desk" "2026-10-01T10:00:01Z")
+                                         other]
+                                        2)]
+    (is (= [:role-change :group-join] (map :action timeline)) "the edit once, and room for the next entry")
+    (is (= :sales/lead (:role (first timeline))))
+    (is (= [{:permission :orders/write :scope {}}] (:added (first timeline))))))

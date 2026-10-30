@@ -187,8 +187,8 @@
   ;; Removes the group, its memberships and assignments. Returns boolean.
 
   (find-members [this group-id])
-  ;; The group's users, {:id :email :name}, by email. Soft-deleted users are
-  ;; left out.
+  ;; The group's users, {:id :email :name :active?}, by email. Soft-deleted
+  ;; users are left out. Without :active?, a user counts as active.
 
   (insert-member [this group-id user-id])
   ;; Returns true, or false when the user was a member already.

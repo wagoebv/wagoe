@@ -200,15 +200,30 @@
             (when-let [vs (get other k)] (every? #(allows? allowed %) vs)))
           scope))
 
+(defn- covered-together?
+  "Whether `scopes` admit, between them, wherever resolved `scope` does: it is
+   split a value at a time until one of them covers each part."
+  [scopes scope]
+  (let [overlaps? (fn [s part] (every? (fn [[k allowed]] (some #(allows? allowed %) (get part k))) s))
+        covered?  (fn covered? [scopes part]
+                    (let [scopes (filterv #(overlaps? % part) scopes)]
+                      (or (boolean (some #(covers? % part) scopes))
+                          (when-let [[k vs] (first (filter (comp next val) part))]
+                            (every? #(covered? scopes (assoc part k #{%})) vs)))))]
+    ;; A scope with a key `scope` lacks admits none of it
+    (boolean (covered? (filterv #(every? (partial contains? scope) (keys %)) scopes) scope))))
+
 (defn rights-diff
   "How resolved rights `after` differ from `before`, rights adding up as the
-   interceptor adds them: `:added`, the rights `after` holds where `before`
-   holds nothing that covers them, and `:removed` the reverse. Each
+   interceptor adds them: `:added`, the rights `after` holds that `before`'s
+   do not cover, one alone or several together, and `:removed` the reverse. Each
    {:permission :scope}, none covered by another in its list."
   [before after]
   (let [norm      #(into #{} (map (fn [r] {:permission (:permission r) :scope (or (:scope r) {})})) %)
         covered?  (fn [rights {:keys [permission scope] :as r}]
-                    (some #(and (not= r %) (= permission (:permission %)) (covers? (:scope %) scope)) rights))
+                    (covered-together? (into [] (keep #(when (and (not= r %) (= permission (:permission %))) (:scope %)))
+                                             rights)
+                                       scope))
         order     (juxt (comp str :permission) (comp str :scope))
         ;; Of two covering each other, 42 and "42", the first in `order` stays
         dropped?  (fn [rights r]
