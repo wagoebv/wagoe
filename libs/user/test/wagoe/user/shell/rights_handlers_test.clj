@@ -430,13 +430,12 @@
       (let [ada     (ports/create-user users {:email "ada@example.com" :name "Ada" :role :user :active true
                                               :password-hash "x"})
             finance (ports/create-group gsvc {:name "Finance"})
-            r       (explain (rights-handlers/grant-wizard usvc gsvc) admin ada
-                             {"permission" "invoice/write" "scope.domain-id" "x"})]
+            page    #(explain (rights-handlers/grant-wizard usvc gsvc) admin ada
+                              {"permission" "invoice/write" "scope.domain-id" "x"})]
+        (is (= 200 (:status (page))) "no option but the refused one")
         (ports/add-group-role gsvc (:id finance) {:role :invoice/editor :scope {}})
-        (let [r (explain (rights-handlers/grant-wizard usvc gsvc) admin ada
-                         {"permission" "invoice/write" "scope.domain-id" "x"})]
+        (let [r (page)]
           (is (= 200 (:status r)))
           (is (str/includes? (:body r) "grant-join"))
           (is (str/includes? (:body r) "grant-refused"))
-          (is (str/includes? (:body r) "error-scope")))
-        (is (= 200 (:status r)) "no option at all but the refused one")))))
+          (is (str/includes? (:body r) "error-scope")))))))

@@ -376,12 +376,22 @@
               (throw e))))
         (not-found request :user.rights/user-not-found)))))
 
+(defn- three-writes
+  "The new group of one for a group service without `IGrantGroup`: the
+   assignment and the expiry are refused before the group exists."
+  [group-service group user-id assignment expires-at]
+  (ports/preview-change group-service {:op :new-group :user-id user-id :assignment assignment :expires-at expires-at})
+  (let [g (ports/create-group group-service group)]
+    (ports/add-group-member-until group-service (:id g) user-id expires-at)
+    (ports/add-group-role group-service (:id g) assignment)
+    g))
+
 (defn grant-group
   "POST /web/users/:id/grant/group — the last option: a group holding only
    the user and the assignment, named and with its purpose said."
   [user-service group-service]
   ;; Asked once: a group service without it takes three writes (Convention 5)
-  (let [one-write? (satisfies? ports/IGrantGroup group-service)]
+  (let [create! (if (satisfies? ports/IGrantGroup group-service) ports/create-grant-group three-writes)]
     (fn [request]
       (let [{:keys [record]} (asked-scope group-service (:form-params request))
             user        (user-of user-service request)
@@ -398,15 +408,7 @@
           (try
             (let [expires-at (group-handlers/form-expiry request)
                   group      {:name (form request "name") :description description}
-                  g          (if one-write?
-                               (ports/create-grant-group group-service group (:id user) assignment expires-at)
-                               ;; Refuse the assignment and the expiry before the group exists
-                               (do (ports/preview-change group-service {:op :new-group :user-id (:id user)
-                                                                        :assignment assignment :expires-at expires-at})
-                                   (let [g (ports/create-group group-service group)]
-                                     (ports/add-group-member-until group-service (:id g) (:id user) expires-at)
-                                     (ports/add-group-role group-service (:id g) assignment)
-                                     g)))]
+                  g          (create! group-service group (:id user) assignment expires-at)]
               (redirect (rights-ui/group-path (:id g)) :user.grant/flash-group-created))
             (catch clojure.lang.ExceptionInfo e
               (if (group-handlers/refused? e) (retry (group-handlers/error-text e)) (throw e)))))))))
@@ -432,7 +434,7 @@
           {:keys [permission record] :as q} (asked-scope group-service params)
           [users unknown] (if permission (named-users user-service (get params "users")) [[] []])
           ;; The roles are read once for every user, not per option per user
-          svc    (group-service/with-roles group-service)
+          svc    (cond-> group-service (seq users) group-service/with-roles)
           [rows error] (try [(mapv (fn [u] {:user u :result (grant-options svc u permission record)}) users)]
                             (catch clojure.lang.ExceptionInfo e
                               (if (group-handlers/refused? e) [[] (group-handlers/error-text e)] (throw e))))]

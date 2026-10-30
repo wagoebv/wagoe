@@ -127,6 +127,17 @@
   (merge (into {} (map (fn [r] [(:name r) (assoc r :source :managed)])) (ports/find-roles repo))
          (update-vals (code-roles registry) #(assoc % :source :code))))
 
+(defn- roles-of
+  "Every role, as `all-roles`, or the snapshot `with-roles` took."
+  [svc]
+  (or (::roles svc) (all-roles (:group-repository svc) (:registry svc))))
+
+(defn with-roles
+  "`svc` reading every role once, for a page of previews and grant options
+   that changes nothing. A group service of another kind is returned as it is."
+  [svc]
+  (if (:group-repository svc) (assoc svc ::roles (roles-of svc)) svc))
+
 (defn- audit!
   "Record `action` for each of `members`, or, for a change to Everyone, once
    for the actor: it reaches every user. `opts`: `:diffs`, as `user-diffs`
@@ -286,7 +297,7 @@
    `:roles-after`, and `:update`, what it does to a user's assignments.
    Throws as making the change would."
   [{:keys [group-repository user-repository registry settings membership] :as svc} {:keys [op group-id user-id role] :as change}]
-  (let [roles (or (::roles svc) (all-roles group-repository registry))
+  (let [roles (roles-of svc)
         plan  {:roles roles :roles-after roles :update identity}]
     (case op
       :add-member
@@ -607,20 +618,22 @@
   [svc option change]
   (try (assoc option :preview (ports/preview-change svc change))
        (catch clojure.lang.ExceptionInfo e
-         (if (#{:validation-error :not-found} (:type (ex-data e)))
-           (assoc option :refused (assoc (ex-data e) :message (ex-message e)))
-           (throw e)))))
+         (let [refusal (ex-data e)]
+           (if (#{:validation-error :not-found} (:type refusal))
+             (assoc option :refused refusal)
+             (throw e))))))
 
 (defn- create-grant-group!
   "The group of one the grant wizard offers, made in one transaction."
-  [{:keys [group-repository] :as svc} group user-id assignment expires-at]
-  ;; Refused before anything is written, as the wizard previewed it
-  (change-plan svc {:op :new-group :user-id user-id :assignment assignment :expires-at expires-at})
-  (let [data (group-data group)]
-    (ports/in-transaction group-repository
+  [svc group user-id assignment expires-at]
+  ;; Refused before anything is written, as the wizard previewed it. No role
+  ;; changes here, so the three checks share one read of them.
+  (let [svc (with-roles svc)]
+    (change-plan svc {:op :new-group :user-id user-id :assignment assignment :expires-at expires-at})
+    (ports/in-transaction (:group-repository svc)
                           (fn [repo]
                             (let [svc (assoc svc :group-repository repo)
-                                  g   (ports/insert-group repo data)]
+                                  g   (ports/insert-group repo (group-data group))]
                               (add-member! svc (:id g) user-id expires-at)
                               (ports/add-group-role svc (:id g) assignment)
                               g)))))
@@ -654,14 +667,6 @@
 ;; Service
 ;; =============================================================================
 
-(defn with-roles
-  "`svc` reading every role once, for a page of previews and grant options
-   that changes nothing. A group service of another kind is returned as it is."
-  [svc]
-  (if (and (map? svc) (:group-repository svc) (nil? (::roles svc)))
-    (assoc svc ::roles (all-roles (:group-repository svc) (:registry svc)))
-    svc))
-
 (defrecord UserGroupService [group-repository user-repository audit-repository settings registry membership]
   authz/IRights
   ;; What the platform's authorization interceptor reads, once per request.
@@ -685,8 +690,7 @@
         (not (:allowed? result))
         (assoc :alternatives
                (role-holders group-repository
-                             (group-core/roles-holding (or (::roles this) (all-roles group-repository registry))
-                                                       permission)
+                             (group-core/roles-holding (roles-of this) permission)
                              false)))))
 
   ports/IRoleAssignments
