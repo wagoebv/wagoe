@@ -71,8 +71,9 @@
         (is (= #{:invoice/read :invoice/write}
                (:permissions (some #(when (= :invoice/clerk (:name %)) %) (ports/list-roles gsvc))))))
 
-      (testing "refused on the page: a code role's name, no permission, one nobody declares"
+      (testing "refused on the page: a code role's name, a taken one, no permission, one nobody declares"
         (doseq [[form text] [[{"name" "invoice/editor" "permissions" "invoice/read"} "error-name-code"]
+                             [{"name" "invoice/clerk" "permissions" "invoice/read"} "error-name-taken"]
                              [{"name" "invoice/empty"} "error-invalid"]
                              [{"name" "invoice/odd" "permissions" "invoice/fly"} "error-permissions"]]]
           (let [r (app (req admin :post "/web/admin/roles" form))]

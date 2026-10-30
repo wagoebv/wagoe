@@ -174,6 +174,9 @@
                    #(ports/add-group-grant svc (random-uuid) {:permission :a})
                    #(ports/update-group svc {:id (random-uuid) :name "X"})]]
           (is (= :not-found (:type (ex-data (try (f) nil (catch clojure.lang.ExceptionInfo e e)))))))
+        (is (= :user (:field (ex-data (try (ports/add-group-member svc (:id g) (random-uuid)) nil
+                                           (catch clojure.lang.ExceptionInfo e e)))))
+            "BOU-915: a missing user says so, not a missing group")
         (is (= :validation-error
                (:type (ex-data (try (ports/create-group svc {:name "  "}) nil
                                     (catch clojure.lang.ExceptionInfo e e))))))

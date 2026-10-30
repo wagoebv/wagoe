@@ -20,7 +20,6 @@
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.web-handlers :refer [html-response]]))
 
-
 (defn page-opts [request]
   {:user  (:user request)
    :flash (:flash request)})
@@ -85,6 +84,7 @@
   (list [:t (or ({:role       :user.groups/error-role
                   :scope      :user.groups/error-scope
                   :email      :user.groups/error-no-user
+                  :user       :user.rights/user-not-found
                   :expires-at :user.groups/error-expires-at} field)
                 ({:not-found :user.groups/not-found} type)
                 (when (= [:conflict :name] [type field]) :user.groups/error-name-taken)
@@ -102,19 +102,18 @@
 (defn- group-page [request group-service group-id status opts]
   (if-let [group (ports/get-group group-service group-id)]
     (html-response request
-          (group-ui/group-page group (ports/list-roles group-service)
-                               (merge (page-opts request)
-                                      {:scope-keys       (scope-keys group-service)
-                                       :scope-info       (scope-info group-service)}
-                                      opts))
-          status)
+                   (group-ui/group-page group (ports/list-roles group-service)
+                                        (merge (page-opts request)
+                                               {:scope-keys       (scope-keys group-service)
+                                                :scope-info       (scope-info group-service)}
+                                               opts))
+                   status)
     (not-found request)))
 
 (defn refused?
+  "Whether `e` is a refusal, by `group-core/refusal?`."
   [e]
-  (let [{:keys [type field]} (ex-data e)]
-    (or (#{:validation-error :not-found} type)
-        (= [:conflict :name] [type field]))))
+  (group-core/refusal? (ex-data e)))
 
 (defn- signalled-groups
   "Every group with its hygiene signals (BOU-855)."
@@ -136,9 +135,9 @@
         (catch clojure.lang.ExceptionInfo e
           (if (refused? e)
             (html-response request
-                  (group-ui/groups-page (signalled-groups group-service)
-                                        (assoc (page-opts request) :error (error-text e) :form data))
-                  422)
+                           (group-ui/groups-page (signalled-groups group-service)
+                                                 (assoc (page-opts request) :error (error-text e) :form data))
+                           422)
             (throw e)))))))
 
 (defn show [group-service]

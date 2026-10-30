@@ -9,6 +9,15 @@
    {:permission :invoice/approve :scope {:domain-id 1} :group-name "Audit"}
    {:permission :report/view :scope {} :group-name "Audit"}])
 
+(deftest ^:unit what-counts-as-a-refusal
+  ;; BOU-915: shown to the admin, not raised
+  (is (sut/refusal? {:type :validation-error :field :scope}))
+  (is (sut/refusal? {:type :not-found :user-id 1}))
+  (is (sut/refusal? {:type :conflict :field :name}) "a name taken")
+  (is (not (sut/refusal? {:type :conflict})) "a write that lost a race")
+  (is (not (sut/refusal? {:type :internal-error})))
+  (is (not (sut/refusal? nil))))
+
 (deftest ^:unit holding-a-permission
   (is (true? (sut/holds? grants :invoice/approve)))
   (is (true? (sut/holds? grants :report/view)))

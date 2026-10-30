@@ -35,6 +35,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Nothing to do, unless your own catalogue overrides `:common/role-user`.
 - **Rights timeline: an expiry records what it took, and a role edit over many groups hides no older change**
   (BOU-911). Nothing to do.
+- **Group and role pages agree on what is a refusal, and a missing user no longer reads as a missing group**
+  (BOU-915). Nothing to do.
 - **OpenTelemetry 1.67.0 in `wagoe-observability`** (BOU-914): 1.66.0 has a known vulnerability in
   `opentelemetry-api`. Nothing to do.
 - **A change to Everyone previews without reading every user, and shows on each user's rights timeline** (BOU-862).

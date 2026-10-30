@@ -36,9 +36,6 @@
   (when role-name
     (some #(when (= role-name (:name %)) %) (ports/list-roles group-service))))
 
-(defn- refused? [e]
-  (#{:validation-error :conflict :not-found} (:type (ex-data e))))
-
 (defn- error-text [e]
   (let [{:keys [type field errors]} (ex-data e)]
     (list [:t (cond
@@ -82,7 +79,7 @@
         (let [role (ports/create-role group-service data)]
           (redirect (rights-ui/role-path (:name role)) :user.roles/flash-created))
         (catch clojure.lang.ExceptionInfo e
-          (if (refused? e)
+          (if (group-core/refusal? (ex-data e))
             (roles-page request group-service 422 {:error (error-text e) :form data})
             (throw e)))))))
 
@@ -109,7 +106,7 @@
     (try
       (f role)
       (catch clojure.lang.ExceptionInfo e
-        (if (refused? e)
+        (if (group-core/refusal? (ex-data e))
           (do (log/info "Role change refused" (select-keys (ex-data e) [:type :field]))
               (role-page request group-service role 422
                          {:error (error-text e)
@@ -350,7 +347,7 @@
     (let [{:keys [permission record] :as q} (asked-scope group-service params)
           [result error] (try [(when permission (grant-options group-service user permission record))]
                               (catch clojure.lang.ExceptionInfo e
-                                (if (group-handlers/refused? e) [nil (group-handlers/error-text e)] (throw e))))]
+                                (if (group-core/refusal? (ex-data e)) [nil (group-handlers/error-text e)] (throw e))))]
       (html-response request
                      (grant-ui/grant-page user result (wizard-opts request group-service q
                                                                    (cond-> opts error (assoc :error error))))
@@ -375,7 +372,7 @@
           (ports/create-role group-service {:name (form request "name") :permissions #{permission}})
           (redirect (rights-ui/grant-path (:id user) permission record) :user.grant/flash-role-created)
           (catch clojure.lang.ExceptionInfo e
-            (if (refused? e)
+            (if (group-core/refusal? (ex-data e))
               (grant-response request user-service group-service (:form-params request) 422 {:error (error-text e)})
               (throw e))))
         (not-found request :user.rights/user-not-found)))))
@@ -415,7 +412,7 @@
                   g          (create! group-service group (:id user) assignment expires-at)]
               (redirect (rights-ui/group-path (:id g)) :user.grant/flash-group-created))
             (catch clojure.lang.ExceptionInfo e
-              (if (group-handlers/refused? e) (retry (group-handlers/error-text e)) (throw e)))))))))
+              (if (group-core/refusal? (ex-data e)) (retry (group-handlers/error-text e)) (throw e)))))))))
 
 (defn- named-users
   "The users `text` names, ids or emails separated by space, comma or line,
@@ -441,7 +438,7 @@
           svc    (cond-> group-service (seq users) group-service/with-roles)
           [rows error] (try [(mapv (fn [u] {:user u :result (grant-options svc u permission record)}) users)]
                             (catch clojure.lang.ExceptionInfo e
-                              (if (group-handlers/refused? e) [[] (group-handlers/error-text e)] (throw e))))]
+                              (if (group-core/refusal? (ex-data e)) [[] (group-handlers/error-text e)] (throw e))))]
       (html-response request
                      (grant-ui/bulk-page rows (if error [] unknown)
                                          (wizard-opts request group-service q (cond-> {:users (get params "users")}
