@@ -11,14 +11,14 @@ Core infrastructure for web applications: database, HTTP routing, pagination, an
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {com.wagoe/wagoe-platform {:mvn/version "1.1.0-rc-1"}
+{:deps {com.wagoe/wagoe-platform {:mvn/version "1.1.0"}
         ;; Choose your database driver
         org.postgresql/postgresql {:mvn/version "42.7.12"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[com.wagoe/wagoe-platform "1.1.0-rc-1"]
+[com.wagoe/wagoe-platform "1.1.0"]
 [org.postgresql/postgresql "42.7.12"]
 ```
 
@@ -188,7 +188,7 @@ libs/platform/src/wagoe/platform/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `wagoe/observability` | 1.1.0-rc-1 | Logging, metrics |
+| `wagoe/observability` | 1.1.0 | Logging, metrics |
 | `next.jdbc` | 1.3.1118 | Database access |
 | `honeysql` | 2.7.1437 | SQL generation |
 | `HikariCP` | 7.1.0 | Connection pooling |
