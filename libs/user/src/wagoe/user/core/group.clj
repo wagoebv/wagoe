@@ -229,6 +229,11 @@
 (defn- changed? [diff]
   (or (seq (:added diff)) (seq (:removed diff))))
 
+(defn- weight
+  "How many users a diff stands for."
+  [diff]
+  (:count diff 1))
+
 (defn permission-counts
   "Per-user diffs, [{:user {:id :email} :added :removed}] as
    `wagoe.platform.core.scope/rights-diff` gives them, counted: `:permissions`,
@@ -237,14 +242,13 @@
    stands for that many users (BOU-862)."
   [diffs]
   (let [changed (filter changed? diffs)
-        weight  #(:count % 1)
         counts  (fn [k] (apply merge-with + {} (for [d changed p (distinct (map :permission (get d k)))]
                                                 {p (weight d)})))
         added   (counts :added)
         removed (counts :removed)]
     {:permissions    (vec (for [p (sort-by str (distinct (concat (keys added) (keys removed))))]
                             {:permission p :added (get added p 0) :removed (get removed p 0)}))
-     :affected-count (reduce + 0 (map weight changed))}))
+     :affected-count (transduce (map weight) + changed)}))
 
 (defn diff-summary
   "`diffs` summed up for a preview: `permission-counts`, `:user`, the diff of
@@ -256,5 +260,5 @@
         others (filter #(and (changed? %) (not (focal? %))) diffs)]
     (assoc (permission-counts diffs)
            :user           (first (filter focal? diffs))
-           :affected-count (reduce + 0 (map #(:count % 1) others))
+           :affected-count (transduce (map weight) + others)
            :affected       (into [] (comp (keep :user) (take preview-page-size)) others))))

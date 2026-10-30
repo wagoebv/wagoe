@@ -244,13 +244,17 @@
    `members?` is false; Everyone lists none."
   ([repo role-names] (role-holders repo role-names true))
   ([repo role-names members?]
-   (->> (mapcat #(ports/find-role-assignments repo %) (set role-names))
-        (map (fn [{:keys [group-id] :as a}]
-               (let [everyone? (group-core/everyone? group-id)]
-                 (cond-> (assoc (select-keys a [:role :group-id :group-name :scope :expires-at]) :everyone? everyone?)
-                   members? (assoc :members (if everyone? [] (ports/find-members repo group-id)))))))
-        (sort-by (juxt :group-name (comp str :role)))
-        vec)))
+   (let [members (memoize #(ports/find-members repo %))]
+     (->> (mapcat #(ports/find-role-assignments repo %) (set role-names))
+          (map (fn [{:keys [group-id] :as a}]
+                 (let [everyone? (group-core/everyone? group-id)]
+                   (cond-> (assoc (select-keys a [:role :group-id :group-name :scope :expires-at]) :everyone? everyone?)
+                     members? (assoc :members (if everyone? [] (members group-id)))))))
+          (sort-by (juxt :group-name (comp str :role)))
+          vec))))
+
+(defn- unique-by-id [users]
+  (vals (into {} (map (juxt (comp str :id) identity)) users)))
 
 ;; =============================================================================
 ;; Effective rights diff (BOU-852)
@@ -288,7 +292,8 @@
    Throws as making the change would."
   [{:keys [group-repository user-repository registry settings membership] :as svc} {:keys [op group-id user-id role] :as change}]
   (let [roles (all-roles group-repository registry)
-        plan  {:roles roles :roles-after roles :update identity}]
+        ;; A change naming no user still names one for the preview (BOU-853)
+        plan  {:roles roles :roles-after roles :update identity :named-id user-id}]
     (case op
       :add-member
       (let [_     (not-everyone! group-id)
@@ -348,25 +353,24 @@
                                                          :permissions (:permissions change)})))
             holders (role-holders group-repository [role])]
         (assoc plan :role before :holders holders
-               :users (vals (into {} (map (juxt (comp str :id) identity)) (mapcat :members holders)))
+               :users (unique-by-id (mapcat :members holders))
                :everyone? (boolean (some :everyone? holders))
                :touched (set (concat (remove (set after) (:permissions before))
                                      (remove (set (:permissions before)) after)))
                :roles-after (if after (assoc-in roles [role :permissions] (set after)) (dissoc roles role)))))))
 
 (defn- stored-holdings
-  "What stored memberships and Everyone give of `role-names`, read per group
-   holding one, so Everyone costs a row and not one per user: `:everyone`,
+  "What stored memberships and Everyone give of `role-names`, by
+   `role-holders`, so Everyone costs a row and not one per user: `:everyone`,
    its assignments, `:by-user` {user-id-string [assignment]} the other
    groups', `:members` of those groups and `:groups?` whether there are any."
   [repo role-names]
-  (let [{everyone true others false} (group-by (comp boolean group-core/everyone? :group-id)
-                                               (mapcat #(ports/find-role-assignments repo %) (set role-names)))
-        members (into {} (map (fn [gid] [gid (ports/find-members repo gid)])) (distinct (map :group-id others)))]
-    {:everyone (vec everyone)
-     :by-user  (reduce (fn [acc a] (reduce #(update %1 (str (:id %2)) (fnil conj []) a) acc (get members (:group-id a))))
+  (let [{everyone true others false} (group-by :everyone? (role-holders repo role-names))]
+    {:everyone (mapv #(dissoc % :members) everyone)
+     :by-user  (reduce (fn [acc a] (let [a' (dissoc a :members)]
+                                     (reduce #(update %1 (str (:id %2)) (fnil conj []) a') acc (:members a))))
                        {} others)
-     :members  (vals (into {} (map (juxt (comp str :id) identity)) (mapcat val members)))
+     :members  (unique-by-id (mapcat :members others))
      :groups?  (boolean (seq others))}))
 
 (defn- active-count [user-repository]
@@ -383,73 +387,74 @@
    query per group.
 
    A plan reaching Everyone diffs the users another group gives a touched
-   role and `named-id`'s, and the rest as one diff with their `:count`: they
+   role and the one it names, and the rest as one diff with their `:count`: they
    hold only Everyone's (BOU-862). Unless a membership hook may put them in
    such a group, or Everyone's scope takes a value from the user: then every
    active user is read. None when no permission is touched."
-  ([svc plan] (user-diffs svc plan nil))
-  ([{:keys [group-repository user-repository membership] :as svc}
-    {:keys [focal grants roles roles-after update everyone?] :as plan} named-id]
-   (when-let [touched (not-empty (or (:touched plan) (into #{} (map :permission) grants)))]
-     (let [resolve  (or (:resolve svc) stored-resolve)
-           stored   (stored-holdings group-repository
-                                     (into #{} (mapcat #(concat (group-core/roles-holding roles %)
-                                                                (group-core/roles-holding roles-after %)))
-                                           touched))
-           scan?    (and everyone?
-                         (or (and membership (:groups? stored))
-                             (some scope/source? (mapcat (comp vals :scope)
-                                                         (cons (:assignment plan) (:everyone stored))))))
-           active?  #(not (false? (:active? %)))
-           users    (cond
-                      scan?     (active-users user-repository (map identity))
-                      everyone? (let [users (vals (into {} (map (juxt (comp str :id) identity))
-                                                        (concat (:users plan) (filter active? (:members stored)))))]
-                                  (if (or (nil? named-id) (some #(access/same-id? named-id (:id %)) users))
-                                    users
-                                    (concat users (some-> (ports/find-user-by-id user-repository named-id) vector))))
-                      :else     (:users plan))
-           focal?   #(access/same-id? (:id focal) (:id %))
-           ;; Read one by one
-           own?     #(or (focal? %) (not (active? %)))
-           ;; A provider group's assignments, by name, read once per group
-           provided (when (and membership (some (complement own?) users))
-                      (let [ids (delay (into {} (map (juxt :name :id)) (ports/find-groups group-repository)))]
-                        (memoize #(some->> (get @ids %) (ports/find-assignments group-repository)))))
-           ;; find-members gives part of a user, without :active
-           record   #(if (contains? % :active) % (ports/find-user-by-id user-repository (:id %)))
-           rights   (fn [assignments roles]
-                      (filterv (comp touched :permission) (group-core/user-grants assignments roles)))
-           diff     (fn [user-map before after]
-                      (scope/rights-diff (resolve user-map before) (resolve user-map after)))
-           baseline (when (and everyone? (not scan?))
-                      (- (active-count user-repository) (count (filter active? users))))]
-       (cond-> (mapv (fn [user]
-                       (let [focal?   (focal? user)
-                             own?     (own? user)
-                             mine     (into (:everyone stored) (get-in stored [:by-user (str (:id user))]))
-                             full     (when (and provided (not own?)) (record user))
-                             held     (cond
-                                        own?
-                                        (ports/find-user-assignments group-repository (:id user)
-                                                                     (provider-groups membership user-repository
-                                                                                      (if focal? user (:id user))))
-                                        full
-                                        (let [ids (set (map (comp str :group-id) mine))]
-                                          (into mine (comp (mapcat provided) (remove (comp ids str :group-id)))
-                                                (provider-groups membership user-repository full)))
-                                        :else mine)
-                             before   (rights held roles)
-                             after    (rights (update held) roles-after)
-                             ;; A source resolver reads the user, so give it the whole record
-                             user-map (if (and (not focal?) (some scope/source? (mapcat (comp vals :scope) (concat before after))))
-                                        (or full (record user) user)
-                                        user)]
-                         (assoc (diff user-map before after) :user (select-keys user [:id :email]))))
-                     users)
-         (and baseline (pos? baseline))
-         (conj (let [held (:everyone stored)]
-                 (assoc (diff {} (rights held roles) (rights (update held) roles-after)) :count baseline))))))))
+  [{:keys [group-repository user-repository membership] :as svc}
+   {:keys [focal grants roles roles-after update everyone? named-id] :as plan}]
+  (when-let [touched (not-empty (or (:touched plan) (into #{} (map :permission) grants)))]
+    (let [resolve  (or (:resolve svc) stored-resolve)
+          active?  #(not (false? (:active? %)))
+          focal?   #(access/same-id? (:id focal) (:id %))
+          ;; Read one by one
+          own?     #(or (focal? %) (not (active? %)))
+          ;; Unread when every user is read one by one
+          stored   (delay (stored-holdings group-repository
+                                           (into #{} (mapcat #(concat (group-core/roles-holding roles %)
+                                                                      (group-core/roles-holding roles-after %)))
+                                                 touched)))
+          scan?    (and everyone?
+                        (or (and membership (:groups? @stored))
+                            (some scope/source? (mapcat (comp vals :scope)
+                                                        (cons (:assignment plan) (:everyone @stored))))))
+          users    (cond
+                     scan?     (active-users user-repository (map identity))
+                     everyone? (let [users (unique-by-id (concat (:users plan) (filter active? (:members @stored))))]
+                                 (if (or (nil? named-id) (some #(access/same-id? named-id (:id %)) users))
+                                   users
+                                   (concat users (some-> (ports/find-user-by-id user-repository named-id) vector))))
+                     :else     (:users plan))
+          ;; A provider group's assignments, by name, read once per group
+          provided (when (and membership (some (complement own?) users))
+                     (let [ids (delay (into {} (map (juxt :name :id)) (ports/find-groups group-repository)))]
+                       (memoize #(some->> (get @ids %) (ports/find-assignments group-repository)))))
+          ;; find-members gives part of a user, without :active
+          record   #(if (contains? % :active) % (ports/find-user-by-id user-repository (:id %)))
+          rights   (fn [assignments roles]
+                     (filterv (comp touched :permission) (group-core/user-grants assignments roles)))
+          diff     (fn [user-map before after]
+                     (scope/rights-diff (resolve user-map before) (resolve user-map after)))
+          baseline (when (and everyone? (not scan?))
+                     (let [n (- (active-count user-repository) (count (filter active? users)))]
+                       (when (pos? n) n)))]
+      (cond-> (mapv (fn [user]
+                      (let [focal?   (focal? user)
+                            own?     (own? user)
+                            mine     (when-not own?
+                                       (into (:everyone @stored) (get-in @stored [:by-user (str (:id user))])))
+                            full     (when (and provided (not own?)) (record user))
+                            held     (cond
+                                       own?
+                                       (ports/find-user-assignments group-repository (:id user)
+                                                                    (provider-groups membership user-repository
+                                                                                     (if focal? user (:id user))))
+                                       full
+                                       (let [ids (set (map (comp str :group-id) mine))]
+                                         (into mine (comp (mapcat provided) (remove (comp ids str :group-id)))
+                                               (provider-groups membership user-repository full)))
+                                       :else mine)
+                            before   (rights held roles)
+                            after    (rights (update held) roles-after)
+                            ;; A source resolver reads the user, so give it the whole record
+                            user-map (if (and (not focal?) (some scope/source? (mapcat (comp vals :scope) (concat before after))))
+                                       (or full (record user) user)
+                                       user)]
+                        (assoc (diff user-map before after) :user (select-keys user [:id :email]))))
+                    users)
+        baseline
+        (conj (let [held (:everyone @stored)]
+                (assoc (diff {} (rights held roles) (rights (update held) roles-after)) :count baseline)))))))
 
 (defn- audit-role-change!
   "Audit what changing managed role `role-name` from `before` to `after`
@@ -728,7 +733,7 @@
   (preview-change [this change]
     (let [{:keys [focal group] :as plan} (change-plan this change)
           ;; A role change names no user, unless the change does (BOU-853)
-          summary (group-core/diff-summary (user-diffs this plan (:user-id change)) (or (:id focal) (:user-id change)))]
+          summary (group-core/diff-summary (user-diffs this plan) (or (:id focal) (:user-id change)))]
       (cond-> (assoc summary :everyone? (boolean (some-> group :id group-core/everyone?)))
         ;; No permission touched: the user the change names still gains nothing
         (and focal (nil? (:user summary)))
