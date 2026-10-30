@@ -298,6 +298,18 @@
   [{:keys [group-repository]} group-id]
   (if (group-core/everyone? group-id) [] (ports/find-members group-repository group-id)))
 
+(defn- join-plan
+  "`plan` joining `user` to `group`, which holds `held`; an expiry reverses it."
+  [{:keys [roles] :as plan} group user held]
+  (assoc plan :group group :users [user] :focal user :grants (group-core/user-grants held roles)
+         :update #(into % held)))
+
+(defn- role-plan
+  "`plan` giving `group`, reaching `users`, assignment `a`; an expiry reverses it."
+  [{:keys [roles] :as plan} group users a]
+  (assoc plan :group group :users users :everyone? (group-core/everyone? (:id group))
+         :assignment a :grants (group-core/user-grants [a] roles) :update #(conj % a)))
+
 (defn- change-plan
   "What `change` (see `IRightsPreview`) does, read before it is made: the
    `:group` or `:role` it changes, the `:users` it reaches and the one it names
@@ -317,10 +329,8 @@
             group (existing-group group-repository group-id)
             user  (or (ports/find-user-by-id user-repository user-id)
                       (throw (not-found "No such user" {:user-id user-id})))
-            held  (ports/find-assignments group-repository group-id)
-            grants (group-core/user-grants held roles)]
-        (assoc plan :group group :users [user] :focal user :grants grants :update #(into % held)
-               :expires-at until))
+            held  (ports/find-assignments group-repository group-id)]
+        (assoc (join-plan plan group user held) :expires-at until))
 
       (:remove-member :delete-group)
       (let [_      (when (= :delete-group op) (not-everyone! group-id))
@@ -346,10 +356,8 @@
       (let [group (existing-group group-repository group-id)
             until (checked-expiry! svc (get-in change [:assignment :expires-at]))
             a     (cond-> (assoc (checked-assignment settings roles (:assignment change) nil) :group-id group-id)
-                    until (assoc :expires-at until))
-            grants (group-core/user-grants [a] roles)]
-        (assoc plan :group group :users (reached svc group-id) :everyone? (group-core/everyone? group-id)
-               :assignment a :grants grants :update #(conj % a)))
+                    until (assoc :expires-at until))]
+        (role-plan plan group (reached svc group-id) a))
 
       :remove-role
       (let [group (ports/find-group group-repository group-id)
@@ -723,30 +731,28 @@
    with what it took from each user's effective rights. Reads ignored it from
    the moment it expired, so that is the diff of adding it back, reversed
    (BOU-911)."
-  [{:keys [group-repository user-repository audit-repository registry] :as svc} now]
+  [{:keys [group-repository user-repository audit-repository registry membership] :as svc} now]
   (let [{:keys [members assignments] :as removed} (ports/remove-expired group-repository now)
         roles    (all-roles group-repository registry)
         plan     {:roles roles :roles-after roles}
+        ;; Each diff asks the membership hook: once per user for the job
+        svc      (cond-> svc membership (update :membership memoize))
         ;; Per group, once: several rows of one group expire together
         group-of (memoize #(or (ports/find-group group-repository %) {:id %}))
         held     (memoize #(ports/find-assignments group-repository %))
-        members-of (memoize #(when-not (group-core/everyone? %) (ports/find-members group-repository %)))
+        members-of (memoize (partial reached svc))
         expired  #(assoc (expiry-metadata %) :reason "expired")]
     (doseq [{:keys [group-id user-id expires-at]} members
             ;; A soft-deleted user held nothing through it
-            :let [user   (ports/find-user-by-id user-repository user-id)
-                  grants (group-core/user-grants (held group-id) roles)]
-            :when user]
-      (audit! audit-repository :group-leave (group-of group-id) [user] grants
-              {:diffs    (undone svc (assoc plan :users [user] :focal user :grants grants
-                                            :update #(into % (held group-id))))
-               :metadata (expired expires-at)}))
+            :let [user (ports/find-user-by-id user-repository user-id)]
+            :when user
+            :let [{:keys [group grants] :as p} (join-plan plan (group-of group-id) user (held group-id))]]
+      (audit! audit-repository :group-leave group [user] grants
+              {:diffs (undone svc p) :metadata (expired expires-at)}))
     (doseq [{:keys [group-id expires-at] :as a} assignments
-            :let [grants (group-core/user-grants [a] roles)]]
-      (audit! audit-repository :grant-remove (group-of group-id) (members-of group-id) grants
-              {:diffs    (undone svc (assoc plan :users (members-of group-id) :everyone? (group-core/everyone? group-id)
-                                            :assignment a :grants grants :update #(conj % a)))
-               :metadata (expired expires-at)}))
+            :let [{:keys [group users grants] :as p} (role-plan plan (group-of group-id) (members-of group-id) a)]]
+      (audit! audit-repository :grant-remove group users grants
+              {:diffs (undone svc p) :metadata (expired expires-at)}))
     (when (or (seq members) (seq assignments))
       (log/info "Removed expired group access" {:members (count members) :assignments (count assignments)}))
     removed))
@@ -755,17 +761,39 @@
 ;; Service
 ;; =============================================================================
 
-(defn newest-changes
+(defn- newest-changes
   "Audit entries, newest first, `(read {:limit :offset})` a page of them, read
    until they record `n` changes or run out: a role edit writes an entry per
-   group, so a page can hold one change (BOU-911)."
+   group, so a page can hold one change (BOU-911). By id, so an entry an
+   offset shift reads twice counts once."
   [read page n]
-  (loop [offset 0 acc []]
+  (loop [offset 0 acc {}]
     (let [xs  (vec (read {:limit page :offset offset}))
-          acc (into acc xs)]
-      (if (or (< (count xs) page) (<= n (audit-core/change-count acc)))
-        acc
+          acc (into acc (map (juxt :id identity)) xs)]
+      (if (or (< (count xs) page) (<= n (audit-core/change-count (vals acc))))
+        (vals acc)
         (recur (+ offset page) acc)))))
+
+(defn rights-timeline
+  "The newest `n` changes to `user`'s rights, as `audit-core/rights-timeline`
+   gives them, Everyone's since the user was created, filed under the group,
+   included (BOU-862). `(read actions opts)` gives the audit entries of
+   `actions` matching find-audit-logs `opts`; when `per-action?` it reads
+   one action at a time."
+  [read per-action? {:keys [id created-at]} n]
+  (let [entries (fn [target actions after]
+                  (let [opts (cond-> {:filter-target-user-id target :sort-by :created-at :sort-direction :desc
+                                      :count? false}
+                               after (assoc :filter-created-after after))
+                        page (fn [actions size] (newest-changes #(read actions (merge opts %)) size n))]
+                    (if per-action?
+                      (mapcat #(page [%] n) actions)
+                      ;; Pages as large as the per-action path's together
+                      (page actions (* n (count actions))))))]
+    (audit-core/rights-timeline
+     (concat (entries id audit-core/rights-actions nil)
+             (entries group-core/everyone-id [:grant-add :grant-remove] created-at))
+     n)))
 
 (defrecord UserGroupService [group-repository user-repository audit-repository settings registry membership]
   authz/IRights
@@ -802,26 +830,11 @@
         (role-holders group-repository (keys roles) false))))
 
   ports/IRightsTimeline
-  (rights-changes [this {:keys [id created-at]} n]
-    (let [entries (fn [target actions after]
-                    (let [opts (cond-> {:filter-target-user-id target :sort-by :created-at :sort-direction :desc
-                                        :count? false}
-                                 after (assoc :filter-created-after after))]
-                      (if (:audit-actions? this)
-                        ;; Pages as large as the per-action path's together
-                        (newest-changes #(:audit-logs (ports/find-audit-logs-with-actions audit-repository (set actions)
-                                                                                          (merge opts %)))
-                                        (* n (count actions)) n)
-                        (mapcat (fn [action]
-                                  (newest-changes #(:audit-logs (ports/find-audit-logs audit-repository
-                                                                                       (merge opts {:filter-action action} %)))
-                                                  n n))
-                                actions))))]
-      (audit-core/rights-timeline
-       ;; Everyone's since the user was created, filed under the group, count too (BOU-862)
-       (concat (entries id audit-core/rights-actions nil)
-               (entries group-core/everyone-id [:grant-add :grant-remove] created-at))
-       n)))
+  (rights-changes [this user n]
+    (if (:audit-actions? this)
+      (rights-timeline #(:audit-logs (ports/find-audit-logs-with-actions audit-repository (set %1) %2)) false user n)
+      (rights-timeline #(:audit-logs (ports/find-audit-logs audit-repository (assoc %2 :filter-action (first %1))))
+                       true user n)))
 
   ports/IRightsPreview
   (preview-change [this change]

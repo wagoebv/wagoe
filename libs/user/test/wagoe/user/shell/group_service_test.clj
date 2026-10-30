@@ -833,9 +833,11 @@
         log   (vec (concat edit [{:id 7} {:id 8} {:id 9}]))
         pages (atom 0)
         read  (fn [{:keys [limit offset]}] (swap! pages inc) (take limit (drop offset log)))]
-    (is (= 9 (count (sut/newest-changes read 3 3))) "the edit and two more")
+    (is (= 9 (count (#'sut/newest-changes read 3 3))) "the edit and two more")
     (is (= 3 @pages))
-    (is (= 10 (count (sut/newest-changes read 3 50))) "to the end of the log")))
+    (is (= 10 (count (#'sut/newest-changes read 3 50))) "to the end of the log")
+    (is (= 10 (count (#'sut/newest-changes #(take (:limit %) (drop (max 0 (dec (:offset %))) log)) 3 50)))
+        "an entry read twice counts once")))
 
 (deftest ^:integration a-role-edit-over-many-groups-hides-no-older-change
   ;; BOU-911: its entries, one per group, collapse into one change, so they do not fill the timeline
