@@ -78,6 +78,25 @@
                       {:source source})
            #{})))))
 
+(defn resolve-rights-split
+  "`rights` resolved as `resolve-rights` does, {:kept [right] :dropped
+   [right]}: the kept with their scope resolved, the dropped as given."
+  [registry user rights]
+  (let [scopes         (ports/scopes registry)
+        resolve-source (source-resolver (ports/scope-sources registry) user)
+        resolve        (fn [scope]
+                         (reduce-kv (fn [acc k v]
+                                      (let [values (scope/scope-values scopes resolve-source k v)]
+                                        (if (seq values) (assoc acc k values) (reduced nil))))
+                                    {}
+                                    scope))]
+    (reduce (fn [acc {:keys [scope] :as right}]
+              (if-let [resolved (resolve scope)]
+                (update acc :kept conj (assoc right :scope resolved))
+                (update acc :dropped conj right)))
+            {:kept [] :dropped []}
+            rights)))
+
 (defn resolve-rights
   "`rights` as the user module hands them over for `user`
    ([{:permission :scope}], see `core.scope`), each scope as {key #{value}}:
@@ -85,17 +104,7 @@
    added later counts. A right whose scope resolves to nothing for a key is
    dropped: it gives no rights, not rights everywhere."
   [registry user rights]
-  (let [scopes         (ports/scopes registry)
-        resolve-source (source-resolver (ports/scope-sources registry) user)]
-    (into []
-          (keep (fn [{:keys [scope] :as right}]
-                  (when-let [resolved (reduce-kv (fn [acc k v]
-                                                   (let [values (scope/scope-values scopes resolve-source k v)]
-                                                     (if (seq values) (assoc acc k values) (reduced nil))))
-                                                 {}
-                                                 scope)]
-                    (assoc right :scope resolved))))
-          rights)))
+  (:kept (resolve-rights-split registry user rights)))
 
 (defn authorize-scope
   "The scope check of a route whose data says `route-scope`, for a caller
@@ -236,11 +245,8 @@
   [registry rights-source user permission record]
   (if (access/platform-admin? user)
     (scope/explain {:platform-admin? true} permission record)
-    (let [held     (into [] (comp (filter #(= permission (:permission %)))
-                                  (map-indexed #(assoc %2 ::i %1 :stored-scope (:scope %2))))
-                         (when rights-source (ports/rights rights-source user)))
-          resolved (resolve-rights registry user held)
-          kept     (set (map ::i resolved))
-          strip    (partial mapv #(dissoc % ::i))]
-      (scope/explain {:rights (strip resolved) :dropped (strip (remove (comp kept ::i) held))}
-                     permission record))))
+    (let [held (into [] (comp (filter #(= permission (:permission %)))
+                              (map #(assoc % :stored-scope (:scope %))))
+                     (when rights-source (ports/rights rights-source user)))
+          {:keys [kept dropped]} (resolve-rights-split registry user held)]
+      (scope/explain {:rights kept :dropped dropped} permission record))))

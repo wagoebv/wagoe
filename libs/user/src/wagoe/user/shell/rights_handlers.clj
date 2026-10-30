@@ -212,15 +212,17 @@
 (def ^:private timeline-size 50)
 
 (defn- rights-changes
-  "The newest audit entries of changes to the user's rights, one query per
-   action: the log filters on one."
-  [user-service user-id]
-  (audit/rights-timeline
-   (mapcat #(:audit-logs (ports/list-audit-logs user-service {:filter-target-user-id user-id :filter-action %
-                                                               :sort-by :created-at :sort-direction :desc
-                                                               :limit timeline-size :count? false}))
-           audit/rights-actions)
-   timeline-size))
+  "The newest changes to the user's rights: through the group service, in one
+   query, or, for one without `IRightsTimeline`, one query per action."
+  [timeline? user-service group-service user-id]
+  (if timeline?
+    (ports/rights-changes group-service user-id timeline-size)
+    (audit/rights-timeline
+     (mapcat #(:audit-logs (ports/list-audit-logs user-service {:filter-target-user-id user-id :filter-action %
+                                                                 :sort-by :created-at :sort-direction :desc
+                                                                 :limit timeline-size :count? false}))
+             audit/rights-actions)
+     timeline-size)))
 
 (defn- user-of [user-service request]
   (some->> (get-in request [:path-params :id]) str parse-uuid (ports/get-user-by-id user-service)))
@@ -229,22 +231,24 @@
   "GET /web/users/:id/rights — the user's groups, effective permissions and
    the changes to them."
   [user-service group-service]
-  (fn [request]
-    (if-let [user (user-of user-service request)]
-      ;; Groups and grants both ask the membership hook: ask it once
-      (let [group-service (cond-> group-service (:membership group-service) (update :membership memoize))
-            grants        (ports/user-grants group-service user)]
-        (html-response request
-                       (rights-ui/rights-page user (ports/user-groups group-service user) grants
-                                              (assoc (page-opts request)
-                                                     :registry (registry-permissions group-service)
-                                                     :roles (rights-ui/role-index (ports/list-roles group-service))
-                                                     :platform-admin? (access/platform-admin? user)
-                                                     :changes (rights-changes user-service (:id user))
-                                                     :scope-info (assoc (group-handlers/scope-info group-service)
-                                                                        :resolved (resolve-sources group-service user grants))))
-                       200))
-      (not-found request :user.rights/user-not-found))))
+  ;; Asked once (Convention 5)
+  (let [timeline? (satisfies? ports/IRightsTimeline group-service)]
+    (fn [request]
+      (if-let [user (user-of user-service request)]
+        ;; Groups and grants both ask the membership hook: ask it once
+        (let [group-service (cond-> group-service (:membership group-service) (update :membership memoize))
+              grants        (ports/user-grants group-service user)]
+          (html-response request
+                         (rights-ui/rights-page user (ports/user-groups group-service user) grants
+                                                (assoc (page-opts request)
+                                                       :registry (registry-permissions group-service)
+                                                       :roles (rights-ui/role-index (ports/list-roles group-service))
+                                                       :platform-admin? (access/platform-admin? user)
+                                                       :changes (rights-changes timeline? user-service group-service (:id user))
+                                                       :scope-info (assoc (group-handlers/scope-info group-service)
+                                                                          :resolved (resolve-sources group-service user grants))))
+                         200))
+        (not-found request :user.rights/user-not-found)))))
 
 (defn- asked
   "The permission and record `params` ask: `permission`, and a `scope.<key>`
@@ -261,22 +265,26 @@
 
 (defn explain-access
   "GET /web/users/:id/explain — why the user may or may not use a permission,
-   on a record when its scope keys are given (BOU-851)."
-  [user-service group-service]
-  (fn [request]
-    (if-let [user (user-of user-service request)]
-      (let [scope-info (group-handlers/scope-info group-service)
-            {:keys [permission record] :as q} (asked (:query-params request) (keys (:labels scope-info)))]
-        (html-response request
-                       (rights-ui/explain-page user
-                                               (when permission
-                                                 (ports/explain-access group-service user permission record))
-                                               (assoc (page-opts request)
-                                                      :asked q
-                                                      :registry (registry-permissions group-service)
-                                                      :scope-info scope-info))
-                       200))
-      (not-found request :user.rights/user-not-found))))
+   on a record when its scope keys are given (BOU-851). `mode`, the
+   `:wagoe/authorization :mode`, is shown: under :report and :off a no
+   refuses nothing (BOU-865)."
+  ([user-service group-service] (explain-access user-service group-service nil))
+  ([user-service group-service mode]
+   (fn [request]
+     (if-let [user (user-of user-service request)]
+       (let [scope-info (group-handlers/scope-info group-service)
+             {:keys [permission record] :as q} (asked (:query-params request) (keys (:labels scope-info)))]
+         (html-response request
+                        (rights-ui/explain-page user
+                                                (when permission
+                                                  (ports/explain-access group-service user permission record))
+                                                (assoc (page-opts request)
+                                                       :asked q
+                                                       :mode mode
+                                                       :registry (registry-permissions group-service)
+                                                       :scope-info scope-info))
+                        200))
+       (not-found request :user.rights/user-not-found)))))
 
 ;; =============================================================================
 ;; Access overview (BOU-854)

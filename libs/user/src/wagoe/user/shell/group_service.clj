@@ -716,8 +716,28 @@
                              false)))))
 
   ports/IRoleAssignments
-  (all-assignments [_]
-    (role-holders group-repository (keys (all-roles group-repository registry)) false))
+  (all-assignments [this]
+    (let [roles (roles-of this)]
+      (if (:all-assignments? this)
+        ;; One query, not one per role; a role no longer known gives nothing
+        (->> (ports/find-all-assignments group-repository)
+             (filter (comp roles :role))
+             (mapv (fn [{:keys [group-id] :as a}]
+                     (assoc (select-keys a [:role :group-id :group-name :scope :expires-at])
+                            :everyone? (group-core/everyone? group-id))))
+             (sort-by (juxt :group-name (comp str :role)))
+             vec)
+        (role-holders group-repository (keys roles) false))))
+
+  ports/IRightsTimeline
+  (rights-changes [this user-id n]
+    (let [opts {:filter-target-user-id user-id :sort-by :created-at :sort-direction :desc :limit n :count? false}]
+      (audit-core/rights-timeline
+       (if (:audit-actions? this)
+         (:audit-logs (ports/find-audit-logs-with-actions audit-repository (set audit-core/rights-actions) opts))
+         (mapcat #(:audit-logs (ports/find-audit-logs audit-repository (assoc opts :filter-action %)))
+                 audit-core/rights-actions))
+       n)))
 
   ports/IRightsPreview
   (preview-change [this change]
@@ -942,7 +962,9 @@
   ([group-repository user-repository audit-repository settings {:keys [registry membership explain resolve]}]
    (cond-> (assoc (->UserGroupService group-repository user-repository audit-repository
                                       (with-registry-permissions settings registry) registry membership)
-                  ;; Asked once: a repository without it keeps no expiry (Convention 5)
-                  :expiry? (satisfies? ports/IAccessExpiry group-repository))
+                  ;; Asked once: a repository without one takes the old path (Convention 5)
+                  :expiry? (satisfies? ports/IAccessExpiry group-repository)
+                  :all-assignments? (satisfies? ports/IAllAssignments group-repository)
+                  :audit-actions? (satisfies? ports/IUserAuditActions audit-repository))
      explain (assoc :explain explain)
      resolve (assoc :resolve resolve))))

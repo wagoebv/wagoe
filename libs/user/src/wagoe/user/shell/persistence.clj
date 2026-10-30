@@ -1147,6 +1147,68 @@
 ;; Audit Log Repository Implementation
 ;; =============================================================================
 
+(defn- query-audit-logs
+  "find-audit-logs, and find-audit-logs-with-actions through `:filter-actions`."
+  [ctx pagination-config options]
+  (let [{:keys [limit offset sort-by sort-direction
+                filter-target-user-id filter-actor-id filter-action
+                filter-result filter-created-after filter-created-before
+                filter-target-email filter-actor-email after-id filter-actions]
+         count? :count? :or {count? true}} options
+        default-limit (get pagination-config :default-limit 20)
+        limit (or limit default-limit)
+        offset (or offset 0)
+        sort-by-kebab (or sort-by :created-at)
+        ;; Convert kebab-case to snake_case for database column
+        sort-by-db (keyword (.replace (name sort-by-kebab) "-" "_"))
+        sort-direction (or sort-direction :desc)
+        where-clauses (cond-> []
+                        filter-target-user-id
+                        (conj [:= :target_user_id (type-conversion/uuid->string filter-target-user-id)])
+
+                        filter-actor-id
+                        (conj [:= :actor_id (type-conversion/uuid->string filter-actor-id)])
+
+                        filter-action
+                        (conj [:= :action (name filter-action)])
+
+                        filter-actions
+                        (conj [:in :action (mapv name filter-actions)])
+
+                        filter-result
+                        (conj [:= :result (name filter-result)])
+
+                        filter-target-email
+                        (conj (protocols/like (:adapter ctx) :target_user_email :contains filter-target-email))
+
+                        filter-actor-email
+                        (conj (protocols/like (:adapter ctx) :actor_email :contains filter-actor-email))
+
+                        filter-created-after
+                        (conj [:>= :created_at filter-created-after])
+
+                        filter-created-before
+                        (conj [:<= :created_at filter-created-before])
+
+                        after-id
+                        (conj [:> :id (type-conversion/uuid->string after-id)]))
+        where-clause (when (seq where-clauses)
+                       (if (= 1 (count where-clauses))
+                         (first where-clauses)
+                         (into [:and] where-clauses)))
+        query (cond-> {:select [:*]
+                       :from [:user_audit_log]
+                       :order-by [[sort-by-db sort-direction]]
+                       :limit limit
+                       :offset offset}
+                where-clause (assoc :where where-clause))
+        count-query (cond-> {:select [[:%count.* :count]]
+                             :from [:user_audit_log]}
+                      where-clause (assoc :where where-clause))
+        results (db/execute-query! ctx query)]
+    (cond-> {:audit-logs (map db->audit-log-entity results)}
+      count? (assoc :total-count (:count (db/execute-one! ctx count-query))))))
+
 (defrecord DatabaseUserAuditRepository [ctx pagination-config]
   ports/IUserAuditRepository
 
@@ -1171,62 +1233,7 @@
     (persistence-interceptors/execute-persistence-operation
      :find-audit-logs
      {:options options}
-     (fn [{:keys [params]}]
-       (let [{:keys [limit offset sort-by sort-direction
-                     filter-target-user-id filter-actor-id filter-action
-                     filter-result filter-created-after filter-created-before
-                     filter-target-email filter-actor-email after-id]
-              count? :count? :or {count? true}} (:options params)
-             default-limit (get pagination-config :default-limit 20)
-             limit (or limit default-limit)
-             offset (or offset 0)
-             sort-by-kebab (or sort-by :created-at)
-             ;; Convert kebab-case to snake_case for database column
-             sort-by-db (keyword (.replace (name sort-by-kebab) "-" "_"))
-             sort-direction (or sort-direction :desc)
-             where-clauses (cond-> []
-                             filter-target-user-id
-                             (conj [:= :target_user_id (type-conversion/uuid->string filter-target-user-id)])
-
-                             filter-actor-id
-                             (conj [:= :actor_id (type-conversion/uuid->string filter-actor-id)])
-
-                             filter-action
-                             (conj [:= :action (name filter-action)])
-
-                             filter-result
-                             (conj [:= :result (name filter-result)])
-
-                             filter-target-email
-                             (conj (protocols/like (:adapter ctx) :target_user_email :contains filter-target-email))
-
-                             filter-actor-email
-                             (conj (protocols/like (:adapter ctx) :actor_email :contains filter-actor-email))
-
-                             filter-created-after
-                             (conj [:>= :created_at filter-created-after])
-
-                             filter-created-before
-                             (conj [:<= :created_at filter-created-before])
-
-                             after-id
-                             (conj [:> :id (type-conversion/uuid->string after-id)]))
-             where-clause (when (seq where-clauses)
-                            (if (= 1 (count where-clauses))
-                              (first where-clauses)
-                              (into [:and] where-clauses)))
-             query (cond-> {:select [:*]
-                            :from [:user_audit_log]
-                            :order-by [[sort-by-db sort-direction]]
-                            :limit limit
-                            :offset offset}
-                     where-clause (assoc :where where-clause))
-             count-query (cond-> {:select [[:%count.* :count]]
-                                  :from [:user_audit_log]}
-                           where-clause (assoc :where where-clause))
-             results (db/execute-query! ctx query)]
-         (cond-> {:audit-logs (map db->audit-log-entity results)}
-           count? (assoc :total-count (:count (db/execute-one! ctx count-query))))))
+     (fn [{:keys [params]}] (query-audit-logs ctx pagination-config (dissoc (:options params) :filter-actions)))
      {:db-ctx ctx}))
 
   (find-audit-logs-by-user [_ user-id options]
@@ -1251,6 +1258,16 @@
                     :offset offset}
              results (db/execute-query! ctx query)]
          (map db->audit-log-entity results)))
+     {:db-ctx ctx}))
+
+  ports/IUserAuditActions
+  (find-audit-logs-with-actions [_ actions options]
+    (persistence-interceptors/execute-persistence-operation
+     :find-audit-logs-with-actions
+     {:options options}
+     (fn [{:keys [params]}]
+       (query-audit-logs ctx pagination-config
+                         (-> (:options params) (dissoc :filter-action) (assoc :filter-actions (set actions)))))
      {:db-ctx ctx}))
 
   ports/IUserAuditRetention
