@@ -162,6 +162,9 @@ callback rows gain `callback_id`.
 
 ### 14. Smaller changes
 
+- API clients of `POST /api/v1/auth/login` and `POST /api/v1/sessions` read the
+  camelCase keys in `user` and `session` (`session.sessionToken`, not
+  `session.session-token`). The kebab-case ones go in 2.0 (BOU-737, BOU-582).
 - An IMAP fetch without `:limit` takes 100 messages; pass a larger `:limit`.
   `core.imap/filter-unread` and `filter-by-date` are gone. Pass the fetched
   message to `mark-read!` and `delete-message!`:
