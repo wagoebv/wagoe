@@ -161,4 +161,11 @@
         (let [out (with-out-str (sut/run dir ["check" "--env" "acc"]))]
           (is (str/includes? out "resources/conf/prod/config.edn"))
           (is (str/includes? out "OIDC provider :google :default-role :viewer"))))
+      (testing "so is one `wagoe add` gave its own file"
+        (spit (io/file dir "resources" "conf" "acc" "config.edn")
+              (str "{:wagoe/included #include \"../prod/config.edn\"\n :wagoe/additions {}\n"
+                   " :active #merge [#ref [:wagoe/included :active] #ref [:wagoe/additions]]}\n"))
+        (binding [sut/*jvm* (constantly 0)]
+          (is (str/includes? (with-out-str (sut/run dir ["check" "--env" "acc"]))
+                             "OIDC provider :google :default-role :viewer"))))
       (finally (doseq [f (reverse (file-seq dir))] (.delete ^java.io.File f))))))

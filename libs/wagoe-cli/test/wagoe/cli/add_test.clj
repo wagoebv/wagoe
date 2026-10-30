@@ -655,7 +655,8 @@
       (is (add/installed? tmp devtools true))
 
       (testing "what prod gets later, dev gets too"
-        (add/patch-configs! tmp (cat/find-module "jobs"))
+        (is (not-any? #{"dev"} (map first (add/patch-configs! tmp (cat/find-module "jobs"))))
+            "written once, into the file dev includes")
         (is (contains? (load-active tmp "prod") :wagoe/jobs))
         (is (= #{:wagoe/settings :wagoe/h2 :wagoe/dashboard :wagoe/jobs}
                (set (keys (load-active tmp "dev"))))))

@@ -207,8 +207,8 @@
        "{:wagoe/included #include " (pr-str target) "\n"
        " " additions "\n {\n }\n"
        " :active #merge [#ref [:wagoe/included :active] #ref [" additions "]]"
-       (apply str (for [k (sort (remove #{:active :secret-sources} (keys included)))]
-                    (str "\n " k " #ref [:wagoe/included " k "]")))
+       (apply str (for [k (sort-by pr-str (remove #{:active :secret-sources} (keys included)))]
+                    (str "\n " (pr-str k) " #ref [:wagoe/included " (pr-str k) "]")))
        "}\n"))
 
 (defn patch-config!
@@ -269,7 +269,7 @@
   ([dir] (project-name dir (profile/reader dir)))
   ([dir read]
    (or (some-> (get-in @(:config (read (profile/profile-path dir "dev" read))) [:active :wagoe/settings :name])
-               str
+               (#(when (string? %) %))
                (str/replace #"-(dev|development|test)$" "")
                not-empty)
        (.getName (.getAbsoluteFile (io/file dir))))))
@@ -370,9 +370,10 @@
 
 (defn- switched-on?
   "Whether `module-key` is in dev's :active or in the code's :extra-modules."
-  [dir module-key read extra]
+  [module-key read extra]
   (or (contains? extra (str module-key))
-      (let [dev (read (profile/profile-path dir "dev" read))]
+      ;; Dev's own file: it reads what it includes, and its :wagoe/additions.
+      (let [dev (read (profile/profile-file "dev"))]
         (and (:text dev) (empty? (absent dev [{:k module-key}]))))))
 
 (defn module-states
@@ -389,7 +390,7 @@
           :let [dep (dep-coords deps (:clojars m) (:scope m))]]
       [m (cond
            (or (nil? dep) (= :unreadable dep)) :absent
-           (:module-key m)                     (if (switched-on? dir (:module-key m) read @extra) :enabled :configurable)
+           (:module-key m)                     (if (switched-on? (:module-key m) read @extra) :enabled :configurable)
            (or (= :core (:category m))
                (:always-on m)
                (installed? dir m true read))   :enabled

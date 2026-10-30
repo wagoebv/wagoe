@@ -27,12 +27,22 @@
   [text]
   (try (edn/read-string {:default tagged-literal} text) (catch Exception _ nil)))
 
+(defn- include-form [v]
+  (when (and (tagged-literal? v) (= 'include (:tag v)) (string? (:form v)))
+    (:form v)))
+
 (defn include-of
   "What `text` includes when it is only an `#include`, else nil."
   [text]
+  (include-form (some-> text read-tagged)))
+
+(defn- stands-for
+  "What `text` stands for: what it includes when it is only an `#include`, or
+   its :wagoe/included when `wagoe add` gave such a profile its own file."
+  [text]
   (let [v (some-> text read-tagged)]
-    (when (and (tagged-literal? v) (= 'include (:tag v)) (string? (:form v)))
-      (:form v))))
+    (or (include-form v)
+        (when (map? v) (include-form (:wagoe/included v))))))
 
 (defn- read-config*
   [dir path text seen cache]
@@ -85,11 +95,13 @@
 
 (defn profile-path
   "Profile `env`'s config.edn relative to `dir`, or, when that file is only an
-   `#include`, the file it includes, followed as Aero does (BOU-867)."
+   `#include`, the file it includes, followed as Aero does (BOU-867). A file
+   `wagoe add` gave such a profile is still the file it includes, so what
+   that one gets is not written twice (BOU-910)."
   ([dir env] (profile-path dir env (reader dir)))
   ([dir env read]
    (loop [path (profile-file env) seen #{}]
-     (let [to (some->> (:include (read path)) (include-target dir path))]
+     (let [to (some->> (stands-for (:text (read path))) (include-target dir path))]
        (if (and to (not (seen to)))
          (recur to (conj seen path))
          path)))))
