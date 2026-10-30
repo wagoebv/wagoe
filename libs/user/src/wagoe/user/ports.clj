@@ -541,7 +541,15 @@
   ;; :exact? :options}. Unless already allowed, :options are
   ;; wagoe.user.core.grant/rank of joining a group, a narrower assignment to one
   ;; of the user's groups, a new managed role and a new group, each previewed
-  ;; with preview-change. BOU-853.
+  ;; with preview-change. BOU-853. An option whose preview is refused carries
+  ;; :refused, the refusal's ex-data, instead of :preview (BOU-863).
+
+(defprotocol IGrantGroup
+  (create-grant-group [this group user-id assignment expires-at]))
+  ;; The wizard's last option: creates `group` ({:name :description}) holding
+  ;; only the user, until `expires-at` unless nil, and `assignment`, in one
+  ;; transaction, so a refused step leaves no group. Audited as the join and
+  ;; the assignment. Returns the group. BOU-863.
 
 (defprotocol ITimeBoundAccess
   (add-group-member-until [this group-id user-id expires-at])

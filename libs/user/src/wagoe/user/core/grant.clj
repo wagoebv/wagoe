@@ -48,14 +48,16 @@
 
 (defn rank
   "`options`, [{:kind :preview ..}], that give `permission` in `scope`: a
-   `:join` or `:narrow` whose preview does not is dropped. Each gets `:extra`
+   `:join` or `:narrow` whose preview does not, or that was `:refused`, is
+   dropped; a refused new role or group stays, to say why. Each gets `:extra`
    (`extra`) and `:radius`, `blast-radius` and one more for a wider scope than
    asked; the smallest
    first, a join before an assignment on a tie. A new managed role, then a new
    group, always come last."
   [options permission scope]
   (->> options
-       (filter #(or (< 1 (kind-order (:kind %))) (fixes? (:preview %) permission scope)))
+       (filter #(or (< 1 (kind-order (:kind %)))
+                    (and (not (:refused %)) (fixes? (:preview %) permission scope))))
        (map (fn [{:keys [preview] :as o}]
               (if preview
                 (let [xs (extra preview permission scope)]
