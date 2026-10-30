@@ -233,24 +233,28 @@
   "Per-user diffs, [{:user {:id :email} :added :removed}] as
    `wagoe.platform.core.scope/rights-diff` gives them, counted: `:permissions`,
    per permission how many users gain it and lose it, in some scope, and
-   `:affected-count`, the users whose rights change."
+   `:affected-count`, the users whose rights change. A diff with `:count`
+   stands for that many users (BOU-862)."
   [diffs]
   (let [changed (filter changed? diffs)
-        counts  (fn [k] (frequencies (mapcat #(distinct (map :permission (get % k))) changed)))
+        weight  #(:count % 1)
+        counts  (fn [k] (apply merge-with + {} (for [d changed p (distinct (map :permission (get d k)))]
+                                                {p (weight d)})))
         added   (counts :added)
         removed (counts :removed)]
     {:permissions    (vec (for [p (sort-by str (distinct (concat (keys added) (keys removed))))]
                             {:permission p :added (get added p 0) :removed (get removed p 0)}))
-     :affected-count (count changed)}))
+     :affected-count (reduce + 0 (map weight changed))}))
 
 (defn diff-summary
   "`diffs` summed up for a preview: `permission-counts`, `:user`, the diff of
    the user `focal-id` names, and the other users whose rights change,
-   `:affected-count` and the first `preview-page-size` as `:affected`."
+   `:affected-count` and the first `preview-page-size` named as `:affected`.
+   A diff standing for many users names none."
   [diffs focal-id]
   (let [focal? #(and focal-id (= (str focal-id) (str (get-in % [:user :id]))))
         others (filter #(and (changed? %) (not (focal? %))) diffs)]
     (assoc (permission-counts diffs)
            :user           (first (filter focal? diffs))
-           :affected-count (count others)
-           :affected       (into [] (comp (map :user) (take preview-page-size)) others))))
+           :affected-count (reduce + 0 (map #(:count % 1) others))
+           :affected       (into [] (comp (keep :user) (take preview-page-size)) others))))

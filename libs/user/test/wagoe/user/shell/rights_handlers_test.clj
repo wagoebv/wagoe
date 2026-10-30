@@ -5,6 +5,7 @@
             [reitit.ring :as ring]
             [support.test-db :as test-db]
             [wagoe.platform.shell.authorization :as authz]
+            [wagoe.user.core.group :as group-core]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.group-persistence :as group-persistence]
             [wagoe.user.shell.group-service :as group-service]
@@ -160,6 +161,19 @@
             (is (str/includes? page "timeline-entry"))
             (is (str/includes? page "audit-group-join"))
             (is (str/includes? page "tone-success\">gains"))))))))
+
+(deftest ^:integration a-change-to-everyone-shows-on-each-users-timeline
+  ;; BOU-862
+  (with-app
+    (fn [{:keys [app users gsvc admin]}]
+      (let [user! #(ports/create-user users {:email % :name "U" :role :user :active true :password-hash "x"})
+            ada   (user! "ada@example.com")
+            page  #(:body (get-page app admin (str "/web/users/" (:id %) "/rights")))]
+        (ports/ensure-everyone (:group-repository gsvc))
+        (ports/add-group-role gsvc group-core/everyone-id {:role :invoice/editor :scope {}})
+        (is (str/includes? (page ada) "timeline-counts"))
+        (is (not (str/includes? (page (user! "bob@example.com")) "timeline-counts"))
+            "not on a user created after it")))))
 
 (deftest ^:integration the-rights-page-asks-the-membership-hook-once
   (with-app

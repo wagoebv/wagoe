@@ -597,7 +597,7 @@
  :user.hygiene/unheld "Nobody holds it"
  :user.hygiene/everyone "Given to Everyone"
  :user.timeline/heading "Changes to rights"
- :user.timeline/note "A change to Everyone is recorded once, on the admin who made it."
+ :user.timeline/note "A change to Everyone shows here as the number of users it changed."
  :user.timeline/column-effect "Effect"
  :user.timeline/empty "No changes recorded."
  :user.timeline/no-diff "Not recorded"
