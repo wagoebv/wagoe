@@ -10,13 +10,13 @@
          ch.qos.logback/logback-classic {:mvn/version "1.6.3"}
          io.sentry/sentry-clj           {:mvn/version "8.34.247"}
          ;; OpenTelemetry (OTLP/HTTP exporter for traces + metrics — :otlp provider)
-         io.opentelemetry/opentelemetry-sdk             {:mvn/version "1.66.0"}
-         io.opentelemetry/opentelemetry-exporter-otlp   {:mvn/version "1.66.0"}}
+         io.opentelemetry/opentelemetry-sdk             {:mvn/version "1.67.0"}
+         io.opentelemetry/opentelemetry-exporter-otlp   {:mvn/version "1.67.0"}}
 
  :aliases
  {:test      {:extra-paths ["test"]
               :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
-                            io.opentelemetry/opentelemetry-sdk-testing {:mvn/version "1.66.0"}}
+                            io.opentelemetry/opentelemetry-sdk-testing {:mvn/version "1.67.0"}}
               :main-opts   ["-m" "kaocha.runner"]}
 
   :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
