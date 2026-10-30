@@ -2,10 +2,10 @@
   "BOU-665: the shipped users entity is written through the user service, so
    an admin edit is audited, ends sessions where it should and keeps an admin."
   (:require [clojure.edn :as edn]
-            [malli.core :as m]
-            [malli.util :as mu]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
+            [malli.core :as m]
+            [malli.util :as mu]
             [support.test-db :as test-db]
             [wagoe.admin.ports :as ports]
             [wagoe.admin.shell.http.handlers.crud :as crud]
@@ -283,7 +283,7 @@
 
 (def ^:private role-options (get-in shipped [:users :fields :role :options]))
 
-(deftest role-options-are-what-the-user-service-accepts
+(deftest ^:unit role-options-are-what-the-user-service-accepts
   ;; Since BOU-771 :user means no role; labelled "User" it read as a role (BOU-917).
   (let [accepted (->> (m/children (mu/get (m/schema user-schema/UpdateUserRequest) :role))
                       first m/children set)]

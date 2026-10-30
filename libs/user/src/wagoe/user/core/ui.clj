@@ -64,11 +64,13 @@
    Returns:
      Vector of cell values for table row (some as Hiccup structures)"
   [user]
-  (let [role (or (:role user) :user)
+  (let [admin?  (= :admin (:role user))
         active? (boolean (:active user))]
     [(:name user)
      (:email user)
-     (ui/tone-badge (-> role name text/capitalize) (if (= :admin role) :info :neutral) "user-role-badge")
+     (ui/tone-badge (if admin? [:t :common/role-admin] [:t :common/role-user])
+                    (if admin? :info :neutral)
+                    "user-role-badge")
      (ui/tone-badge (if active? [:t :user/badge-active] [:t :user/badge-inactive])
                     (if active? :success :warning)
                     "user-status-badge")]))
