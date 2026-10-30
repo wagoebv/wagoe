@@ -462,6 +462,22 @@
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
+(deftest ^:integration an-include-resolves-on-the-classpath-and-for-dev-too
+  ;; wagoe.config falls back to the classpath, so "conf/prod/config.edn" is
+  ;; prod; and dev being an include is read through it (BOU-867).
+  (let [tmp (with-profiles! "include-cp")]
+    (try
+      (io/make-parents (io/file tmp "resources/conf/acc/config.edn"))
+      (spit (io/file tmp "resources/conf/acc/config.edn") "#include \"conf/prod/config.edn\"\n")
+      (spit (io/file tmp "resources/conf/prod/config.edn")
+            "{:active {:wagoe/settings {:name \"shop-dev\"}}}")
+      (spit (io/file tmp "resources/conf/dev/config.edn") "#include \"../prod/config.edn\"\n")
+      (is (= ["prod" "test"]
+             (map first (add/patch-configs! tmp (cat/find-module "jobs")))))
+      (is (= "shop" (add/project-name tmp)))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
 (deftest ^:integration devtools-enables-the-dashboard-in-dev-only
   (let [tmp (with-profiles! "devtools")]
     (try

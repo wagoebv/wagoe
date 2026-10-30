@@ -243,6 +243,20 @@
 
 (defn- profile-file [env] (str "resources/conf/" env "/config.edn"))
 
+(defn- include-target
+  "The existing file `target`, included from `path`, names, relative to `dir`
+   with forward slashes: next to `path`, else on the classpath under
+   resources/, the order wagoe.config resolves it in. Nil when neither exists."
+  [dir path target]
+  (let [root (.normalize (.toAbsolutePath (.toPath (io/file dir))))
+        from (.getParent (.resolve root ^String path))]
+    (some (fn [^java.nio.file.Path p]
+            (let [p (.normalize p)]
+              (when (.exists (.toFile p))
+                (str/replace (str (.relativize root p)) "\\" "/"))))
+          (cond-> [(.resolve from ^String target)]
+            (not (.isAbsolute (io/file target))) (conj (.resolve root (str "resources/" target)))))))
+
 (defn- profile-path
   "Profile `env`'s config.edn relative to `dir`, or, when that file is only an
    `#include`, the file it includes, followed as Aero does (BOU-867)."
@@ -253,9 +267,8 @@
                                    (slurp (io/file dir path)))
                   (catch Exception _ nil))
           to (when-let [target (and (map? v) (::include v))]
-               (when (string? target)
-                 (str (.normalize (.toPath (io/file (.getParent (io/file path)) target))))))]
-      (if (and to (not (seen to)) (.exists (io/file dir to)))
+               (when (string? target) (include-target dir path target)))]
+      (if (and to (not (seen to)))
         (recur to (conj seen path))
         path))))
 
@@ -278,15 +291,17 @@
    `#include`. A profile including another profile is that profile, so it is
    left out. A dev-scoped module goes in dev only; no profile is ever created."
   [dir {:keys [scope] :as module}]
-  (let [envs (filter #(.exists (io/file dir (profile-file %)))
-                     (sort (.list (io/file dir "resources/conf"))))
-        own  (set (map profile-file envs))]
+  (let [envs  (filter #(.exists (io/file dir (profile-file %)))
+                      (sort (.list (io/file dir "resources/conf"))))
+        own   (set (map profile-file envs))
+        pname (delay (project-name dir))]
     (for [env   envs
           :let  [path (profile-path dir env)]
           :when (and (or (not= :dev scope) (= "dev" env))
                      (or (= path (profile-file env)) (not (own path))))
-          :let  [snippet (some-> (snippet-for module env)
-                                 (str/replace "{{project-name}}" (project-name dir)))]
+          :let  [snippet (when-let [s (snippet-for module env)]
+                           (cond-> s
+                             (str/includes? s "{{project-name}}") (str/replace "{{project-name}}" @pname)))]
           :when (seq snippet)]
       [env snippet path])))
 
@@ -315,8 +330,8 @@
                           (not (and (= :wagoe/h2 db) (str/includes? snippet ":allow-h2? true"))))]
            (str env " runs on " db ", and " (:name module) " needs "
                 (str/join " or " (map #(str ":wagoe/" (name %)) (sort databases)))
-                ": the app will refuse to boot in " env " until resources/conf/" env
-                "/config.edn switches its :active database.")))))
+                ": the app will refuse to boot in " env " until " path
+                " switches its :active database.")))))
 
 (defn patch-configs!
   "Patch every existing resources/conf/<profile>/config.edn. Returns
