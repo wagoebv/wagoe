@@ -1266,8 +1266,11 @@
      :find-audit-logs-with-actions
      {:options options}
      (fn [{:keys [params]}]
-       (query-audit-logs ctx pagination-config
-                         (-> (:options params) (dissoc :filter-action) (assoc :filter-actions (set actions)))))
+       ;; No actions matches nothing; IN () is not SQL
+       (if (empty? actions)
+         (cond-> {:audit-logs []} (:count? (:options params) true) (assoc :total-count 0))
+         (query-audit-logs ctx pagination-config
+                           (-> (:options params) (dissoc :filter-action) (assoc :filter-actions (set actions))))))
      {:db-ctx ctx}))
 
   ports/IUserAuditRetention

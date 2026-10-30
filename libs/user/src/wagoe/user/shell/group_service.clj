@@ -733,7 +733,9 @@
     (let [opts {:filter-target-user-id user-id :sort-by :created-at :sort-direction :desc :limit n :count? false}]
       (audit-core/rights-timeline
        (if (:audit-actions? this)
-         (:audit-logs (ports/find-audit-logs-with-actions audit-repository (set audit-core/rights-actions) opts))
+         ;; As many entries as the per-action path reads: a role edit's entries collapse into one
+         (:audit-logs (ports/find-audit-logs-with-actions audit-repository (set audit-core/rights-actions)
+                                                          (update opts :limit * (count audit-core/rights-actions))))
          (mapcat #(:audit-logs (ports/find-audit-logs audit-repository (assoc opts :filter-action %)))
                  audit-core/rights-actions))
        n)))
