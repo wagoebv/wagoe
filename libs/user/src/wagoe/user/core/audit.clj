@@ -435,12 +435,13 @@
   [entries]
   (let [by-change (group-by (comp :change-id :metadata) entries)
         own-diff? #(nil? (get-in % [:changes :effective :permissions]))]
-    (keep (fn [{:keys [metadata] :as e}]
-            (let [same (get by-change (:change-id metadata))]
-              (cond (nil? (:change-id metadata)) e
-                    (identical? e (first same))  (assoc (or (first (filter own-diff? same)) e)
-                                                        :action :role-change :created-at (:created-at e)))))
-          entries)))
+    (for [e     entries
+          :let  [id   (get-in e [:metadata :change-id])
+                 same (get by-change id)]
+          :when (or (nil? id) (identical? e (first same)))]
+      (if id
+        (assoc (or (first (filter own-diff? same)) e) :action :role-change :created-at (:created-at e))
+        e))))
 
 (defn rights-timeline
   "The newest `n` of `entries`, audit entries of `rights-actions`, newest

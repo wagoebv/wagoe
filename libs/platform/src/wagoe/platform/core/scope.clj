@@ -207,7 +207,7 @@
   (let [overlaps? (fn [s part] (every? (fn [[k allowed]] (some #(allows? allowed %) (get part k))) s))
         covered?  (fn covered? [scopes part]
                     (let [scopes (filterv #(overlaps? % part) scopes)]
-                      (or (boolean (some #(covers? % part) scopes))
+                      (or (some #(covers? % part) scopes)
                           (when-let [[k vs] (first (filter (comp next val) part))]
                             (every? #(covered? scopes (assoc part k #{%})) vs)))))]
     ;; A scope with a key `scope` lacks admits none of it
@@ -220,10 +220,8 @@
    {:permission :scope}, none covered by another in its list."
   [before after]
   (let [norm      #(into #{} (map (fn [r] {:permission (:permission r) :scope (or (:scope r) {})})) %)
-        covered?  (fn [rights {:keys [permission scope] :as r}]
-                    (covered-together? (into [] (keep #(when (and (not= r %) (= permission (:permission %))) (:scope %)))
-                                             rights)
-                                       scope))
+        covered?  (fn [rights {:keys [permission scope]}]
+                    (covered-together? (remove #{scope} (scopes-for rights permission)) scope))
         order     (juxt (comp str :permission) (comp str :scope))
         ;; Of two covering each other, 42 and "42", the first in `order` stays
         dropped?  (fn [rights r]

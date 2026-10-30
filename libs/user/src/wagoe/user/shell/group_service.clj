@@ -357,38 +357,50 @@
    rights, [{:user {:id :email} :added :removed}]: their rights before and
    after, of the touched permissions, resolved as the authorization
    interceptor resolves them and compared by `scope/rights-diff`. The focal
-   user's are read with their identity provider's groups, and so are the
-   others' when there is a membership hook; without one, from stored
-   memberships and Everyone, one query for all. An inactive user other than
-   the focal one is left out, as Everyone leaves them out. None when no
-   permission is touched."
+   user's are read with their identity provider's groups in one query; the
+   others' from stored memberships and Everyone, one query for all, and the
+   groups the membership hook names, one query per group. An inactive user
+   other than the focal one is left out, as Everyone leaves them out. None
+   when no permission is touched."
   [{:keys [group-repository user-repository membership] :as svc}
    {:keys [users focal grants roles roles-after update] :as plan}]
   (when-let [touched (not-empty (or (:touched plan) (into #{} (map :permission) grants)))]
     (let [resolve  (or (:resolve svc) stored-resolve)
           focal?   #(access/same-id? (:id focal) (:id %))
           users    (remove #(and (false? (:active? %)) (not (focal? %))) users)
-          held-by  (when (and (not membership) (some (complement focal?) users))
+          others?  (some (complement focal?) users)
+          held-by  (when others?
                      (group-by (comp str :user-id)
                                (ports/find-role-holders group-repository
                                                         (into #{} (mapcat #(concat (group-core/roles-holding roles %)
                                                                                    (group-core/roles-holding roles-after %)))
                                                               touched))))
+          ;; A provider group's assignments, by name, read once per group
+          provided (when (and others? membership)
+                     (let [ids (into {} (map (juxt :name :id)) (ports/find-groups group-repository))]
+                       (memoize #(some->> (get ids %) (ports/find-assignments group-repository)))))
+          ;; find-members gives part of a user, without :active
+          record   #(if (contains? % :active) % (ports/find-user-by-id user-repository (:id %)))
           rights   (fn [assignments roles]
                      (filterv (comp touched :permission) (group-core/user-grants assignments roles)))]
       (mapv (fn [user]
               (let [focal?   (focal? user)
-                    held     (if (or focal? membership)
-                               ;; Another user's record, as the hook reads it, by id
+                    stored   (get held-by (str (:id user)) [])
+                    full     (when (and provided (not focal?)) (record user))
+                    held     (cond
+                               focal?
                                (ports/find-user-assignments group-repository (:id user)
-                                                            (provider-groups membership user-repository
-                                                                             (if focal? user (:id user))))
-                               (get held-by (str (:id user)) []))
+                                                            (provider-groups membership user-repository user))
+                               full
+                               (let [mine (set (map (comp str :group-id) stored))]
+                                 (into stored (comp (mapcat provided) (remove (comp mine str :group-id)))
+                                       (provider-groups membership user-repository full)))
+                               :else stored)
                     before   (rights held roles)
                     after    (rights (update held) roles-after)
                     ;; A source resolver reads the user, so give it the whole record
                     user-map (if (and (not focal?) (some scope/source? (mapcat (comp vals :scope) (concat before after))))
-                               (or (ports/find-user-by-id user-repository (:id user)) user)
+                               (or full (record user) user)
                                user)]
                 (assoc (scope/rights-diff (resolve user-map before) (resolve user-map after))
                        :user (select-keys user [:id :email]))))
