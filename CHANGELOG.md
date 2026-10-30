@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **User forms, filters, role badges and bulk actions say "No role" where they said "User"** (BOU-917).
+  Nothing to do, unless your own catalogue overrides `:common/role-user`.
 - **Rights timeline: an expiry records what it took, and a role edit over many groups hides no older change**
   (BOU-911). Nothing to do.
 - **Group and role pages agree on what is a refusal, and a missing user no longer reads as a missing group**

@@ -33,7 +33,7 @@
  :common/button-search      "Zoeken"
 
  :common/filter-all-roles   "Alle rollen"
- :common/role-user          "Gebruiker"
+ :common/role-user          "Geen rol"
  :common/role-admin         "Admin"
  :common/role-viewer        "Kijker"
 
@@ -168,7 +168,7 @@
  :user/bulk-action-activate     "Activeren"
  :user/bulk-action-delete       "Verwijderen"
  :user/bulk-action-role-admin   "Rol wijzigen naar admin"
- :user/bulk-action-role-user    "Rol wijzigen naar gebruiker"
+ :user/bulk-action-role-user    "Adminrol verwijderen"
  :user/button-apply-bulk        "Toepassen op geselecteerde"
 
  :user/filter-placeholder-email "E-mail zoeken..."
@@ -634,7 +634,7 @@
  :admin.users/field-email              "E-mail"
  :admin.users/field-name               "Naam"
  :admin.users/field-role               "Rol"
- :admin.users/role-help                "Admin geeft toegang tot het beheer. Als rechten worden afgedwongen, mag een Admin buiten een tenant alles en geven de andere rollen niets: wat iemand mag, komt uit de groepen, op het tabblad Rechten."
+ :admin.users/role-help                "Admin geeft toegang tot het beheer. Als rechten worden afgedwongen, mag een Admin buiten een tenant alles. Zonder die rol komt wat iemand mag uit de groepen, op het tabblad Rechten."
  :admin.users/field-active             "Actief"
  :admin.users/field-created            "Aangemaakt"
  :admin.users/field-theme              "Thema"

@@ -33,7 +33,8 @@
  :common/button-search      "Search"
 
  :common/filter-all-roles   "All roles"
- :common/role-user          "User"
+ ;; :user is no role since BOU-771 (BOU-917)
+ :common/role-user          "No role"
  :common/role-admin         "Admin"
  :common/role-viewer        "Viewer"
 
@@ -168,7 +169,7 @@
  :user/bulk-action-activate     "Activate"
  :user/bulk-action-delete       "Delete"
  :user/bulk-action-role-admin   "Change Role to Admin"
- :user/bulk-action-role-user    "Change Role to User"
+ :user/bulk-action-role-user    "Remove Admin Role"
  :user/button-apply-bulk        "Apply to Selected"
 
  :user/filter-placeholder-email "Search email..."
@@ -634,7 +635,7 @@
  :admin.users/field-email              "Email"
  :admin.users/field-name               "Name"
  :admin.users/field-role               "Role"
- :admin.users/role-help                "Admin opens the admin. When rights are enforced, an Admin outside any tenant passes every check and the other roles grant nothing: what a user may do comes from their groups, on the Rights tab."
+ :admin.users/role-help                "Admin opens the admin. When rights are enforced, an Admin outside any tenant passes every check. Without it, what a user may do comes from their groups, on the Rights tab."
  :admin.users/field-active             "Active"
  :admin.users/field-created            "Created"
  :admin.users/field-theme              "Theme"
