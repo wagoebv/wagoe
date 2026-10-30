@@ -646,7 +646,7 @@
           (ports/add-group-role svc (:id g) {:role :sales/lead}))
         (ports/update-role svc {:name :sales/lead :permissions #{:orders/write}})
         (let [timeline (audit-core/rights-timeline (ports/find-audit-logs-by-user audit (:id ada) {:limit 50}) 50)
-              edits    (filter #(= :role-change (:action %)) timeline)]
+              edits    (filter #(= :role-edit (:action %)) timeline)]
           (is (= 1 (count edits)))
           (is (= [:sales/lead [{:permission :orders/write :scope {}}] [{:permission :reports/read :scope {}}]]
                  ((juxt :role :added :removed) (first edits)))))))))

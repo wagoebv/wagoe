@@ -359,16 +359,17 @@
    interceptor resolves them and compared by `scope/rights-diff`. The focal
    user's are read with their identity provider's groups in one query; the
    others' from stored memberships and Everyone, one query for all, and the
-   groups the membership hook names, one query per group. An inactive user
-   other than the focal one is left out, as Everyone leaves them out. None
+   groups the membership hook names, one query per group. An inactive user's
+   are read as the focal user's: the one query reads only active users. None
    when no permission is touched."
   [{:keys [group-repository user-repository membership] :as svc}
    {:keys [users focal grants roles roles-after update] :as plan}]
   (when-let [touched (not-empty (or (:touched plan) (into #{} (map :permission) grants)))]
     (let [resolve  (or (:resolve svc) stored-resolve)
           focal?   #(access/same-id? (:id focal) (:id %))
-          users    (remove #(and (false? (:active? %)) (not (focal? %))) users)
-          others?  (some (complement focal?) users)
+          ;; Read one by one
+          own?     #(or (focal? %) (false? (:active? %)))
+          others?  (some (complement own?) users)
           held-by  (when others?
                      (group-by (comp str :user-id)
                                (ports/find-role-holders group-repository
@@ -377,20 +378,22 @@
                                                               touched))))
           ;; A provider group's assignments, by name, read once per group
           provided (when (and others? membership)
-                     (let [ids (into {} (map (juxt :name :id)) (ports/find-groups group-repository))]
-                       (memoize #(some->> (get ids %) (ports/find-assignments group-repository)))))
+                     (let [ids (delay (into {} (map (juxt :name :id)) (ports/find-groups group-repository)))]
+                       (memoize #(some->> (get @ids %) (ports/find-assignments group-repository)))))
           ;; find-members gives part of a user, without :active
           record   #(if (contains? % :active) % (ports/find-user-by-id user-repository (:id %)))
           rights   (fn [assignments roles]
                      (filterv (comp touched :permission) (group-core/user-grants assignments roles)))]
       (mapv (fn [user]
               (let [focal?   (focal? user)
+                    own?     (own? user)
                     stored   (get held-by (str (:id user)) [])
-                    full     (when (and provided (not focal?)) (record user))
+                    full     (when (and provided (not own?)) (record user))
                     held     (cond
-                               focal?
+                               own?
                                (ports/find-user-assignments group-repository (:id user)
-                                                            (provider-groups membership user-repository user))
+                                                            (provider-groups membership user-repository
+                                                                             (if focal? user (:id user))))
                                full
                                (let [mine (set (map (comp str :group-id) stored))]
                                  (into stored (comp (mapcat provided) (remove (comp mine str :group-id)))

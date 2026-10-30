@@ -221,7 +221,7 @@
   [before after]
   (let [norm      #(into #{} (map (fn [r] {:permission (:permission r) :scope (or (:scope r) {})})) %)
         covered?  (fn [rights {:keys [permission scope]}]
-                    (covered-together? (remove #{scope} (scopes-for rights permission)) scope))
+                    (covered-together? (scopes-for rights permission) scope))
         order     (juxt (comp str :permission) (comp str :scope))
         ;; Of two covering each other, 42 and "42", the first in `order` stays
         dropped?  (fn [rights r]

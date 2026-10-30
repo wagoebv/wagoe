@@ -455,6 +455,6 @@
                                          (entry :grant-add "Desk" "2026-10-01T10:00:01Z")
                                          other]
                                         2)]
-    (is (= [:role-change :group-join] (map :action timeline)) "the edit once, and room for the next entry")
+    (is (= [:role-edit :group-join] (map :action timeline)) "the edit once, and room for the next entry")
     (is (= :sales/lead (:role (first timeline))))
     (is (= [{:permission :orders/write :scope {}}] (:added (first timeline))))))

@@ -431,7 +431,7 @@
   "`entries` with each change audited in several, sharing a `:change-id` (a
    role edit: per group holding the role, per permission added and removed),
    kept once, where its newest is: the entry with the user's own diff, as a
-   `:role-change`."
+   `:role-edit`."
   [entries]
   (let [by-change (group-by (comp :change-id :metadata) entries)
         own-diff? #(nil? (get-in % [:changes :effective :permissions]))]
@@ -440,14 +440,14 @@
                  same (get by-change id)]
           :when (or (nil? id) (identical? e (first same)))]
       (if id
-        (assoc (or (first (filter own-diff? same)) e) :action :role-change :created-at (:created-at e))
+        (assoc (or (first (filter own-diff? same)) e) :action :role-edit :created-at (:created-at e))
         e))))
 
 (defn rights-timeline
   "The newest `n` of `entries`, audit entries of `rights-actions`, newest
    first, each {:at :actor :action :group-id :group-name :role :added
    :removed}, the rights the change gave and took (BOU-852). A role edit is
-   one `:role-change` naming the `:role` (BOU-864). A change to Everyone has
+   one `:role-edit` naming the `:role` (BOU-864). A change to Everyone has
    :permissions and :affected-count instead; an entry from before BOU-852
    none of these."
   [entries n]
