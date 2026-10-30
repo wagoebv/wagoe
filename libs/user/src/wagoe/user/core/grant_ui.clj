@@ -146,9 +146,13 @@
                            (rights-ui/table
                             [[:t :user.grant/column-user] [:t :user.grant/column-best] [:t :user.grant/column-radius]]
                             (for [{:keys [user result]} refused
-                                  :let [best (first (:options result))]]
+                                  :let [best (first (remove :refused (:options result)))]]
                               [:tr.grant-bulk-row
                                [:td (:email user)]
-                               [:td [:a {:href (rights-ui/grant-path (:id user) permission record)} (title best)]]
+                               [:td [:a {:href (rights-ui/grant-path (:id user) permission record)}
+                                     ;; Every option refused: the wizard says why
+                                     (if best
+                                       (title best)
+                                       (list [:t :user.grant/refused] " " (title (first (:options result)))))]]
                                [:td (str (:radius best ""))]])))))
      opts)))

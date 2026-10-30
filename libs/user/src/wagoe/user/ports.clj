@@ -548,8 +548,8 @@
   (create-grant-group [this group user-id assignment expires-at]))
   ;; The wizard's last option: creates `group` ({:name :description}) holding
   ;; only the user, until `expires-at` unless nil, and `assignment`, in one
-  ;; transaction, so a refused step leaves no group. Audited as the three
-  ;; changes. Returns the group. BOU-863.
+  ;; transaction, so a refused step leaves no group. Audited as the join and
+  ;; the assignment. Returns the group. BOU-863.
 
 (defprotocol ITimeBoundAccess
   (add-group-member-until [this group-id user-id expires-at])
