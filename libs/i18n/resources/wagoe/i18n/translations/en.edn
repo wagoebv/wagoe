@@ -34,6 +34,7 @@
 
  :common/filter-all-roles   "All roles"
  :common/role-user          "User"
+ :common/role-none          "No role"
  :common/role-admin         "Admin"
  :common/role-viewer        "Viewer"
 
@@ -143,7 +144,6 @@
  :user/link-signin              "Sign in"
  :user/text-no-account          "Don't have an account?"
  :user/button-create-account    "Create Account"
-
 
  :user/button-view-user         "View User"
  :user/button-delete-permanently "Permanently Delete"
@@ -635,7 +635,7 @@
  :admin.users/field-email              "Email"
  :admin.users/field-name               "Name"
  :admin.users/field-role               "Role"
- :admin.users/role-help                "Admin opens the admin. When rights are enforced, an Admin outside any tenant passes every check and the other roles grant nothing: what a user may do comes from their groups, on the Rights tab."
+ :admin.users/role-help                "Admin opens the admin. When rights are enforced, an Admin outside any tenant passes every check. Without it, what a user may do comes from their groups, on the Rights tab."
  :admin.users/field-active             "Active"
  :admin.users/field-created            "Created"
  :admin.users/field-theme              "Theme"

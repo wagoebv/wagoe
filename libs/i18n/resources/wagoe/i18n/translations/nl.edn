@@ -34,6 +34,7 @@
 
  :common/filter-all-roles   "Alle rollen"
  :common/role-user          "Gebruiker"
+ :common/role-none          "Geen rol"
  :common/role-admin         "Admin"
  :common/role-viewer        "Kijker"
 
@@ -143,7 +144,6 @@
  :user/link-signin              "Inloggen"
  :user/text-no-account          "Heeft u nog geen account?"
  :user/button-create-account    "Account aanmaken"
-
 
  :user/button-view-user         "Gebruiker bekijken"
  :user/button-delete-permanently "Permanent verwijderen"
@@ -635,7 +635,7 @@
  :admin.users/field-email              "E-mail"
  :admin.users/field-name               "Naam"
  :admin.users/field-role               "Rol"
- :admin.users/role-help                "Admin geeft toegang tot het beheer. Als rechten worden afgedwongen, mag een Admin buiten een tenant alles en geven de andere rollen niets: wat iemand mag, komt uit de groepen, op het tabblad Rechten."
+ :admin.users/role-help                "Admin geeft toegang tot het beheer. Als rechten worden afgedwongen, mag een Admin buiten een tenant alles. Zonder die rol komt wat iemand mag uit de groepen, op het tabblad Rechten."
  :admin.users/field-active             "Actief"
  :admin.users/field-created            "Aangemaakt"
  :admin.users/field-theme              "Thema"
