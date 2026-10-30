@@ -713,27 +713,40 @@
                               (ports/add-group-role svc (:id g) assignment)
                               g)))))
 
+(defn- undone
+  "`plan`'s diffs reversed: what undoing the change it describes does."
+  [svc plan]
+  (mapv #(assoc % :added (:removed %) :removed (:added %)) (user-diffs svc plan)))
+
 (defn- expire!
   "Remove what expired by `now`, auditing each as a leave or a removed role
-   without an effective-rights diff: reads ignored it from the moment it
-   expired, so removing it changes no one's rights."
-  [{:keys [group-repository user-repository audit-repository registry]} now]
+   with what it took from each user's effective rights. Reads ignored it from
+   the moment it expired, so that is the diff of adding it back, reversed
+   (BOU-911)."
+  [{:keys [group-repository user-repository audit-repository registry] :as svc} now]
   (let [{:keys [members assignments] :as removed} (ports/remove-expired group-repository now)
         roles    (all-roles group-repository registry)
+        plan     {:roles roles :roles-after roles}
         ;; Per group, once: several rows of one group expire together
         group-of (memoize #(or (ports/find-group group-repository %) {:id %}))
-        grants   (memoize #(group-core/user-grants (ports/find-assignments group-repository %) roles))
+        held     (memoize #(ports/find-assignments group-repository %))
         members-of (memoize #(when-not (group-core/everyone? %) (ports/find-members group-repository %)))
         expired  #(assoc (expiry-metadata %) :reason "expired")]
     (doseq [{:keys [group-id user-id expires-at]} members
             ;; A soft-deleted user held nothing through it
-            :let [user (ports/find-user-by-id user-repository user-id)]
+            :let [user   (ports/find-user-by-id user-repository user-id)
+                  grants (group-core/user-grants (held group-id) roles)]
             :when user]
-      (audit! audit-repository :group-leave (group-of group-id) [user] (grants group-id)
-              {:metadata (expired expires-at)}))
-    (doseq [{:keys [group-id expires-at] :as a} assignments]
-      (audit! audit-repository :grant-remove (group-of group-id) (members-of group-id) (group-core/user-grants [a] roles)
-              {:metadata (expired expires-at)}))
+      (audit! audit-repository :group-leave (group-of group-id) [user] grants
+              {:diffs    (undone svc (assoc plan :users [user] :focal user :grants grants
+                                            :update #(into % (held group-id))))
+               :metadata (expired expires-at)}))
+    (doseq [{:keys [group-id expires-at] :as a} assignments
+            :let [grants (group-core/user-grants [a] roles)]]
+      (audit! audit-repository :grant-remove (group-of group-id) (members-of group-id) grants
+              {:diffs    (undone svc (assoc plan :users (members-of group-id) :everyone? (group-core/everyone? group-id)
+                                            :assignment a :grants grants :update #(conj % a)))
+               :metadata (expired expires-at)}))
     (when (or (seq members) (seq assignments))
       (log/info "Removed expired group access" {:members (count members) :assignments (count assignments)}))
     removed))
@@ -741,6 +754,18 @@
 ;; =============================================================================
 ;; Service
 ;; =============================================================================
+
+(defn newest-changes
+  "Audit entries, newest first, `(read {:limit :offset})` a page of them, read
+   until they record `n` changes or run out: a role edit writes an entry per
+   group, so a page can hold one change (BOU-911)."
+  [read page n]
+  (loop [offset 0 acc []]
+    (let [xs  (vec (read {:limit page :offset offset}))
+          acc (into acc xs)]
+      (if (or (< (count xs) page) (<= n (audit-core/change-count acc)))
+        acc
+        (recur (+ offset page) acc)))))
 
 (defrecord UserGroupService [group-repository user-repository audit-repository settings registry membership]
   authz/IRights
@@ -780,13 +805,17 @@
   (rights-changes [this {:keys [id created-at]} n]
     (let [entries (fn [target actions after]
                     (let [opts (cond-> {:filter-target-user-id target :sort-by :created-at :sort-direction :desc
-                                        :limit n :count? false}
+                                        :count? false}
                                  after (assoc :filter-created-after after))]
                       (if (:audit-actions? this)
-                        ;; As many entries as the per-action path reads: a role edit's entries collapse into one
-                        (:audit-logs (ports/find-audit-logs-with-actions audit-repository (set actions)
-                                                                         (update opts :limit * (count actions))))
-                        (mapcat #(:audit-logs (ports/find-audit-logs audit-repository (assoc opts :filter-action %)))
+                        ;; Pages as large as the per-action path's together
+                        (newest-changes #(:audit-logs (ports/find-audit-logs-with-actions audit-repository (set actions)
+                                                                                          (merge opts %)))
+                                        (* n (count actions)) n)
+                        (mapcat (fn [action]
+                                  (newest-changes #(:audit-logs (ports/find-audit-logs audit-repository
+                                                                                       (merge opts {:filter-action action} %)))
+                                                  n n))
                                 actions))))]
       (audit-core/rights-timeline
        ;; Everyone's since the user was created, filed under the group, count too (BOU-862)

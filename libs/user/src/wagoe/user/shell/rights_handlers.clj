@@ -219,11 +219,14 @@
   (if timeline?
     (ports/rights-changes group-service user timeline-size)
     (let [entries (fn [target action & [after]]
-                    (:audit-logs (ports/list-audit-logs user-service
-                                                        (cond-> {:filter-target-user-id target :filter-action action
-                                                                 :sort-by :created-at :sort-direction :desc
-                                                                 :limit timeline-size :count? false}
-                                                          after (assoc :filter-created-after after)))))]
+                    (group-service/newest-changes
+                     #(:audit-logs (ports/list-audit-logs user-service
+                                                          (cond-> (merge {:filter-target-user-id target :filter-action action
+                                                                          :sort-by :created-at :sort-direction :desc
+                                                                          :count? false}
+                                                                         %)
+                                                            after (assoc :filter-created-after after))))
+                     timeline-size timeline-size))]
       (audit/rights-timeline
        (concat (mapcat #(entries id %) audit/rights-actions)
                (mapcat #(entries group-core/everyone-id % created-at) [:grant-add :grant-remove]))
