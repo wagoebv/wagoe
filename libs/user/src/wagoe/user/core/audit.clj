@@ -443,6 +443,11 @@
         (assoc (or (first (filter own-diff? same)) e) :action :role-edit :created-at (:created-at e))
         e))))
 
+(defn change-count
+  "How many changes `entries` record, a role edit's entries counted once."
+  [entries]
+  (count (one-per-change entries)))
+
 (defn rights-timeline
   "The newest `n` of `entries`, audit entries of `rights-actions`, newest
    first, each {:at :actor :action :group-id :group-name :role :added

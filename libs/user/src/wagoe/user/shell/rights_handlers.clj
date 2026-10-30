@@ -7,7 +7,6 @@
             [wagoe.platform.core.scope :as scope]
             [wagoe.platform.ports.authorization :as authz]
             [wagoe.user.core.access-ui :as access-ui]
-            [wagoe.user.core.audit :as audit]
             [wagoe.user.core.grant-ui :as grant-ui]
             [wagoe.user.core.group :as group-core]
             [wagoe.user.core.hygiene :as hygiene]
@@ -213,21 +212,13 @@
 
 (defn- rights-changes
   "The newest changes to the user's rights: through the group service, or,
-   for one without `IRightsTimeline`, one query per action. Everyone's since
-   the user was created, filed under the group, count too (BOU-862)."
-  [timeline? user-service group-service {:keys [id created-at] :as user}]
+   for one without `IRightsTimeline`, one query per action."
+  [timeline? user-service group-service user]
   (if timeline?
     (ports/rights-changes group-service user timeline-size)
-    (let [entries (fn [target action & [after]]
-                    (:audit-logs (ports/list-audit-logs user-service
-                                                        (cond-> {:filter-target-user-id target :filter-action action
-                                                                 :sort-by :created-at :sort-direction :desc
-                                                                 :limit timeline-size :count? false}
-                                                          after (assoc :filter-created-after after)))))]
-      (audit/rights-timeline
-       (concat (mapcat #(entries id %) audit/rights-actions)
-               (mapcat #(entries group-core/everyone-id % created-at) [:grant-add :grant-remove]))
-       timeline-size))))
+    (group-service/rights-timeline
+     #(:audit-logs (ports/list-audit-logs user-service (assoc %2 :filter-action (first %1))))
+     true user timeline-size)))
 
 (defn- user-of [user-service request]
   (some->> (get-in request [:path-params :id]) str parse-uuid (ports/get-user-by-id user-service)))
