@@ -598,7 +598,7 @@
  :user.hygiene/unheld "Niemand heeft dit"
  :user.hygiene/everyone "Aan Iedereen gegeven"
  :user.timeline/heading "Wijzigingen in rechten"
- :user.timeline/note "Een wijziging aan Iedereen wordt één keer vastgelegd, bij de beheerder die haar maakte."
+ :user.timeline/note "Een wijziging aan Iedereen staat hier als het aantal gebruikers dat ze veranderde."
  :user.timeline/column-effect "Effect"
  :user.timeline/empty "Geen wijzigingen vastgelegd."
  :user.timeline/no-diff "Niet vastgelegd"

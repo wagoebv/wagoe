@@ -213,14 +213,19 @@
 
 (defn- rights-changes
   "The newest audit entries of changes to the user's rights, one query per
-   action: the log filters on one."
-  [user-service user-id]
-  (audit/rights-timeline
-   (mapcat #(:audit-logs (ports/list-audit-logs user-service {:filter-target-user-id user-id :filter-action %
+   action: the log filters on one. Everyone's since the user was created,
+   filed under the group, count too (BOU-862)."
+  [user-service {:keys [id created-at]}]
+  (let [entries (fn [target action & [after]]
+                  (:audit-logs (ports/list-audit-logs user-service
+                                                      (cond-> {:filter-target-user-id target :filter-action action
                                                                :sort-by :created-at :sort-direction :desc
-                                                               :limit timeline-size :count? false}))
-           audit/rights-actions)
-   timeline-size))
+                                                               :limit timeline-size :count? false}
+                                                        after (assoc :filter-created-after after)))))]
+    (audit/rights-timeline
+     (concat (mapcat #(entries id %) audit/rights-actions)
+             (mapcat #(entries group-core/everyone-id % created-at) [:grant-add :grant-remove]))
+     timeline-size)))
 
 (defn- user-of [user-service request]
   (some->> (get-in request [:path-params :id]) str parse-uuid (ports/get-user-by-id user-service)))
@@ -240,7 +245,7 @@
                                                      :registry (registry-permissions group-service)
                                                      :roles (rights-ui/role-index (ports/list-roles group-service))
                                                      :platform-admin? (access/platform-admin? user)
-                                                     :changes (rights-changes user-service (:id user))
+                                                     :changes (rights-changes user-service user)
                                                      :scope-info (assoc (group-handlers/scope-info group-service)
                                                                         :resolved (resolve-sources group-service user grants))))
                        200))
