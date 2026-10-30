@@ -212,17 +212,22 @@
 (def ^:private timeline-size 50)
 
 (defn- rights-changes
-  "The newest changes to the user's rights: through the group service, in one
-   query, or, for one without `IRightsTimeline`, one query per action."
-  [timeline? user-service group-service user-id]
+  "The newest changes to the user's rights: through the group service, or,
+   for one without `IRightsTimeline`, one query per action. Everyone's since
+   the user was created, filed under the group, count too (BOU-862)."
+  [timeline? user-service group-service {:keys [id created-at] :as user}]
   (if timeline?
-    (ports/rights-changes group-service user-id timeline-size)
-    (audit/rights-timeline
-     (mapcat #(:audit-logs (ports/list-audit-logs user-service {:filter-target-user-id user-id :filter-action %
+    (ports/rights-changes group-service user timeline-size)
+    (let [entries (fn [target action & [after]]
+                    (:audit-logs (ports/list-audit-logs user-service
+                                                        (cond-> {:filter-target-user-id target :filter-action action
                                                                  :sort-by :created-at :sort-direction :desc
-                                                                 :limit timeline-size :count? false}))
-             audit/rights-actions)
-     timeline-size)))
+                                                                 :limit timeline-size :count? false}
+                                                          after (assoc :filter-created-after after)))))]
+      (audit/rights-timeline
+       (concat (mapcat #(entries id %) audit/rights-actions)
+               (mapcat #(entries group-core/everyone-id % created-at) [:grant-add :grant-remove]))
+       timeline-size))))
 
 (defn- user-of [user-service request]
   (some->> (get-in request [:path-params :id]) str parse-uuid (ports/get-user-by-id user-service)))
@@ -244,7 +249,7 @@
                                                        :registry (registry-permissions group-service)
                                                        :roles (rights-ui/role-index (ports/list-roles group-service))
                                                        :platform-admin? (access/platform-admin? user)
-                                                       :changes (rights-changes timeline? user-service group-service (:id user))
+                                                       :changes (rights-changes timeline? user-service group-service user)
                                                        :scope-info (assoc (group-handlers/scope-info group-service)
                                                                           :resolved (resolve-sources group-service user grants))))
                          200))

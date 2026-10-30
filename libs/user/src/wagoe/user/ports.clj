@@ -428,8 +428,8 @@
    are the permissions of the roles of their groups: those they were added
    to, the built-in Everyone, and those the `:group-membership` hook names.
    Joining, leaving, a changed assignment and a changed managed role are
-   audited for each user whose rights change; a change to Everyone once, for
-   the actor. Nothing is cached: `user-grants` reads the database, so a change
+   audited for each user whose rights change; a change to Everyone once, its
+   target the Everyone group. Nothing is cached: `user-grants` reads the database, so a change
    applies to the next request. The :admin role is separate and needs no
    group. Throws ex-infos carrying :type: :validation-error, :not-found,
    :conflict."
@@ -530,9 +530,10 @@
   ;; without members: what the access overview reads. BOU-854.
 
 (defprotocol IRightsTimeline
-  (rights-changes [this user-id n]))
-  ;; The newest `n` changes to the user's rights, as
-  ;; wagoe.user.core.audit/rights-timeline gives them. BOU-865.
+  (rights-changes [this user n]))
+  ;; The newest `n` changes to `user`'s rights, a user map, Everyone's since
+  ;; their :created-at included, as wagoe.user.core.audit/rights-timeline
+  ;; gives them. BOU-865.
 
 (defprotocol IRightsPreview
   (preview-change [this change]))
