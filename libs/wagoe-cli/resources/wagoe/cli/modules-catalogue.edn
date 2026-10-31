@@ -317,8 +317,11 @@
    :version             "1.1.0"
    :category            :optional
    :tier                :stable
-   :config-snippet      "  :wagoe/admin\n  {:enabled? true :base-path \"/web/admin\"}\n"
-   :test-config-snippet "  :wagoe/admin\n  {:enabled? true :base-path \"/web/admin\"}\n"
+   :config-snippet      "  :wagoe/admin\n  {:enabled?         true\n   :base-path        \"/web/admin\"\n   :entity-discovery {:mode :allowlist :allowlist #{:users}}\n   :entities         #merge [#include \"admin/users.edn\"]}\n"
+   :test-config-snippet "  :wagoe/admin\n  {:enabled?         true\n   :base-path        \"/web/admin\"\n   :entity-discovery {:mode :allowlist :allowlist #{:users}}\n   :entities         #merge [#include \"admin/users.edn\"]}\n"
+   ;; The user pages link to /web/admin/users, which needs this entity. A copy
+   ;; of the admin/users.edn `bb setup` writes; add-test keeps them equal.
+   :config-files        {"admin/users.edn" "admin-users.edn.tmpl"}
    :add-command         "wagoe add admin"
    ;; Admin admits an admin, or under :enforce a holder of admin.<entity>
    ;; rights, which nobody has yet. So a fresh install lands on a

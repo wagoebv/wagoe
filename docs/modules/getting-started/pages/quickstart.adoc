@@ -157,18 +157,17 @@ answers `[]` and a `POST` creates a row the next `GET` returns. Generate with
 `src/<your-project>/product/shell/http.clj` — `bb scaffold integrate` prints the prefix
 they are mounted under.
 
-For a browsable CRUD UI over your tables rather than a JSON stub, add the admin
-module:
+A new project has the admin UI on, managing users. It requires a signed-in
+admin, and a new project has none:
 
 [source,bash]
 ----
-wagoe add admin
-bb create-admin       # it requires a signed-in admin, and a new project has none
+bb create-admin
 ----
 
-Restart, then open http://localhost:3000/web/admin/. See
-xref:libraries:admin.adoc[the admin reference] for choosing which entities it
-manages.
+Then open http://localhost:3000/web/admin/. To browse your own tables there
+too, see xref:libraries:admin.adoc[the admin reference] for choosing which
+entities it manages.
 
 == Run tests
 

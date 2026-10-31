@@ -29,6 +29,13 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The users page no longer fails on SQLite with `ambiguous column name: created_at`** (BOU-919), and an unknown `?sort=`
+  sorts by date instead of failing. Nothing to do.
+- **`wagoe new` switches the admin on, and `wagoe add admin` gives it the users entity** (BOU-920): the user pages link there,
+  and a created user landed on a 404. An app whose `:wagoe/admin` has no `:entities`: copy them from a new app.
+
 ## [1.1.0] — 2026-10-30
 
 ### Fixed
