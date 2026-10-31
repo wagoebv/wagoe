@@ -466,6 +466,15 @@ done
 [ "$CODE" = "200" ] || { log_excerpt /tmp/repl.log 25; fail "/api-docs/ returned $CODE, expected 200"; }
 ok "/api-docs/ returned 200"
 
+# Signed in as that admin, open every page the web UI links to, then each again
+# with odd parameters. Until BOU-923 this script never opened a /web page, and
+# 1.1.0 shipped a users page that answered 500 on SQLite and a create-user flow
+# that landed on a 404 (BOU-919, BOU-920).
+bb /repo/scripts/web_crawl.clj http://localhost:3000 admin@demo.test "$ADMIN_PW" >/tmp/crawl.log 2>&1 \
+  || { grep "^FAIL" /tmp/crawl.log | head -20; log_excerpt /tmp/repl.log 25
+       fail "a web page answered 4xx or 5xx (see FAIL lines above)"; }
+ok "$(head -1 /tmp/crawl.log)"
+
 
 # ── does the module quickstart scaffolded serve anything? ───────────────────
 # The check above only proves that *some* server is up. /api-docs/ is served by
