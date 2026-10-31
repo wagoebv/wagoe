@@ -866,3 +866,21 @@
            (update-vals (:roles declared) :permissions)))
     (is (nil? (:error registry)) "and the platform's registry takes it")))
 
+
+(deftest ^:unit a-generated-entity-reads-a-boolean-as-one
+  ;; SQLite reads a boolean column back as 0 or 1, and 0 is truthy
+  (let [src   (gen/generate-persistence-file
+               {:base-ns "app" :module-name "widget"
+                :entities [{:entity-name "Widget" :entity-table "widgets"
+                            :fields [(template/build-field-context {:name :active :type :boolean :required true})]}]})
+        forms (read-string (str "[" (subs src (str/index-of src "(defn- date->iso")) "]"))
+        wanted #{'date->iso 'enum-fields 'boolean-fields '->entity}
+        scratch (create-ns (gensym "generated-persistence"))]
+    (binding [*ns* scratch]
+      (refer-clojure)
+      (import '[java.time LocalDate])
+      (doseq [f forms :when (and (seq? f) (wanted (second f)))] (eval f)))
+    (let [->entity @(ns-resolve scratch '->entity)]
+      (is (false? (:active (->entity {:id 1 :active 0}))))
+      (is (true? (:active (->entity {:id 1 :active 1}))))
+      (is (true? (:active (->entity {:id 1 :active true}))) "H2 and PostgreSQL already say so"))))

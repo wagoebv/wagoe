@@ -195,6 +195,8 @@
                                     :deleted_at :deleted-at})
           (update :id type-conversion/string->uuid)
           (update :active #(protocols/db->boolean adapter %))
+          ;; SQLite reads 0 back, which is truthy (BOU-925)
+          (update :mfa-enabled #(when (some? %) (protocols/db->boolean adapter %)))
           (update :created-at type-conversion/string->instant)
           (update :updated-at type-conversion/string->instant)
           (update :deleted-at type-conversion/string->instant)

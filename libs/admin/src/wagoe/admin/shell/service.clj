@@ -350,6 +350,16 @@
                                                  (fn? %)      (own-rows entity-config %)
                                                  :else        %))))
 
+(defn- as-boolean
+  "A boolean read or sent as SQLite's 0/1 or a form's \"true\"/\"false\"; else as is.
+   0 is truthy, so an unconverted false rendered a ticked checkbox."
+  [v]
+  (cond (boolean? v)                v
+        (number? v)                 (not (zero? (long v)))
+        (#{"true" "1" "on"} v)      true
+        (#{"false" "0" "off"} v)    false
+        :else                       v))
+
 (defn- list-where
   "The WHERE a list applies for `options`: its search, its filters and, for a
    soft-deleting entity, live rows only. The overview's facet and summary
@@ -362,7 +372,13 @@
         ;; A filter the entity does not offer is dropped, not run
         allowed       (into {} (filter #(filters/queryable-field? entity-config :filterable (key %)))
                             (:filters options))
-        [plain links] (link-filters entity-config allowed)
+        ;; "true" from a form never equals SQLite's 1
+        typed         (into {} (map (fn [[field spec]]
+                                      [field (if (= :boolean (get-in entity-config [:fields field :type]))
+                                               (if (map? spec) (update spec :value as-boolean) (as-boolean spec))
+                                               spec)]))
+                            allowed)
+        [plain links] (link-filters entity-config typed)
         filters       (into {} (map (fn [[field spec]] [(col field) spec])) plain)]
     (combine-where-clauses
      (concat
@@ -530,7 +546,10 @@
                      (assoc k (or (type-conversion/string->uuid v) v))
 
                      (and (= :instant type) (some? v) (not (inst? v)))
-                     (assoc k (or (type-conversion/string->instant v) v)))))
+                     (assoc k (or (type-conversion/string->instant v) v))
+
+                     (and (= :boolean type) (some? v))
+                     (assoc k (as-boolean v)))))
                row
                (:fields entity-config))))
 

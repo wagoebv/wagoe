@@ -905,12 +905,14 @@ DROP TABLE IF EXISTS %s;
 ;; Persistence File Generator
 ;; =============================================================================
 
-(defn- enum-field-set
-  "The entity's enum fields as a set literal, e.g. `#{:status}`."
-  [entity]
-  (str "#{" (str/join " " (for [f (:fields entity) :when (= :enum (:field-type f))]
+(defn- field-set
+  "The entity's fields of `field-type` as a set literal, e.g. `#{:status}`."
+  [entity field-type]
+  (str "#{" (str/join " " (for [f (:fields entity) :when (= field-type (:field-type f))]
                             (str ":" (:field-name-kebab f))))
        "}"))
+
+(defn- enum-field-set [entity] (field-set entity :enum))
 
 (defn generate-persistence-file
   "Generate shell/persistence.clj file content.
@@ -962,13 +964,18 @@ DROP TABLE IF EXISTS %s;
           "  \"Keywords in Clojure, strings in the database.\"\n"
           "  " (enum-field-set entity) ")\n"
           "\n"
+          "(def ^:private boolean-fields\n"
+          "  \"SQLite reads a boolean back as 0 or 1, and 0 is truthy.\"\n"
+          "  " (field-set entity :boolean) ")\n"
+          "\n"
           "(defn- ->row [entity]\n"
           "  (reduce (fn [m k] (cond-> m (keyword? (get m k)) (update k name))) entity enum-fields))\n"
           "\n"
           "(defn- ->entity [row]\n"
           "  (some-> row\n"
           "          (update-vals date->iso)\n"
-          "          (as-> r (reduce (fn [m k] (cond-> m (string? (get m k)) (update k keyword))) r enum-fields))))\n"
+          "          (as-> r (reduce (fn [m k] (cond-> m (string? (get m k)) (update k keyword))) r enum-fields))\n"
+          "          (as-> r (reduce (fn [m k] (cond-> m (number? (get m k)) (update k (complement zero?)))) r boolean-fields))))\n"
           "\n"
           "(defn- select-by-id [db-ctx id]\n"
           "  (->entity (db/execute-one! db-ctx {:select [:*] :from [:" table-name "] :where [:= :id id]})))\n"

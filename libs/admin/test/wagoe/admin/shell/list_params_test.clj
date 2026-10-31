@@ -23,6 +23,8 @@
                    (when (.exists f) (slurp f)))
                 ["libs" ".."]))))
 
+(def ^:private ^:dynamic *repo* nil)
+
 (defn- with-admin [f]
   (doseq [[engine open] [[:sqlite #(let [db (java.io.File/createTempFile "admin-params-" ".db")]
                                      (.deleteOnExit db)
@@ -45,7 +47,7 @@
             (doseq [[e role] [["ada@example.com" :user] ["bram@example.com" :admin]]]
               (user-ports/create-user repo {:email e :name e :role role :active true
                                             :password-hash "$2a$12$secret"}))
-            (f admin))
+            (binding [*repo* repo] (f admin)))
           (finally (factory/close-db-context! ctx)))))))
 
 (defn- emails [admin query-params]
@@ -89,3 +91,18 @@
     (fn [admin]
       (is (= 2 (ports/count-entities admin :users {:password-hash "nope"})))
       (is (= 1 (ports/count-entities admin :users {:role "admin"}))))))
+
+(deftest ^:integration a-boolean-reads-and-filters-as-one
+  ;; SQLite stores it as 0/1: a deactivated user rendered as active, so saving
+  ;; any other field reactivated them, and the active filter matched nothing
+  (with-admin
+    (fn [admin]
+      (let [id-of  (fn [email] (:id (first (filter #(= email (:email %))
+                                                   (:records (ports/list-entities admin :users {}))))))
+            active (fn [email] (:active (ports/get-entity admin :users (id-of email))))]
+        (user-ports/update-user *repo* (assoc (user-ports/find-user-by-email *repo* "ada@example.com") :active false))
+        (is (false? (active "ada@example.com")))
+        (is (true? (active "bram@example.com")))
+        (is (= ["bram@example.com"] (emails admin {"filters[active][op]" "eq" "filters[active][value]" "true"})))
+        (is (= ["ada@example.com"] (emails admin {"filters[active][op]" "eq" "filters[active][value]" "false"})))
+        (is (= ["bram@example.com"] (emails admin {"active" "true"})))))))
