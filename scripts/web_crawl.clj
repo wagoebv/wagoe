@@ -7,8 +7,9 @@
 ;;
 ;; Follows href, hx-get and form GET actions under /web, so a table's sort,
 ;; filter and page links are opened too. Exits 1 naming each failure.
-(require '[babashka.http-client :as http]
-         '[clojure.string :as str])
+(ns web-crawl
+  (:require [babashka.http-client :as http]
+            [clojure.string :as str]))
 
 (def max-pages 600)
 ;; A table emits one link per sort, page and filter; the shape is what breaks,
