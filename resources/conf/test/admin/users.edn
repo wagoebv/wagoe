@@ -38,7 +38,8 @@
 
   :fields
   {:email      {:label [:t :admin.users/field-email]      :filterable false}
-   :name       {:label [:t :admin.users/field-name]       :filterable false}
+   ;; Typed here: SQLite reports TEXT and INTEGER, which read as long text and a number
+   :name       {:type :string :label [:t :admin.users/field-name] :filterable false}
    :role       {:type :enum
                 :label [:t :admin.users/field-role]
                 :help-text [:t :admin.users/role-help]
@@ -66,9 +67,9 @@
                  :label [:t :admin.users/field-time-format]
                  :options [[:12h [:t :admin.users/time-format-12h]]
                            [:24h [:t :admin.users/time-format-24h]]]}
-   :notifications-email {:label [:t :admin.users/field-notifications-email]}
-   :notifications-push  {:label [:t :admin.users/field-notifications-push]}
-   :notifications-sms   {:label [:t :admin.users/field-notifications-sms]}}
+   :notifications-email {:type :boolean :label [:t :admin.users/field-notifications-email]}
+   :notifications-push {:type :boolean :label [:t :admin.users/field-notifications-push]}
+   :notifications-sms {:type :boolean :label [:t :admin.users/field-notifications-sms]}}
 
   :field-order     [:email
                     :name

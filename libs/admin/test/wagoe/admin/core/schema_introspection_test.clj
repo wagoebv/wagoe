@@ -900,3 +900,12 @@
     (is (= [:doc] (map :field (introspection/upload-errors :p {:fields {:doc {:type :binary :widget :hidden}}}))))
     (is (= [:doc] (map :field (introspection/upload-errors :p {:fields {:doc {:type :binary}}})))
         "with no widget a field renders as a text input")))
+
+(deftest ^:unit a-name-hint-does-not-override-a-non-text-type
+  ;; SQLite stores a boolean as INTEGER: notifications_email became an email
+  ;; input holding "0", and the browser refused to submit the users form
+  (is (= :number-input (introspection/infer-widget-for-field :notifications-email :int "INTEGER")))
+  (is (= :checkbox (introspection/infer-widget-for-field :notifications-email :boolean "INTEGER")))
+  (is (= :email-input (introspection/infer-widget-for-field :email :string "TEXT")))
+  (is (= :url-input (introspection/infer-widget-for-field :avatar-url :text "TEXT")))
+  (is (= :datetime-input (introspection/infer-widget-for-field :contact-email-sent-at :instant "TEXT"))))
