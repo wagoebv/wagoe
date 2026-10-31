@@ -471,6 +471,12 @@
         (is (contains? (get-in with [:active env]) :wagoe/user) env)
         (is (not (contains? (get-in without [:active env]) :wagoe/user)) env)))
 
+    (testing "and brings the admin, where the user pages live"
+      ;; Without it a created user redirected to a 404 (1.1.0).
+      (doseq [env ["dev" "test"]]
+        (is (contains? (get-in with [:active env]) :wagoe/admin) env)
+        (is (not (contains? (get-in without [:active env]) :wagoe/admin)) env)))
+
     (testing "and the code no longer enables it"
       (is (not (str/includes? (:code with) ":extra-modules"))))
 
@@ -669,7 +675,8 @@
         (is (str/includes? installed "- i18n (") "the platform always runs it")
         (is (str/includes? installed "- external (") "in deps.edn with nothing to configure")
         (is (str/includes? in-deps "wagoe add ai") "in deps.edn, its config key missing")
-        (is (re-find #"(?s)In deps\.edn but not switched on.*wagoe add admin" in-deps)
+        (is (str/includes? installed "- admin (") "switched on with user")
+        (is (re-find #"(?s)In deps\.edn but not switched on.*wagoe add ai" in-deps)
             "in deps.edn, not yet in config, and said so")
         (is (str/includes? in-deps "wagoe add workflow"))
         (doseq [[_ m] (re-seq #"wagoe add ([a-z0-9-]+)" (or not-in-deps ""))]

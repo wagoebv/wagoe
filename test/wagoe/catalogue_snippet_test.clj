@@ -70,13 +70,19 @@
    `#env`, `#or` and `#long`, and approximating those is how a probe for this
    turned an unset credential into `nil` and blamed the module — the tags mean
    what Aero says they mean, and the application reads them the same way."
-  [snippet]
-  (when (seq (str/trim (or snippet "")))
-    (let [f (java.io.File/createTempFile "snippet" ".edn")]
-      (try
-        (spit f (str "{" snippet "}"))
-        (aero/read-config f {:profile :test})
-        (finally (.delete f))))))
+  ([snippet] (snippet-settings snippet nil))
+  ([snippet config-files]
+   ;; With the files `wagoe add` writes beside it, which the snippet may #include.
+   (when (seq (str/trim (or snippet "")))
+     (let [dir (.toFile (java.nio.file.Files/createTempDirectory "snippet" (make-array java.nio.file.attribute.FileAttribute 0)))
+           f   (io/file dir "config.edn")]
+       (try
+         (doseq [[rel tmpl] config-files]
+           (io/make-parents (io/file dir rel))
+           (spit (io/file dir rel) (slurp (io/file "libs/wagoe-cli/resources/wagoe/cli/templates" tmpl))))
+         (spit f (str "{" snippet "}"))
+         (aero/read-config f {:profile :test})
+         (finally (doseq [x (reverse (file-seq dir))] (.delete x))))))))
 
 (deftest ^:integration the-audience-snippet-boots-the-module
   (let [entry (module "audience")]
@@ -160,7 +166,7 @@
             :let    [entry    (get by-lib lib)
                      ;; devtools' snippet is the dashboard, which refuses the
                      ;; test profile; its other key boots on its own.
-                     settings (not-empty (apply dissoc (snippet-settings (dev-snippet entry))
+                     settings (not-empty (apply dissoc (snippet-settings (dev-snippet entry) (:config-files entry))
                                                 (keys modules/dev-only-modules)))
                      active   (merge (get prerequisites lib)
                                      (or settings {k {:enabled? true}}))]]

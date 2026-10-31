@@ -151,8 +151,11 @@
       (write-file! dir target (templates/render (templates/read-template tmpl) subs)))
     (.setExecutable (io/file dir ".githooks/pre-commit") true false)
     ;; In every profile's :active, which is what `migrate up` reads (BOU-667).
+    ;; Admin too: the user pages live in its shell, and without it a created
+    ;; user redirected to a 404.
     (when with-user?
-      (add/patch-configs! dir (cat/find-module "user")))
+      (add/patch-configs! dir (cat/find-module "user"))
+      (add/patch-configs! dir (cat/find-module "admin")))
     ;; What the files just written hold, not a list kept by hand (BOU-573).
     (add/sync-agents-md! dir)))
 

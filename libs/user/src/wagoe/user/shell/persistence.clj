@@ -421,6 +421,17 @@
 ;; User Repository Implementation
 ;; =============================================================================
 
+;; Both tables have created_at and updated_at, and SQLite refuses an unqualified
+;; one in ORDER BY. A field not listed here sorts by the default.
+(def ^:private user-sort-columns
+  {:email      :a.email
+   :active     :a.active
+   :created-at :a.created_at
+   :updated-at :a.updated_at
+   :name       :u.name
+   :role       :u.role
+   :last-login :u.last_login})
+
 (defrecord DatabaseUserRepository [ctx]
   ports/IUserRepository
 
@@ -569,7 +580,7 @@
 
           ;; Build pagination & ordering (default to a.created_at)
           pagination (db/build-pagination options)
-          ordering (db/build-ordering options :a.created_at)
+          ordering (db/build-ordering (assoc options :sort-by (get user-sort-columns (:sort-by options) :a.created_at)) :a.created_at)
 
           ;; Build query with JOIN - select all fields from both tables.
           ;; COUNT(*) OVER() is a window function that returns the total matching rows

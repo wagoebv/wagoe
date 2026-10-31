@@ -317,13 +317,26 @@
                  ": the app will refuse to boot in " env " until " path
                  " switches its :active database."))))))
 
+(defn- write-config-files!
+  "Write the module's :config-files beside `path`, and beside `env`'s own
+   config.edn, which the snippet may land in instead. A file already there is
+   the app's, and is left alone. First, so the patched config reads."
+  [dir {:keys [config-files]} env path]
+  (doseq [parent (distinct (map #(.getParent (io/file %)) [path (profile/profile-file env)]))
+          [rel tmpl] config-files
+          :let [f (io/file dir parent rel)]
+          :when (not (.exists f))]
+    (io/make-parents f)
+    (spit f (templates/read-template tmpl))))
+
 (defn patch-configs!
   "Patch every existing resources/conf/<profile>/config.edn. Returns
    [[env result]], result as `patch-config!` returns it. Only dev and test
    were written, so a module was missing under WAG_ENV=prod (BOU-529)."
   [dir module]
   (vec (for [[env snippet path] (target-profiles dir module)]
-         [env (patch-config! dir path snippet)])))
+         (do (write-config-files! dir module env path)
+             [env (patch-config! dir path snippet)]))))
 
 (defn installed?
   "Whether `module` needs nothing more: its dep is there and every profile it

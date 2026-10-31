@@ -7,6 +7,7 @@
             [wagoe.cli.catalogue :as cat]
             [wagoe.cli.config-edn :as config-edn]
             [wagoe.cli.new :as new]
+            [wagoe.cli.profile :as profile]
             [wagoe.cli.templates :as templates]))
 
 (defn- make-wagoe-project! [dir]
@@ -325,12 +326,12 @@
   (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-agents-" (System/currentTimeMillis))]
     (try
       (new/generate! tmp "shop" {})
-      (let [admin (cat/find-module "admin")]
-        (is (str/includes? (agents-block tmp "wagoe:available-modules") "wagoe add admin"))
-        (add/patch-configs! tmp admin)
+      (let [workflow (cat/find-module "workflow")]
+        (is (str/includes? (agents-block tmp "wagoe:available-modules") "wagoe add workflow"))
+        (add/patch-configs! tmp workflow)
         (add/sync-agents-md! tmp)
-        (is (not (str/includes? (agents-block tmp "wagoe:available-modules") "wagoe add admin")))
-        (is (str/includes? (agents-block tmp "wagoe:installed-modules") "- admin ("))
+        (is (not (str/includes? (agents-block tmp "wagoe:available-modules") "wagoe add workflow")))
+        (is (str/includes? (agents-block tmp "wagoe:installed-modules") "- workflow ("))
         (testing "a module not in deps.edn gets its dependency named"
           (spit (io/file tmp "deps.edn")
                 (str/replace (slurp (io/file tmp "deps.edn")) #"(?m)^.*com\.wagoe/wagoe-geo .*$" ""))
@@ -669,4 +670,30 @@
                                                     "  :wagoe/extra\n  {}\n")))))
       (finally
         (System/setProperty "user.dir" home)
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration adding-admin-gives-it-the-users-entity
+  ;; The user pages link to /web/admin/users. Admin switched on without the
+  ;; users entity answered those links with a 404.
+  (let [tmp (str (System/getProperty "java.io.tmpdir") "/wagoe-add-admin-" (System/nanoTime))
+        shipped (some #(let [f (io/file % "tools/resources/wagoe/tools/admin/users.edn")]
+                         (when (.exists f) (slurp f)))
+                      [".." "libs"])]
+    (try
+      (new/generate! tmp "shop" {:with-user? false})
+      (add/patch-configs! tmp (cat/find-module "admin"))
+      (doseq [env ["dev" "test"]]
+        (testing env
+          (let [path   (str "resources/conf/" env "/config.edn")
+                config @(:config ((profile/reader tmp) path))]
+            (is (= #{:users} (get-in config [:active :wagoe/admin :entity-discovery :allowlist])))
+            (is (contains? (get-in config [:active :wagoe/admin :entities]) :users)
+                "admin/users.edn is written and included"))
+          (is (= shipped (slurp (io/file tmp "resources/conf" env "admin/users.edn")))
+              "the file bb setup ships")))
+      (testing "an existing admin/users.edn is the app's own, and stays"
+        (spit (io/file tmp "resources/conf/dev/admin/users.edn") "{:users {:label \"Mine\"}}")
+        (add/patch-configs! tmp (cat/find-module "admin"))
+        (is (= "{:users {:label \"Mine\"}}" (slurp (io/file tmp "resources/conf/dev/admin/users.edn")))))
+      (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))

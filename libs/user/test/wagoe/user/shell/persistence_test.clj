@@ -3,6 +3,7 @@
             [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.shell.adapters.database.sqlite.core :as sqlite]
             [wagoe.platform.shell.adapters.database.utils.schema :as schema-utils]
+            [wagoe.user.ports :as ports]
             [wagoe.user.shell.persistence :as sut]
             [support.test-db :as test-db]
             [cheshire.core :as json]
@@ -152,3 +153,33 @@
           (sut/initialize-user-schema! upgraded)
           (doseq [table (keys sut/tables)]
             (is (= (column-types fresh table) (column-types upgraded table)) table)))))))
+
+(deftest ^:integration find-users-sorts-on-a-column-both-tables-have
+  ;; auth_users and users both have created_at, the users page's default sort.
+  ;; SQLite refused it unqualified as ambiguous; H2 and PostgreSQL read it as
+  ;; the select list's column.
+  (doseq [[engine open] [[:sqlite #(let [f (java.io.File/createTempFile "user-sort-" ".db")]
+                                    (.deleteOnExit f)
+                                    (factory/db-context (factory/sqlite-config (str f))))]
+                         [:h2 #(factory/db-context
+                                (factory/h2-config (str "mem:user_sort_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]]]
+    (testing (name engine)
+      (let [ctx (open)]
+        (try
+          (sut/initialize-user-schema! ctx)
+          (let [repo   (sut/create-user-repository ctx)
+                add!   #(ports/create-user repo {:email % :name % :role :user :active true :password-hash "x"})
+                emails #(mapv :email (:users (ports/find-users repo %)))]
+            (add! "b-old@example.com")
+            (Thread/sleep 5)
+            (add! "a-new@example.com")
+            (is (= ["a-new@example.com" "b-old@example.com"]
+                   (emails {:sort-by :created-at :sort-direction :desc})))
+            (is (= ["b-old@example.com" "a-new@example.com"]
+                   (emails {:sort-by :created-at :sort-direction :asc})))
+            (is (= ["a-new@example.com" "b-old@example.com"]
+                   (emails {:sort-by :email :sort-direction :asc})))
+            (is (= ["b-old@example.com" "a-new@example.com"]
+                   (emails {:sort-by :no-such-column :sort-direction :asc}))
+                "an unknown sort falls back to created_at"))
+          (finally (factory/close-db-context! ctx)))))))

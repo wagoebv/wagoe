@@ -45,13 +45,10 @@
       (is (mentions? text "localhost:3000"))
       (is (seq paths)))
 
-    (testing "no admin path without the step that adds the admin module"
-      ;; The failure was structural: the page ended on an admin URL and never
-      ;; mentioned `wagoe add admin`, because admin is not in the generated
-      ;; config. Either both or neither.
+    (testing "no admin path without the step that makes an admin"
+      ;; `wagoe new` switches the admin on (1.1.1); `wagoe add admin` was the
+      ;; step this checked for before.
       (when (some #(str/includes? % "admin") paths)
-        (is (mentions? text "wagoe add admin")
-            "the page sends you to an admin URL without telling you to add the module")
         (is (mentions? text "bb create-admin")
             "admin needs a signed-in admin, and a new project has no users")))
 
