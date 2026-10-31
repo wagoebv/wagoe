@@ -57,7 +57,7 @@
                 :label [:t :admin.users/field-language]
                 :options [[:en [:t :admin.users/language-en]]
                           [:nl [:t :admin.users/language-nl]]]}
-   :timezone   {:options-source :timezones :label [:t :admin.users/field-timezone]}
+   :timezone   {:type :string :options-source :timezones :label [:t :admin.users/field-timezone]}
    :date-format {:type :enum
                  :label [:t :admin.users/field-date-format]
                  :options [[:iso [:t :admin.users/date-format-iso]]
