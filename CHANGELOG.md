@@ -33,6 +33,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **The users page no longer fails on SQLite with `ambiguous column name: created_at`** (BOU-919), and an unknown `?sort=`
   sorts by date instead of failing. Nothing to do.
+- **Admin lists filter and sort only on fields the entity shows** (BOU-921); anything else is ignored rather than
+  answering 500. Upgrade; see the security advisory.
+- **Deleted users no longer appear in user lists, and the audit trail ignores a sort it does not offer** (BOU-922).
+  Nothing to do.
 - **`wagoe new` switches the admin on, and `wagoe add admin` gives it the users entity** (BOU-920): the user pages link there,
   and a created user landed on a 404. An app whose `:wagoe/admin` has no `:entities`: copy them from a new app.
 
