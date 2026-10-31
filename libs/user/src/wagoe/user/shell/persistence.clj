@@ -1165,7 +1165,9 @@
 
 ;; The sort comes from the request; any other field sorts by time
 (def ^:private audit-sort-columns
-  {:created-at        :created_at
+  ;; :id is the data export's keyset order (after-id)
+  {:id                :id
+   :created-at        :created_at
    :action            :action
    :actor-email       :actor_email
    :target-user-email :target_user_email
