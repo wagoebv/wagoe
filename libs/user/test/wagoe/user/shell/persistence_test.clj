@@ -183,3 +183,38 @@
                    (emails {:sort-by :no-such-column :sort-direction :asc}))
                 "an unknown sort falls back to created_at"))
           (finally (factory/close-db-context! ctx)))))))
+
+(defn- with-user-db [f]
+  (doseq [[engine open] [[:sqlite #(let [db (java.io.File/createTempFile "user-db-" ".db")]
+                                    (.deleteOnExit db)
+                                    (factory/db-context (factory/sqlite-config (str db))))]
+                         [:h2 #(factory/db-context
+                                (factory/h2-config (str "mem:user_db_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]]]
+    (testing (name engine)
+      (let [ctx (open)]
+        (try (sut/initialize-user-schema! ctx)
+             (f ctx)
+             (finally (factory/close-db-context! ctx)))))))
+
+(deftest ^:integration find-users-leaves-out-a-deleted-user
+  ;; {:deleted-at nil} was a filter the where builder dropped, so a deleted
+  ;; user was listed wherever :filter-active true did not hide it
+  (with-user-db
+    (fn [ctx]
+      (let [repo (sut/create-user-repository ctx)
+            add! #(ports/create-user repo {:email % :name % :role :user :active true :password-hash "x"})
+            gone (add! "gone@example.com")]
+        (add! "here@example.com")
+        (ports/soft-delete-user repo (:id gone))
+        (is (= ["here@example.com"] (mapv :email (:users (ports/find-users repo {})))))
+        (is (= 1 (:total-count (ports/find-users repo {}))))
+        (is (= #{"gone@example.com" "here@example.com"}
+               (set (map :email (:users (ports/find-users repo {:include-deleted? true}))))))))))
+
+(deftest ^:integration the-audit-trail-ignores-a-sort-it-does-not-offer
+  (with-user-db
+    (fn [ctx]
+      (let [audit (sut/create-audit-repository ctx {:default-limit 20})]
+        (is (map? (ports/find-audit-logs audit {:sort-by :nope :sort-direction :sideways})))
+        (is (map? (ports/find-audit-logs audit {:sort-by :action :sort-direction :asc})))
+        (is (seqable? (ports/find-audit-logs-by-user audit (java.util.UUID/randomUUID) {:sort-by :nope})))))))

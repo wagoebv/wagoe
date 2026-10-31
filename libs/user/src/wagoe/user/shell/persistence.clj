@@ -534,7 +534,6 @@
 
           ;; Build separate filters for auth_users and users tables
           auth-filters (cond-> {}
-                         (not (:include-deleted? options)) (assoc :deleted-at nil)
                          (contains? options :filter-active) (assoc :active (:filter-active options)))
 
           profile-filters (cond-> {}
@@ -559,6 +558,10 @@
           ;; Handle email LIKE separately (on auth_users table)
           contains    #(protocols/like (:adapter ctx) %1 :contains %2)
           where-parts (cond-> where-parts
+                        ;; Its own condition: the where builder drops a nil value
+                        (not (:include-deleted? options))
+                        (conj [:= :a.deleted_at nil])
+
                         (:filter-email-contains options)
                         (conj (contains :a.email (:filter-email-contains options)))
 
@@ -1158,6 +1161,18 @@
 ;; Audit Log Repository Implementation
 ;; =============================================================================
 
+;; The sort comes from the request; any other field sorts by time
+(def ^:private audit-sort-columns
+  {:created-at        :created_at
+   :action            :action
+   :actor-email       :actor_email
+   :target-user-email :target_user_email
+   :result            :result
+   :ip-address        :ip_address})
+
+(defn- audit-sort-column [field]
+  (get audit-sort-columns field :created_at))
+
 (defn- query-audit-logs
   "find-audit-logs, and find-audit-logs-with-actions through `:filter-actions`."
   [ctx pagination-config options]
@@ -1169,10 +1184,8 @@
         default-limit (get pagination-config :default-limit 20)
         limit (or limit default-limit)
         offset (or offset 0)
-        sort-by-kebab (or sort-by :created-at)
-        ;; Convert kebab-case to snake_case for database column
-        sort-by-db (keyword (.replace (name sort-by-kebab) "-" "_"))
-        sort-direction (or sort-direction :desc)
+        sort-by-db (audit-sort-column sort-by)
+        sort-direction (if (#{:asc :desc} sort-direction) sort-direction :desc)
         where-clauses (cond-> []
                         filter-target-user-id
                         (conj [:= :target_user_id (type-conversion/uuid->string filter-target-user-id)])
@@ -1257,10 +1270,8 @@
              default-limit (get pagination-config :default-limit 20)
              limit (or limit default-limit)
              offset (or offset 0)
-             sort-by-kebab (or sort-by :created-at)
-             ;; Convert kebab-case to snake_case for database column
-             sort-by-db (keyword (.replace (name sort-by-kebab) "-" "_"))
-             sort-direction (or sort-direction :desc)
+             sort-by-db (audit-sort-column sort-by)
+             sort-direction (if (#{:asc :desc} sort-direction) sort-direction :desc)
              query {:select [:*]
                     :from [:user_audit_log]
                     :where [:= :target_user_id (type-conversion/uuid->string user-id)]
