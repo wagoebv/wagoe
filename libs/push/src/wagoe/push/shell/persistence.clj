@@ -40,7 +40,8 @@
     (-> row
         (update :id tc/string->uuid)
         (update :platform keyword)
-        (assoc :active? (boolean (:active row)))
+        ;; SQLite reads 0 back, which `boolean` calls true
+        (assoc :active? (tc/int->boolean (:active row)))
         (dissoc :active))))
 
 (defn- upsert-device!

@@ -172,22 +172,27 @@
   (if-not field-name
     :text-input
     (let [field-name-str (name field-name)
-          field-name-lower (text/lower-case field-name-str)]
+          field-name-lower (text/lower-case field-name-str)
+          ;; A name hints at a widget only for text: SQLite stores a boolean as
+          ;; INTEGER, and notifications_email became an email input holding "0"
+          ;; that the browser would not submit
+          hint?          (contains? #{:string :text} field-type)]
       (cond
         ;; Before the name heuristics: a `content` BYTEA is a file, not a textarea
         (= field-type :binary) :file-input
 
         ; Special field name heuristics
-        (str/includes? field-name-lower "email") :email-input
-        (str/includes? field-name-lower "password") :password-input
-        (or (str/includes? field-name-lower "url")
-            (str/includes? field-name-lower "website")) :url-input
-        (str/includes? field-name-lower "color") :color-input
-        (str/includes? field-name-lower "description") :textarea
-        (str/includes? field-name-lower "bio") :textarea
-        (str/includes? field-name-lower "notes") :textarea
-        (str/includes? field-name-lower "content") :textarea
-        (and (str/ends-with? field-name-lower "-date")
+        (and hint? (str/includes? field-name-lower "email")) :email-input
+        (and hint? (str/includes? field-name-lower "password")) :password-input
+        (and hint? (or (str/includes? field-name-lower "url")
+                       (str/includes? field-name-lower "website"))) :url-input
+        (and hint? (str/includes? field-name-lower "color")) :color-input
+        (and hint? (str/includes? field-name-lower "description")) :textarea
+        (and hint? (str/includes? field-name-lower "bio")) :textarea
+        (and hint? (str/includes? field-name-lower "notes")) :textarea
+        (and hint? (str/includes? field-name-lower "content")) :textarea
+        (and hint?
+             (str/ends-with? field-name-lower "-date")
              (not (str/includes? field-name-lower "format"))) :date-input
 
         ; Type-based widget selection

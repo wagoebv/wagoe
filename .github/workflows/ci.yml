@@ -1130,6 +1130,57 @@ jobs:
       - name: Run MySQL smoke
         run: ./scripts/mysql-smoke.sh
 
+  # Every web page of a fresh app, on each engine apps run on. The e2e suite
+  # runs on H2, which accepted the SQL 1.1.0 failed with on SQLite (BOU-923).
+  web-crawl-smoke:
+    name: Web crawl (${{ matrix.engine }})
+    runs-on: ubuntu-latest
+    needs: [warm-deps, changes]
+    if: needs.changes.outputs.code == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [sqlite, postgresql, mysql]
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: probe
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -uroot -pprobe --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Clojure + warm deps
+        uses: ./.github/actions/clojure-deps
+        with:
+          aliases: "-"
+
+      - name: Setup bb
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
+
+      - name: Run web crawl smoke
+        run: ./scripts/web-crawl-smoke.sh ${{ matrix.engine }}
+
   test-scaffolder:
     name: Test wagoe/scaffolder
     runs-on: ubuntu-latest
@@ -1682,7 +1733,7 @@ jobs:
     # always(): with the default, a failed job skips this one, and GitHub
     # counts a skipped required check as passing (BOU-615).
     if: always()
-    needs: [changes, warm-deps, checks, lint, first-run-smoke, build-ui-assets, docs-lint, command-smoke, i18n-scan, check-isolation-matrix, build-uberjar, test-tools, example-smoke, test-i18n, test-config, test-app, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-test-kit, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-mysql-suites, mysql-smoke, test-scaffolder, test-external, test-payments, test-push, test-webhooks, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui, e2e]
+    needs: [changes, warm-deps, checks, lint, first-run-smoke, build-ui-assets, docs-lint, command-smoke, i18n-scan, check-isolation-matrix, build-uberjar, test-tools, example-smoke, test-i18n, test-config, test-app, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-test-kit, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-mysql-suites, mysql-smoke, web-crawl-smoke, test-scaffolder, test-external, test-payments, test-push, test-webhooks, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui, e2e]
 
     steps:
       - name: Every job passed, or was skipped on a docs-only change or untouched library

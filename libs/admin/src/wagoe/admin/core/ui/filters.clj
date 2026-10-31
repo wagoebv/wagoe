@@ -331,6 +331,18 @@
   [filters]
   (into {} (remove (comp blank-filter? val)) filters))
 
+(defn queryable-field?
+  "Whether a request may filter (`purpose` :filterable) or sort (:sortable) a
+   list on `field`: one of the entity's fields, not hidden and not opted out,
+   or for a filter one of its many-to-many keys. A hidden field is never one:
+   a filter on the users' password hash leaked it a character at a time."
+  [entity-config purpose field]
+  (or (and (contains? (:fields entity-config) field)
+           (not (contains? (set (:hide-fields entity-config)) field))
+           (get-in entity-config [:fields field purpose] true))
+      (and (= :filterable purpose)
+           (some #(= field (:key %)) (:many-to-many entity-config)))))
+
 (defn filterable-fields
   "The fields a list can filter on: its columns (all fields without
    :list-fields) that are columns of the table and not :filterable false,

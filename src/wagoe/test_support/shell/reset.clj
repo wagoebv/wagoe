@@ -1,7 +1,8 @@
 (ns wagoe.test-support.shell.reset
-  "Side-effecting reset of the H2 test database.
+  "Side-effecting reset of the test database.
    Safe to call only in the :test profile."
-  (:require [next.jdbc :as jdbc]
+  (:require [clojure.string :as str]
+            [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
             [next.jdbc.sql :as sql]
             [clojure.tools.logging :as log]
@@ -102,21 +103,42 @@
   (seed-customers! ds)
   (seed-labels! ds))
 
+(defn- engine [tx]
+  (let [product (.getDatabaseProductName (.getMetaData ^java.sql.Connection tx))]
+    (cond (re-find #"(?i)postgres" product) :postgresql
+          (re-find #"(?i)sqlite" product)   :sqlite
+          (re-find #"(?i)mysql" product)    :mysql
+          :else                             :h2)))
+
+(defn- existing-tables [tx]
+  (let [md (.getMetaData ^java.sql.Connection tx)]
+    (with-open [rs (.getTables md nil nil "%" (into-array String ["TABLE"]))]
+      (loop [acc #{}]
+        (if (.next rs) (recur (conj acc (.toLowerCase (.getString rs "TABLE_NAME")))) acc)))))
+
 (defn truncate-all!
-  "Truncates every table the e2e suite might touch. Uses H2's
-   SET REFERENTIAL_INTEGRITY FALSE because H2 does not support
-   TRUNCATE ... CASCADE."
+  "Empties every table the e2e suite might touch, with each engine's way of
+   setting foreign keys aside: the suite runs on H2 by default, and on the
+   other engines to catch SQL only H2 accepts."
   [ds]
   (create-fixture-tables! ds)
   (jdbc/with-transaction [tx ds]
-    (jdbc/execute! tx ["SET REFERENTIAL_INTEGRITY FALSE"])
-    (try
-      (doseq [t tables-in-truncation-order]
-        (jdbc/execute! tx [(str "TRUNCATE TABLE " t)]))
-      ;; Everyone stays: the user module creates it only at boot.
-      (jdbc/execute! tx ["DELETE FROM user_groups WHERE id <> ?" (str group/everyone-id)])
-      (finally
-        (jdbc/execute! tx ["SET REFERENTIAL_INTEGRITY TRUE"]))))
+    (let [eng    (engine tx)
+          tables (filter (existing-tables tx) tables-in-truncation-order)
+          [off on empty!] (case eng
+                            :h2         ["SET REFERENTIAL_INTEGRITY FALSE" "SET REFERENTIAL_INTEGRITY TRUE" #(str "TRUNCATE TABLE " %)]
+                            :mysql      ["SET FOREIGN_KEY_CHECKS = 0" "SET FOREIGN_KEY_CHECKS = 1" #(str "DELETE FROM " %)]
+                            :sqlite     ["PRAGMA defer_foreign_keys = ON" nil #(str "DELETE FROM " %)]
+                            :postgresql [nil nil nil])]
+      (when off (jdbc/execute! tx [off]))
+      (try
+        (if empty!
+          (doseq [t tables] (jdbc/execute! tx [(empty! t)]))
+          (jdbc/execute! tx [(str "TRUNCATE TABLE " (str/join ", " tables) " CASCADE")]))
+        ;; Everyone stays: the user module creates it only at boot.
+        (jdbc/execute! tx ["DELETE FROM user_groups WHERE id <> ?" (str group/everyone-id)])
+        (finally
+          (when on (jdbc/execute! tx [on]))))))
   (log/debug "test-support: truncated all tables"))
 
 (defn seed-baseline!
@@ -145,7 +167,9 @@
   [{:keys [user-service tenant-service]}]
   (let [spec            (core/baseline-seed-spec)
         tenant-input    (select-keys (:tenant spec) [:slug :name])
-        tenant          (tenant-ports/create-new-tenant tenant-service tenant-input)
+        ;; Tenancy is off on an engine it does not run on
+        tenant          (when tenant-service
+                          (tenant-ports/create-new-tenant tenant-service tenant-input))
         admin-spec      (:admin spec)
         user-spec       (:user spec)
         created-admin   (user-ports/register-user user-service admin-spec)

@@ -6,7 +6,7 @@ in process, and makes the asynchronous parts deterministic.
 
 ```clojure
 ;; deps.edn
-:test {:extra-deps {com.wagoe/wagoe-test {:mvn/version "1.1.0"}}}
+:test {:extra-deps {com.wagoe/wagoe-test {:mvn/version "1.1.1"}}}
 ```
 
 ```clojure

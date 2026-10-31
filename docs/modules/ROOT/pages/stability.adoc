@@ -12,7 +12,7 @@ at `1.0.1`, and the surface below is the one it promises.
 | |
 
 | Current version
-| `1.1.0`
+| `1.1.1`
 
 | Stability
 | Stable. Semantic Versioning applies to the public surface — see

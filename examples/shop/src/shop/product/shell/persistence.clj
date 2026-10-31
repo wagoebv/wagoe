@@ -16,13 +16,18 @@
   "Keywords in Clojure, strings in the database."
   #{})
 
+(def ^:private boolean-fields
+  "SQLite reads a boolean back as 0 or 1, and 0 is truthy."
+  #{})
+
 (defn- ->row [entity]
   (reduce (fn [m k] (cond-> m (keyword? (get m k)) (update k name))) entity enum-fields))
 
 (defn- ->entity [row]
   (some-> row
           (update-vals date->iso)
-          (as-> r (reduce (fn [m k] (cond-> m (string? (get m k)) (update k keyword))) r enum-fields))))
+          (as-> r (reduce (fn [m k] (cond-> m (string? (get m k)) (update k keyword))) r enum-fields))
+          (as-> r (reduce (fn [m k] (cond-> m (number? (get m k)) (update k (complement zero?)))) r boolean-fields))))
 
 (defn- select-by-id [db-ctx id]
   (->entity (db/execute-one! db-ctx {:select [:*] :from [:products] :where [:= :id id]})))

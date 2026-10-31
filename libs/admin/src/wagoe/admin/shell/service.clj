@@ -22,6 +22,7 @@
    [wagoe.admin.core.schema-introspection :as introspection]
    [wagoe.admin.core.display :as display]
    [wagoe.admin.core.forms :as forms]
+   [wagoe.admin.core.ui.filters :as filters]
    [wagoe.events.core.event :as event]
    [wagoe.events.ports :as events]
    [wagoe.platform.core.scope :as scope]
@@ -349,16 +350,36 @@
                                                  (fn? %)      (own-rows entity-config %)
                                                  :else        %))))
 
+(defn- as-boolean
+  "A boolean read or sent as SQLite's 0/1 or a form's \"true\"/\"false\"; else as is.
+   0 is truthy, so an unconverted false rendered a ticked checkbox."
+  [v]
+  (cond (boolean? v)                v
+        (number? v)                 (not (zero? (long v)))
+        (#{"true" "1" "on"} v)      true
+        (#{"false" "0" "off"} v)    false
+        :else                       v))
+
 (defn- list-where
   "The WHERE a list applies for `options`: its search, its filters and, for a
    soft-deleting entity, live rows only. The overview's facet and summary
    queries use it too, so they count exactly the rows the list shows.
    `:scopes` keeps the rows inside them, `:ids` those records."
-  [adapter entity-config field-aliases options]
-  (let [search-fields (mapv #(get field-aliases % %) (:search-fields entity-config))
-        [plain links] (link-filters entity-config (:filters options))
-        filters       (into {} (map (fn [[field spec]] [(get field-aliases field field) spec]))
-                            plain)]
+  [adapter entity-config qc options]
+  (let [field-aliases (:field-aliases qc)
+        col           (column-of qc)
+        search-fields (mapv #(get field-aliases % %) (:search-fields entity-config))
+        ;; A filter the entity does not offer is dropped, not run
+        allowed       (into {} (filter #(filters/queryable-field? entity-config :filterable (key %)))
+                            (:filters options))
+        ;; "true" from a form never equals SQLite's 1
+        typed         (into {} (map (fn [[field spec]]
+                                      [field (if (= :boolean (get-in entity-config [:fields field :type]))
+                                               (if (map? spec) (update spec :value as-boolean) (as-boolean spec))
+                                               spec)]))
+                            allowed)
+        [plain links] (link-filters entity-config typed)
+        filters       (into {} (map (fn [[field spec]] [(col field) spec])) plain)]
     (combine-where-clauses
      (concat
       [(build-search-where adapter (:search options) search-fields)
@@ -525,7 +546,10 @@
                      (assoc k (or (type-conversion/string->uuid v) v))
 
                      (and (= :instant type) (some? v) (not (inst? v)))
-                     (assoc k (or (type-conversion/string->instant v) v)))))
+                     (assoc k (or (type-conversion/string->instant v) v))
+
+                     (and (= :boolean type) (some? v))
+                     (assoc k (as-boolean v)))))
                row
                (:fields entity-config))))
 
@@ -1130,7 +1154,7 @@
   [db-ctx entity-config qc options]
   (when-let [facet (:facet entity-config)]
     (let [col   ((column-of qc) facet)
-          where (list-where (:adapter db-ctx) entity-config (:field-aliases qc)
+          where (list-where (:adapter db-ctx) entity-config qc
                             (update options :filters dissoc facet))]
       ;; `value` is reserved in H2, hence facet-value
       (into {}
@@ -1144,9 +1168,8 @@
   "Each `:summary` entry's aggregate over the filtered set, narrowed by its
    own `:where`."
   [db-ctx entity-name entity-config qc options]
-  (let [aliases (:field-aliases qc)
-        col     (column-of qc)
-        base    (list-where (:adapter db-ctx) entity-config aliases options)]
+  (let [col     (column-of qc)
+        base    (list-where (:adapter db-ctx) entity-config qc options)]
     (vec
      (for [{:keys [label agg field where] :or {agg :count}} (take 4 (:summary entity-config))
            :let [count? (or (= agg :count) (nil? field))
@@ -1224,22 +1247,25 @@
       :offset (:offset options)}
      (fn [{:keys [_params]}]
        (let [entity-config (ports/get-entity-config schema-provider entity-name)
-             sort-field (:sort options)
+             ;; A sort the entity does not offer falls back to the default
+             sort-field (let [f (:sort options)]
+                          (when (and f (filters/queryable-field? entity-config :sortable f)) f))
              ;; The default direction goes with the default field only
              sort-dir (or (:sort-dir options)
                           (when-not sort-field (:default-sort-dir entity-config)))
              default-sort (:default-sort entity-config :id)
 
              ;; A file's content is not read for a list, its size only where it is a column
-             {:keys [from-clause select-clause join-clause field-aliases]}
+             {:keys [from-clause select-clause join-clause field-aliases] :as qc}
              (resolve-query-config entity-config (set (:list-fields entity-config)))
 
-             ; Resolve field aliases for ORDER BY
-             resolved-sort-field    (when sort-field (get field-aliases sort-field sort-field))
-             resolved-default-sort  (get field-aliases default-sort default-sort)
+             ; Qualified for ORDER BY: in a join both tables may have the column
+             col                    (column-of qc)
+             resolved-sort-field    (when sort-field (col sort-field))
+             resolved-default-sort  (col default-sort)
 
              ; Search, filters and soft delete, shared with the overview (ADR-040)
-             where-clause (list-where (:adapter db-ctx) entity-config field-aliases options)
+             where-clause (list-where (:adapter db-ctx) entity-config qc options)
              primary-key (:primary-key entity-config :id)
              ;; created-at or a name repeats; without the key as tie-breaker
              ;; a row can show on two pages, or on none
@@ -1524,13 +1550,9 @@
      {:entity (name entity-name)}
      (fn [{:keys [_params]}]
        (let [entity-config (ports/get-entity-config schema-provider entity-name)
-             soft-delete? (:soft-delete entity-config false)
-             {:keys [from-clause join-clause field-aliases]} (resolve-query-config entity-config)
-             soft-delete-field (get field-aliases :deleted-at :deleted_at)
-             filter-where (build-filter-where (:adapter db-ctx) filters)
-             ; Exclude soft-deleted records if entity uses soft delete
-             soft-delete-where (when soft-delete? [:= soft-delete-field nil])
-             where-clause (combine-where-clauses [filter-where soft-delete-where])
+             {:keys [from-clause join-clause] :as qc} (resolve-query-config entity-config)
+             ;; The list's rules: offered fields only, live rows only
+             where-clause (list-where (:adapter db-ctx) entity-config qc {:filters filters})
              query (cond-> {:select [[:%count.* :total]]
                             :from from-clause}
                      join-clause  (assoc :join join-clause)

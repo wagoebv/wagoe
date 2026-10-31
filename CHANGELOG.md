@@ -29,10 +29,23 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-10-31
+
+### Security
+
+- **Admin lists filter and sort only on fields the entity shows** (BOU-921, GHSA-g896-jm3g-34h6): a hidden field could
+  be filtered on, exposing password hashes and MFA secrets to holders of read on users. Upgrade.
+
 ### Fixed
 
 - **The users page no longer fails on SQLite with `ambiguous column name: created_at`** (BOU-919), and an unknown `?sort=`
   sorts by date instead of failing. Nothing to do.
+- **Deleted users no longer appear in user lists, and the audit trail ignores a sort it does not offer** (BOU-922).
+  Nothing to do.
+- **SQLite: a boolean reads as one, not 0 or 1** (BOU-925): MFA turned off read as on, and saving a deactivated user in
+  the admin reactivated them. A module scaffolded earlier still returns 0/1: convert its boolean fields in `->entity`.
+- **SQLite: the admin's user form saves** (BOU-926): a notification flag rendered as an email input the browser would
+  not submit. An app's own `admin/users.edn`: type `:name` and `:timezone` `:string`, the `:notifications-*` fields `:boolean`.
 - **`wagoe new` switches the admin on, and `wagoe add admin` gives it the users entity** (BOU-920): the user pages link there,
   and a created user landed on a 404. An app whose `:wagoe/admin` has no `:entities`: copy them from a new app.
 
