@@ -33,6 +33,13 @@
    :wagoe/user
    {}
 
+   :wagoe/admin
+   {:enabled?         true
+    :base-path        "/web/admin"
+    :entity-discovery {:mode :allowlist :allowlist #{:users :products}}
+    :entities         #merge [#include "admin/users.edn"
+                              #include "admin/products.edn"]}
+
    ;; Product module (bb scaffold integrate)
    :wagoe/product
    {:enabled? true}}

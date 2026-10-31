@@ -503,7 +503,6 @@ In deps.edn but not switched on. `wagoe add <module>` writes its config key.
 | events | Event bus for cross-process, asynchronous module communication — in-memory and Redis Streams | `wagoe add events` |
 | webhooks | Outbound webhooks: signed, retried, per-tenant delivery of bus events | `wagoe add webhooks` |
 | audience | Rule-based audience segmentation with SQL + predicate pipeline | `wagoe add audience` |
-| admin | Admin UI with entity config, HTMX forms | `wagoe add admin` |
 | devtools | Dev-only: error pipeline with WGE codes, REPL helpers, dashboard component | `wagoe add devtools` |
 
 <!-- /wagoe:available-modules -->
@@ -519,5 +518,6 @@ In deps.edn but not switched on. `wagoe add <module>` writes its config key.
 - email (`com.wagoe/wagoe-email`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/email/AGENTS.md)
 - external (`com.wagoe/wagoe-external`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/external/AGENTS.md)
 - i18n (`com.wagoe/wagoe-i18n`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/i18n/AGENTS.md)
+- admin (`com.wagoe/wagoe-admin`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/admin/AGENTS.md)
 - ui-style (`com.wagoe/wagoe-ui-style`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/ui-style/AGENTS.md)
 <!-- /wagoe:installed-modules -->
