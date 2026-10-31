@@ -29,12 +29,17 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-10-31
+
+### Security
+
+- **Admin lists filter and sort only on fields the entity shows** (BOU-921, GHSA-g896-jm3g-34h6): a hidden field could
+  be filtered on, exposing password hashes and MFA secrets to holders of read on users. Upgrade.
+
 ### Fixed
 
 - **The users page no longer fails on SQLite with `ambiguous column name: created_at`** (BOU-919), and an unknown `?sort=`
   sorts by date instead of failing. Nothing to do.
-- **Admin lists filter and sort only on fields the entity shows** (BOU-921); anything else is ignored rather than
-  answering 500. Upgrade; see the security advisory.
 - **Deleted users no longer appear in user lists, and the audit trail ignores a sort it does not offer** (BOU-922).
   Nothing to do.
 - **SQLite: a boolean reads as one, not 0 or 1** (BOU-925): MFA turned off read as on, and saving a deactivated user in

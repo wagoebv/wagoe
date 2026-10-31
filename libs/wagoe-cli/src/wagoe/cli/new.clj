@@ -7,18 +7,18 @@
             [wagoe.cli.templates :as templates]))
 
 ;; Keep in sync with libs/tools/build.clj version
-(def ^:private wagoe-tools-version "1.1.0")
+(def ^:private wagoe-tools-version "1.1.1")
 
 ;; Keep in sync with libs/wagoe-mcp/build.clj version (release-bumped with wagoe-tools-version)
-(def ^:private wagoe-mcp-version "1.1.0")
+(def ^:private wagoe-mcp-version "1.1.1")
 
 ;; Not in modules-catalogue.edn: no config key turns it on. Keep in sync with
 ;; libs/shared-ui/build.clj version.
-(def ^:private wagoe-shared-ui-version "1.1.0")
+(def ^:private wagoe-shared-ui-version "1.1.1")
 
 ;; Not in modules-catalogue.edn either: it is a test dependency, not a module.
 ;; Keep in sync with libs/test/build.clj version.
-(def ^:private wagoe-test-version "1.1.0")
+(def ^:private wagoe-test-version "1.1.1")
 
 (defn validate-name [n]
   (cond
