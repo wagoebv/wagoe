@@ -37,6 +37,10 @@ for what is public API, what is internal, and how deprecations are announced.
   answering 500. Upgrade; see the security advisory.
 - **Deleted users no longer appear in user lists, and the audit trail ignores a sort it does not offer** (BOU-922).
   Nothing to do.
+- **SQLite: MFA turned off reads as off** (BOU-925): it read as on, so an admin's reset and the profile's switch did
+  nothing. Nothing to do.
+- **SQLite: the admin's user form saves** (BOU-926): a notification flag rendered as an email input the browser would
+  not submit. An app's own `admin/users.edn`: add `:type :boolean` to the three `:notifications-*` fields.
 - **`wagoe new` switches the admin on, and `wagoe add admin` gives it the users entity** (BOU-920): the user pages link there,
   and a created user landed on a 404. An app whose `:wagoe/admin` has no `:entities`: copy them from a new app.
 

@@ -273,6 +273,8 @@
           (update :tenant-id type-conversion/string->uuid)
           (update :role db->role)
           (update :active #(protocols/db->boolean adapter %))
+          ;; SQLite reads 0 back, which is truthy: MFA turned off read as on
+          (update :mfa-enabled db-bool)
           (update :created-at type-conversion/string->instant)
           (update :updated-at type-conversion/string->instant)
           (update :deleted-at type-conversion/string->instant)

@@ -218,3 +218,16 @@
         (is (map? (ports/find-audit-logs audit {:sort-by :nope :sort-direction :sideways})))
         (is (map? (ports/find-audit-logs audit {:sort-by :action :sort-direction :asc})))
         (is (seqable? (ports/find-audit-logs-by-user audit (java.util.UUID/randomUUID) {:sort-by :nope})))))))
+
+(deftest ^:integration mfa-turned-off-reads-as-off
+  ;; SQLite stores the flag as 0, and 0 is truthy
+  (with-user-db
+    (fn [ctx]
+      (let [repo (sut/create-user-repository ctx)
+            u    (ports/create-user repo {:email "m@example.com" :name "M" :role :user :active true :password-hash "x"})
+            read #(:mfa-enabled (ports/find-user-by-id repo (:id u)))]
+        (ports/update-user repo (assoc (ports/find-user-by-id repo (:id u)) :mfa-enabled true :mfa-secret "S"))
+        (is (true? (read)))
+        (ports/update-user repo (assoc (ports/find-user-by-id repo (:id u)) :mfa-enabled false :mfa-secret nil))
+        (is (false? (read)))
+        (is (false? (:mfa-enabled (ports/find-user-by-email repo "m@example.com"))))))))
