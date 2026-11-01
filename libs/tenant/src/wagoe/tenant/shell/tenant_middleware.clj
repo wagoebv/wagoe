@@ -15,7 +15,7 @@
   (:require [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [wagoe.platform.core.http.errors :as errors]
+            [wagoe.core.http.errors :as errors]
             [wagoe.platform.database :as db]
             [wagoe.tenant.ports :as tenant-ports]
             [wagoe.tenant.shell.provisioning :as provisioning]))
