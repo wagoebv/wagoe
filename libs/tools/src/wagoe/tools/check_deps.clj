@@ -78,7 +78,8 @@
              (remove nil?))))))
 
 (def ^:private moved-namespaces
-  "Namespaces that kept their name when they moved to another library."
+  "Namespaces that kept their name when they moved to another library.
+   `check-isolation/namespace-owners` derives the same from the tree."
   {"wagoe.platform.ports.privacy" "core"}) ; BOU-872
 
 (defn ns->wagoe-lib

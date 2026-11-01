@@ -126,25 +126,22 @@
    in two trees. The library named after the prefix keeps it; the other owns
    its namespaces there one by one."
   []
-  (let [claims (for [lib   (libs)
-                     :let  [root (fs/file root-dir "libs" lib "src" "wagoe")]
-                     :when (fs/exists? root)
-                     entry (fs/list-dir root)
-                     :let  [seg (-> (str (fs/file-name entry))
-                                    (str/replace #"\.clj[cs]?$" "")
-                                    (str/replace "_" "-"))]]
-                 [(str "wagoe." seg) lib])]
-    (into {}
-          (mapcat (fn [[prefix cs]]
-                    (let [owners (distinct (map second cs))
-                          home   (or (some #{(subs prefix (count "wagoe."))} owners)
-                                     (first owners))]
-                      (cons [prefix home]
-                            (for [lib owners :when (not= lib home)
-                                  n   (namespaces-of lib)
-                                  :when (str/starts-with? n (str prefix "."))]
-                              [n lib])))))
-          (group-by first claims))))
+  (let [claims   (for [lib   (libs)
+                       :let  [root (fs/file root-dir "libs" lib "src" "wagoe")]
+                       :when (fs/exists? root)
+                       entry (fs/list-dir root)
+                       :let  [seg (-> (str (fs/file-name entry))
+                                      (str/replace #"\.clj[cs]?$" "")
+                                      (str/replace "_" "-"))]]
+                   {:prefix (str "wagoe." seg) :seg seg :lib lib :entry entry})
+        prefixes (update-vals (group-by :prefix claims)
+                              (fn [cs] (:lib (or (first (filter #(= (:seg %) (:lib %)) cs))
+                                                 (first cs)))))]
+    (into prefixes
+          (for [{:keys [prefix lib entry]} claims
+                :when (not= lib (prefixes prefix))
+                n     (if (fs/directory? entry) (namespaces-under entry) [])]
+            [(str prefix "." n) lib]))))
 
 (defn source-classpath
   "`lib`'s :paths and those of every library it declares by `:local/root`,
