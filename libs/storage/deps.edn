@@ -3,6 +3,7 @@
  :deps  {org.clojure/clojure                        {:mvn/version "1.12.6"}
          wagoe/core {:local/root "../core"}
          wagoe/platform                          {:local/root "../platform"}
+         wagoe/platform-sql                      {:local/root "../platform-sql"}
          wagoe/observability                     {:local/root "../observability"}
          integrant/integrant {:mvn/version "1.0.1"}
          metosin/malli {:mvn/version "0.20.1"}

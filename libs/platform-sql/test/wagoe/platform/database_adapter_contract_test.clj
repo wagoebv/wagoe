@@ -1,4 +1,4 @@
-(ns wagoe.database-adapter-contract-test
+(ns wagoe.platform.database-adapter-contract-test
   "What the four database engines must agree on, run on all four (ADR-039).
 
    `database-adapter-surface-test` checks each `DBAdapter` method answers.

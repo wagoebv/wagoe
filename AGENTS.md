@@ -1170,7 +1170,7 @@ rename a released id: databases that recorded it would run it again. Per-module 
 {:paths ["libs/tools/src" "libs/tools/resources" ...]}
 ```
 
-> **Note:** the monorepo reads `libs/tools` from source, not from Clojars — but it *is* published, as `com.wagoe/wagoe-tools`, and `bb deploy --all` includes it along with the other 32. "Dev-only" describes when you use it, not whether it ships.
+> **Note:** the monorepo reads `libs/tools` from source, not from Clojars — but it *is* published, as `com.wagoe/wagoe-tools`, and `bb deploy --all` includes it along with the other 33. "Dev-only" describes when you use it, not whether it ships.
 
 ### Namespaces
 
@@ -1184,7 +1184,7 @@ rename a released id: databases that recorded it would run it again. Per-module 
 | `wagoe.tools.integrate` | `bb scaffold integrate` — guide module integration (Integrant config + wiring) |
 | `wagoe.tools.i18n` | `bb i18n:find/scan/missing/unused` |
 | `wagoe.tools.admin` | `bb create-admin` |
-| `wagoe.tools.deploy` | `bb deploy` (handles all 33 libs) |
+| `wagoe.tools.deploy` | `bb deploy` (handles all 34 libs) |
 | `wagoe.tools.dev` | `bb migrate`, `bb check-links`, `bb smoke-check`, `bb install-hooks` |
 | `wagoe.tools.check-fcis` | `bb check:fcis` — FC/IS boundary enforcement (ADR-021) |
 | `wagoe.tools.check-tests` | `bb check:placeholder-tests` — placeholder assertion detection |

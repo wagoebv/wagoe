@@ -99,7 +99,7 @@ sites move to it.
 
 === 2. A conformance suite pins what they must agree on
 
-`test/wagoe/database_adapter_contract_test.clj` runs every case on H2, SQLite,
+`libs/platform-sql/test/wagoe/platform/database_adapter_contract_test.clj` runs every case on H2, SQLite,
 embedded PostgreSQL and MySQL. It lives in the root `test/` tree because the
 `:app` CI job is the one with a MySQL service. MySQL fails the suite when it is
 not reachable, like the other sweeps, and is registered in

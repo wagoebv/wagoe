@@ -85,7 +85,8 @@
    are not followed further, so over-reading only runs a few more jobs."
   [libs f]
   (let [text (slurp f)]
-    (-> (set (ns-libs (map second (re-seq #"wagoe\.([a-z0-9-]+)[./]" text))))
+    ;; The whole dotted name: a namespace that moved library keeps its prefix (BOU-871).
+    (-> (set (ns-libs (map second (re-seq #"wagoe\.([a-z0-9-]+(?:\.[a-z0-9-]+)*)" text))))
         (into (filter #(or (names-path text %) (str/includes? text (str ":wagoe/" %)))) libs))))
 
 (defn dependency-graph

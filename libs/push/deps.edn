@@ -12,7 +12,7 @@
          ;; google-auth-library brings guava 33.6.0-jre: GHSA-xxph-c9ww-hj94, CVE-2026-102554 (BOU-861).
          com.google.guava/guava {:mvn/version "33.7.2-jre"}
          wagoe/jobs             {:local/root "../jobs"}
-         wagoe/platform         {:local/root "../platform"}
+         wagoe/platform-sql        {:local/root "../platform-sql"}
          wagoe/core             {:local/root "../core"}}
 
  :aliases

@@ -93,7 +93,7 @@
   [dir]
   (if-not (fs/exists? dir)
     []
-    (->> (fs/glob dir "**/*.clj{,c}")
+    (->> (fs/glob dir "**.clj{,c}")
          (filter fs/regular-file?)
          (map #(-> (str (fs/relativize dir %))
                    (str/replace #"\.cljc?$" "")
