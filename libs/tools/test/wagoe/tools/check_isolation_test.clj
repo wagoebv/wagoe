@@ -198,6 +198,14 @@
                  "realtime" #{}
                  "(requiring-resolve 'wagoe.realtime.shell.server/start)" "f.clj")))))
 
+(deftest ^:unit a-moved-namespace-belongs-to-the-library-that-ships-it
+  ;; BOU-872: the exact name wins over its prefix, in both directions.
+  (let [owners {"wagoe.platform" "platform" "wagoe.platform.ports.privacy" "core"}
+        text   "(require 'wagoe.platform.ports.privacy)"]
+    (is (empty? (sut/smuggle-findings "core" #{} text "f.clj" owners)))
+    (is (empty? (sut/smuggle-findings "user" #{"core"} text "f.clj" owners)))
+    (is (= ["core"] (map :lib (sut/smuggle-findings "user" #{"platform"} text "f.clj" owners))))))
+
 (deftest ^:unit a-namespace-no-library-owns-is-still-a-finding
   ;; `wagoe.test-support` lives in the application, in no library. A published
   ;; library reaching for it is broken in the worst way available — that is the

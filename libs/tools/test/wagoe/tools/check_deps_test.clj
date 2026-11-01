@@ -11,7 +11,8 @@
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [wagoe.tools.check-deps :as sut]))
+            [wagoe.tools.check-deps :as sut]
+            [wagoe.tools.check-isolation :as check-isolation]))
 
 (defn- temp-lib
   "Write a throwaway library dir with the given deps.edn text and one source
@@ -265,4 +266,7 @@
 (deftest ^:unit a-moved-namespace-maps-to-the-library-that-ships-it
   ;; BOU-872: the name still says platform; wagoe-core ships it.
   (is (= "core" (sut/ns->wagoe-lib "wagoe.platform.ports.privacy")))
-  (is (= "platform" (sut/ns->wagoe-lib "wagoe.platform.ports.http"))))
+  (is (= "platform" (sut/ns->wagoe-lib "wagoe.platform.ports.http")))
+  (testing "and agrees with the tree, so the next move cannot skip `moved-namespaces`"
+    (doseq [[ns-name lib] (check-isolation/namespace-owners)]
+      (is (= lib (sut/ns->wagoe-lib ns-name)) ns-name))))
