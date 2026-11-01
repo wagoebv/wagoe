@@ -77,19 +77,24 @@
              (map #(cond (symbol? %) (str %) (vector? %) (str (first %)) :else nil))
              (remove nil?))))))
 
+(def ^:private moved-namespaces
+  "Namespaces that kept their name when they moved to another library."
+  {"wagoe.platform.ports.privacy" "core"}) ; BOU-872
+
 (defn ns->wagoe-lib
   "Given a namespace string like 'wagoe.user.core.foo', extract the library
    name 'user'. Returns nil for non-boundary namespaces.
    Maps wagoe.shared.* to 'shared-ui' (those namespaces live in libs/shared-ui/src/)."
   [ns-str]
   (let [parts (str/split ns-str #"\.")]
-    (when (and (>= (count parts) 2) (= "wagoe" (first parts)))
-      (case (second parts)
-        ;; namespace segment differs from the lib dir name
-        "shared" "shared-ui"      ; wagoe.shared.* lives in libs/shared-ui/
-        "cli"    "wagoe-cli"      ; wagoe.cli.*  lives in libs/wagoe-cli/
-        "mcp"    "wagoe-mcp"      ; wagoe.mcp.*  lives in libs/wagoe-mcp/
-        (second parts)))))
+    (or (moved-namespaces ns-str)
+        (when (and (>= (count parts) 2) (= "wagoe" (first parts)))
+          (case (second parts)
+            ;; namespace segment differs from the lib dir name
+            "shared" "shared-ui"      ; wagoe.shared.* lives in libs/shared-ui/
+            "cli"    "wagoe-cli"      ; wagoe.cli.*  lives in libs/wagoe-cli/
+            "mcp"    "wagoe-mcp"      ; wagoe.mcp.*  lives in libs/wagoe-mcp/
+            (second parts))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Graph building

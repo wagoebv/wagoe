@@ -261,3 +261,8 @@
         (is (= [["probe" "org.clojure/tools.cli"]]
                (map (juxt :lib (comp str :artifact)) (sut/third-party-gaps [["probe" dir]]))))
         (finally (delete-tree! dir))))))
+
+(deftest ^:unit a-moved-namespace-maps-to-the-library-that-ships-it
+  ;; BOU-872: the name still says platform; wagoe-core ships it.
+  (is (= "core" (sut/ns->wagoe-lib "wagoe.platform.ports.privacy")))
+  (is (= "platform" (sut/ns->wagoe-lib "wagoe.platform.ports.http"))))

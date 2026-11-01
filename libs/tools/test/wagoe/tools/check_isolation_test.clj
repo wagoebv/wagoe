@@ -40,6 +40,10 @@
       (is (= "realtime" (get owners "wagoe.realtime")))
       (is (= "user"     (get owners "wagoe.user"))))
 
+    (testing "a namespace that moved keeps its name, and the library it moved to owns it"
+      (is (= "platform" (get owners "wagoe.platform")))
+      (is (= "core"     (get owners "wagoe.platform.ports.privacy"))))
+
     (testing "the map covers the whole tree"
       (is (<= 30 (count owners))))))
 

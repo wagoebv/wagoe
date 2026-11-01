@@ -49,24 +49,6 @@
        (map #(str (fs/file-name %)))
        sort))
 
-(defn namespace-owners
-  "{\"wagoe.realtime\" -> \"realtime\"}, read from the tree.
-
-   Derived rather than named, because no string rule maps all 31: `shared-ui`
-   owns `wagoe.shared`, `wagoe-cli` owns `wagoe.cli`, `ui-style` owns
-   `wagoe.ui-style`. A convention the tree does not follow is one somebody has
-   to maintain by hand, which is how every other drift in this epic started."
-  []
-  (into {}
-        (for [lib   (libs)
-              :let  [root (fs/file root-dir "libs" lib "src" "wagoe")]
-              :when (fs/exists? root)
-              entry (fs/list-dir root)
-              :let  [seg (-> (str (fs/file-name entry))
-                             (str/replace #"\.clj[cs]?$" "")
-                             (str/replace "_" "-"))]]
-          [(str "wagoe." seg) lib])))
-
 (defn declared-deps
   "The library directory names `lib` declares as dependencies.
 
@@ -131,6 +113,38 @@
    trap `bb bump` removed from the release procedure (BOU-316)."
   [lib]
   (namespaces-under (fs/file root-dir "libs" lib "src")))
+
+(defn namespace-owners
+  "{\"wagoe.realtime\" -> \"realtime\"}, read from the tree.
+
+   Derived rather than named, because no string rule maps all 31: `shared-ui`
+   owns `wagoe.shared`, `wagoe-cli` owns `wagoe.cli`, `ui-style` owns
+   `wagoe.ui-style`. A convention the tree does not follow is one somebody has
+   to maintain by hand, which is how every other drift in this epic started.
+
+   A namespace that moved library and kept its name (BOU-872) leaves its prefix
+   in two trees. The library named after the prefix keeps it; the other owns
+   its namespaces there one by one."
+  []
+  (let [claims (for [lib   (libs)
+                     :let  [root (fs/file root-dir "libs" lib "src" "wagoe")]
+                     :when (fs/exists? root)
+                     entry (fs/list-dir root)
+                     :let  [seg (-> (str (fs/file-name entry))
+                                    (str/replace #"\.clj[cs]?$" "")
+                                    (str/replace "_" "-"))]]
+                 [(str "wagoe." seg) lib])]
+    (into {}
+          (mapcat (fn [[prefix cs]]
+                    (let [owners (distinct (map second cs))
+                          home   (or (some #{(subs prefix (count "wagoe."))} owners)
+                                     (first owners))]
+                      (cons [prefix home]
+                            (for [lib owners :when (not= lib home)
+                                  n   (namespaces-of lib)
+                                  :when (str/starts-with? n (str prefix "."))]
+                              [n lib])))))
+          (group-by first claims))))
 
 (defn source-classpath
   "`lib`'s :paths and those of every library it declares by `:local/root`,
@@ -297,7 +311,8 @@
    broken in the same way, and worse — it is the thing a downstream user
    certainly does not have."
   [owners ns-name]
-  (get owners (str/join "." (take 2 (str/split ns-name #"\.")))))
+  (or (get owners ns-name)
+      (get owners (str/join "." (take 2 (str/split ns-name #"\."))))))
 
 (defn smuggle-findings
   "Namespaces `text` loads that `lib` neither owns nor declares.
@@ -306,18 +321,16 @@
    without a repository to break."
   ([lib declared text path] (smuggle-findings lib declared text path (namespace-owners)))
   ([lib declared text path owners]
-   (let [own (set (for [[ns-name owner] owners :when (= lib owner)] ns-name))]
-     (for [[idx line] (map-indexed vector (str/split-lines (code-only text)))
-           ns-name (re-seq namespace-reference-re line)
-           :let  [top   (str/join "." (take 2 (str/split ns-name #"\.")))
-                  owner (owning-lib owners ns-name)]
-           :when (not (contains? own top))
-           :when (not (contains? declared owner))]
-       {:lib*      lib
-        :file      path
-        :line      (inc idx)
-        :namespace ns-name
-        :lib       owner}))))
+   (for [[idx line] (map-indexed vector (str/split-lines (code-only text)))
+         ns-name (re-seq namespace-reference-re line)
+         :let  [owner (owning-lib owners ns-name)]
+         :when (not= lib owner)
+         :when (not (contains? declared owner))]
+     {:lib*      lib
+      :file      path
+      :line      (inc idx)
+      :namespace ns-name
+      :lib       owner})))
 
 ;; =============================================================================
 ;; Allowlist
