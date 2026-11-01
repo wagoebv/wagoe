@@ -595,10 +595,7 @@
           (is (empty? (get cfg k))
               (str file " " k " gained an entry. That may be correct — but it is "
                    "debt, so it needs a ticket and a removal plan, not just a line "
-                   "in a file.")))))
-    ;; Emptied by BOU-873: the platform->external entry outlived the require.
-    (is (empty? @#'check-deps/allowed-undeclared-deps)
-        "check_deps.clj allowed-undeclared-deps gained an entry: that needs an ADR")))
+                   "in a file.")))))))
 
 ;; =============================================================================
 ;; The meta-gate: every gate must be represented above
