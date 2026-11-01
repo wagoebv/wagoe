@@ -52,3 +52,16 @@
   (is (= {:products products}
          (get-in (sut/ig-config {:indexes {:products products}} nil)
                  [:components :wagoe/search :indexes]))))
+
+(deftest ^:unit admin-pages-only-with-shared-ui
+  (let [routes #(ig/init-key :wagoe/search-routes {:search-service {:engine (engine {})}})]
+    (testing "shared-ui on the classpath: the admin pages and their nav"
+      (let [r (routes)]
+        (is (seq (:web r)))
+        (is (contains? (:nav r) :search))))
+    (testing "without it, the API alone (BOU-932)"
+      (with-redefs [sut/admin-ui? (constantly false)]
+        (let [r (routes)]
+          (is (seq (:api r)))
+          (is (= [] (:web r)))
+          (is (nil? (:nav r))))))))

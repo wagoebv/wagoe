@@ -31,7 +31,7 @@
             [wagoe.search.core.index :as index]
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.service :as service]
-            [wagoe.search.core.ui :as search-ui]
+            [wagoe.search.shell.ui :as search-ui]
             [clojure.tools.logging :as log]))
 
 ;; Declared so coercion puts the body in [:parameters :body]; without them it

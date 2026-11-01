@@ -57,6 +57,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Nothing to change; `wagoe-platform` depends on core.
 - **`wagoe-jobs` no longer depends on `wagoe-tenant`**: tenant's `:wagoe/in-tenant` runs a tenant's job (BOU-931).
   Declare `wagoe-tenant` if you got it through jobs.
+- **`wagoe-search` no longer depends on `wagoe-shared-ui`**, so not on the HTTP stack; its admin pages mount when shared-ui is on the classpath (BOU-932).
+  Declare `wagoe-shared-ui` to keep them, and `wagoe-platform` if you got it through search.
 - **`bb check:fcis`: core and ports know no SQL** — `honey.sql` in `core/` now fails (BOU-874).
   Move query building to the shell, or list the file under `:allow-sql` in `.wagoe/check-fcis.edn`.
 
