@@ -8,8 +8,7 @@
 migrations, seeding, leases and the transit wire format, without Jetty, Reitit,
 Muuntaja or Buddy. `wagoe-platform` depends on it, so an application on platform
 gets it unchanged. A library that needs only the database depends on this one
-instead (BOU-871). events and storage then carry no HTTP stack; jobs still does,
-through tenant (BOU-931).
+instead (BOU-871): jobs, events and storage carry no HTTP stack.
 
 The namespaces kept their `wagoe.platform.*` names when they moved here.
 

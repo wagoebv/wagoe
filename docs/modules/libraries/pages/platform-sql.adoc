@@ -6,7 +6,7 @@ and the transit wire format. xref:platform.adoc[platform] depends on it, so an
 application on platform already has it.
 
 Depend on it directly when you want Wagoe's data access without Jetty, Reitit or
-Muuntaja: next to your own HTTP wiring, or in a library. events and storage
+Muuntaja: next to your own HTTP wiring, or in a library. jobs, events and storage
 reach no HTTP stack through it.
 
 == Coordinates
