@@ -586,16 +586,6 @@
         (str "libs/platform now has ports.clj — remove \"wagoe.platform\" from "
              "builtin-allow-missing-ports in check_ports.clj"))))
 
-(deftest ^:unit deps-allowlist-is-load-bearing-test
-  (testing "platform genuinely still does not declare external"
-    ;; Same reasoning. The entry exists because declaring it would create a
-    ;; circular :local/root that tools.deps rejects; once the external->platform
-    ;; coupling is broken the exemption must go.
-    (let [deps (slurp "libs/platform/deps.edn")]
-      (is (not (str/includes? deps "wagoe/external"))
-          (str "libs/platform/deps.edn now declares external — remove "
-               "[\"platform\" \"external\"] from allowed-undeclared-deps")))))
-
 (deftest ^:unit empty-allowlists-stay-empty-test
   (testing "the allowlists that are complete carry no entries"
     (doseq [[file ks] {".wagoe/check-fcis.edn"      [:allow-throw :allow-mutable-state]
@@ -605,7 +595,10 @@
           (is (empty? (get cfg k))
               (str file " " k " gained an entry. That may be correct — but it is "
                    "debt, so it needs a ticket and a removal plan, not just a line "
-                   "in a file.")))))))
+                   "in a file.")))))
+    ;; Emptied by BOU-873: the platform->external entry outlived the require.
+    (is (empty? @#'check-deps/allowed-undeclared-deps)
+        "check_deps.clj allowed-undeclared-deps gained an entry: that needs an ADR")))
 
 ;; =============================================================================
 ;; The meta-gate: every gate must be represented above
