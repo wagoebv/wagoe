@@ -118,9 +118,8 @@
   (start-workflow! [this input] [this tx input]
     "Create a new workflow instance in its initial state.
 
-     With `tx`, an open transaction on the store's datasource (a next.jdbc
-     connection or a platform transaction context), the instance is written on
-     it and commits or rolls back with the caller's own writes. A nil `tx` is
+     With `tx`, an open transaction on the store's datasource, as
+     `with-transaction` binds it, the instance is written on it and commits or rolls back with the caller's own writes. A nil `tx` is
      the same as none.
 
      Args:

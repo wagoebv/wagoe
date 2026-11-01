@@ -62,14 +62,17 @@ The `:wagoe/audience` component returns `{:store <IAudienceRepository> :resolver
 
 `:wagoe/audience-routes` returns `{:api [...] :web [...]}` for composition by the HTTP handler.
 
-`:wagoe/audience` refuses to boot without a `:user-data-source`; the wired default is a SQL source over `:users-table`. To use your own, implement `IUserDataSource`:
+`:wagoe/audience` refuses to boot without a `:user-data-source`; the wired default is a SQL source over `:users-table`. To use your own, implement `IUserQuery` and `IUserDataSource`:
 
 ```clojure
 (defrecord MyUserDataSource [db]
+  ports/IUserQuery
+  (query-user-ids [_ filters] ...)   ; the filter maps; empty means every user
   ports/IUserDataSource
-  (query-users-sql [_ clause] ...)
-  (load-users      [_ user-ids] ...))
+  (load-users [_ user-ids] ...))
 ```
+
+`IUserDataSource/query-users-sql` is deprecated (BOU-875) and is called only on a source without `IUserQuery`. clj-kondo reports it missing from your record; `#_{:clj-kondo/ignore [:missing-protocol-method]}` silences that until 2.0.
 
 ---
 

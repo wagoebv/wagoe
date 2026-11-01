@@ -5,9 +5,9 @@
 
      1. Check L1 DB cache (via get-cached-with-ttl when TTL is known).
      2. Load definition from in-process registry, fall back to repository.
-     3. Compile definition into {:sql-clauses [...] :predicates [...]}.
+     3. Compile definition into {:query-filters [...] :predicates [...]}.
      4. If :compose present, resolve composed segments recursively.
-     5. Phase 1 — SQL: query user IDs via IUserDataSource.query-users-sql.
+     5. Phase 1 — SQL: query user IDs via IUserQuery.query-user-ids.
      6. Phase 2 — predicates: load-users for candidates, filter in-process.
      7. Build SegmentResult.
      8. Cache result when cache + TTL are configured.
@@ -75,15 +75,17 @@
     (= 1 (count sql-clauses)) (first sql-clauses)
     :else                 (into [:and] sql-clauses)))
 
-(defn- run-sql-phase
-  "Query candidate user IDs using IUserDataSource.query-users-sql.
-   Returns a set of user IDs, or all-user-ids marker when no SQL clause."
-  [user-ds sql-clauses]
-  (let [clause (sql-clause-for-plan sql-clauses)]
-    (if clause
-      (set (ports/query-users-sql user-ds clause))
-      ;; No SQL filter — load all users (empty filter = universe)
-      (set (ports/query-users-sql user-ds nil)))))
+(defn- candidate-query
+  "How the SQL phase asks `user-ds` for candidate ids, decided once: the filters
+   as data to an IUserQuery, the compiled clause to an older source. nil or
+   empty means every user (BOU-875)."
+  [user-ds]
+  (if (satisfies? ports/IUserQuery user-ds)
+    (fn [plan] (set (ports/query-user-ids user-ds (:query-filters plan))))
+    (fn [plan]
+      #_{:clj-kondo/ignore [:deprecated-var]}
+      (set (ports/query-users-sql user-ds (sql-clause-for-plan
+                                           (mapv filter/filter->sql (:query-filters plan))))))))
 
 (defn- run-predicate-phase
   "Filter candidate user IDs by loading full user records and applying predicates.
@@ -99,7 +101,7 @@
 ;; IAudienceResolver implementation
 ;; =============================================================================
 
-(defrecord AudienceService [repository cache user-data-source filter-fields]
+(defrecord AudienceService [repository cache user-data-source filter-fields query-candidates]
   ports/IAudienceResolver
 
   (resolve-audience [this audience-id]
@@ -133,7 +135,7 @@
                 ;; Validate filters up front (pure core check); raise a typed
                 ;; error before compiling if any filter is unknown/unsupported.
                 _ (unwrap! (filter/explain-filters (:filters definition)))
-                {:keys [sql-clauses predicates unsupported]}
+                {:keys [predicates unsupported] :as plan}
                 (compiler/compile-segment definition {:now eval-date})
                 ;; A filter the compiler could express neither way. Refusing
                 ;; here rather than evaluating the rest: a definition that
@@ -172,7 +174,7 @@
                 result)
 
               ;; Direct evaluation path
-              (let [candidates  (run-sql-phase user-data-source sql-clauses)
+              (let [candidates  (query-candidates plan)
                     final-ids   (run-predicate-phase user-data-source candidates predicates)
                     result      {:user-ids     final-ids
                                  :count        (count final-ids)
@@ -196,11 +198,12 @@
      opts - map with:
        :repository       - IAudienceRepository (optional, for DB-stored definitions)
        :cache            - AudienceCache (optional)
-       :user-data-source - IUserDataSource (required)
+       :user-data-source - IUserDataSource, and IUserQuery (required)
        :filter-fields    - fields a filter may name (default `filter/default-filter-fields`)
 
    Returns:
      AudienceService implementing IAudienceResolver"
   [{:keys [repository cache user-data-source filter-fields]}]
   (->AudienceService repository cache user-data-source
-                     (or filter-fields filter/default-filter-fields)))
+                     (or filter-fields filter/default-filter-fields)
+                     (candidate-query user-data-source)))

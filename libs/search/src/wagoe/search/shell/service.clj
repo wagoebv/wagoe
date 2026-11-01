@@ -3,7 +3,7 @@
 
    Implements ISearchEngine by coordinating:
    - core/index     — document construction
-   - core/query     — query sanitization
+   - core/query     — query sanitization and filter terms
    - definitions    — the index definitions this service was built with, then
                       the deprecated global registry
    - ISearchStore   — persistence operations"
