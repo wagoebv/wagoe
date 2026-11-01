@@ -1,0 +1,35 @@
+;; Exemptions for `bb check:deps`: a library's declared wagoe deps must equal
+;; the ones its src/ uses (BOU-870). Every entry needs a :why — the gate throws
+;; on one without it — and an entry that exempts nothing fails as stale.
+;;
+;; A dep used only for a classpath resource is not an exemption: name it under
+;; :wagoe/resource-deps in that library's deps.edn.
+
+{;; Undeclared libs a library loads at run time with requiring-resolve, on
+ ;; purpose: optional companions, present only when the app wires them.
+ :allow-soft
+ [{:lib "platform" :dep "i18n"
+   :why "Deprecated :i18n input to :wagoe/http-handler (BOU-131); only runs when the app supplied the i18n component, so i18n is already on its classpath."}
+  {:lib "platform" :dep "devtools"
+   :why "Dev-only request capture; falls back to the plain handler when devtools is absent."}
+  {:lib "devtools" :dep "admin"
+   :why "(explain-entity) works only in a system with admin, and says so when there is none."}
+  {:lib "email" :dep "jobs"
+   :why "Async sending is optional; without jobs it fails with :missing-dependency."}
+  {:lib "reports" :dep "jobs"
+   :why "Async generation is optional; without jobs it fails with :missing-dependency."}
+  {:lib "reports" :dep "storage"
+   :why "Storing a generated report is optional, asked for per request."}
+  {:lib "reports" :dep "email"
+   :why "Mailing a generated report is optional, asked for per request."}
+  {:lib "storage" :dep "jobs"
+   :why "Export as a background job needs a job queue, and jobs is loaded whenever there is one."}
+  {:lib "realtime" :dep "observability"
+   :why "An error reporter exists only when observability is loaded (BOU-848)."}]
+
+ ;; Declared libs nothing in src/ requires.
+ :allow-unused
+ [{:lib "e2e" :dep "user"
+   :why "Test-only library with no src/: its tests drive user as the system under test."}
+  {:lib "e2e" :dep "tenant"
+   :why "Test-only library with no src/: its tests drive tenant as the system under test."}]}

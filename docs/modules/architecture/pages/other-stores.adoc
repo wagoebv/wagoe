@@ -1,0 +1,211 @@
+= Other stores
+:description: Keep one of your own modules in Datomic, XTDB or behind a REST API, next to Wagoe's libraries on SQL.
+
+Your own modules can keep their data in any store: Datomic, XTDB, a REST API.
+Wagoe's own libraries (user, admin, tenant, jobs, search, workflow and the
+rest) run on SQL: H2, SQLite, PostgreSQL or MySQL. That will not become a
+setting.
+
+So a realistic system has Wagoe's libraries on PostgreSQL and your `orders`
+module on Datomic, in one Integrant system. The libraries share
+`:wagoe/db-context`; your module has its own connection and does not use it.
+
+== Your own module on another store
+
+A scaffolded module already has the seam. `ports.clj` describes the module's
+domain, `shell/persistence.clj` is the only namespace that talks to the
+database, and the service sees only the port. To move the module to another
+store, you replace the persistence namespace and the repository's Integrant
+key. Core, service, routes and their tests stay as they are.
+
+An entity with a workflow is the exception: its `shell/<entity>_workflow.clj`
+keeps the workflow in the workflow library's SQL store and joins the caller's
+SQL transaction, so on another store the entity and its workflow no longer
+commit together.
+
+=== The port
+
+Keep the repository protocol `bb scaffold` wrote, and keep SQL out of it: no
+table names, no JDBC values, no HoneySQL maps in a signature or a return value.
+
+[source,clojure]
+----
+(defprotocol IOrderRepository
+  (find-by-id    [this id])
+  (find-all      [this options])
+  (create        [this entity])
+  (update-entity [this entity])
+  (delete        [this id])
+  (transact      [this f]))
+----
+
+=== The adapter
+
+Write a record that implements the port against the store. For Datomic, with
+the client API:
+
+[source,clojure]
+----
+(ns myapp.orders.shell.datomic
+  (:require [datomic.client.api :as d]
+            [myapp.orders.ports :as ports]))
+
+(def ^:private attrs {:id :order/id :status :order/status :total :order/total})
+
+(def ^:private pattern (vec (vals attrs)))
+
+(defn- ->entity [m]
+  (into {} (for [[k a] attrs :when (contains? m a)] [k (get m a)])))
+
+(defn- ->tx
+  "Only the keys present: an update carries the changed fields, and Datomic
+   refuses a nil value."
+  [entity]
+  (into {} (for [[k a] attrs :let [v (get entity k)] :when (some? v)] [a v])))
+
+(defn- pull-order [db id]
+  (some-> (d/q '[:find (pull ?e pattern) :in $ pattern ?id :where [?e :order/id ?id]]
+               db pattern id)
+          ffirst
+          ->entity))
+
+(defn- write! [conn entity]
+  (pull-order (:db-after (d/transact conn {:tx-data [(->tx entity)]})) (:id entity)))
+
+(defrecord DatomicOrders [conn]
+  ports/IOrderRepository
+  (find-by-id [_ id] (pull-order (d/db conn) id))
+  (find-all [_ {:keys [limit offset]}]
+    ;; A query returns a set: sort before paging, or pages overlap.
+    (->> (d/q '[:find (pull ?e pattern) :in $ pattern :where [?e :order/id]]
+              (d/db conn) pattern)
+         (map (comp ->entity first))
+         (sort-by :id)
+         (drop (or offset 0))
+         (take (or limit 20))))
+  (create [_ entity] (write! conn entity))
+  ;; nil for an unknown id, like the SQL repository, so the handler answers 404
+  ;; rather than the upsert creating the order.
+  (update-entity [_ entity]
+    (when (pull-order (d/db conn) (:id entity))
+      (write! conn entity)))
+  (delete [_ id]
+    ;; A lookup ref to a missing id fails the transaction.
+    (when (pull-order (d/db conn) id)
+      (d/transact conn {:tx-data [[:db/retractEntity [:order/id id]]]})))
+  (transact [_ f] (f)))
+----
+
+The SQL repository returns the stored row from `create` and `update-entity`,
+and the HTTP handler answers 404 when `update-entity` returns nil. Keep both.
+
+`transact` means "run `f` as one unit of work". A Datomic transaction is one
+`d/transact` call, not a block you open and close. When two writes must land together, build both into one `:tx-data`, or use a
+transaction function. `(f)` above gives no atomicity across two calls.
+
+The same shape holds for XTDB (`xtdb.api/submit-tx` and `q`) and for a REST API
+(an HTTP client in the record, the remote service's ids in your entity).
+
+=== The Integrant key
+
+Discovery builds `:wagoe/orders-repository` with `{:ctx (ig/ref
+:wagoe/db-context)}`. Point it at your connection instead, from the module's
+`ig-config` in `shell/module_wiring.clj`. A component you return is merged into
+the scaffold's, your keys winning (see
+xref:libraries:platform.adoc#_adding_components_and_middleware_to_an_app_module[Adding
+components to an app module]). `:ctx` stays in the map, unused; `:wagoe/db-context`
+boots anyway, for Wagoe's libraries. Then change the body of the scaffolded
+`init-key` for the repository. The wiring namespace requires
+`datomic.client.api :as d` and `myapp.orders.shell.datomic :as datomic`.
+
+A module with a workflow, or with a second entity, already has an `ig-config`:
+add these components to it instead of defining a second one, which would
+replace it. Its further entities' repositories are built in
+`:wagoe/orders-entities`, still on `:wagoe/db-context`. And once a module
+defines its own `ig-config`, `bb scaffold entity` refuses to wire another
+entity into it.
+
+[source,clojure]
+----
+(defn ig-config [settings _ctx]
+  {:components {:wagoe/orders-datomic    {:client (:datomic settings)
+                                          :db-name "orders"}
+                :wagoe/orders-repository {:conn (ig/ref :wagoe/orders-datomic)}}})
+
+(defmethod ig/init-key :wagoe/orders-datomic [_ {:keys [client db-name]}]
+  (let [c (d/client client)]
+    (d/create-database c {:db-name db-name})
+    (d/connect c {:db-name db-name})))
+
+(defmethod ig/init-key :wagoe/orders-repository [_ {:keys [conn]}]
+  (datomic/->DatomicOrders conn))     ; was (persistence/create-repository ctx)
+----
+
+and in `resources/conf/<profile>/config.edn`:
+
+[source,clojure]
+----
+:wagoe/orders {:enabled? true
+               :datomic  {:server-type :datomic-local :system "myapp"}}
+----
+
+Install the schema (`:order/id` as a unique identity, and so on) in
+`:wagoe/orders-datomic`, or with your own migration step. Wagoe's migrations
+cover SQL tables only.
+
+=== Testing
+
+The scaffolded service test already runs against a `reify` of the port, so it
+needs no change (see xref:guides:testing.adoc[Testing]). For tests that
+exercise more than one call, an in-memory adapter over an atom implements the
+same port:
+
+[source,clojure]
+----
+(defrecord MemoryOrders [state]
+  ports/IOrderRepository
+  (find-by-id    [_ id] (get @state id))
+  (find-all      [_ {:keys [limit offset]}]
+    (->> (vals @state) (sort-by :id) (drop (or offset 0)) (take (or limit 20))))
+  (create        [_ e] (swap! state assoc (:id e) e) e)
+  (update-entity [_ {:keys [id] :as e}]   ; changed fields only; nil when unknown
+    (when (contains? @state id)
+      (get (swap! state update id merge e) id)))
+  (delete        [_ id] (swap! state dissoc id) nil)
+  (transact      [_ f] (f)))
+
+(def repo (->MemoryOrders (atom {})))
+----
+
+Test the Datomic adapter itself against Datomic Local with `:storage-dir :mem`,
+so it needs no running database either. Run the same cases on both adapters and
+they cannot drift apart.
+
+A runnable sample module on another store is planned.
+
+== Framework libraries run on SQL
+
+Wagoe's libraries depend on what SQL databases give them:
+
+* *Tenancy* is one PostgreSQL schema per tenant, and is PostgreSQL-only.
+* *Jobs* on the database claim a job with a conditional `UPDATE` and hold it
+  with a lease on the row. The Redis queue is the alternative.
+* *Search* uses PostgreSQL full-text search, with a `LIKE` fallback elsewhere.
+* *User, admin and workflow* rely on unique constraints, foreign keys and
+  transactions across tables, and ship SQL migrations.
+
+== What we will not do
+
+We will not put a generic store port above SQL and Datomic. It could offer only
+what both share: put, get by id, a filtered list. Datalog, the database as a
+value at a point in time and a schema made of attributes are Datomic's
+strength. Joins, constraints the database enforces, full-text search, row locks
+and a schema per tenant are SQL's. A port over both hides all of them, and code
+written against it is weaker on either store.
+
+We will not make the framework's libraries switchable between SQL and another
+store. Each would need its own adapter, tests and migrations per store, and
+tenancy does not translate at all. What is planned instead: a quality gate that
+keeps SQL out of `core/` and `ports.clj`, so the store stays a choice per
+module, and the SQL layer as an artifact of its own, so depending on it is
+explicit.
