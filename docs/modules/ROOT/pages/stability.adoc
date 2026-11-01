@@ -161,7 +161,8 @@ design, and the rule above still applies — only the file layout differs.
 | `platform`
 | `wagoe.platform.ports.*` — a directory rather than one file: `ports.http`
   (`IHttpServer`; routing is not a port, see ADR-037), `ports.database`
-  (`DBAdapter`, `EngineInfo`, …), `ports.authorization` and `ports.privacy`.
+  (`DBAdapter`, `EngineInfo`, …) and `ports.authorization`. `ports.privacy`
+  keeps its name but ships in `wagoe-core`.
   `IFileSystemAdapter` still sits under `shell.adapters.filesystem.protocols`;
   it is supported surface despite the location
 
