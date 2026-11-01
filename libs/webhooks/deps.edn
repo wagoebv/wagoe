@@ -5,6 +5,10 @@
          metosin/malli                     {:mvn/version "0.20.1"}
          org.clojure/tools.logging         {:mvn/version "1.3.1"}
          cheshire/cheshire                 {:mvn/version "6.2.0"}
+         ;; buddy-core 1.12.0-430 (latest) brings BouncyCastle 1.78.1: critical CVE-2025-14813, CVE-2026-8763 (BOU-618). Pinned in platform until BOU-871.
+         org.bouncycastle/bcprov-jdk18on {:mvn/version "1.86"}
+         org.bouncycastle/bcpkix-jdk18on {:mvn/version "1.86"}
+         org.bouncycastle/bcutil-jdk18on {:mvn/version "1.86"}
          buddy/buddy-core                  {:mvn/version "1.12.0-430"}
          com.github.seancorfield/next.jdbc {:mvn/version "1.3.1118"}
          org.apache.httpcomponents/httpclient {:mvn/version "4.5.14"}
