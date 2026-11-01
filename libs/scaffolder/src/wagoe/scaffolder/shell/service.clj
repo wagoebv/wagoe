@@ -617,14 +617,17 @@
                                 " early east of UTC. Regenerate that file, or copy date->iso and ->entity"
                                 " from a newly generated module."))
             ;; Written as a keyword, an enum value is a column name to HoneySQL,
-            ;; and read back it stays a string unless it is in enum-fields.
+            ;; and read back it stays a string unless it is in enum-fields. A
+            ;; boolean, UUID, timestamp or decimal needs its set too, or SQLite
+            ;; and H2 read it back as the driver's type (BOU-877).
             enum?       (= :enum (:type field))
-            enum-source (when (and enum? (.isFile persistence))
+            set-name    (generators/persistence-set (:type field))
+            enum-source (when (and set-name (.isFile persistence))
                           (slurp persistence))
-            enum-added  (some-> enum-source (generators/add-enum-field-to-persistence field))
+            enum-added  (some-> enum-source (generators/add-field-to-persistence field))
             enum-edits  (when (and enum-added (not= enum-added enum-source))
                           [{:file persistence :content enum-added
-                            :note (str "added :" (name (:name field)) " to enum-fields")}])
+                            :note (str "added :" (name (:name field)) " to " set-name)}])
             enum-step (when (and enum? (nil? enum-added))
                         (str "Add :" (name (:name field)) " to enum-fields in " (.getPath persistence)
                              (when-not (some-> enum-source (str/includes? "enum-fields"))

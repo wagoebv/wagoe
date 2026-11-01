@@ -1014,6 +1014,16 @@
     (is (= "(def ^:private enum-fields #{:kind})" (add "(def ^:private enum-fields #{:kind})")))
     (is (nil? (add "(def ^:private other #{})")))))
 
+(deftest ^:unit a-field-joins-the-set-its-type-reads-back-through
+  (let [src "(def ^:private uuid-fields #{:id})\n(def ^:private decimal-fields #{})"
+        add #(generators/add-field-to-persistence src {:name %1 :type %2})]
+    (is (= "(def ^:private uuid-fields #{:id :owner-id})\n(def ^:private decimal-fields #{})"
+           (add :owner-id :uuid)))
+    (is (= "(def ^:private uuid-fields #{:id})\n(def ^:private decimal-fields #{:total})"
+           (add :total :decimal)))
+    (is (nil? (add :name :string)) "a string needs no set")
+    (is (nil? (add :at :inst)) "nor is one added to a file without it")))
+
 ;; =============================================================================
 ;; The generated web page requires a signed-in user too (BOU-539 review)
 ;; =============================================================================

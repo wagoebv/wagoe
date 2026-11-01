@@ -867,20 +867,40 @@
     (is (nil? (:error registry)) "and the platform's registry takes it")))
 
 
-(deftest ^:unit a-generated-entity-reads-a-boolean-as-one
-  ;; SQLite reads a boolean column back as 0 or 1, and 0 is truthy
+(defn- generated-->entity
+  "The ->entity a generated persistence.clj defines for these fields."
+  [fields]
   (let [src   (gen/generate-persistence-file
                {:base-ns "app" :module-name "widget"
                 :entities [{:entity-name "Widget" :entity-table "widgets"
-                            :fields [(template/build-field-context {:name :active :type :boolean :required true})]}]})
+                            :fields (mapv template/build-field-context fields)}]})
         forms (read-string (str "[" (subs src (str/index-of src "(defn- date->iso")) "]"))
-        wanted #{'date->iso 'enum-fields 'boolean-fields '->entity}
+        wanted #{'date->iso 'enum-fields 'boolean-fields 'uuid-fields 'inst-fields 'decimal-fields 'coerce '->entity}
         scratch (create-ns (gensym "generated-persistence"))]
     (binding [*ns* scratch]
       (refer-clojure)
       (import '[java.time LocalDate])
+      (require '[wagoe.core.utils.type-conversion :as tc])
       (doseq [f forms :when (and (seq? f) (wanted (second f)))] (eval f)))
-    (let [->entity @(ns-resolve scratch '->entity)]
-      (is (false? (:active (->entity {:id 1 :active 0}))))
-      (is (true? (:active (->entity {:id 1 :active 1}))))
-      (is (true? (:active (->entity {:id 1 :active true}))) "H2 and PostgreSQL already say so"))))
+    @(ns-resolve scratch '->entity)))
+
+(deftest ^:unit a-generated-entity-reads-a-boolean-as-one
+  ;; SQLite reads a boolean column back as 0 or 1, and 0 is truthy
+  (let [->entity (generated-->entity [{:name :active :type :boolean :required true}])]
+    (is (false? (:active (->entity {:id 1 :active 0}))))
+    (is (true? (:active (->entity {:id 1 :active 1}))))
+    (is (true? (:active (->entity {:id 1 :active true}))) "H2 and PostgreSQL already say so")))
+
+(deftest ^:unit a-generated-entity-has-the-schemas-types-on-every-engine
+  (let [->entity (generated-->entity [{:name :price :type :decimal :required true}
+                                      {:name :owner-id :type :uuid :required true}])
+        id       (random-uuid)
+        at       (java.time.Instant/parse "2026-01-01T00:00:00Z")]
+    (testing "SQLite: a UUID as a string, a decimal as a double, a timestamp as a string"
+      (is (= {:id id :owner-id id :price 9.99M :created-at at}
+             (->entity {:id (str id) :owner-id (str id) :price 9.99 :created-at (str at)})))
+      (is (decimal? (:price (->entity {:price 9.99})))))
+    (testing "H2: a timestamp as an OffsetDateTime"
+      (is (= at (:created-at (->entity {:created-at (.atOffset at java.time.ZoneOffset/UTC)})))))
+    (testing "values already of their type pass through"
+      (is (= {:id id :price 9.99M :created-at at} (->entity {:id id :price 9.99M :created-at at}))))))

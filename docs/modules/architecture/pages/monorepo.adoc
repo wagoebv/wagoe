@@ -27,14 +27,18 @@ wagoe/
 └── tests.edn              ← Kaocha test suite definitions
 ----
 
-Example applications live under `examples/`, and CI runs both on every commit:
+Example applications live under `examples/`, and CI runs all of them on every
+commit:
 
 * `examples/shop` — a generated application: `wagoe new` plus one scaffolded
   module, committed as generator output and re-verified by
   `bb example:regen --check`
+* `examples/stores` — the shop's module on a second store, an atom, with one
+  contract suite for both repositories (see
+  xref:architecture:other-stores.adoc[Other stores])
 * `examples/todo` — functional core / imperative shell with no framework at all
 
-The former `wagoe-examples` repository is archived; these two are the examples.
+The former `wagoe-examples` repository is archived; these are the examples.
 
 == Library structure
 
