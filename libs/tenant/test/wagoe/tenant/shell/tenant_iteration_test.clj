@@ -72,3 +72,21 @@
            (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
                                         (sut/for-each-tenant (tenant-service 1 (atom [])) (fake-provider [])
                                                              {:datasource :ds} (fn [_] :ok))))))))))
+
+(deftest ^:unit in-tenant-runs-f-in-that-tenants-schema
+  (let [schemas  (atom [])
+        provider (reify ports/ITenantSchemaProvider
+                   (with-tenant-schema [_ _ schema f] (swap! schemas conj schema) (f nil))
+                   (tenant-provisioned? [_ _ _] true)
+                   (list-tenant-schemas [_ _] []))
+        service  #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify ports/ITenantService
+          (get-tenant [_ id] (when (= "t1" id) {:id id :schema-name "tenant_one"})))]
+    (is (= "t1" (sut/in-tenant service provider {:datasource :ds} "t1" (fn [] db/*tenant-id*)))
+        "with the tenant bound")
+    (is (= ["tenant_one"] @schemas))
+    (testing "an unknown tenant never runs"
+      (is (= :tenant-not-found
+             (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
+                                          (sut/in-tenant service provider {:datasource :ds} "gone"
+                                                         (fn [] :ran)))))))))))

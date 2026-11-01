@@ -94,12 +94,14 @@
                      :component :wagoe/tenant-service}
               :keys [:wagoe/tenant-db-schema :wagoe/tenant-repository
                      :wagoe/tenant-service :wagoe/tenant-routes
-                     :wagoe/tenant-http-middleware :wagoe/each-tenant
+                     :wagoe/tenant-http-middleware :wagoe/each-tenant :wagoe/in-tenant
                      :wagoe/membership-repository :wagoe/membership-service
                      :wagoe/membership-routes
                      :wagoe/invite-repository :wagoe/invite-service
                      :wagoe/tenant-data-exporter :wagoe/tenant-export-routes
-                     :wagoe/tenant-audit-repository]}
+                     :wagoe/tenant-audit-repository
+                     ;; Deprecated, emitted only by a config that names it (BOU-931).
+                     :wagoe/job-tenant-runner]}
 
    :admin    {:keys [:wagoe/admin-schema-provider :wagoe/admin-service
                      :wagoe/admin-routes]}
@@ -136,7 +138,7 @@
    ;; and storage any service legitimately uses. What is here is the surface a
    ;; module owns — including the two that must not run everywhere,
    ;; `:wagoe/job-workers` and `:wagoe/storage-routes`.
-   :jobs     {:keys [:wagoe/job-workers :wagoe/job-tenant-runner :wagoe/job-scheduler
+   :jobs     {:keys [:wagoe/job-workers :wagoe/job-scheduler
                      :wagoe/job-dead-letter-retention]}
 
    :storage  {:keys [:wagoe/storage-routes :wagoe.storage/data-exporter :wagoe.storage/upload-retention
