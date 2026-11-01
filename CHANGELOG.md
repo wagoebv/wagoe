@@ -32,7 +32,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Changed
 
 - **`wagoe-search` no longer depends on `wagoe-admin`**, which it never used (BOU-869).
-  Declare `wagoe-admin` yourself if you relied on getting it through search.
+  Declare `wagoe-email` (always on) and any of `wagoe-admin`/`wagoe-user` you got through search.
 
 ## [1.1.1] — 2026-10-31
 

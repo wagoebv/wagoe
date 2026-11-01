@@ -78,11 +78,11 @@ the code is right. A previous version of this table listed 22 libraries and gave
 |*ai*            |`com.wagoe/wagoe-ai`            |config, core
 |*ui-style*      |`com.wagoe/wagoe-ui-style`      |—
 |*shared-ui*     |`com.wagoe/wagoe-shared-ui`     |core, platform, ui-style
-|*user*          |`com.wagoe/wagoe-user`          |config, core, email, external, i18n, observability, platform, shared-ui, tenant
+|*user*          |`com.wagoe/wagoe-user`          |config, core, email, i18n, observability, platform, shared-ui, tenant
 |*calendar*      |`com.wagoe/wagoe-calendar`      |core, shared-ui
 |*admin*         |`com.wagoe/wagoe-admin`         |core, events, i18n, platform, shared-ui, ui-style, user
 |*workflow*      |`com.wagoe/wagoe-workflow`      |admin, core, i18n, platform, shared-ui, user
-|*search*        |`com.wagoe/wagoe-search`        |admin, core, i18n, platform, shared-ui
+|*search*        |`com.wagoe/wagoe-search`        |core, i18n, platform, shared-ui
 |*test*          |`com.wagoe/wagoe-test`          |config, events, jobs, platform, realtime, tenant, user
 |*wagoe-cli*     |`com.wagoe/wagoe-cli`           |—
 |*tools*         |`com.wagoe/wagoe-tools`         |wagoe-cli
