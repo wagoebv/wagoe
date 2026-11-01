@@ -28,7 +28,7 @@ predicate pipeline.
 | Pure: Hiccup UI components for segments
 
 | `wagoe.audience.ports`
-| Protocols: `IAudienceResolver`, `IAudienceRepository`, `IAudienceCache`, `IUserDataSource`
+| Protocols: `IAudienceResolver`, `IAudienceRepository`, `IAudienceCache`, `IUserDataSource`, `IUserQuery`
 
 | `wagoe.audience.shell.service`
 | Service orchestrating resolution, caching, and persistence

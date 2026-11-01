@@ -29,6 +29,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Security
+
+- **A search filter key could inject SQL on PostgreSQL** (BOU-875), and reach past the tenant filter. Upgrade if you serve
+  `wagoe-search` routes.
+
 ### Added
 
 - **`wagoe.core.http.errors` and `wagoe.core.http.access`**: the error body and access checks, without cheshire (BOU-930).

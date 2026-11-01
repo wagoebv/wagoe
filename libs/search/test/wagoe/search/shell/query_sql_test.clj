@@ -38,8 +38,15 @@
     (let [[sql & params] (query-sql/build-postgres-search-sql
                           "product-search" "product" "english" "widget" 20 0 false
                           {:tenant-id "abc"})]
-      (is (.contains sql "d.filters::jsonb->>'tenant_id' = ?"))
-      (is (some #(= "abc" %) params)))))
+      (is (.contains sql "d.filters::jsonb->>?::text = ?"))
+      (is (= ["tenant_id" "abc" 20 0] (drop 4 params)))))
+
+  (testing "a filter key is bound, never spliced into the SQL"
+    (let [k (keyword "x' OR 'a'<>'b")
+          [sql & params] (query-sql/build-postgres-search-sql
+                          "i" "t" "english" "w" 20 0 false {k "v"})]
+      (is (not (str/includes? sql "OR 'a'")))
+      (is (some #{"x' OR 'a'<>'b"} params)))))
 
 ;; =============================================================================
 ;; build-fallback-search-sql
@@ -75,14 +82,19 @@
     (let [[sql & params] (query-sql/build-fallback-count-sql
                           "product-search" "product" (match "test") {:status "active"})]
       (is (str/includes? sql "INSTR"))
-      (is (some #(= "\"status\":\"active\"" %) params)))))
+      (is (some #(= "\"status\":\"active\"" %) params))))
+
+  (testing "a quote in a value is escaped as the stored JSON escapes it"
+    (let [[_ & params] (query-sql/build-fallback-count-sql
+                        "i" "t" (match "x") {:status "a\"b"})]
+      (is (= "\"status\":\"a\\\"b\"" (last params))))))
 
 (deftest ^:unit suggest-sql-carries-the-tenant-filter
   ;; Suggestions of a tenant-scoped index are filtered like searches (BOU-568).
   (let [[sql & params] (query-sql/build-postgres-suggest-sql "i" "t" "wid" 5 {:tenant-id "a"})]
     (is (re-find #"FROM search_documents d " sql))
-    (is (re-find #"d\.filters::jsonb->>'tenant_id' = \?" sql))
-    (is (= ["wid" "i" "t" "wid" "a" 5] params)))
+    (is (re-find #"d\.filters::jsonb->>\?::text = \?" sql))
+    (is (= ["wid" "i" "t" "wid" "tenant_id" "a" 5] params)))
   (let [[sql & params] (query-sql/build-fallback-suggest-sql "i" "t" (match "wid") 5 {:tenant-id "a"})]
     (is (re-find #"INSTR\(filters, \?\)" sql))
     (is (= ["i" "t" "%wid%" "\"tenant_id\":\"a\"" 5] params))))

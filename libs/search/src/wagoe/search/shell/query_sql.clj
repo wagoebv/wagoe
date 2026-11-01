@@ -9,7 +9,8 @@
    Filter values are matched against the JSON \"filters\" column using
    DB-appropriate syntax. Here rather than in core because the SQL is the
    store's business (BOU-875)."
-  (:require [clojure.string :as str]
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [honey.sql :as sql]
             [wagoe.search.core.query :as qry]))
 
@@ -21,7 +22,10 @@
   "Build PostgreSQL WHERE conditions for a filter map.
 
    Each filter is rendered as:
-     AND d.filters::jsonb->>'<key>' = ?
+     AND d.filters::jsonb->>?::text = ?
+
+   The key is bound, not spliced: it comes from the request body, and a quote
+   in it would otherwise end the literal and OR past the tenant filter.
 
    A NULL filters column or absent key causes the condition to evaluate to
    NULL (which is falsy), so documents without that filter value are excluded.
@@ -29,8 +33,8 @@
    Returns [sql-fragment & param-values] or [\"\" ] when filters is empty."
   [filters]
   (let [terms (qry/filter-terms filters)]
-    (into [(str/join " " (map (fn [[k _]] (str "AND d.filters::jsonb->>'" k "' = ?")) terms))]
-          (map second)
+    (into [(str/join " " (repeat (count terms) "AND d.filters::jsonb->>?::text = ?"))]
+          cat
           terms)))
 
 (defn- build-filter-sql-fallback
@@ -51,7 +55,10 @@
   [filters]
   (let [terms (qry/filter-terms filters)]
     (into [(str/join " " (repeat (count terms) "AND INSTR(filters, ?) > 0"))]
-          (map (fn [[k v]] (str "\"" k "\":\"" v "\"")))
+          ;; Encoded as filters->json stores it, so a quote or backslash in a
+          ;; value is escaped on both sides.
+          (map (fn [[k v]] (let [pair (json/generate-string {k v})]
+                             (subs pair 1 (dec (count pair))))))
           terms)))
 
 ;; =============================================================================
