@@ -1,8 +1,8 @@
-(ns wagoe.search.core.ui
-  "Pure Hiccup UI components for the search Admin interface.
+(ns wagoe.search.shell.ui
+  "Hiccup UI components for the search Admin interface.
 
-   All functions are pure — they receive data and return Hiccup structures.
-   No side effects, no I/O, no logging.
+   They receive data and return Hiccup. In the shell, not core, because they
+   load wagoe-shared-ui at run time (BOU-932).
 
    Components:
      field-weight-badge   — weight indicator (A/B/C/D)
@@ -10,24 +10,36 @@
      search-results-fragment — HTMX results area
      indices-page         — list all registered indices (full page)
      index-detail-page    — index config + live search test form (full page)"
-  (:require [wagoe.core.utils.text :as text]
-            [wagoe.shared.ui.core.home :as home]
-            [wagoe.shared.ui.core.icons :as icons]
-            [wagoe.shared.ui.core.layout :as layout]
-            [wagoe.shared.ui.core.components :as ui]))
+  (:require [wagoe.core.utils.text :as text]))
+
+;; wagoe-shared-ui is not a dependency of wagoe-search: it brings the platform's
+;; HTTP stack (BOU-932). These pages run only when an app mounts search's web
+;; routes, and such an app has shared-ui. Resolved on first use, so this
+;; namespace loads without it.
+(def ^:private badge* (delay (requiring-resolve 'wagoe.shared.ui.core.components/badge)))
+(def ^:private table-wrapper* (delay (requiring-resolve 'wagoe.shared.ui.core.components/table-wrapper)))
+(def ^:private icon* (delay (requiring-resolve 'wagoe.shared.ui.core.icons/icon)))
+(def ^:private home-path* (delay (requiring-resolve 'wagoe.shared.ui.core.home/*path*)))
+(def ^:private admin-page* (delay (requiring-resolve 'wagoe.shared.ui.core.layout/admin-pilot-page-layout)))
+
+(defn- badge [& args] (apply @badge* args))
+(defn- table-wrapper [& args] (apply @table-wrapper* args))
+(defn- icon [& args] (apply @icon* args))
+(defn- home-path [] @@home-path*) ; the var, deref'd per call: callers bind it
+(defn- admin-page [& args] (apply @admin-page* args))
 
 ;; =============================================================================
 ;; Badges
 ;; =============================================================================
 
 (defn- language-badge [language]
-  (ui/badge (name language) {:variant :neutral
-                             :class "status-badge"}))
+  (badge (name language) {:variant :neutral
+                          :class "status-badge"}))
 
 (defn- doc-count-badge [n]
-  (ui/badge (str (or n 0) " docs")
-            {:variant (if (pos? (or n 0)) :success :neutral)
-             :class "status-badge"}))
+  (badge (str (or n 0) " docs")
+         {:variant (if (pos? (or n 0)) :success :neutral)
+          :class "status-badge"}))
 
 (defn field-weight-badge
   "Render a field weight label as a colored badge."
@@ -36,9 +48,9 @@
                   (:a :A) :success
                   (:b :B) :info
                   :neutral)]
-    (ui/badge [:t :search/badge-weight {:weight (text/upper-case (name weight))}]
-              {:variant variant
-               :class "status-badge"})))
+    (badge [:t :search/badge-weight {:weight (text/upper-case (name weight))}]
+           {:variant variant
+            :class "status-badge"})))
 
 ;; =============================================================================
 ;; Indices List Page
@@ -62,19 +74,19 @@
      opts    - map with :user, :flash (passed to page-layout)"
   [indices opts]
   (let [{:keys [user flash]} opts]
-    (layout/admin-pilot-page-layout
+    (admin-page
      [:t :search/page-indices-title]
      [:div {:style "padding: 1.5rem;"}
       [:div.page-header
        [:h1.page-title
-        (icons/icon :search {:size 24})
+        (icon :search {:size 24})
         [:t :search/page-indices-heading]]
-       [:a.button.secondary {:href home/*path*}
+       [:a.button.secondary {:href (home-path)}
         [:t :search/button-back-dashboard]]]
       [:p {:style "color: var(--muted-color); margin-top: 0;"}
        [:t :search/page-indices-description]]
       (if (seq indices)
-        (ui/table-wrapper
+        (table-wrapper
          [:table {:class "data-table ui-table"}
           [:thead
            [:tr
@@ -87,7 +99,7 @@
            (for [idx indices]
              (index-row idx))]])
         [:div.empty-state
-         (icons/icon :search {:size 32})
+         (icon :search {:size 32})
          [:h3 [:t :search/empty-state-no-indices]]
          [:p [:t :search/empty-state-help]]])]
      {:user  user
@@ -131,7 +143,7 @@
       [:small {:style "color: var(--muted-color);"}
        [:t :search/result-showing-first {:count (count results)}]])]
    (if (seq results)
-     (ui/table-wrapper
+     (table-wrapper
       [:table {:class "data-table ui-table"}
        [:thead
         [:tr
@@ -144,7 +156,7 @@
         (for [r results]
           (search-result-row r))]])
      [:div.empty-state
-      (icons/icon :search {:size 32})
+      (icon :search {:size 32})
       [:p [:t :search/result-empty-state {:query (or query "")}]]])])
 
 (defn index-detail-page
@@ -159,7 +171,7 @@
   (let [{:keys [user flash]} opts
         {:keys [id entity-type language fields doc-count]} index-info
         index-name (name id)]
-    (layout/admin-pilot-page-layout
+    (admin-page
      [:t :search/page-detail-title {:index-name index-name}]
      [:div {:style "padding: 1.5rem;"}
       [:nav {:aria-label [:t :common/aria-breadcrumb]
@@ -198,7 +210,7 @@
                    :value       (or query "")
                    :style       "width: 100%;"}]]
          [:button {:type "submit"}
-          (icons/icon :search {:size 16})
+          (icon :search {:size 16})
           " " [:t :common/button-search]
           [:span#search-spinner.htmx-indicator " ..."]]]]]
       (if results
@@ -209,7 +221,7 @@
          (:took-ms results))
         [:div#search-results
          [:div.empty-state
-          (icons/icon :search {:size 32})
+          (icon :search {:size 32})
           [:p [:t :search/test-form-empty-state]]]])]
      {:user  user
       :flash flash})))
