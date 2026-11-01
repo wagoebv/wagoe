@@ -1,0 +1,135 @@
+= ADR-042: Other stores: app modules choose, framework libraries run on SQL
+:status: Accepted
+:date: 2026-11-01
+:deciders: wagoe-team
+
+== Status
+
+Accepted (BOU-876). Builds on ADR-021 (FC/IS boundaries) and ADR-039 (the
+database adapter contract). Supersedes the `DataStore` protocol and the
+per-library Datomic and XTDB persistence files that ADR-023 sketched as a
+direction. Follow-ups: BOU-871 (`wagoe-platform-sql`), BOU-874 (no SQL in
+`core/` or ports).
+
+== Context
+
+People ask whether Wagoe runs on Datomic, XTDB or a store behind a REST API.
+There are two questions in that, with different answers:
+
+* Can _my_ module keep its data somewhere other than SQL? Yes, today.
+* Can the framework's libraries (user, admin, tenant, jobs, search, workflow,
+  …) run on something other than SQL? No, and that will not become a setting.
+
+The database port, `wagoe.platform.ports.database/DBAdapter` with
+`wagoe.platform.database` over it, is SQL-shaped: dialect, JDBC driver and URL,
+pool, column types, `search_path`, transactional DDL, `SELECT … FOR UPDATE`.
+ADR-039 made it answer which engine and which capabilities, across H2, SQLite,
+PostgreSQL and MySQL.
+
+== Decision
+
+=== 1. No generic store port above SQL and Datomic
+
+There is no `DataStore` or `IStore` that both a JDBC engine and Datomic
+implement. ADR-023 proposed one; this replaces that direction.
+
+Such a port can only offer what both sides share: put, get by id, a filtered
+list. Each side's strength is outside that intersection. Datomic has Datalog,
+the database as a value at a point in time, and a schema made of attributes.
+SQL has joins, constraints that the database enforces, full-text search, row
+locks and schemas per tenant. A port over both hides all of these, and the
+libraries written against it would be weaker on both.
+
+=== 2. The seam for another store is the module
+
+Each module's `ports.clj` is shaped by its domain, and its
+`shell/persistence.clj` picks the store. Nothing else in the module knows which.
+The scaffolder already generates modules this way
+(`libs/scaffolder/src/wagoe/scaffolder/core/generators.clj`):
+
+* `ports-parts` writes `I<Entity>Repository`: `find-by-id`, `find-all`,
+  `create`, `update-entity`, `delete` and `transact`. No SQL type or JDBC value
+  in a signature.
+* `generate-service-file` requires the module's `ports` and `core` only.
+* `generate-persistence-file` is the one namespace that requires
+  `wagoe.platform.database`, apart from an entity's workflow
+  (`generate-workflow-file`), which joins the caller's SQL transaction.
+* `generate-module-wiring-file` builds `:wagoe/<module>-repository` with
+  `persistence/create-repository`; the service receives it as `:repository`.
+* `generate-service-test-file` tests the service against a `reify` of the
+  repository port, with no database.
+
+So a module on Datomic replaces `shell/persistence.clj` and the
+`:wagoe/<module>-repository` init. `transact` means "run `f` as one unit of
+work", which a Datomic adapter implements with its own transaction.
+
+=== 3. Framework libraries run on SQL
+
+A non-SQL version of a framework library is a separate adapter for that
+library, written and tested on its own, not a config value. Where a library has
+a seam (jobs, cache and events already ship `:memory` and `:redis`), it is one
+more adapter behind it. Where it has none, the seam comes first.
+
+Cost per library:
+
+[cols="1,3"]
+|===
+| Library | What a non-SQL adapter has to replace
+
+| tenant
+| Doesn't fit. One PostgreSQL schema per tenant, switched with `search_path`;
+  every tenant-aware library relies on it. Tenancy is PostgreSQL-only, decided
+  in BOU-449 (`libs/tenant/src/wagoe/tenant/ports.clj`, `ITenantSchemaProvider`;
+  ADR-039, "Not decided here"). Another store needs a different isolation model
+  in every library, not an adapter in one.
+
+| jobs
+| The `:db` queue claims a job with a conditional `UPDATE … WHERE
+  status='ready'` serialized by the row lock, and reclaims expired leases by
+  `locked_at` (`libs/jobs/src/wagoe/jobs/shell/adapters/db.clj`). Another store
+  needs its own compare-and-set and lease renewal, then the reliability tests.
+  Redis already exists for this.
+
+| search
+| PostgreSQL FTS (`to_tsvector`, `ts_rank`, `ts_headline`) with a `LIKE`
+  fallback elsewhere. Another store means another engine (its own index) or an
+  external search service.
+
+| user, admin, workflow
+| Unique constraints, foreign keys and transactions across tables carry their
+  invariants: one account per email; a workflow store joins its caller's
+  transaction, so an instance and its audit log commit with the caller's write.
+  Each check moves into the adapter, and its tests with it. Admin builds its
+  list queries (filters, counts, facets) from table metadata and
+  would need a query layer per store.
+
+| migrations
+| Every library ships SQL migrations into one `schema_migrations`. Another store
+  needs its own schema story per library.
+|===
+
+=== 4. What 1.2 does to keep this possible
+
+Planned, not shipped:
+
+* *No SQL in `core/` or ports* (BOU-874): a `check:fcis` rule, so a module's
+  domain cannot start depending on SQL. Today SQL appears in five core
+  namespaces; platform's own database core and the code generators (scaffolder,
+  ai SQL copilot) are SQL by purpose, and search's query builder needs a
+  decision when the rule lands.
+* *`wagoe-platform-sql`* (BOU-871): the SQL database layer as a named artifact,
+  same namespaces. An app depends on SQL by choice, and a module that does not
+  need it can say so.
+
+== Consequences
+
+* An app can run the framework libraries on PostgreSQL and its own module on
+  Datomic, XTDB or a REST API in one Integrant system. Documented in
+  `docs/modules/architecture/pages/other-stores.adoc`.
+* We do not ship a store abstraction, so there is none to keep compatible.
+
+== Not decided here
+
+* A runnable sample module on another store (later ticket).
+* Whether any framework library gets a non-SQL adapter. That is a per-library
+  decision with its own ADR.
