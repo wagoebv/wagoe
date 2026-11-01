@@ -83,19 +83,24 @@
 ;; Throw / mutable-state ban + escape hatch
 ;; ---------------------------------------------------------------------------
 
+(defn- with-file
+  "Write `src` to `rel` under a fresh temp dir and call `f` with the File."
+  [rel src f]
+  (let [dir  (io/file (System/getProperty "java.io.tmpdir")
+                      (str "fcis-sql-" (System/nanoTime)))
+        file (io/file dir rel)]
+    (try
+      (io/make-parents file)
+      (spit file src)
+      (f file)
+      (finally
+        (doseq [x (reverse (file-seq dir))] (.delete x))))))
+
 (defn- check-src
   "Write `src` to a temp core file and run check-file with `config`."
   ([src] (check-src src {}))
   ([src config]
-   (let [f (io/file (System/getProperty "java.io.tmpdir")
-                    (str "fcis-impurity-" (System/currentTimeMillis) "-" (hash src))
-                    "core" "sample.clj")]
-     (try
-       (io/make-parents f)
-       (spit f src)
-       (fcis/check-file f config)
-       (finally
-         (doseq [x (reverse (file-seq (.getParentFile f)))] (.delete x)))))))
+   (with-file "core/sample.clj" src #(doall (fcis/check-file % config)))))
 
 (deftest ^:unit flags-throw-in-core
   (testing "(throw ...) in a core namespace is a :throw violation"
@@ -204,7 +209,7 @@
   ;; are taken from what core namespaces require today.
   (doseq [lib ["clojure.string" "clojure.set" "clojure.walk" "clojure.edn"
                "malli.core" "malli.error" "hiccup2.core" "cheshire.core"
-               "buddy.core.codecs" "honey.sql" "rewrite-clj.zip"
+               "buddy.core.codecs" "rewrite-clj.zip"
                "integrant.core"
                "wagoe.user.schema" "wagoe.i18n.ports"
                "wagoe.shared.ui.core.icons" "wagoe.core.utils.case-conversion"]]
@@ -292,3 +297,86 @@
   (testing "and a real call is still caught beside one"
     (is (some #(= :mutable-state (:kind %))
               (check-src "(ns ex.core)\n(def d {\\( :paren})\n(defn g [r] (swap! r inc))\n")))))
+
+;; ===========================================================================
+;; core/ and ports know no SQL (BOU-874)
+;; ===========================================================================
+
+(defn- ports-findings [src]
+  (with-file "ports.clj" src #(doall (fcis/sql-port-findings %))))
+
+(deftest ^:unit core-may-not-require-sql
+  (doseq [[lib kind] [["honey.sql" :sql-require] ["honey.sql.helpers" :sql-require]
+                      ["wagoe.platform.ports.database" :sql-require]
+                      ;; I/O, so the purity rule reports them, not :allow-sql's.
+                      ["next.jdbc" :require] ["next.jdbc.sql" :require]
+                      ["wagoe.platform.database" :require]]]
+    (testing lib
+      (let [vs (check-src (str "(ns ex.core\n  (:require [" lib " :as x]))\n"))]
+        (is (= [[kind lib]] (map (juxt :kind :req) vs)) "reported once")))))
+
+(deftest ^:unit allow-sql-does-not-exempt-next-jdbc-in-core
+  (with-file "core/q.clj" "(ns ex.core.q\n  (:require [next.jdbc :as jdbc]))\n"
+    (fn [f]
+      (is (= [:require]
+             (map :kind (fcis/check-file f {:allow-sql [{:path (.getCanonicalPath f)
+                                                         :why  "x"}]})))))))
+
+(deftest ^:unit sql-in-a-port-ns-docstring-or-a-jdbc-type-is-found
+  (let [fs (ports-findings (str "(ns ex.ports\n"
+                                "  \"Queries are HoneySQL maps.\"\n"
+                                "  (:import (javax.sql DataSource)))\n"
+                                "(defprotocol IRepo\n"
+                                "  (find-by [this ^java.sql.Connection conn]))\n"))]
+    (is (= #{[:sql-doc 2] [:sql-require nil] [:sql-signature 5]}
+           (set (map (juxt :kind :line) fs))))))
+
+(deftest ^:unit ports-may-not-require-sql
+  (is (= [[:sql-require :error "next.jdbc"]]
+         (map (juxt :kind :severity :req)
+              (ports-findings "(ns ex.ports\n  (:require [next.jdbc :as jdbc]))\n")))))
+
+(deftest ^:unit a-sql-type-in-a-port-arglist-is-an-error-and-in-a-docstring-a-warning
+  (let [fs (ports-findings (str "(ns ex.ports)\n"
+                                "(defprotocol IUsers\n"
+                                "  (query [this honeysql-clause]\n"
+                                "    \"Run a HoneySQL map.\")\n"
+                                "  (in-tx [this tx]\n"
+                                "    \"tx: an open next.jdbc transaction.\"))\n"))]
+    (is (= #{[:sql-signature :error 3] [:sql-doc :warning 4] [:sql-doc :warning 6]}
+           (set (map (juxt :kind :severity :line) fs))))
+    (is (= #{"honeysql" "HoneySQL" "next.jdbc"} (set (map :req fs))))))
+
+(deftest ^:unit an-untyped-store-handle-may-pass-through-a-port
+  (is (empty? (ports-findings (str "(ns ex.ports)\n"
+                                   "(defprotocol IJobs\n"
+                                   "  (enqueue-in! [this tx job]\n"
+                                   "    \"tx: an open transaction of the store.\"))\n"
+                                   ";; a comment naming next.jdbc is not a signature\n")))))
+
+(deftest ^:unit allow-sql-exempts-a-file-or-a-directory
+  (with-file "core/q.clj" "(ns ex.core.q\n  (:require [honey.sql :as sql]))\n"
+    (fn [f]
+      (let [path (.getCanonicalPath f)
+            dir  (str (.getCanonicalPath (.getParentFile f)) "/")]
+        (is (some #(= :sql-require (:kind %)) (fcis/check-file f {})))
+        (testing "by file"
+          (is (empty? (fcis/check-file f {:allow-sql [{:path path :why "x"}]}))))
+        (testing "by directory"
+          (is (empty? (fcis/check-file f {:allow-sql [{:path dir :why "x"}]}))))
+        (testing "a directory needs its trailing slash"
+          (is (seq (fcis/check-file f {:allow-sql [{:path (subs dir 0 (dec (count dir)))
+                                                    :why  "x"}]}))))))))
+
+(deftest ^:unit an-allow-sql-entry-without-a-why-or-path-is-refused
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"no :why"
+                        (fcis/allowed-sql {:allow-sql [{:path "libs/x/"}]})))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"no :path"
+                        (fcis/allowed-sql {:allow-sql [{:why "reasons"}]})))
+  (is (= [{:path "libs/x/" :why "reasons"}]
+         (fcis/allowed-sql {:allow-sql [{:path "libs/x/" :why "reasons"}]}))))
+
+(deftest ^:unit an-allow-sql-entry-that-exempts-nothing-is-stale
+  (let [config {:allow-sql [{:path "libs/a/" :why "x"} {:path "libs/b/ports.clj" :why "y"}]}
+        found  [{:path "libs/a/src/a/core/q.clj"}]]
+    (is (= ["libs/b/ports.clj"] (map :path (fcis/stale-sql-entries config found))))))
