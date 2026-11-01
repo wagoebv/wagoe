@@ -400,8 +400,12 @@
         read  (profile/reader dir)
         extra (delay (extra-modules dir))]
     (for [m (:modules (cat/load-catalogue))
-          :let [dep (dep-coords deps (:clojars m) (:scope m))]]
+          :let [dep      (dep-coords deps (:clojars m) (:scope m))
+                provider (some-> (:provided-by m) cat/find-module)]]
       [m (cond
+           ;; platform brings platform-sql: installed, though deps.edn never names it.
+           (and (nil? dep) provider
+                (some? (dep-coords deps (:clojars provider) (:scope provider)))) :enabled
            (or (nil? dep) (= :unreadable dep)) :absent
            (:module-key m)                     (if (switched-on? (:module-key m) read @extra) :enabled :configurable)
            (or (= :core (:category m))

@@ -42,7 +42,7 @@ JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test
 # run. Bare `clojure -M:test` runs the lean set: fine for a suite that needs
 # nothing extra, and it fails on ClassNotFoundException for one that does.
 #
-#   :test/pg      admin, platform, scaffolder, tenant, workflow (embedded PostgreSQL, Linux binary)
+#   :test/pg      admin, platform, platform-sql, scaffolder, tenant, workflow (embedded PostgreSQL, Linux binary)
 #   :test/pg-mac  add to :test/pg on Apple Silicon — CI is ubuntu-only
 #   :test/otel    observability             (OpenTelemetry in-memory exporters)
 #   :test/http    devtools                  (clj-http-lite)
@@ -55,6 +55,7 @@ WAGOE_TEST_DB=mysql clojure -M:test:test/pg :admin # admin, user, workflow, sear
 clojure -M:test :core                              # Core library tests
 clojure -M:test:test/otel :observability           # Observability library tests
 clojure -M:test:test/pg :platform                  # Platform library tests
+clojure -M:test:test/pg :platform-sql              # Platform SQL library tests (MySQL: bb test:services up)
 clojure -M:test :user                              # User library tests
 clojure -M:test:test/pg :admin                     # Admin library tests
 clojure -M:test :storage                           # Storage library tests
@@ -1099,6 +1100,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 | [observability](https://github.com/wagoebv/wagoe/blob/main/libs/observability/AGENTS.md) | Interceptor-based metrics, logging, and error reporting                                             |
 | [payments](https://github.com/wagoebv/wagoe/blob/main/libs/payments/AGENTS.md)           | PSP abstraction — Mollie, Stripe, Mock checkout and webhook verification                            |
 | [platform](https://github.com/wagoebv/wagoe/blob/main/libs/platform/AGENTS.md)           | HTTP server, Reitit router, Ring middleware pipeline                                                |
+| [platform-sql](https://github.com/wagoebv/wagoe/blob/main/libs/platform-sql/AGENTS.md)   | JDBC adapters, migrations, seeding and leases, without the HTTP stack                               |
 | [push](https://github.com/wagoebv/wagoe/blob/main/libs/push/AGENTS.md)                   | Multi-platform push notifications — FCM (Firebase) + APNs (Apple)                                   |
 | [realtime](https://github.com/wagoebv/wagoe/blob/main/libs/realtime/AGENTS.md)           | WebSocket pub/sub messaging                                                                         |
 | [reports](https://github.com/wagoebv/wagoe/blob/main/libs/reports/AGENTS.md)             | PDF/CSV export and scheduled report generation                                                      |
@@ -1170,7 +1172,7 @@ rename a released id: databases that recorded it would run it again. Per-module 
 {:paths ["libs/tools/src" "libs/tools/resources" ...]}
 ```
 
-> **Note:** the monorepo reads `libs/tools` from source, not from Clojars — but it *is* published, as `com.wagoe/wagoe-tools`, and `bb deploy --all` includes it along with the other 32. "Dev-only" describes when you use it, not whether it ships.
+> **Note:** the monorepo reads `libs/tools` from source, not from Clojars — but it *is* published, as `com.wagoe/wagoe-tools`, and `bb deploy --all` includes it along with the other 33. "Dev-only" describes when you use it, not whether it ships.
 
 ### Namespaces
 
@@ -1184,7 +1186,7 @@ rename a released id: databases that recorded it would run it again. Per-module 
 | `wagoe.tools.integrate` | `bb scaffold integrate` — guide module integration (Integrant config + wiring) |
 | `wagoe.tools.i18n` | `bb i18n:find/scan/missing/unused` |
 | `wagoe.tools.admin` | `bb create-admin` |
-| `wagoe.tools.deploy` | `bb deploy` (handles all 33 libs) |
+| `wagoe.tools.deploy` | `bb deploy` (handles all 34 libs) |
 | `wagoe.tools.dev` | `bb migrate`, `bb check-links`, `bb smoke-check`, `bb install-hooks` |
 | `wagoe.tools.check-fcis` | `bb check:fcis` — FC/IS boundary enforcement (ADR-021) |
 | `wagoe.tools.check-tests` | `bb check:placeholder-tests` — placeholder assertion detection |

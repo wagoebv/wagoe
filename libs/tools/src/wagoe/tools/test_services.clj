@@ -52,7 +52,7 @@
     :port-env  "WAGOE_TEST_MYSQL_PORT"
     :port      (env-port "WAGOE_TEST_MYSQL_PORT" 3306)
     :needed-by ["wagoe.audience-dialect-test"
-                "wagoe.database-adapter-contract-test"
+                "wagoe.platform.database-adapter-contract-test"
                 "wagoe.jobs-workflow-mysql-test"
                 "wagoe.library-migrations-mysql-test"
                 "wagoe.search-mysql-test"

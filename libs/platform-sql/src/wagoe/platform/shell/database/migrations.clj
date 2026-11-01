@@ -26,7 +26,6 @@
             [wagoe.core.utils.migration-id :as migration-id]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.shell.adapters.database.config :as db-config]
-            [wagoe.platform.shell.modules :as modules]
             [clojure.edn :as edn]
             [clojure.set :as set]
             [clojure.java.io :as io]
@@ -419,11 +418,16 @@
 
 (defn- without-switched-off
   "`dirs` less those under manifest key `k` that only framework modules
-   `enabled-libs` does not name ship. nil keeps every directory."
+   `enabled-libs` does not name ship. nil keeps every directory, and so does
+   a classpath without platform's registry."
   [dirs enabled-libs k]
   (if (nil? enabled-libs)
     dirs
-    (let [framework (set (vals modules/framework-modules))
+    ;; Resolved, not required: wagoe-platform owns the registry and depends on
+    ;; this artifact (BOU-871).
+    (let [registry  (try (requiring-resolve 'wagoe.platform.shell.modules/framework-modules)
+                         (catch java.io.FileNotFoundException _ nil))
+          framework (set (some-> registry deref vals))
           by-lib    (library-manifests k)
           off?      (fn [[lib _]] (and (framework lib) (not (enabled-libs lib))))
           skip      (set/difference (set (mapcat second (filter off? by-lib)))
@@ -470,10 +474,13 @@
 
 (defn- configured-libraries
   "The libraries the active profile's config switches on, for the CLI, which
-   has no running system to ask."
+   has no running system to ask. nil, so every directory, without
+   wagoe-platform: it owns the module registry."
   []
-  (modules/enabled-libraries
-   (:active (db-config/load-config (db-config/detect-environment)))))
+  (when-let [enabled-libraries (try (requiring-resolve 'wagoe.platform.shell.modules/enabled-libraries)
+                                    (catch java.io.FileNotFoundException _ nil))]
+    (enabled-libraries
+     (:active (db-config/load-config (db-config/detect-environment))))))
 
 (defn- migrate-reserved!
   "migratus's `migrate-up*` / `migrate-down*`, with the reservation taken and

@@ -1,0 +1,48 @@
+= platform-sql
+:description: The SQL layer of Wagoe: JDBC adapters, migrations, seeding and leases, without the HTTP stack.
+
+JDBC adapters for PostgreSQL, MySQL, SQLite and H2, migrations, seeding, leases
+and the transit wire format. xref:platform.adoc[platform] depends on it, so an
+application on platform already has it.
+
+Depend on it directly when you want Wagoe's data access without Jetty, Reitit or
+Muuntaja: next to your own HTTP wiring, or in a library. jobs, events and storage
+reach no HTTP stack through it.
+
+== Coordinates
+
+[source,clojure]
+----
+{:deps {com.wagoe/wagoe-platform-sql {:mvn/version "1.1.1"}}}
+----
+
+== Key namespaces
+
+The namespaces kept their `wagoe.platform.*` names when they moved out of
+platform.
+
+[cols="1,3",options="header"]
+|===
+| Namespace | Purpose
+
+| `wagoe.platform.database`
+| Queries, transactions, `upsert!`, `after-commit`.
+
+| `wagoe.platform.ports.database`
+| `DBAdapter` and the capability protocols every engine answers.
+
+| `wagoe.platform.shell.adapters.database.*`
+| The four engine adapters and connection pooling.
+
+| `wagoe.platform.shell.database.*`
+| Migrations, seeding and `db:reset`, with their CLIs.
+
+| `wagoe.platform.lease`
+| A lease row replicas take turns holding, timed by the database clock.
+
+| `wagoe.platform.transit`
+| Transit JSON for events and jobs that leave the process.
+|===
+
+Without platform on the classpath, `migrate` runs every library's migrations:
+deciding which modules are switched on is platform's.

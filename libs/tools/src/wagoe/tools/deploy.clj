@@ -39,6 +39,7 @@
    "config"
    "core"
    "observability"
+   "platform-sql"
    "platform"
    "audience"
    "i18n"

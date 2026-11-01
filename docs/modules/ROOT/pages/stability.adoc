@@ -22,7 +22,7 @@ at `1.0.1`, and the surface below is the one it promises.
   The `:base` CSS bundle is the exception; see <<_removed_in_1_x,Removed in 1.x>>.
 
 | Artifacts
-| 33 libraries on Clojars, all in the `com.wagoe` group. Artifact ids are
+| 34 libraries on Clojars, all in the `com.wagoe` group. Artifact ids are
   `wagoe-` followed by the library name — `wagoe-core`, `wagoe-platform` — except
   where the library name already begins with `wagoe-`, which is not doubled:
   `libs/wagoe-cli` publishes as `com.wagoe/wagoe-cli`, not `wagoe-wagoe-cli`, and
@@ -162,7 +162,8 @@ design, and the rule above still applies — only the file layout differs.
 | `wagoe.platform.ports.*` — a directory rather than one file: `ports.http`
   (`IHttpServer`; routing is not a port, see ADR-037), `ports.database`
   (`DBAdapter`, `EngineInfo`, …) and `ports.authorization`. `ports.privacy`
-  keeps its name but ships in `wagoe-core`.
+  keeps its name but ships in `wagoe-core`, and `ports.database` in
+  `wagoe-platform-sql`.
   `IFileSystemAdapter` still sits under `shell.adapters.filesystem.protocols`;
   it is supported surface despite the location
 

@@ -33,10 +33,14 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`wagoe.core.http.errors` and `wagoe.core.http.access`**: the error body and access checks, without cheshire (BOU-930).
   The `wagoe.platform.core.http` namespaces delegate to them; nothing to change.
+- **`com.wagoe/wagoe-platform-sql`**: platform's database, migration, lease and transit namespaces, same names (BOU-871).
+  `wagoe-platform` depends on it; nothing to change.
 
 ### Fixed
 
 - **A successful storage upload or URL lookup went out unencoded** (BOU-930). Upgrade if you serve `wagoe-storage` routes.
+- **A CLI pipeline answered a rate limit or a refused login with a 500** (BOU-871): its error table had drifted from HTTP's.
+  Nothing to change.
 
 ### Changed
 

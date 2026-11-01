@@ -6,7 +6,7 @@
   (:require [wagoe.core.utils.case-conversion :as case-conversion]
             [wagoe.core.utils.text :as text]
             [wagoe.platform.core.database.constraint :as constraint]
-            [wagoe.platform.core.http.problem-details :as problem]
+            [wagoe.core.http.error-status :as error-status]
             [wagoe.platform.core.database.query :as core-query]
             [wagoe.platform.shell.adapters.database.common.adapter :as common-adapter]
             [wagoe.platform.shell.adapters.database.common.connection :as connection]
@@ -604,7 +604,7 @@
 
                   (catch Exception e
                     ;; A refused key is the caller's to answer, not a fault (BOU-712).
-                    (log/logp (problem/exception-log-level e {}) "Transaction failed, rolling back"
+                    (log/logp (error-status/exception-log-level e {}) "Transaction failed, rolling back"
                               {:adapter (protocols/dialect (:adapter ctx))
                                :error (redaction/loggable-message e)})
                     (throw e))))))]

@@ -482,7 +482,7 @@
       ;; scaffolder imports EmbeddedPostgres directly: migration_postgres_test
       ;; round-trips the generated timestamp columns on PostgreSQL (BOU-522).
       ;; workflow converts its legacy TEXT timestamps on PostgreSQL (BOU-502).
-      (doseq [s ["admin" "platform" "tenant" "scaffolder" "workflow"]]
+      (doseq [s ["admin" "platform" "platform-sql" "tenant" "scaffolder" "workflow"]]
         (is (str/includes? (get in-ci s "") ":test/pg")
             (str s " uses EmbeddedPostgres and must request :test/pg"))))
 
@@ -510,7 +510,7 @@
       ;; events runs its outbox test on PostgreSQL in the MySQL job (BOU-448),
       ;; jobs its DB queue test (BOU-689).
       (doseq [[s alias] in-ci
-              :when (not (#{"admin" "platform" "tenant" "scaffolder" "workflow" "observability"
+              :when (not (#{"admin" "platform" "platform-sql" "tenant" "scaffolder" "workflow" "observability"
                             "devtools" "app" "events" "jobs" "external"} s))]
         (is (= "-M:test" alias)
             (str s " requests " alias " but needs nothing beyond :test"))))))

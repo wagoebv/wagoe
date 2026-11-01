@@ -59,7 +59,7 @@
 (deftest ^:unit project-migration-dir-matches-the-platform
   ;; Babashka cannot load the platform namespace, so the value is copied. This
   ;; is what keeps the copy honest.
-  (let [src (slurp (str (fs/path (repo-root) "libs/platform/src/wagoe/platform/shell/database/migrations.clj")))
+  (let [src (slurp (str (fs/path (repo-root) "libs/platform-sql/src/wagoe/platform/shell/database/migrations.clj")))
         [_ platform-dir] (re-find #"\(def project-migration-dir\s+\"(?:[^\"\\]|\\.)*\"\s+\"([^\"]+)\"\)" src)]
     (is (some? platform-dir) "the platform definition was not found")
     (is (= platform-dir db/project-migration-dir))))

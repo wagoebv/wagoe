@@ -84,6 +84,10 @@
   {:lib "platform"  :namespace "wagoe.devtools.shell.dashboard.middleware"
    :why "BY DESIGN. Dev-only: the branch is behind (= :dev profile) and degrades to no
          enrichment when devtools is absent. Documented inline in routes.clj."}
+  {:lib "platform-sql" :namespace "wagoe.platform.shell.modules"
+   :why "BY DESIGN. Platform's module registry decides which libraries' migrations run.
+         platform depends on platform-sql, so a require is a cycle; without platform
+         the CLI migrates every directory (BOU-871)."}
   {:lib "platform"  :namespace "wagoe.i18n.shell.middleware"
    :why "TO FIX. BOU-131 deprecation path — the call site logs that wiring :i18n here is
          deprecated and builds the middleware anyway. Clears when that argument goes."}

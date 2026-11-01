@@ -10,6 +10,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [wagoe.tools.ansi :as ansi]
+            [wagoe.tools.check-isolation :as check-isolation]
             [wagoe.tools.parsing :as parsing]))
 
 ;; ---------------------------------------------------------------------------
@@ -79,10 +80,13 @@
                                       (symbol (str (first spec) "." s))))]
     (str n)))
 
-(def ^:private moved-namespaces
-  "Namespaces that kept their name when they moved to another library.
-   `check-isolation/namespace-owners` derives the same from the tree."
-  {"wagoe.platform.ports.privacy" "core"}) ; BOU-872
+(def ^:private namespace-owners
+  "`check-isolation/namespace-owners`, read from the tree once. It names each
+   namespace that kept its name when it moved library (BOU-872, BOU-871)."
+  (delay
+    (if (.isDirectory (io/file (System/getProperty "user.dir") "libs"))
+      (check-isolation/namespace-owners)
+      {})))
 
 (defn ns->wagoe-lib
   "Given a namespace string like 'wagoe.user.core.foo', extract the library
@@ -90,7 +94,7 @@
    Maps wagoe.shared.* to 'shared-ui' (those namespaces live in libs/shared-ui/src/)."
   [ns-str]
   (let [parts (str/split ns-str #"\.")]
-    (or (moved-namespaces ns-str)
+    (or (@namespace-owners ns-str)
         (when (and (>= (count parts) 2) (= "wagoe" (first parts)))
           (case (second parts)
             ;; namespace segment differs from the lib dir name
