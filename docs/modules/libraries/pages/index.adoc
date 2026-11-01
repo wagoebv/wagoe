@@ -5,6 +5,8 @@ Wagoe is a monorepo of 34 libraries published to Clojars under the `com.wagoe`
 group.
 Every library follows the same FC/IS structure, making the codebase instantly familiar across libraries.
 
+Before you commit to one: xref:architecture:other-stores.adoc[Other stores] covers keeping your own modules off SQL, and xref:architecture:leaving-wagoe.adoc[Leaving Wagoe] what you keep if you drop the framework.
+
 == Foundation
 
 [cols="1,3",options="header"]

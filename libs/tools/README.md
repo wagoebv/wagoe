@@ -29,6 +29,7 @@ available out of the box:
 | `wagoe.tools.setup` | `bb setup`, `bb setup ai` | Config setup wizard (interactive / flags / AI) |
 | `wagoe.tools.admin` | `bb create-admin` | Create the first admin user |
 | `wagoe.tools.deploy` | `bb deploy` (framework repo only) | Publish the 34 Clojars artifacts (tools itself included) |
+| `wagoe.tools.footprint` | `bb deps:footprint` (framework repo only) | Each library's classpath at a release tag, as EDN for wagoe.org's library pages |
 | `wagoe.tools.dev` | `bb migrate`, `bb check-links`, `bb smoke-check`, `bb install-hooks` | Dev utilities |
 | `wagoe.tools.i18n` | `bb i18n:find/scan/missing/unused` | Translation catalogue management |
 

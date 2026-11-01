@@ -118,11 +118,12 @@
    string-prefixing) avoids a double `wagoe-` for libs whose dir already starts
    with it (e.g. wagoe-cli → wagoe-cli, not wagoe-wagoe-cli). Falls
    back to `wagoe-<lib>` when build.clj is unreadable."
-  [lib]
-  (let [build-file (io/file (lib-dir lib) "build.clj")]
-    (or (when (.exists build-file)
-          (second (re-find #"\(def lib '[^/]+/([^\)\s]+)" (slurp build-file))))
-        (str "wagoe-" lib))))
+  ([lib] (artifact-name root-dir lib))
+  ([root lib]
+   (let [build-file (io/file root "libs" lib "build.clj")]
+     (or (when (.exists build-file)
+           (second (re-find #"\(def lib '[^/]+/([^\)\s]+)" (slurp build-file))))
+         (str "wagoe-" lib)))))
 
 (defn read-version [lib]
   (let [build-file (io/file (lib-dir lib) "build.clj")]
