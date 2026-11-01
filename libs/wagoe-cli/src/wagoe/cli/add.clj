@@ -398,11 +398,10 @@
   [dir]
   (let [deps  (slurp (io/file dir "deps.edn"))
         read  (profile/reader dir)
-        extra (delay (extra-modules dir))
-        mods  (:modules (cat/load-catalogue))]
-    (for [m mods
+        extra (delay (extra-modules dir))]
+    (for [m (:modules (cat/load-catalogue))
           :let [dep      (dep-coords deps (:clojars m) (:scope m))
-                provider (some #(when (= (:provided-by m) (:name %)) %) mods)]]
+                provider (some-> (:provided-by m) cat/find-module)]]
       [m (cond
            ;; platform brings platform-sql: installed, though deps.edn never names it.
            (and (nil? dep) provider

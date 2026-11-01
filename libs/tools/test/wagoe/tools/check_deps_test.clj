@@ -271,7 +271,7 @@
   ;; BOU-871: a top-level file and a nested one, both in platform-sql.
   (is (= "platform-sql" (sut/ns->wagoe-lib "wagoe.platform.database")))
   (is (= "platform-sql" (sut/ns->wagoe-lib "wagoe.platform.shell.database.migrations")))
-  (testing "and agrees with the tree, so the next move cannot skip `moved-namespaces`"
+  (testing "and agrees with the tree, prefixes included"
     (doseq [[ns-name lib] (check-isolation/namespace-owners)]
       (is (= lib (sut/ns->wagoe-lib ns-name)) ns-name))))
 

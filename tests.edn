@@ -33,7 +33,8 @@
 
   ;; Each test namespace belongs to exactly one suite, so a full run executes
   ;; it once (check_test.clj pins this). Kaocha runs every suite by default.
-  :tests [         ;; The root test/ tree. Each library has its own suite below.
+  :tests [
+         ;; The root test/ tree. Each library has its own suite below.
           {:id :app
            :test-paths ["test"]
            :ns-patterns ["wagoe.*-test"]

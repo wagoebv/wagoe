@@ -77,7 +77,7 @@
   (let [text (slurp f)]
     (-> (->> (tree-seq coll? seq (try (parsing/read-ns-form f) (catch Exception _ nil)))
              (filter symbol?) (keep (comp check-deps/ns->wagoe-lib str)) set)
-        (into (ns-libs (map second (re-seq #"requiring-resolve\s+'wagoe\.([a-z0-9-]+)[./]" text))))
+        (into (ns-libs (map second (re-seq #"requiring-resolve\s+'wagoe\.([a-z0-9-]+(?:\.[a-z0-9-]+)*)" text))))
         (into (filter #(names-path text %)) libs))))
 
 (defn- test-uses

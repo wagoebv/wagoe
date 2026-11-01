@@ -629,7 +629,6 @@ jobs:
         image: mysql:8
         env:
           MYSQL_ROOT_PASSWORD: probe
-          MYSQL_DATABASE: audience
         ports:
           - 3306:3306
         options: >-
