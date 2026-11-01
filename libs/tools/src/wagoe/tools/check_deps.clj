@@ -452,10 +452,9 @@
    library without declaring it in deps.edn. These are acknowledged but not
    yet resolved. Remove entries as deps.edn files are updated; adding new
    entries requires an ADR."
-  ;; Only platform->external remains undeclared: external declares platform, so
-  ;; declaring platform->external would create a circular :local/root that
-  ;; tools.deps rejects. Needs the external->platform coupling broken first.
-  #{["platform" "external"]})
+  ;; Empty: platform's last require of external went in e3cc0ecd5 (BOU-92);
+  ;; the entry outlived it until BOU-873.
+  #{})
 
 (defn- allowed-undeclared?
   "Returns true if this undeclared dep is in the known allowlist."
