@@ -12,6 +12,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [wagoe.tools.check-deps :as sut]
+            [wagoe.tools.check-isolation :as check-isolation]
             [wagoe.tools.parsing :as parsing]))
 
 (defn- temp-lib
@@ -262,6 +263,14 @@
         (is (= [["probe" "org.clojure/tools.cli"]]
                (map (juxt :lib (comp str :artifact)) (sut/third-party-gaps [["probe" dir]]))))
         (finally (delete-tree! dir))))))
+
+(deftest ^:unit a-moved-namespace-maps-to-the-library-that-ships-it
+  ;; BOU-872: the name still says platform; wagoe-core ships it.
+  (is (= "core" (sut/ns->wagoe-lib "wagoe.platform.ports.privacy")))
+  (is (= "platform" (sut/ns->wagoe-lib "wagoe.platform.ports.http")))
+  (testing "and agrees with the tree, so the next move cannot skip `moved-namespaces`"
+    (doseq [[ns-name lib] (check-isolation/namespace-owners)]
+      (is (= lib (sut/ns->wagoe-lib ns-name)) ns-name))))
 
 ;; =============================================================================
 ;; BOU-870: declared wagoe deps = used wagoe deps, both directions

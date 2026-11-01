@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`wagoe-search` no longer depends on `wagoe-admin`**, which it never used (BOU-869).
   Declare `wagoe-email` (always on) and any of `wagoe-admin`/`wagoe-user` you got through search.
+- **`wagoe.platform.ports.privacy` ships in `wagoe-core`** under the same name (BOU-872).
+  Nothing to change; `wagoe-platform` depends on core.
 
 ## [1.1.1] — 2026-10-31
 
