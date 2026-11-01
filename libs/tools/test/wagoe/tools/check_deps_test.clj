@@ -316,13 +316,27 @@
                            "wagoe.geo.core requires wagoe.core.validation")))
       (finally (delete-tree! root)))))
 
+(deftest ^:unit prefix-lists-and-later-require-clauses-count-as-use
+  ;; Only the first clause's plain specs were read; with unused deps failing,
+  ;; every require it skipped would be a false "remove this dep".
+  (let [src {"wagoe/geo/core.clj"
+             (str "(ns wagoe.geo.core\n  (:require [clojure.string :as str])\n"
+                  "  (:require (wagoe.core [validation :as v] utils)))\n")}
+        [root entries] (temp-libs {"core" {}
+                                   "geo"  {:deps "{:deps {wagoe/core {:local/root \"../core\"}}}"
+                                           :src  src}})]
+    (try
+      (is (empty? (sut/dependency-mismatches entries {})))
+      (finally (delete-tree! root)))))
+
 (deftest ^:unit soft-refs-need-a-declaration-or-an-allowance
   (let [src {"wagoe/geo/core.clj"
              (str "(ns wagoe.geo.core\n  \"Names (requiring-resolve 'wagoe.jobs.ports/x) in a docstring.\")\n"
-                  "(defn f []\n  (requiring-resolve 'wagoe.core.validation/v))\n")}
+                  "(defn f []\n  (requiring-resolve 'wagoe.core.validation/v))\n"
+                  "(comment\n  (requiring-resolve 'wagoe.jobs.ports/x))\n")}
         [root entries] (temp-libs {"core" {} "jobs" {} "geo" {:src src}})]
     (try
-      (testing "an undeclared soft ref fails with its line; the docstring does not count"
+      (testing "an undeclared soft ref fails with its line; a docstring or comment block does not count"
         (is (= [[:undeclared-soft-dep "geo" "core" 4]]
                (map (juxt :type :lib :dep :line) (sut/dependency-mismatches entries {})))))
       (testing "an :allow-soft entry exempts it"

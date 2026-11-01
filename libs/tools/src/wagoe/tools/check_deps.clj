@@ -66,16 +66,18 @@
   (lib-dirs))
 
 (defn- extract-required-ns
-  "Extract required namespace symbols from a ns form."
+  "Required namespaces of a ns form, as strings: every :require clause, and
+   prefix lists expanded. A missed require is now a false unused dep."
   [ns-form]
-  (when ns-form
-    (let [require-clause (->> ns-form
-                              (filter #(and (sequential? %) (= :require (first %))))
-                              first)]
-      (when require-clause
-        (->> (rest require-clause)
-             (map #(cond (symbol? %) (str %) (vector? %) (str (first %)) :else nil))
-             (remove nil?))))))
+  (for [clause (filter #(and (sequential? %) (= :require (first %))) ns-form)
+        spec   (rest clause)
+        n      (cond (symbol? spec) [spec]
+                     (vector? spec) [(first spec)]
+                     (list? spec)   (for [s (rest spec)
+                                          :let [s (if (vector? s) (first s) s)]
+                                          :when (symbol? s)]
+                                      (symbol (str (first spec) "." s))))]
+    (str n)))
 
 (defn ns->wagoe-lib
   "Given a namespace string like 'wagoe.user.core.foo', extract the library
@@ -107,12 +109,32 @@
   "Calls that load a namespace named by a quoted symbol at run time."
   #{"requiring-resolve" "require" "resolve"})
 
+(defn- blank-comment-forms
+  "`stripped` with every `(comment ...)` form blanked, newlines kept. Expects
+   `strip-comments-and-strings` output, so no paren sits in a string."
+  [^String stripped]
+  (let [sb (StringBuilder. stripped)
+        n  (count stripped)
+        m  (re-matcher #"\(\s*comment[\s)]" stripped)]
+    (while (.find m)
+      (let [start (.start m)
+            end   (loop [i start depth 0]
+                    (if (>= i n)
+                      n
+                      (let [depth (case (.charAt stripped i) \( (inc depth) \) (dec depth) depth)]
+                        (if (zero? depth) (inc i) (recur (inc i) depth)))))]
+        (doseq [i (range start end) :when (not= \newline (.charAt stripped i))]
+          (.setCharAt sb i \space))))
+    (str sb)))
+
 (defn- soft-refs
   "Quoted wagoe symbols passed to `soft-ref-heads` in `content`, as {:ns :line}.
-   Read from code only: strings and comments are stripped first, so a
-   docstring or a scaffolder template naming one does not count."
+   Read from code only: strings, comments and `(comment ...)` blocks are
+   blanked first, so a docstring, a scaffolder template or a REPL snippet
+   naming one does not count."
   [content]
-  (for [{:keys [head arg1 line]} (parsing/call-forms (parsing/strip-comments-and-strings content))
+  (for [{:keys [head arg1 line]} (parsing/call-forms
+                                  (blank-comment-forms (parsing/strip-comments-and-strings content)))
         :when (and (soft-ref-heads head) arg1 (str/starts-with? arg1 "'wagoe."))]
     {:ns (first (str/split (subs arg1 1) #"/")) :line line}))
 
@@ -456,7 +478,7 @@
     (when (or (str/blank? (some-> (:lib e) str)) (str/blank? (some-> (:dep e) str)))
       (throw (ex-info (str where " entry needs :lib and :dep: " (pr-str e))
                       {:type :configuration-error :entry e})))
-    (when (str/blank? (:why e))
+    (when (str/blank? (some-> (:why e) str))
       (throw (ex-info (str where " entry " (:lib e) " -> " (:dep e) " has no :why.")
                       {:type :configuration-error :entry e})))))
 
