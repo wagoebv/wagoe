@@ -6,8 +6,7 @@
             [wagoe.storage.shell.adapters.local :as local]
             [wagoe.storage.ports]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
-            [clojure.string]
-            [cheshire.core]))
+            [clojure.string]))
 
 (def test-dir "target/test-http-handlers-storage")
 
@@ -264,7 +263,7 @@
         (is (= 400 (:status resp)) (str label " with " (pr-str key)))
         ;; It said "bad-request", a type no other 400 used (BOU-586).
         (is (= "validation-error"
-               (get-in (cheshire.core/parse-string (:body resp) true) [:error :type])))))))
+               (get-in (:body resp) [:error :type])))))))
 
 ;; ============================================================================
 ;; Who may download (BOU-568)
@@ -295,3 +294,16 @@
                               [:delete "/api/v1/storage/delete/photo.jpg"]
                               [:get "/api/v1/storage/url/photo.jpg"]]]
             (is (= 401 (:status (handler {:request-method method :uri p}))) p)))))))
+
+(deftest ^:unit a-success-body-goes-out-encoded
+  ;; With a Content-Type already set muuntaja left the map for Jetty, which
+  ;; cannot write one.
+  (let [handler (reitit-router/compile-routes
+                 [(into ["/api/v1"] (sut/storage-routes (create-test-service) {}))]
+                 {:swagger-enabled false :authentication {:middleware []}})
+        resp    (handler {:request-method   :post :uri "/api/v1/storage/upload"
+                          :headers          {} :user {:id 1}
+                          :multipart-params {"file" (make-multipart-file "a.txt" "text/plain" "hi")}})]
+    (is (= 201 (:status resp)))
+    (is (instance? java.io.InputStream (:body resp)))
+    (is (clojure.string/includes? (slurp (:body resp)) "\"key\""))))

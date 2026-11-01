@@ -12,8 +12,8 @@
    Reading a tenant's memberships takes an active membership of that tenant;
    changing them takes its admin role. A global admin may do both. Only the
    invitee may accept an invitation (BOU-568)."
-  (:require [wagoe.platform.core.http.access :as access]
-            [wagoe.platform.core.http.errors :as errors]
+  (:require [wagoe.core.http.access :as access]
+            [wagoe.core.http.errors :as errors]
             [wagoe.tenant.ports :as membership-ports]
             [cheshire.core :as json]
             [clojure.tools.logging :as log]))

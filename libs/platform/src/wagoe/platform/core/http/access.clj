@@ -6,9 +6,10 @@
    `require-authenticated` interceptor answers with, so a client sees one 401
    whichever layer refused it: the one error body of
    `wagoe.platform.core.http.errors` (BOU-586). No Content-Type: muuntaja encodes a map body
-   only when none is set (ZZP-120)."
+   only when none is set (ZZP-120). What needs no HTTP stack lives in
+   `wagoe.core.http.access` (BOU-930)."
   (:require [clojure.string :as str]
-            [wagoe.platform.core.http.errors :as errors]))
+            [wagoe.core.http.access :as core]))
 
 (defn public?
   "Whether Reitit endpoint data opts out of authentication."
@@ -16,9 +17,9 @@
   (true? (:public data)))
 
 (defn correlation-id
-  "The caller's X-Correlation-ID, or `fresh` when it sent none."
+  "See `wagoe.core.http.access/correlation-id`."
   [request fresh]
-  (or (get-in request [:headers "x-correlation-id"]) fresh))
+  (core/correlation-id request fresh))
 
 (defn web-request?
   "Whether `request` is for a page under /web."
@@ -33,16 +34,13 @@
                              (java.net.URLEncoder/encode (str (:uri request)) "UTF-8"))}
    :body    ""})
 
-(defn- error-response [status error message correlation-id]
-  (errors/response status error message {:correlation-id correlation-id}))
-
 (defn unauthorized-response
   "401 for an API caller; a web page sends the browser to the login form,
    which returns it here afterwards."
   [message request correlation-id]
   (if (web-request? request)
     (login-redirect request)
-    (error-response 401 "unauthorized" message correlation-id)))
+    (core/refusal-response 401 "unauthorized" message correlation-id)))
 
 (defn escape-html
   "`s` safe in HTML text or an attribute."
@@ -59,58 +57,36 @@
        "<p><a href=\"/\">Home</a></p></main></body></html>"))
 
 (defn refusal-response
-  "`status` for a signed-in caller who may not do this: the error body, which
-   the router shows a browser on /web as the app's error page. Not the login
-   redirect, which would send them back here."
+  "See `wagoe.core.http.access/refusal-response`."
   [status error message correlation-id]
-  (error-response status error message correlation-id))
+  (core/refusal-response status error message correlation-id))
 
 (defn forbidden-response
-  "403 for a signed-in caller who may not do this, as `refusal-response`
-   answers. A web page once redirected to the login form, which only sent the
-   user back here."
-  [message _request correlation-id]
-  (refusal-response 403 "forbidden" message correlation-id))
+  "See `wagoe.core.http.access/forbidden-response`."
+  [message request correlation-id]
+  (core/forbidden-response message request correlation-id))
 
 (defn admin?
-  "Whether the signed-in user has the global admin role."
+  "See `wagoe.core.http.access/admin?`."
   [request]
-  (= :admin (some-> (get-in request [:user :role]) keyword)))
+  (core/admin? request))
 
 (defn platform-admin?
-  "Whether `user` is an admin outside any tenant, whom platform-wide pages such
-   as the audit trail admit. The role may be a string in an older session."
+  "See `wagoe.core.http.access/platform-admin?`."
   [user]
-  (and (= :admin (some-> (:role user) keyword))
-       (nil? (:tenant-id user))))
+  (core/platform-admin? user))
 
 (defn same-id?
-  "Whether `a` names the same id as `b`, a UUID or its string; never for nil `a`."
+  "See `wagoe.core.http.access/same-id?`."
   [a b]
-  (and (some? a) (= (str a) (str b))))
+  (core/same-id? a b))
 
 (defn in-tenant-scope?
-  "Whether the caller may use the schema the request runs in. With a tenant
-   resolved: a member of it, a user of it, or a platform admin. Without one,
-   the public schema: only a user of no tenant."
+  "See `wagoe.core.http.access/in-tenant-scope?`."
   [request]
-  (let [user      (:user request)
-        tenant-id (get-in request [:tenant :id])]
-    (if tenant-id
-      (boolean (or (:tenant-membership request)
-                   (same-id? (:tenant-id user) tenant-id)
-                   (platform-admin? user)))
-      (nil? (:tenant-id user)))))
+  (core/in-tenant-scope? request))
 
 (defn tenant-admin?
-  "Whether the caller is an admin where the request runs. In a tenant: a
-   platform admin, an admin by membership of it, or an admin user of it; an
-   admin of another tenant is not one here. Without a tenant, `admin?`."
+  "See `wagoe.core.http.access/tenant-admin?`."
   [request]
-  (let [user      (:user request)
-        tenant-id (get-in request [:tenant :id])]
-    (if tenant-id
-      (or (platform-admin? user)
-          (= :admin (some-> request :tenant-membership :role keyword))
-          (and (admin? request) (same-id? (:tenant-id user) tenant-id)))
-      (admin? request))))
+  (core/tenant-admin? request))

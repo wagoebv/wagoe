@@ -4,10 +4,24 @@
   Provides Ring-compatible handlers for file operations."
   (:require [wagoe.storage.shell.service :as service]
             [wagoe.storage.shell.adapters.local :as local]
-            [wagoe.platform.core.http.problem-details :as problem-details]
+            [wagoe.core.http.errors :as errors]
             [clojure.java.io :as io]
             [clojure.string :as str])
   (:import [java.io ByteArrayOutputStream]))
+
+;; Map bodies the router encodes, so storage needs no JSON library and no
+;; platform problem-details (BOU-930). No Content-Type on any of them:
+;; muuntaja encodes a map body only when none is set (ZZP-120).
+(defn- error-response [status type message details]
+  (errors/response status type message {:details details}))
+
+(defn- bad-request
+  ([message] (bad-request message nil))
+  ([message details] (error-response 400 :validation-error message details)))
+
+(defn- forbidden [message] (error-response 403 :forbidden message nil))
+
+(defn- not-found [message details] (error-response 404 :not-found message details))
 
 ;; ============================================================================
 ;; Parsing Helpers
@@ -41,7 +55,7 @@
 
 (defn- repeated-params-response
   [names]
-  (problem-details/bad-request
+  (bad-request
    (str "Repeated parameter(s): " (str/join ", " names))
    {:repeated-parameters (vec names)}))
 
@@ -139,7 +153,7 @@
                                  (str/split exts #","))]
 
         (if-not (multipart-file? file)
-          (problem-details/bad-request
+          (bad-request
            (if file
              "Field 'file' must be an uploaded file"
              "Missing required field: file")
@@ -158,10 +172,9 @@
 
             (if (:success result)
               {:status 201
-               :headers {"Content-Type" "application/json"}
                :body (:data result)}
 
-              (problem-details/bad-request
+              (bad-request
                "File validation failed"
                {:errors (:errors result)}))))))))
 
@@ -188,7 +201,7 @@
                              (parse-int-safe size))]
 
         (if-not (multipart-file? file)
-          (problem-details/bad-request
+          (bad-request
            (if file
              "Field 'file' must be an uploaded file"
              "Missing required field: file")
@@ -209,10 +222,9 @@
 
             (if (:success result)
               {:status 201
-               :headers {"Content-Type" "application/json"}
                :body (dissoc result :success)}
 
-              (problem-details/bad-request
+              (bad-request
                "Image upload failed"
                {:errors (:errors result)}))))))))
 
@@ -228,7 +240,7 @@
 
        (cond
          (not file-key)
-         (problem-details/bad-request
+         (bad-request
           "Missing required parameter: file-key"
           {:missing-parameter "file-key"})
 
@@ -241,7 +253,7 @@
                     signing-secret file-key
                     {:expires   (get query-params "expires")
                      :signature (get query-params "signature")})))
-         (problem-details/forbidden "Missing, invalid or expired signature")
+         (forbidden "Missing, invalid or expired signature")
 
          :else
 
@@ -252,7 +264,7 @@
                       "Content-Disposition" (str "attachment; filename=\"" file-key "\"")}
             :body (io/input-stream (:bytes file-data))}
 
-           (problem-details/not-found
+           (not-found
             "File not found"
             {:file-key file-key})))))))
 
@@ -266,7 +278,7 @@
     (let [file-key (let [k (get path-params :file-key)] (when-not (str/blank? k) k))]
 
       (if-not file-key
-        (problem-details/bad-request
+        (bad-request
          "Missing required parameter: file-key"
          {:missing-parameter "file-key"})
 
@@ -274,7 +286,7 @@
           {:status 204
            :body nil}
 
-          (problem-details/not-found
+          (not-found
            "File not found or deletion failed"
            {:file-key file-key}))))))
 
@@ -296,17 +308,16 @@
                          3600)]
 
         (if-not file-key
-          (problem-details/bad-request
+          (bad-request
            "Missing required parameter: file-key"
            {:missing-parameter "file-key"})
 
           (if-let [url (service/get-file-url storage-service file-key expiration)]
             {:status 200
-             :headers {"Content-Type" "application/json"}
              :body {:url url
                     :expiration-seconds expiration}}
 
-            (problem-details/not-found
+            (not-found
              "File not found or URL generation failed"
              {:file-key file-key})))))))
 
