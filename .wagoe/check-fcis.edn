@@ -16,6 +16,10 @@
 ;; :why. Since BOU-301 the require check is an allowlist — a core namespace may
 ;; require pure libraries and its own core/schema/ports, and nothing else — so
 ;; this is where a justified exception to that goes.
+;;
+;; :allow-sql exempts a file, or a directory when the path ends in /, from
+;; "core/ and ports know no SQL". Keyed by path because platform-sql owns
+;; wagoe.platform.* namespaces. An entry that exempts nothing fails the gate.
 {:allow-throw         []
  :allow-mutable-state []
  :allow-require
@@ -25,4 +29,18 @@
              is its vocabulary rather than a dependency it reaches for. The
              functions that build scenarios are pure; only the macro that
              expands them emits tests. Moving it out would put a testing DSL in
-             the shell, where nothing else about testing lives."}]}
+             the shell, where nothing else about testing lives."}]
+ :allow-sql
+ [{:path "libs/platform-sql/"
+   :why  "It is the SQL implementation."}
+  {:path "libs/ai/src/wagoe/ai/core/sql_copilot.clj"
+   :why  "NL to HoneySQL: SQL is the product here, not a store it is tied to."}
+  ;; Burn-down: fixed in BOU-875.
+  {:path "libs/search/src/wagoe/search/core/query.clj"
+   :why  "Builds SQL in core. Fixed in BOU-875."}
+  {:path "libs/audience/src/wagoe/audience/ports.clj"
+   :why  "query-users-sql takes a HoneySQL map. Fixed in BOU-875."}
+  {:path "libs/jobs/src/wagoe/jobs/ports.clj"
+   :why  "Documents tx as a next.jdbc transaction. Fixed in BOU-875."}
+  {:path "libs/workflow/src/wagoe/workflow/ports.clj"
+   :why  "Documents tx as a next.jdbc connection. Fixed in BOU-875."}]}
