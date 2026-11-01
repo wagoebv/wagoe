@@ -4,7 +4,7 @@
    GET /me/export-jobs/:id until it is done, then
    GET /me/export-jobs/:id/download. A job is visible only to who asked, and
    an export of someone else's data only while they are a platform admin."
-  (:require [wagoe.platform.core.http.access :as access]
+  (:require [wagoe.core.http.access :as access]
             [wagoe.platform.ports.privacy :as privacy]
             [wagoe.storage.core.export-jobs :as core]
             [wagoe.storage.ports :as ports]

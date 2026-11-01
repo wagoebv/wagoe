@@ -1,0 +1,65 @@
+(ns wagoe.core.http.access
+  "Who may act on a request, and the 403 a refused caller gets, without the
+   HTTP stack (BOU-930). `wagoe.platform.core.http.access` delegates to these."
+  (:require [wagoe.core.http.errors :as errors]))
+
+(defn correlation-id
+  "The caller's X-Correlation-ID, or `fresh` when it sent none."
+  [request fresh]
+  (or (get-in request [:headers "x-correlation-id"]) fresh))
+
+(defn refusal-response
+  "`status` for a signed-in caller who may not do this: the error body, which
+   the router shows a browser on /web as the app's error page. Not the login
+   redirect, which would send them back here."
+  [status error message correlation-id]
+  (errors/response status error message {:correlation-id correlation-id}))
+
+(defn forbidden-response
+  "403 for a signed-in caller who may not do this, as `refusal-response`
+   answers."
+  [message _request correlation-id]
+  (refusal-response 403 "forbidden" message correlation-id))
+
+(defn admin?
+  "Whether the signed-in user has the global admin role."
+  [request]
+  (= :admin (some-> (get-in request [:user :role]) keyword)))
+
+(defn platform-admin?
+  "Whether `user` is an admin outside any tenant, whom platform-wide pages such
+   as the audit trail admit. The role may be a string in an older session."
+  [user]
+  (and (= :admin (some-> (:role user) keyword))
+       (nil? (:tenant-id user))))
+
+(defn same-id?
+  "Whether `a` names the same id as `b`, a UUID or its string; never for nil `a`."
+  [a b]
+  (and (some? a) (= (str a) (str b))))
+
+(defn in-tenant-scope?
+  "Whether the caller may use the schema the request runs in. With a tenant
+   resolved: a member of it, a user of it, or a platform admin. Without one,
+   the public schema: only a user of no tenant."
+  [request]
+  (let [user      (:user request)
+        tenant-id (get-in request [:tenant :id])]
+    (if tenant-id
+      (boolean (or (:tenant-membership request)
+                   (same-id? (:tenant-id user) tenant-id)
+                   (platform-admin? user)))
+      (nil? (:tenant-id user)))))
+
+(defn tenant-admin?
+  "Whether the caller is an admin where the request runs. In a tenant: a
+   platform admin, an admin by membership of it, or an admin user of it; an
+   admin of another tenant is not one here. Without a tenant, `admin?`."
+  [request]
+  (let [user      (:user request)
+        tenant-id (get-in request [:tenant :id])]
+    (if tenant-id
+      (or (platform-admin? user)
+          (= :admin (some-> request :tenant-membership :role keyword))
+          (and (admin? request) (same-id? (:tenant-id user) tenant-id)))
+      (admin? request))))

@@ -26,7 +26,7 @@
    sends is dropped. With no tenant resolved, only a global admin may search it, with
    whatever filters they send. Anyone else gets 403."
   (:require [wagoe.i18n.shell.middleware :as i18n-middleware]
-            [wagoe.platform.core.http.access :as access]
+            [wagoe.core.http.access :as access]
             [wagoe.i18n.shell.render :as i18n]
             [wagoe.search.core.index :as index]
             [wagoe.search.ports :as ports]

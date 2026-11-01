@@ -29,6 +29,15 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Added
+
+- **`wagoe.core.http.errors` and `wagoe.core.http.access`**: the error body and access checks, without cheshire (BOU-930).
+  The `wagoe.platform.core.http` namespaces delegate to them; nothing to change.
+
+### Fixed
+
+- **A successful storage upload or URL lookup went out unencoded** (BOU-930). Upgrade if you serve `wagoe-storage` routes.
+
 ### Changed
 
 - **`wagoe-search` no longer depends on `wagoe-admin`**, which it never used (BOU-869).
