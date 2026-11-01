@@ -53,6 +53,14 @@ The current persistence layer is deeply SQL-specific:
 
 == Decision
 
+[NOTE]
+====
+Superseded in part by xref:ADR-042-other-stores.adoc[ADR-042] (BOU-876). There
+is no `DataStore` protocol above SQL, and framework libraries get no per-store
+persistence files by configuration: they run on SQL, and an app module picks its
+own store behind its port.
+====
+
 We record this ADR as a **feasibility analysis and architectural direction**,
 not as an immediate implementation decision. Actual implementation will be
 planned when concrete demand arises.
