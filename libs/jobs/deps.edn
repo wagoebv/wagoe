@@ -4,7 +4,6 @@
          org.clojure/clojure                {:mvn/version "1.12.6"}
          wagoe/core {:local/root "../core"}
          metosin/malli                     {:mvn/version "0.20.1"}
-         wagoe/tenant                   {:local/root "../tenant"}
          wagoe/platform                 {:local/root "../platform"}
          wagoe/observability            {:local/root "../observability"}
          cheshire/cheshire                 {:mvn/version "6.2.0"}
@@ -16,7 +15,9 @@
  :aliases
  {:test      {:extra-paths ["test"]
               :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
-                            com.h2database/h2 {:mvn/version "2.5.250"}}
+                            com.h2database/h2 {:mvn/version "2.5.250"}
+                            ;; tenant_context_test drives the tenant ports
+                            wagoe/tenant {:local/root "../tenant"}}
               :main-opts   ["-m" "kaocha.runner"]}
 
   :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}

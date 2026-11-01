@@ -345,6 +345,7 @@ The four tenant-aware HTTP interceptors live in `wagoe.user.shell.http-intercept
 | `:wagoe/tenant-audit-repository` | `tenant_audit_log` repository |
 | `:wagoe/tenant-export-routes` | `/tenants/:id/export` (and `/export-jobs` with the jobs module) |
 | `:wagoe/each-tenant` | `(fn [f])`: `(f tenant)` in each active tenant's schema, `db/*tenant-id*` bound (`tenant-iteration/for-each-tenant`) |
+| `:wagoe/in-tenant` | `(fn [tenant-id f])`: `(f)` in that tenant's schema; the job workers' `:tenant-runner` (`tenant-iteration/in-tenant`) |
 | `:wagoe/membership-repository` | `MembershipRepository` record |
 | `:wagoe/membership-service` | `MembershipService` record |
 | `:wagoe/membership-routes` | Normalized membership API routes |

@@ -44,6 +44,12 @@ for what is public API, what is internal, and how deprecations are announced.
   Declare `wagoe-email` (always on) and any of `wagoe-admin`/`wagoe-user` you got through search.
 - **`wagoe.platform.ports.privacy` ships in `wagoe-core`** under the same name (BOU-872).
   Nothing to change; `wagoe-platform` depends on core.
+- **`wagoe-jobs` no longer depends on `wagoe-tenant`**: tenant's `:wagoe/in-tenant` runs a tenant's job (BOU-931).
+  Declare `wagoe-tenant` if you got it through jobs.
+
+### Deprecated
+
+- **`wagoe.jobs.shell.tenant-context/tenant-runner` and `:wagoe/job-tenant-runner`** (BOU-931). Use tenant's `:wagoe/in-tenant`.
 
 ## [1.1.1] — 2026-10-31
 

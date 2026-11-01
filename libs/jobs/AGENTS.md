@@ -52,7 +52,7 @@ several slots.
 | `:wagoe/job-store` | `IJobStore` — job history and the dead-letter queue |
 | `:wagoe/job-stats` | `IJobStats` — what the devtools dashboard reads. nil under `:provider :db` |
 | `:wagoe/job-registry` | The handlers every enabled module contributed |
-| `:wagoe/job-tenant-runner` | Runs a job carrying `:tenant-id` in its tenant's schema; wired only when `:wagoe/tenant` is on |
+| `:wagoe/job-tenant-runner` | Deprecated, defined by tenant now: the workers take its `:wagoe/in-tenant` when `:wagoe/tenant` is on (BOU-931) |
 | `:wagoe/job-workers` | One pool of `:count` workers per queue in `:queues` |
 | `:wagoe/job-scheduler` | The recurring-job ticker; `recurring/schedule-recurring!` takes it |
 | `:wagoe/idempotency-store` | `IIdempotencyStore` on the provider's backend, for any module |
@@ -363,7 +363,7 @@ Jobs dequeued by priority: critical > high > normal > low.
 1. **Register handlers BEFORE starting workers** - late registration doesn't affect running workers
 2. **Handlers are NOT transactional** - use `process-tenant-job!` for tenant-scoped DB operations
 3. **Tenant jobs fail explicitly** if tenant not found (safety-first, not silent fallback). A job with
-   `:metadata {:tenant-id ...}` runs through the worker's `:tenant-runner`, which the wiring adds when
+   `:metadata {:tenant-id ...}` runs through the worker's `:tenant-runner`, tenant's `:wagoe/in-tenant`, which the wiring adds when
    `:wagoe/tenant` is on; without one it fails rather than run against public
 4. **Scheduled jobs** are stored separately and periodically moved to execution queues (default every 5s)
 5. **In-memory adapter** is single-process only - NOT for production
