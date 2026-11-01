@@ -1,0 +1,231 @@
+= Leaving Wagoe
+:description: What you keep and what you rewrite when you take a Wagoe application off the framework, layer by layer, measured on a generated module.
+
+The example is the `product` module in `examples/shop`,
+which CI holds equal to what `wagoe new` and `bb scaffold` generate. Line counts
+and requires below are from that module.
+
+== Per layer
+
+[cols="2,1,3,2",options="header"]
+|===
+| File | Lines | Wagoe in it | Verdict
+
+| `core/product.clj`
+| 68
+| None. Requires only `shop.product.schema`.
+| Keep
+
+| `core/ui.clj`
+| 51
+| `wagoe.shared.ui.core.form` and `.layout`: 8 calls that build the create form.
+| Keep `wagoe-shared-ui` as a library, or rewrite the form
+
+| `schema.clj`
+| 53
+| None. Malli.
+| Keep
+
+| `ports.clj`
+| 55
+| None. Two `defprotocol`.
+| Keep
+
+| `shell/persistence.clj`
+| 62
+| `wagoe.platform.database`: `execute-one!`, `execute-query!`,
+  `execute-update!`, `with-transaction*`. The queries are HoneySQL maps.
+| Keep. One require changes; see <<persistence>>
+
+| `shell/service.clj`
+| 77
+| None. Ports, core, `java.time`, `java.util.UUID`.
+| Keep
+
+| `shell/http.clj`
+| 159
+| No Wagoe require, but two quoted interceptor symbols from `wagoe-user`, errors
+  thrown for the platform to map, and routes returned for the platform to mount.
+| Rewrite those parts; the handlers stay. See <<routes>>
+
+| `shell/web_handlers.clj`
+| 43
+| `wagoe.shared.ui.core.components` and `.form`: 4 calls.
+| As `core/ui.clj`
+
+| `shell/module_wiring.clj`
+| 97
+| Integrant, which is not Wagoe, on `:wagoe/product-*` keys, with the database
+  from `:wagoe/db-context` and an `authorization` map Wagoe reads at boot.
+| Rewrite, about 30 lines
+
+| `migrations/*.sql`
+| 16
+| None. Plain SQL in Migratus's file format.
+| Keep
+|===
+
+`bb check:fcis` lets `core/` require pure `wagoe.*` namespaces, as `core/ui.clj`
+does. It guarantees no I/O, not no Wagoe.
+
+[[persistence]]
+== Persistence: one require
+
+The generated persistence makes four calls. On next.jdbc and HoneySQL, neither
+of which is Wagoe, they are one namespace you write once for every module:
+
+[source,clojure]
+----
+(ns shop.db
+  (:require [honey.sql :as sql]
+            [next.jdbc :as jdbc]
+            [next.jdbc.date-time]
+            [next.jdbc.result-set :as rs]))
+
+(def ^:private ^:dynamic *tx* nil)
+(def ^:private opts {:builder-fn rs/as-unqualified-kebab-maps})
+
+(defn- conn [{:keys [datasource]}] (or *tx* datasource))
+
+(defn execute-query! [ctx q] (jdbc/execute! (conn ctx) (sql/format q) opts))
+(defn execute-one! [ctx q] (jdbc/execute-one! (conn ctx) (sql/format q) opts))
+(defn execute-update! [ctx q] (::jdbc/update-count (jdbc/execute-one! (conn ctx) (sql/format q))))
+
+(defn with-transaction* [ctx f]
+  (if *tx*
+    (f *tx*)
+    (jdbc/with-transaction [tx (conn ctx)]
+      (binding [*tx* tx] (f tx)))))
+----
+
+The dynamic var matters: the generated `transact` ignores the connection
+`with-transaction*` passes it, so the repository calls inside it find the
+transaction through `*tx*` rather than borrowing another connection from the
+pool. A nested call joins the outer transaction, as Wagoe's does; on the same
+connection, next.jdbc would commit it early. A Wagoe module that joins the
+transaction, such as a workflow start, does not see `*tx*`, so move such modules
+off together.
+
+Then the module's diff is this:
+
+[source,diff]
+----
+ (ns shop.product.shell.persistence
+   "Persistence layer for product module."
+   (:require [shop.product.ports :as ports]
+-            [wagoe.platform.database :as db])
++            [shop.db :as db])
+   (:import [java.time Instant LocalDate]))
+----
+
+The repository still takes a map with `:datasource`, which is what
+`:wagoe/db-context` is. With this, the generated repository test passes on H2,
+as does a test that a throw inside `transact` rolls the insert back.
+
+What `wagoe.platform.database` did that this does not:
+
+* *Dialect.* It formats with the engine's HoneySQL dialect. On MySQL, pass
+  `{:dialect :mysql :quoted false}` to `sql/format`: a dialect alone turns on
+  quoting, and a quoted `:created-at` stays `created-at`.
+* *Instants.* It sends an `Instant` parameter as an ISO string, except on MySQL.
+  `next.jdbc.date-time` sends it as a `Timestamp`.
+* *MySQL values.* It sends a UUID as text, which Connector/J would otherwise
+  serialise, and reads a `DATETIME` back as the UTC `Instant` it wrote.
+* *Constraint violations.* A refused unique key, foreign key or CHECK becomes an
+  `ex-info` with `:type :conflict`, which HTTP answers 409
+  (xref:libraries:platform.adoc[platform]). Without it the `SQLException`
+  reaches the client as a 500.
+* *Redaction.* Driver messages that quote the values sent are rewritten before
+  they are logged.
+
+[[routes]]
+== Routes and wiring: the real cost
+
+The cost is in `shell/http.clj`,
+`shell/module_wiring.clj`, and above all in what the platform assembles around
+them.
+
+In `shell/http.clj`:
+
+* *Authentication.* Routes carry `:interceptors`, two `def`s naming
+  `wagoe.user.shell.http-interceptors/require-authenticated` and
+  `require-web-authenticated`. Wagoe's router turns that key into Ring
+  middleware. Plain `reitit.ring` ignores it: the routes keep answering and stop
+  checking who asks. Replace the two `def`s with `:middleware` from your own
+  auth.
+* *Authorization.* Requiring sign-in unless a route says `:public true`, and
+  `:enforce` answering 403 to a route with no rule
+  (xref:guides:authorization.adoc[Authorization]), are platform behaviour, not
+  route data. They go with it.
+* *Errors.* Handlers throw `ex-info` with `:type :validation-error` or
+  `:not-found`, and the platform picks the status
+  (xref:architecture:conventions.adoc[Conventions] lists them all). Reitit's exception middleware
+  dispatches on the same `:type`:
++
+[source,clojure]
+----
+(exception/create-exception-middleware
+ (merge exception/default-handlers
+        {:validation-error (fn [e _] {:status 400 :body (ex-data e)})
+         :not-found        (fn [_ _] {:status 404 :body {:error "not found"}})
+         :conflict         (fn [e _] {:status 409 :body (ex-data e)})}))
+----
+* *Mounting.* `product-routes` returns `{:api [...] :web [...] :static []}`,
+  which the platform mounts under `/api/v1` and `/web`. Mount them yourself:
+  `[["/api/v1" (api-routes svc)] ["/web" (web-routes svc config)]]`.
+* *OpenAPI.* The `:openapi` route data is what `reitit.openapi` reads. It stays.
+
+In `shell/module_wiring.clj`, Integrant stays. Rename the three `:wagoe/product-*`
+keys, hand the repository `{:datasource ds}` where it took `:ctx`, and drop the
+`:wagoe/product` key (Wagoe's module discovery) and the `authorization` map
+(Wagoe's permission registry).
+
+Once per application, not per module: `src/shop/system_config.clj` builds its
+Integrant config with `wagoe.platform.shell.system.config/system-config`. That
+call is where Jetty, the Reitit router, the middleware stack (params, Muuntaja,
+sessions, CSRF, error pages), the HikariCP pool, Aero config loading and the
+migration runner come from. You write that system yourself.
+
+Our estimate, not a measurement: an hour per module shaped like `product`, and
+days for the application system, which is the part Wagoe exists to write.
+
+== Modules you replace
+
+[cols="1,3",options="header"]
+|===
+| Module | What carries over
+
+| admin
+| Nothing to migrate. `:wagoe/admin` reads `resources/conf/<env>/admin/*.edn`
+  and renders CRUD pages over your tables; the tables are yours.
+
+| auth (`wagoe-user`)
+| The users, groups and roles tables, created by `wagoe-user`'s migrations.
+  Passwords are `buddy-hashers` `:bcrypt+sha512`, which `buddy.hashers/check`
+  reads, so nobody resets one. `user_sessions` stores a hash of each token, so
+  a new session store starts empty: everyone signs in once more.
+
+| jobs
+| With the `:db` provider the queue is a table. Drain it before you switch.
+
+| tenancy
+| The PostgreSQL schema per tenant stays. You replace the middleware that sets
+  `search_path` to it on each request (xref:libraries:tenant.adoc[tenant]).
+|===
+
+== What you lose that is not code
+
+* *The gates.* `bb check:fcis`, `check:ports`, `check:placeholder-tests` and
+  the rest come from `wagoe-tools`, a Babashka
+  dependency in `bb.edn`, not on the application's classpath
+  (xref:libraries:tools.adoc[tools]).
+* *The generators.* `bb scaffold`, `bb scaffold integrate`, `wagoe add`.
+* *The diagnostics.* `wagoe doctor`, `clojure -M:run authz-report`,
+  `bb create-admin`.
+* *The dev dashboard.* `wagoe-devtools`, in the `:repl` alias: `/dashboard`,
+  the route explorer and request inspector
+  (xref:libraries:devtools.adoc[devtools]).
+* *Editor tooling.* The Wagoe MCP server in the `:mcp` alias
+  (xref:libraries:mcp.adoc[MCP]), and the
+  generated `AGENTS.md` that `wagoe agents update` keeps in line with
+  `deps.edn`.

@@ -6,3 +6,4 @@
 ** xref:architecture:scaling.adoc[Sizing & Scaling]
 ** xref:architecture:deployment-topologies.adoc[Deployment Topologies]
 ** xref:architecture:other-stores.adoc[Other Stores]
+** xref:architecture:leaving-wagoe.adoc[Leaving Wagoe]
