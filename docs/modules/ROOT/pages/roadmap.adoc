@@ -1,182 +1,148 @@
 = Roadmap
-:description: Where Wagoe is at 1.1.1, what is left before the public launch, and what comes after.
+:description: What each Wagoe 1.x release makes true, in the order it ships.
 
-Wagoe is at `1.1.1`. This page is the public view of what is built, what
-is left before the public launch, and what we intend to build after it.
+Each minor release makes one claim on wagoe.org true that was not quite true
+yet. 1.0 made the stability promise, 1.1 authorization. What comes next is
+below, in order, and what every release does besides is at the bottom.
 
-It is a statement of intent, not a delivery commitment. Dates are deliberately
-absent — the ordering is the useful part.
+There are no dates. With one maintainer they would be fiction; the order is the
+promise.
 
-== Where we are
+== 1.1 — Permissions, roles and scopes
 
-Thirty-three libraries are published on Clojars under `com.wagoe`, versioned in
-lockstep. The framework is feature-complete for the applications it targets; the
-remaining work is about trust rather than capability.
+Released. Routes check permissions, roles and scopes under
+`:wagoe/authorization`, in one of three modes: `:off`, `:report`, which logs
+every request it would refuse, and `:enforce`, which new apps start in. The
+admin manages groups and roles, explains why a user may or may not do
+something, and shows who gains and loses rights before a change saves. Start
+with the xref:guides:authorization.adoc[Authorization] guide; an existing app
+moves over with xref:guides:upgrade-authorization.adoc[Upgrading
+authorization].
 
-.Built and shipping
-[cols="1,3",options="header"]
-|===
-| Area | What exists
+== 1.2 — Adopt one library
 
-| Architecture
-| Functional Core / Imperative Shell throughout, with `ports.clj` protocols per
-  module, enforced in CI by dedicated boundary, dependency-direction and
-  hexagonal-layering gates
+[quote, wagoe.org]
+Add `wagoe-user` for auth this week and nothing else — that's a valid way in.
 
-| Code generation
-| Scaffolder for modules, fields and endpoints — interactive, flag-driven, or
-  from a natural-language description
+*Why it is not quite true.* In the source it nearly is. In your dependency tree
+it is not: `wagoe-user` brings `wagoe-platform`, and with it the HTTP server,
+the router, the CLI and around fifty other dependencies. Jobs, events, storage,
+search, push, webhooks and tenancy bring the same, although their code uses only
+the database part.
 
-| Web + admin
-| Reitit routing, HTMX + Hiccup UI, and an auto-CRUD
-  admin interface generated from entity configuration
+*What 1.2 does.* The database part of `wagoe-platform` becomes its own library,
+`wagoe-platform-sql`, with no HTTP stack, and the data libraries depend on that
+instead. Namespaces keep their names and `wagoe-platform` still brings
+`wagoe-platform-sql` along, so nothing breaks. Every library declares exactly
+the Wagoe libraries its source requires. SQL stays out of `core/` and out of
+port signatures, so a module of your own can keep its data in any store. Each
+library page says which ring it is in: standalone, needs only `wagoe-core`, or
+needs the platform.
 
-| Identity
-| Authentication, JWT, MFA, sessions, and role-based authorization
+*How you see it is done.* `bb check:deps` fails a library that declares a Wagoe
+library its source does not require, `bb check:fcis` fails SQL in `core/` or in
+a port, and the homepage sentence says what is then true, ring by ring.
 
-| Data
-| next.jdbc with PostgreSQL, MySQL, SQLite and H2; migrations; multi-tenancy by
-  schema-per-tenant; full-text search
+== 1.3 — Declare an entity. Get the screens.
 
-| Async
-| Background jobs over Redis or a durable database-backed queue, with
-  transactional enqueue; an event bus; WebSocket real-time messaging
+[quote, wagoe.org]
+Declare an entity; the list, search, filters, sorting and bulk actions come
+with it.
 
-| Integrations
-| Payments (Mollie, Stripe, Mock), file storage (local, S3, GCS), email over
-  SMTP, SMS/WhatsApp, IMAP, geocoding, push notifications (FCM, APNs)
+*Why it is not quite true.* The screens are there. But the admin is the library
+most likely to become a silo: `workflow` imports it, the screens wear Wagoe's
+look instead of your app's, and the entity configuration is a format of its own
+that no single page explains.
 
-| Domain libraries
-| Workflow state machines, reports with PDF/Excel/DOCX export, calendar with
-  RRULE recurrence and iCal, audience segmentation
+*What 1.3 does.* Modules contribute to the admin through a port instead of
+importing it, so no domain library depends on the admin. Everything the admin UI
+can do, its ports can do: a different admin, or an API with none, is built on
+the same contract. The admin wears your app's design tokens. Entity
+configuration gets a reference generated from its own schema, and is derived
+from your module's Malli schema, so it describes your domain rather than the
+admin. And the last mile on lists, record pages, the dashboard, phones and the
+keyboard. Still no build step and no `node_modules`.
 
-| Observability
-| Interceptor-based metrics, logging and error reporting, with Prometheus, OTLP
-  and Datadog providers, plus distributed tracing spans
+*How you see it is done.* `bb check:deps` fails any domain library that depends
+on the admin, and the screenshots on the homepage are of 1.3.
 
-| Internationalisation
-| Marker-based i18n with translation catalogues and locale chains; the admin UI
-  is fully translatable
+== 1.4 — Graduation
 
-| Tooling
-| `wagoe` CLI, a Babashka task suite (config doctor, setup wizard, migrations,
-  i18n scanning, deploy), framework-aware AI helpers, and an MCP server for
-  editor agents
-|===
+[quote, the 1.0 release post]
+Eight libraries are published as incubating and sit outside the guarantee,
+because we already know their API is not finished.
 
-== Shipped in 1.0
+*Why it is not quite true.* Marking what is unfinished is honest only while the
+list gets shorter. Since 1.0 it has not: `payments`, `config`, `ai`, `geo`,
+`external`, `reports`, `audience` and `workflow` are all still incubating.
 
-Work that earlier drafts of this page listed as future. It is done, in `main`,
-and covered by tests.
+*What 1.4 does.* Each of them gets a verdict: stable, deliberately incubating
+with the reason and what would promote it, or folded into or split out of
+another library. None stays incubating by default. A library that is ready
+earlier graduates earlier; 1.4 is the deadline for the verdict, not the only
+chance. `audience` and `workflow` can only graduate once their ports lose their
+SQL (1.2), and `workflow` once it no longer depends on the admin (1.3).
 
-=== Scaling out
+*How you see it is done.* The xref:stability.adoc[stability page] gives every
+incubating library a verdict and a reason, and a new gate, `bb check:tier`,
+fails the build when one has none.
 
-Wagoe scales vertically through configuration, and the `ports.clj` seam is what
-makes scaling out tractable: swap an in-process adapter for a distributed one
-without touching business logic.
+== 1.5 — Measured, not claimed
 
-* *Generic remote-port adapter + RPC envelope* — any module protocol can be
-  implemented by a call to another process, built from the protocol's own
-  signatures, with correlation-id, tenant and auth riding the headers the
-  interceptor pipeline already uses.
-* *Service launch mode* — `java -jar wagoe.jar service <module>…` boots a named
-  subset of modules as its own service, with its RPC endpoint on its own port.
-* *Event-bus port + adapter* — `wagoe-events`, with a Redis Streams adapter
-  (at-least-once, consumer groups) and an in-process one.
-* *Break allowlisted dependency cycles* — no module pair is blocked from
-  separation by a cycle any more; `bb check:deps` now fails on any cycle at all.
-* *Realtime Redis pub/sub adapter*, *graceful connection draining*, *default
-  rate-limit wiring*, *jobs hardening* and a *deploy topology reference* —
-  the replica-safety work.
+[quote, wagoe.org]
+Wagoe makes those tools produce code that's architecturally correct,
+immediately mergeable, and consistent with everything already in the codebase.
 
-What is still missing for full functional decomposition — service discovery and
-the data-ownership decision — and the readiness matrix behind all of the above,
-are in xref:architecture:scaling.adoc[Sizing & Scaling]. That page is the source
-of truth for what scales; this one does not restate it.
+*Why it is not quite true.* Today that rests on a terminal recording, not on a
+number.
 
-=== Stability surface
+*What 1.5 does.* A nightly run, started well before 1.5, gives `bb scaffold ai`
+fixed tasks against real AI providers and records how many come out compiling,
+tested and passing the architecture gates without an edit. 1.5 grows it to
+about twenty-five tasks, in English and Dutch, across every kind of module the
+scaffolder knows and several providers, and measures an agent working through
+`wagoe-mcp` end to end. The tasks that fail most become fixes to the templates,
+the agent guidance or the ports, and the number shows whether each fix helped.
 
-The xref:stability.adoc[stability policy] defines what is public, what is
-internal, how deprecations work, and which libraries are incubating rather than
-covered by the `1.0` promise.
+*How you see it is done.* Every night's result is public on wagoe.org, with the
+modules it generated, and the claim above carries the number and the tasks that
+still fail.
 
-=== In `main`, not yet released
+== Ongoing through 1.x
 
-Most of what this page planned for 1.1 to 1.3. It ships in the next release; the
-https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md[CHANGELOG] lists it
-under `[Unreleased]`:
+=== Security and stability
 
-* OIDC login (authorization code + PKCE) and a transactional outbox for events
-* Tenancy decided: PostgreSQL-only
-* Dependency vulnerability scanning (`bb check:vulns`) and coverage in CI
-* Database adapters that report their engine and capabilities; MySQL 8 support
-* Mollie finished, with one PSP contract sweep over Mock, Stripe and Mollie;
-  the metrics and error-reporting stubs fixed
-* Recurring cron jobs and job `:unique-key`s
-* Server-checked form fields from Malli schemas
-* A `#secret` config reader with pluggable sources
-* OpenAPI 3.1 instead of Swagger 2.0
-* Live htmx updates over server-sent events
-* A test kit for applications, `com.wagoe/wagoe-test`
-* Per-user and per-tenant data export, and retention policies
-* Combobox, toast and dialog components in the shared UI library
-* `wagoe upgrade`, a codemod for deprecated config keys and names
-* Opt-in virtual threads for requests and job workers
+Every release closes every known security issue before it is tagged. Report a
+vulnerability privately through a
+https://github.com/wagoebv/wagoe/security/advisories/new[GitHub security
+advisory].
 
-== The road to 1.0.0
+=== Working on Wagoe
 
-`1.0.0` means the API is one we are willing to be held to. What is left is
-about earning that, not adding surface.
+Each release names three starter tasks that are smaller than the framework — an
+adapter, a translation, a deployment guide, a benchmark task — each with a short
+brief, and its release post names who contributed. A pull request gets a
+decision within two working days. Start with
+https://github.com/wagoebv/wagoe/blob/main/CONTRIBUTING.md[CONTRIBUTING.md].
 
-=== 1. The release gate — done
+== 2.0
 
-One JDK baseline, one provider vocabulary, jars that cannot ship stale classes,
-a version scheme in which a pre-release can never outrank a release, library
-tiers, and a frozen changelog carrying an explicit decision on every open
-breaking change. `1.0.0` ships no surprise.
+2.0 removes what 1.x deprecates, once each deprecation has run its term of one
+minor release and 90 days. Nothing else is planned for it, and it has no date.
 
-=== 2. A release candidate that is actually exercised — done
+== What has shipped
 
-Four candidates, `1.0.0-rc-1` to `1.0.0-rc-4`, shipped before the tag. Of the
-twenty-five breaking changes they turned up, twenty-two landed in a candidate
-and were exercised there; the last three landed in `1.0.0` itself.
-
-=== 3. First-run experience
-
-The bulk of this has landed: `install.sh` with prerequisite detection, a
-`wagoe new` scaffold that produces a project which boots, a setup wizard needing
-no external services, automatic migrations, seed data, a production build path,
-and a CI smoke test that walks install → new project → serving app inside a bare
-container and asserts on HTTP rather than exit codes.
-
-What remains is deliberate QA: the same path exercised across an environment
-matrix and by people who did not write it. This gates the public launch rather
-than the tag — a framework gets one first impression.
-
-== After 1.0.0
-
-Grouped by the release they would ship in. `1.x` work keeps the stability
-promise; `2.0` is where the things that cannot are collected.
-
-=== Ongoing through 1.x
-
-* A showcase application and a migration guide for people arriving from Kit or
-  Luminus
-
-=== 2.0
-
-* Removing the deprecated provider aliases and the duplicate choices that 1.x
-  deprecates — one HTTP client, one config layer, one CSS system, one mail
-  library
-* Virtual threads on by default for request handling and the jobs worker pool
-* A decision on the front-end stack
+The detail of every release is in
+https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md[CHANGELOG.md]. What 1.0
+promises, and which libraries it does not cover yet, is on the
+xref:stability.adoc[stability page]. What scales today is on
+xref:architecture:scaling.adoc[Sizing & Scaling].
 
 == How this page is maintained
 
-This roadmap is the only one. It is reviewed alongside each release; work is
-tracked on https://github.com/wagoebv/wagoe[GitHub], and the shipped detail of
-every release is in
-https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md[CHANGELOG.md].
+This roadmap is the only one. It is updated with every release post, and the
+post quotes this page, not the other way round. Work is tracked on
+https://github.com/wagoebv/wagoe[GitHub].
 
 A CI gate (`bb check:roadmap`) fails the build if this page plans something
 xref:architecture:scaling.adoc[Sizing & Scaling] already marks as shipped, which
