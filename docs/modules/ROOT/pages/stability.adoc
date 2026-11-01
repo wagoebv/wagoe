@@ -317,6 +317,8 @@ depend on it rather than from this page afterwards.
   generator, not your files.
 * Database schemas of the framework's own tables, other than through migrations
   we ship.
+* Transitive dependencies. A library may stop bringing in another Wagoe library
+  or a third-party artifact it does not use. Declare what you require yourself.
 
 == The HTTP server is Jetty
 

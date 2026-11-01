@@ -109,6 +109,7 @@ Every module MUST define `ports.clj`.
 - core/ must not hold mutable state (defonce/atom/swap!/reset!) — definition registries and process state live in the shell (wagoe.<lib>.shell.registry)
 - cross-module calls go through service ports
 - web/HTTP layers never require *.shell.persistence directly
+- a module picks its store (SQL, Datomic, a REST API) in shell/persistence.clj behind a domain-shaped port; Wagoe's own libraries stay on SQL — see https://wagoe.org/docs/architecture/other-stores.html (ADR-042)
 
 ```clojure
 (ns {{project-ns}}.core.product)
