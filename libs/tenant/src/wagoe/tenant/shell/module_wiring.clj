@@ -236,6 +236,24 @@
 
 (defmethod ig/halt-key! :wagoe/each-tenant [_ _] nil)
 
+;; (fn [tenant-id f]): calls (f) in that tenant's schema. The job workers' runner
+;; for a job that carries a tenant; tenant provides it so jobs need not depend
+;; on tenant (BOU-931).
+(defmethod ig/init-key :wagoe/in-tenant
+  [_ {:keys [tenant-service db-context]}]
+  (let [provider (provisioning/create-tenant-schema-provider)]
+    (fn [tenant-id f] (tenant-iteration/in-tenant tenant-service provider db-context tenant-id f))))
+
+(defmethod ig/halt-key! :wagoe/in-tenant [_ _] nil)
+
+;; Deprecated: jobs declared and defined this until BOU-931; kept for a config
+;; that names it.
+(defmethod ig/init-key :wagoe/job-tenant-runner
+  [_ {:keys [db-ctx tenant-service]}]
+  (ig/init-key :wagoe/in-tenant {:tenant-service tenant-service :db-context db-ctx}))
+
+(defmethod ig/halt-key! :wagoe/job-tenant-runner [_ _] nil)
+
 ;; =============================================================================
 ;; Tenant HTTP middleware
 ;; =============================================================================
@@ -294,6 +312,8 @@
                                     :db-context     (ig/ref :wagoe/db-context)
                                     :config         config}
       :wagoe/each-tenant           {:tenant-service (ig/ref :wagoe/tenant-service)
+                                    :db-context     (ig/ref :wagoe/db-context)}
+      :wagoe/in-tenant             {:tenant-service (ig/ref :wagoe/tenant-service)
                                     :db-context     (ig/ref :wagoe/db-context)}
       :wagoe/membership-routes     {:service (ig/ref :wagoe/membership-service)
                                     :config  config}

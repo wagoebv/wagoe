@@ -414,7 +414,8 @@
                    (with-tenant-schema [_ _ schema f] (swap! schemas conj schema) (f nil))
                    (tenant-provisioned? [_ _ _] true)
                    (list-tenant-schemas [_ _] []))
-        run (tenant-jobs/tenant-runner (create-mock-db-context) (create-mock-tenant-service) provider)]
+        run #_{:clj-kondo/ignore [:deprecated-var]}
+            (tenant-jobs/tenant-runner (create-mock-db-context) (create-mock-tenant-service) provider)]
     (is (= "tenant-1" (run "tenant-1" (fn [] db/*tenant-id*))) "with the tenant bound")
     (is (= ["tenant_acme_corp"] @schemas))
     (is (thrown? clojure.lang.ExceptionInfo (run "no-such-tenant" (fn [] :ran))))))

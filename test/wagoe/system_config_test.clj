@@ -368,7 +368,8 @@
         ;; anything fails below, so the list shrinks rather than rots.
         not-assembled
         {:wagoe/admin "DEPRECATED in this release (BOU-346): settings passthrough with no consumer. Removed a release after the deprecation ships, per the stability policy"
-         :wagoe/auth-user-repository "DEPRECATED in this release (BOU-346): no consumer — :wagoe/auth-service takes :wagoe/user-repository. Removed a release after the deprecation ships"}
+         :wagoe/auth-user-repository "DEPRECATED in this release (BOU-346): no consumer — :wagoe/auth-service takes :wagoe/user-repository. Removed a release after the deprecation ships"
+         :wagoe/job-tenant-runner "DEPRECATED (BOU-931): the workers take :wagoe/in-tenant; kept for a config that names it until 2.0"}
 
         defined  (into {}
                        (for [[_ lib] modules/framework-modules

@@ -26,6 +26,8 @@
    :why "Mailing a generated report is optional, asked for per request."}
   {:lib "storage" :dep "jobs"
    :why "Export as a background job needs a job queue, and jobs is loaded whenever there is one."}
+  {:lib "jobs" :dep "tenant"
+   :why "wagoe.jobs.shell.tenant-context takes a tenant service, so tenant is loaded whenever it runs; the workers get tenant's :wagoe/in-tenant (BOU-931)."}
   {:lib "realtime" :dep "observability"
    :why "An error reporter exists only when observability is loaded (BOU-848)."}]
 

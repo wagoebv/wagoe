@@ -76,3 +76,16 @@
                      :message "Call it outside any transaction; each tenant gets its own"})))
   (each-schema schema-provider db-ctx (active-tenants tenant-service) :schema-name
                (fn [tenant] (binding [db/*tenant-id* (:id tenant)] (f tenant)))))
+
+(defn in-tenant
+  "Call `(f)` in one transaction on `tenant-id`'s schema, with `db/*tenant-id*`
+   bound. Throws for an unknown tenant (`:tenant-not-found` from a service that
+   answers nil), so its work never runs against public."
+  [tenant-service schema-provider db-ctx tenant-id f]
+  (let [tenant (or (ports/get-tenant tenant-service tenant-id)
+                   (throw (ex-info "Tenant not found"
+                                   {:type      :tenant-not-found
+                                    :tenant-id tenant-id
+                                    :message   "No tenant with this id; it may have been deleted"})))]
+    (ports/with-tenant-schema schema-provider db-ctx (:schema-name tenant)
+      (fn [_tx] (binding [db/*tenant-id* tenant-id] (f))))))
