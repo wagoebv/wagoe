@@ -11,7 +11,8 @@
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [wagoe.tools.check-deps :as sut]))
+            [wagoe.tools.check-deps :as sut]
+            [wagoe.tools.parsing :as parsing]))
 
 (defn- temp-lib
   "Write a throwaway library dir with the given deps.edn text and one source
@@ -261,3 +262,130 @@
         (is (= [["probe" "org.clojure/tools.cli"]]
                (map (juxt :lib (comp str :artifact)) (sut/third-party-gaps [["probe" dir]]))))
         (finally (delete-tree! dir))))))
+
+;; =============================================================================
+;; BOU-870: declared wagoe deps = used wagoe deps, both directions
+;; =============================================================================
+
+(defn- temp-libs
+  "A throwaway libs/ tree from {lib {:deps text :src {path text} :resources [path]}},
+   as [root lib-entries]."
+  [spec]
+  (let [root (.toFile (java.nio.file.Files/createTempDirectory
+                       "wagoe-check-deps-870"
+                       (make-array java.nio.file.attribute.FileAttribute 0)))]
+    [root
+     (vec (for [[lib {:keys [deps src resources]}] (sort-by key spec)
+                :let [dir (io/file root lib)]]
+            (do (.mkdirs dir)
+                (spit (io/file dir "deps.edn") (or deps "{:deps {}}"))
+                (doseq [[path text] src]
+                  (io/make-parents (io/file dir "src" path))
+                  (spit (io/file dir "src" path) text))
+                (doseq [path resources]
+                  (io/make-parents (io/file dir "resources" path))
+                  (spit (io/file dir "resources" path) ""))
+                [lib dir])))]))
+
+(defn- deps-file [entries lib]
+  (io/file (get (into {} entries) lib) "deps.edn"))
+
+(def ^:private geo-src
+  {"wagoe/geo/core.clj" "(ns wagoe.geo.core\n  (:require [wagoe.core.validation :as v]))\n"})
+
+(deftest ^:unit an-unused-declared-dep-fails
+  (let [[root entries] (temp-libs {"core"     {}
+                                   "payments" {}
+                                   "geo"      {:deps (str "{:deps {wagoe/core {:local/root \"../core\"}\n"
+                                                          "        wagoe/payments {:local/root \"../payments\"}}}")
+                                               :src geo-src}})]
+    (try
+      (let [vs (sut/dependency-mismatches entries {})]
+        (is (= [[:unused-dep "geo" "payments"]] (map (juxt :type :lib :dep) vs)))
+        (let [msg (sut/describe-violation (first vs))]
+          (is (str/includes? msg "geo"))
+          (is (str/includes? msg "payments"))))
+      (finally (delete-tree! root)))))
+
+(deftest ^:unit a-removed-used-dep-fails-naming-the-namespace
+  (let [[root entries] (temp-libs {"core" {} "geo" {:src geo-src}})]
+    (try
+      (let [[v :as vs] (sut/dependency-mismatches entries {})]
+        (is (= [[:undeclared-dep "geo" "core"]] (map (juxt :type :lib :dep) vs)))
+        (is (str/includes? (sut/describe-violation v)
+                           "wagoe.geo.core requires wagoe.core.validation")))
+      (finally (delete-tree! root)))))
+
+(deftest ^:unit soft-refs-need-a-declaration-or-an-allowance
+  (let [src {"wagoe/geo/core.clj"
+             (str "(ns wagoe.geo.core\n  \"Names (requiring-resolve 'wagoe.jobs.ports/x) in a docstring.\")\n"
+                  "(defn f []\n  (requiring-resolve 'wagoe.core.validation/v))\n")}
+        [root entries] (temp-libs {"core" {} "jobs" {} "geo" {:src src}})]
+    (try
+      (testing "an undeclared soft ref fails with its line; the docstring does not count"
+        (is (= [[:undeclared-soft-dep "geo" "core" 4]]
+               (map (juxt :type :lib :dep :line) (sut/dependency-mismatches entries {})))))
+      (testing "an :allow-soft entry exempts it"
+        (is (empty? (sut/dependency-mismatches
+                     entries {:allow-soft [{:lib "geo" :dep "core" :why "optional"}]}))))
+      (testing "a declared soft ref counts as use"
+        (spit (deps-file entries "geo") "{:deps {wagoe/core {:local/root \"../core\"}}}")
+        (is (empty? (sut/dependency-mismatches entries {}))))
+      (finally (delete-tree! root)))))
+
+(deftest ^:unit a-stale-allowance-fails
+  ;; check:deps kept a platform->external entry long after the require went
+  ;; (BOU-873), because an exemption that exempts nothing said nothing.
+  (let [[root entries] (temp-libs {"core" {}
+                                   "geo"  {:deps "{:deps {wagoe/core {:local/root \"../core\"}}}"
+                                           :src  geo-src}})]
+    (try
+      (is (= [[:stale-allowance :allow-soft "geo" "core"]
+              [:stale-allowance :allow-unused "geo" "core"]]
+             (map (juxt :type :key :lib :dep)
+                  (sut/dependency-mismatches
+                   entries {:allow-soft   [{:lib "geo" :dep "core" :why "was soft once"}]
+                            :allow-unused [{:lib "geo" :dep "core" :why "was unused once"}]}))))
+      (finally (delete-tree! root)))))
+
+(deftest ^:unit resource-deps-count-as-use-and-go-stale
+  (let [deps (fn [resource]
+               (str "{:deps {wagoe/core {:local/root \"../core\"} wagoe/ui-style {:local/root \"../ui-style\"}}\n"
+                    " :wagoe/resource-deps {ui-style {:resource \"" resource "\" :why \"styles\"}}}"))
+        [root entries] (temp-libs {"core"     {}
+                                   "ui-style" {:resources ["public/css/a.css"]}
+                                   "geo"      {:deps (deps "public/css/a.css") :src geo-src}})]
+    (try
+      (is (empty? (sut/dependency-mismatches entries {})))
+      (testing "a resource the dep no longer ships exempts nothing"
+        (spit (deps-file entries "geo") (deps "public/css/gone.css"))
+        (is (= [[:stale-allowance :wagoe/resource-deps "geo" "ui-style"]]
+               (map (juxt :type :key :lib :dep) (sut/dependency-mismatches entries {})))))
+      (testing "an entry without :why throws"
+        (spit (deps-file entries "geo") (str/replace (deps "public/css/a.css") " :why \"styles\"" ""))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"has no :why"
+                              (sut/dependency-mismatches entries {}))))
+      (finally (delete-tree! root)))))
+
+(deftest ^:unit an-allowance-without-why-throws
+  (let [f (java.io.File/createTempFile "check-deps" ".edn")]
+    (try
+      (spit f "{:allow-soft [{:lib \"platform\" :dep \"i18n\"}]}")
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"has no :why" (sut/read-config f)))
+      (spit f "{:allow-unused [{:lib \"e2e\" :why \"x\"}]}")
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"needs :lib and :dep" (sut/read-config f)))
+      (finally (.delete f)))))
+
+(deftest ^:unit every-library-namespace-maps-to-its-own-lib
+  ;; shared-ui is wagoe.shared.*, wagoe-cli wagoe.cli.*, wagoe-mcp wagoe.mcp.*:
+  ;; a namespace that mapped elsewhere would count as a dep on another lib.
+  (doseq [[lib dir] (sut/library-entries)
+          f     (file-seq (io/file dir "src"))
+          :when (str/ends-with? (.getName f) ".clj")
+          :let  [n (some-> (parsing/read-ns-form f) second str)]
+          :when (some-> n (str/starts-with? "wagoe."))]
+    (is (= lib (sut/ns->wagoe-lib n)) (str n " in libs/" lib))))
+
+(deftest ^:unit the-repository-declares-exactly-what-it-uses
+  (let [vs (sut/dependency-mismatches (sut/library-entries) (sut/read-config))]
+    (is (empty? vs) (str/join "\n" (map sut/describe-violation vs)))))

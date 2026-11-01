@@ -145,7 +145,7 @@ bb scripts/docs_lint.clj                           # Run documentation drift lin
 # Quality Gates (all run in CI + check:fcis/check:ports run in pre-commit)
 bb check:fcis                                      # FC/IS enforcement: core/ must not import shell/IO/logging/DB, throw, or hold mutable state
 bb check:placeholder-tests                         # Detect (is true) placeholder assertions in tests
-bb check:deps                                      # Dependency direction + cycles + undeclared third-party deps
+bb check:deps                                      # Declared wagoe deps = used ones, both ways; cycles; undeclared third-party deps
 bb check:ports                                     # Hexagonal: modules must define ports.clj; shell/web must not bypass protocols
 bb check:ports-diff                                # A stable library's protocols gained, lost or moved no method since the last release (Convention 5)
 bb check:poms                                      # Published POMs must carry inter-Wagoe deps (build-shared rewrite + pom-basis)
@@ -1054,7 +1054,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 |------|---------|-----------------|------------|
 | **FC/IS enforcement** | `bb check:fcis` | A core namespace requiring anything outside a small allowlist of pure libraries and its own core/schema/ports; throwing; or holding mutable state (defonce/atom/swap!/reset!, including via `apply`). Reads operator position, so a newline between `(` and the symbol does not hide a call. Exceptions: `^:wagoe/allow-throw` / `^:wagoe/allow-mutable-state` ns metadata, or `.wagoe/check-fcis.edn` (`:allow-require` entries need a `:why`) | Yes |
 | **Placeholder tests** | `bb check:placeholder-tests` | Read with edamame, per runtime feature set: `(is true)`-style shapes (alias-qualified too), a deftest or `testing` block with no assertion at all (helpers like `check-snapshot!` count via a named list; for a `testing`, so does a helper in the file that asserts, directly or through another, and an `assert-*`/`expect-*` call into another namespace), and identical-argument `(= x x)` tautologies. Escape hatch: `^:wagoe/allow-placeholder` on the deftest name, on one `testing`, or on one assertion for a deliberate sentinel | Yes |
-| **Dependency direction** | `bb check:deps` | Core independence violations, circular deps between libraries, third-party namespaces required but not declared (so the published POM would omit them), requires no artifact mapping covers, unparseable `deps.edn` | Yes (cycles/core/new undeclared/unmapped); warn (allowlisted) |
+| **Dependency direction** | `bb check:deps` | A library's main `:deps` wagoe libs differing from what its `src/` uses, either way: a require or `requiring-resolve` of an undeclared lib, or a declared lib nothing uses. A dep used only for a classpath resource goes under `:wagoe/resource-deps` in that deps.edn; a deliberate soft ref or unused dep goes in `.wagoe/check-deps.edn` (`:allow-soft` / `:allow-unused`, each with a `:why`; stale entries fail). Also core independence, circular deps, third-party namespaces required but not declared, requires no artifact mapping covers, unparseable `deps.edn` | Yes |
 | **Ports / hexagonal** | `bb check:ports` | Modules missing `ports.clj`; a shell namespace requiring *any* of another module's `shell.*` namespaces (composition roots exempt); web/HTTP requiring `shell.persistence` directly; an allowlist prefix that no longer exempts anything | Yes |
 | **Stable ports vs release** | `bb check:ports-diff` | A protocol in a stable library's `ports`/`protocols` namespace that, since the last final release tag, lost or moved a method or arity (callers break) or gained one (implementers break), with no backticked name under `[Unreleased]` `### Breaking`. Incubating and tooling libraries are reported, not failed; a major version skips it. Pass a ref or set `PORTS_BASE` to compare with another | Yes |
 | **POM dep completeness** | `bb check:poms` | Published POMs dropping inter-Wagoe deps: `build_shared` losing the `:local/root`→mvn rewrite, a publishable `build.clj` bypassing `pom-basis`, or a referenced wagoe dep that is not itself publishable | Yes |
@@ -1187,7 +1187,7 @@ rename a released id: databases that recorded it would run it again. Per-module 
 | `wagoe.tools.dev` | `bb migrate`, `bb check-links`, `bb smoke-check`, `bb install-hooks` |
 | `wagoe.tools.check-fcis` | `bb check:fcis` — FC/IS boundary enforcement (ADR-021) |
 | `wagoe.tools.check-tests` | `bb check:placeholder-tests` — placeholder assertion detection |
-| `wagoe.tools.check-deps` | `bb check:deps` — dependency direction linting, cycle detection, third-party declaration completeness |
+| `wagoe.tools.check-deps` | `bb check:deps` — declared wagoe deps = used ones, cycle detection, third-party declaration completeness |
 | `wagoe.tools.check-ports` | `bb check:ports` — hexagonal boundary enforcement (ports.clj presence + protocol usage) |
 | `wagoe.tools.check-poms` | `bb check:poms` — published-POM dependency completeness (build-shared rewrite + pom-basis usage + publishable deps) |
 | `wagoe.tools.check-roadmap` | `bb check:roadmap` — one roadmap, and it may not plan what `scaling.adoc` marks shipped |

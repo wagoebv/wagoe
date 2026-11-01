@@ -16,6 +16,11 @@
          ;; UI
          hiccup/hiccup       {:mvn/version "2.0.0"}}
 
+ ;; Used for a classpath resource, not a namespace (bb check:deps, BOU-870).
+ :wagoe/resource-deps
+ {ui-style {:resource "public/css/wagoe-admin.css"
+            :why "Admin markup is styled by wagoe-admin.css and driven by admin-ux.js, both shipped in ui-style."}}
+
  :aliases
  {:test      {:extra-paths ["test"]
               :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
