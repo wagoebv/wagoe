@@ -7,7 +7,8 @@
    through interceptor pipelines, ensuring consistent data flow and preventing
    common runtime errors."
   (:require [malli.core :as m]
-            [malli.error :as me]))
+            [malli.error :as me]
+            [wagoe.core.http.error-status :as error-status]))
 
 ;; Core context schemas
 
@@ -288,25 +289,9 @@
   [context additional-data]
   (merge context additional-data))
 
-;; Default error mappings for exception→HTTP status resolution.
-;; Inlined from problem-details to avoid core→platform circular dependency.
-
 (def default-error-mappings
-  "Default mapping of exception types to HTTP status codes and titles."
-  {:validation-error          [400 "Validation Error"]
-   :invalid-request           [400 "Invalid Request"]
-   :unauthorized              [401 "Unauthorized"]
-   :auth-failed               [401 "Authentication Failed"]
-   :forbidden                 [403 "Forbidden"]
-   :not-found                 [404 "Not Found"]
-   :user-not-found            [404 "User Not Found"]
-   :resource-not-found        [404 "Resource Not Found"]
-   :conflict                  [409 "Conflict"]
-   :user-exists               [409 "User Already Exists"]
-   :resource-exists           [409 "Resource Already Exists"]
-   :business-rule-violation   [400 "Business Rule Violation"]
-   :deletion-not-allowed      [403 "Deletion Not Allowed"]
-   :hard-deletion-not-allowed [403 "Hard Deletion Not Allowed"]})
+  "Exception `:type` -> [status title]. See `wagoe.core.http.error-status`."
+  error-status/default-error-mappings)
 
 ;; Pre-built context creators for common scenarios
 

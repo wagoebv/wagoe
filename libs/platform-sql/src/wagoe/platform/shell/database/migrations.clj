@@ -418,13 +418,16 @@
 
 (defn- without-switched-off
   "`dirs` less those under manifest key `k` that only framework modules
-   `enabled-libs` does not name ship. nil keeps every directory."
+   `enabled-libs` does not name ship. nil keeps every directory, and so does
+   a classpath without platform's registry."
   [dirs enabled-libs k]
   (if (nil? enabled-libs)
     dirs
     ;; Resolved, not required: wagoe-platform owns the registry and depends on
-    ;; this artifact (BOU-871). Only a running platform system passes `enabled-libs`.
-    (let [framework (set (vals @(requiring-resolve 'wagoe.platform.shell.modules/framework-modules)))
+    ;; this artifact (BOU-871).
+    (let [registry  (try (requiring-resolve 'wagoe.platform.shell.modules/framework-modules)
+                         (catch java.io.FileNotFoundException _ nil))
+          framework (set (some-> registry deref vals))
           by-lib    (library-manifests k)
           off?      (fn [[lib _]] (and (framework lib) (not (enabled-libs lib))))
           skip      (set/difference (set (mapcat second (filter off? by-lib)))
