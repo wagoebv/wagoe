@@ -103,14 +103,6 @@
                [lib-name (parse-deps-edn (io/file lib-dir "deps.edn"))])
              lib-entries)))
 
-(defn- dir-name->ns-prefix
-  "For hyphenated lib dirs like 'wagoe-cli', return the namespace segment
-   'cli' that the library's own sources actually use under wagoe.<segment>.*.
-   Returns nil for libs whose dir name equals their namespace segment."
-  [lib-name]
-  (when (str/starts-with? lib-name "wagoe-")
-    (subs lib-name (count "wagoe-"))))
-
 (def ^:private soft-ref-heads
   "Calls that load a namespace named by a quoted symbol at run time."
   #{"requiring-resolve" "require" "resolve"})
@@ -133,18 +125,21 @@
    soft ones from `requiring-resolve` and friends, and only count when they
    name a library under libs/ (`wagoe.test-support` lives in the app)."
   [lib-names [lib-name lib-dir]]
-  (let [own? #{lib-name (dir-name->ns-prefix lib-name)}]
-    (for [f     (source-files lib-dir)
-          :let  [content (slurp f)
-                 ns-form (parsing/read-ns-form f)]
-          ref   (concat (for [n (extract-required-ns ns-form)] {:ns n :soft? false})
-                        (map #(assoc % :soft? true) (soft-refs content)))
-          :let  [dep (ns->wagoe-lib (:ns ref))]
-          :when (and dep (not (own? dep))
-                     (or (not (:soft? ref)) (contains? lib-names dep)))]
-      (assoc ref :lib lib-name :dep dep :from (some-> ns-form second str) :file (relative-path f)))))
+  (for [f     (source-files lib-dir)
+        :let  [content (slurp f)
+               ns-form (try (some-> (parsing/extract-ns-form-text content) read-string)
+                            (catch Exception _ nil))]
+        ref   (concat (for [n (extract-required-ns ns-form)] {:ns n :soft? false})
+                      (map #(assoc % :soft? true) (soft-refs content)))
+        :let  [dep (ns->wagoe-lib (:ns ref))]
+        :when (and dep (not= dep lib-name)
+                   (or (not (:soft? ref)) (contains? lib-names dep)))]
+    (assoc ref :lib lib-name :dep dep :from (some-> ns-form second str) :file (relative-path f))))
 
-(defn- all-wagoe-refs [lib-entries]
+(defn all-wagoe-refs
+  "`wagoe-refs` for every library. Public so `-main` can scan once and hand the
+   result to both the graph and `dependency-mismatches`."
+  [lib-entries]
   (let [lib-names (set (map first lib-entries))]
     (mapcat #(wagoe-refs lib-names %) lib-entries)))
 
@@ -157,8 +152,8 @@
 (defn- build-actual-graph
   "Build adjacency map from source :requires: {lib-name -> #{dep-lib-names}}.
    Static requires only; a soft ref is how a cycle is avoided, not one."
-  [lib-entries]
-  (refs->graph lib-entries (remove :soft? (all-wagoe-refs lib-entries))))
+  [lib-entries refs]
+  (refs->graph lib-entries (remove :soft? refs)))
 
 ;; ---------------------------------------------------------------------------
 ;; Cycle detection (DFS)
@@ -505,48 +500,48 @@
    Only direct declaration counts, and only the main :deps: test aliases may
    legitimately pull in more. A library whose deps.edn does not parse is left
    to :unreadable-deps rather than blamed for every require."
-  [lib-entries {:keys [allow-soft allow-unused]}]
-  (let [unreadable (set (map :lib (unreadable-deps-files lib-entries)))
-        allow-soft   (map #(update-vals % str) allow-soft)
-        allow-unused (map #(update-vals % str) allow-unused)
-        declared  (build-declared-graph lib-entries)
-        dirs      (into {} lib-entries)
-        refs      (all-wagoe-refs lib-entries)
-        resources (mapcat resource-deps lib-entries)
-        pair      (juxt :lib :dep)
-        declared? (fn [[lib dep]] (contains? (get declared lib) dep))
-        static    (set (map pair (remove :soft? refs)))
-        used      (into static (map pair) (concat refs resources))
-        undeclared-soft (->> refs (filter :soft?) (remove (comp declared? pair)))
-        soft-pairs      (set (map pair undeclared-soft))
-        unused    (set (for [[lib deps] declared, dep deps
-                             :when (not (used [lib dep]))]
-                         [lib dep]))
-        allowed-soft   (set (map pair allow-soft))
-        allowed-unused (set (map pair allow-unused))
-        stale (fn [k reason e] (assoc (select-keys e [:lib :dep]) :type :stale-allowance
-                                      :key k :reason reason))]
-    (remove
-     (comp unreadable :lib)
-     (concat
-      (for [r (remove :soft? refs) :when (not (declared? (pair r)))]
-        (assoc (select-keys r [:lib :dep :from :ns :file]) :type :undeclared-dep))
-      (for [r undeclared-soft :when (not (allowed-soft (pair r)))]
-        (assoc (select-keys r [:lib :dep :from :ns :file :line]) :type :undeclared-soft-dep))
-      (for [[lib dep] (sort unused) :when (not (allowed-unused [lib dep]))]
-        {:type :unused-dep :lib lib :dep dep})
-      (for [e allow-soft :when (not (soft-pairs (pair e)))]
-        (stale :allow-soft "no undeclared soft ref matches it" e))
-      (for [e allow-unused :when (not (unused (pair e)))]
-        (stale :allow-unused "the dep is used or not declared" e))
-      (for [e resources
-            :let [reason (cond
-                           (not (declared? (pair e))) "the dep is not declared in :deps"
-                           (static (pair e))          "the dep is required, so the entry is not needed"
-                           (not (some-> (dirs (:dep e)) (io/file "resources" (:resource e)) .exists))
-                           (str (:resource e) " is not in " (:dep e) "/resources"))]
-            :when reason]
-        (stale :wagoe/resource-deps reason e))))))
+  ([lib-entries config] (dependency-mismatches lib-entries config (all-wagoe-refs lib-entries)))
+  ([lib-entries {:keys [allow-soft allow-unused]} refs]
+   (let [unreadable (set (map :lib (unreadable-deps-files lib-entries)))
+         allow-soft   (map #(update-vals % str) allow-soft)
+         allow-unused (map #(update-vals % str) allow-unused)
+         declared  (build-declared-graph lib-entries)
+         dirs      (into {} lib-entries)
+         resources (mapcat resource-deps lib-entries)
+         pair      (juxt :lib :dep)
+         declared? (fn [[lib dep]] (contains? (get declared lib) dep))
+         static    (set (map pair (remove :soft? refs)))
+         used      (set (map pair (concat refs resources)))
+         undeclared-soft (->> refs (filter :soft?) (remove (comp declared? pair)))
+         soft-pairs      (set (map pair undeclared-soft))
+         unused    (set (for [[lib deps] declared, dep deps
+                              :when (not (used [lib dep]))]
+                          [lib dep]))
+         allowed-soft   (set (map pair allow-soft))
+         allowed-unused (set (map pair allow-unused))
+         stale (fn [k reason e] (assoc (select-keys e [:lib :dep]) :type :stale-allowance
+                                       :key k :reason reason))]
+     (remove
+      (comp unreadable :lib)
+      (concat
+       (for [r (remove :soft? refs) :when (not (declared? (pair r)))]
+         (assoc (select-keys r [:lib :dep :from :ns :file]) :type :undeclared-dep))
+       (for [r undeclared-soft :when (not (allowed-soft (pair r)))]
+         (assoc (select-keys r [:lib :dep :from :ns :file :line]) :type :undeclared-soft-dep))
+       (for [[lib dep] (sort unused) :when (not (allowed-unused [lib dep]))]
+         {:type :unused-dep :lib lib :dep dep})
+       (for [e allow-soft :when (not (soft-pairs (pair e)))]
+         (stale :allow-soft "no undeclared soft ref matches it" e))
+       (for [e allow-unused :when (not (unused (pair e)))]
+         (stale :allow-unused "the dep is used or not declared" e))
+       (for [e resources
+             :let [reason (cond
+                            (not (declared? (pair e))) "the dep is not declared in :deps"
+                            (static (pair e))          "the dep is required, so the entry is not needed"
+                            (not (some-> (dirs (:dep e)) (io/file "resources" (:resource e)) .exists))
+                            (str (:resource e) " is not in " (:dep e) "/resources"))]
+             :when reason]
+         (stale :wagoe/resource-deps reason e)))))))
 
 (def ^:private allowed-third-party-gaps
   "Pre-existing [lib artifact] pairs where a library requires a namespace
@@ -566,20 +561,6 @@
 ;; ---------------------------------------------------------------------------
 ;; Known cycle allowlist
 ;; ---------------------------------------------------------------------------
-
-(def ^:private allowed-undeclared-deps
-  "Pre-existing [lib dep] pairs where a library :requires another Wagoe
-   library without declaring it in deps.edn. These are acknowledged but not
-   yet resolved. Remove entries as deps.edn files are updated; adding new
-   entries requires an ADR."
-  ;; Empty: platform's last require of external went in e3cc0ecd5 (BOU-92);
-  ;; the entry outlived it until BOU-873.
-  #{})
-
-(defn- allowed-undeclared?
-  "Returns true if this undeclared dep is in the known allowlist."
-  [{:keys [type lib dep]}]
-  (and (= :undeclared-dep type) (contains? allowed-undeclared-deps [lib dep])))
 
 (def ^:private allowed-cycle-edges
   "Pre-existing directed source-level require edges that are acknowledged
@@ -638,15 +619,14 @@
 (defn -main [& _args]
   (let [entries        (lib-dirs)
         declared-graph (build-declared-graph entries)
-        actual-graph   (build-actual-graph entries)
+        refs           (all-wagoe-refs entries)
+        actual-graph   (build-actual-graph entries refs)
         core-issues        (check-core-independence declared-graph actual-graph)
-        mismatches         (dependency-mismatches entries (read-config))
+        mismatches         (dependency-mismatches entries (read-config) refs)
         declared-cycles    (find-all-cycles declared-graph)
         actual-cycles      (find-all-cycles actual-graph)
         allowed-actual     (filter allowed-cycle? actual-cycles)
         new-actual         (remove allowed-cycle? actual-cycles)
-        allowed-undeclared  (filter allowed-undeclared? mismatches)
-        new-mismatches      (remove allowed-undeclared? mismatches)
         tp-gaps             (distinct (map #(select-keys % [:lib :artifact])
                                            (third-party-gaps entries)))
         allowed-tp          (filter allowed-third-party-gap? tp-gaps)
@@ -656,11 +636,10 @@
         hard-failures  (concat core-issues
                                (map (fn [p] {:type :declared-cycle :path p}) declared-cycles)
                                (map (fn [p] {:type :actual-cycle :path p}) new-actual)
-                               new-mismatches
+                               mismatches
                                (map #(assoc % :type :undeclared-third-party) new-tp)
                                (map #(assoc % :type :unreadable-deps) unreadable)
-                               (map #(assoc % :type :unmapped-ns) unmapped))
-        warnings       allowed-undeclared]
+                               (map #(assoc % :type :unmapped-ns) unmapped))]
     (when (seq allowed-tp)
       (println (ansi/yellow "Third-party dependencies used but not declared (allowlisted):"))
       (doseq [v (sort-by (juxt :lib (comp str :artifact)) allowed-tp)]
@@ -672,12 +651,6 @@
       (println (ansi/yellow "Known source-level cycle(s) (allowlisted):"))
       (doseq [c allowed-actual]
         (println (str "  " (str/join " -> " c))))
-      (println))
-    (when (seq warnings)
-      (println (ansi/yellow "Known undeclared dependencies (allowlisted):"))
-      (doseq [v warnings]
-        (println (str "  " (:lib v) " requires " (:dep v) " (not in deps.edn)")))
-      (println (str (count warnings) " allowlisted. Remove entries as deps.edn files are updated."))
       (println))
     ;; Hard failures block CI
     (if (seq hard-failures)
