@@ -20,7 +20,8 @@
 (def ^:private platform-sources
   ["libs/platform/src/wagoe/platform/shell/system/wiring.clj"
    "libs/platform/src/wagoe/platform/shell/system/config.clj"
-   "libs/platform/src/wagoe/platform/shell/modules.clj"])
+   "libs/platform/src/wagoe/platform/shell/modules.clj"
+   "libs/platform-sql/src/wagoe/platform/shell/module_registry.clj"])
 
 (deftest ^:unit a-module-mounts-its-web-routes-where-it-says
   (let [{:keys [static web api]}

@@ -44,5 +44,6 @@ platform.
 | Transit JSON for events and jobs that leave the process.
 |===
 
-Without platform on the classpath, `migrate` runs every library's migrations:
-deciding which modules are switched on is platform's.
+`migrate` skips the migrations of a framework module the config does not
+switch on in `:active`, with or without platform on the classpath
+(`wagoe.platform.shell.module-registry`).

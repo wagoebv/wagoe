@@ -21,14 +21,16 @@ The namespaces kept their `wagoe.platform.*` names when they moved here.
 | `wagoe.platform.shell.adapters.database.*` | Engine adapters (PostgreSQL, MySQL, SQLite, H2), connection pooling |
 | `wagoe.platform.shell.database.*` | Migrations, seeding, `db:reset`, and their CLIs |
 | `wagoe.platform.core.database.*` | Pure query, constraint, migration-SQL and seed logic |
+| `wagoe.platform.shell.module-registry` | Which library owns each framework module, and which a config switches on |
 | `wagoe.platform.lease` | A lease row replicas take turns holding, timed by the database clock |
 | `wagoe.platform.transit` | Transit JSON for events and jobs that leave the process |
 
 ## Gotchas
 
-- Migrations skip switched-off modules by asking platform's module registry
-  (`wagoe.platform.shell.modules`), resolved at run time: platform depends on
-  this library. Without platform on the classpath, `migrate` runs every directory.
+- Migrations skip switched-off modules by the module registry, which lives here
+  (`wagoe.platform.shell.module-registry`) and which `wagoe.platform.shell.modules`
+  re-exports: platform depends on this library, not the other way (BOU-934).
+  With or without platform, `migrate` skips a module `:active` does not switch on.
 - Database configuration and `db-context` are documented in
   [platform's AGENTS.md](../platform/AGENTS.md#database-integration).
 

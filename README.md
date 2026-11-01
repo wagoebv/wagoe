@@ -136,6 +136,7 @@ Wagoe is a monorepo of **34 independently publishable libraries**, application a
 | [core](libs/core/) | Foundation: validation, utilities, interceptor pipeline, feature flags |
 | [observability](libs/observability/) | Logging, metrics, error reporting (Datadog, Sentry) |
 | [platform](libs/platform/) | HTTP, database, CLI infrastructure |
+| [platform-sql](libs/platform-sql/) | JDBC adapters, migrations, seeding and leases, without the HTTP stack |
 | [user](libs/user/) | Authentication, authorization, MFA, session management |
 | [admin](libs/admin/) | Auto-generated CRUD admin UI (Hiccup + HTMX) |
 | [storage](libs/storage/) | File storage: local filesystem, S3 and GCS |
