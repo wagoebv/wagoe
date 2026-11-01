@@ -29,7 +29,9 @@
   {:lib "jobs" :dep "tenant"
    :why "wagoe.jobs.shell.tenant-context takes a tenant service, so tenant is loaded whenever it runs; the workers get tenant's :wagoe/in-tenant (BOU-931)."}
   {:lib "realtime" :dep "observability"
-   :why "An error reporter exists only when observability is loaded (BOU-848)."}]
+   :why "An error reporter exists only when observability is loaded (BOU-848)."}
+  {:lib "search" :dep "shared-ui"
+   :why "The admin pages render with it and are mounted only when it is on the classpath; declaring it brings the platform's HTTP stack (BOU-932)."}]
 
  ;; Declared libs nothing in src/ requires.
  :allow-unused
