@@ -102,10 +102,10 @@
         (finally (delete-tree! dir))))))
 
 (deftest ^:unit the-repository-declares-what-it-requires
-  ;; The regression guard for BOU-273 itself: platform and user require
+  ;; The regression guard for BOU-273 itself: platform-sql and user require
   ;; clojure.tools.cli for `bb migrate` and `bb create-admin`.
-  (testing "platform and user declare tools.cli"
-    (doseq [lib ["platform" "user"]]
+  (testing "platform-sql and user declare tools.cli"
+    (doseq [lib ["platform-sql" "user"]]
       (let [deps (slurp (str "libs/" lib "/deps.edn"))]
         (is (str/includes? deps "org.clojure/tools.cli")
             (str lib " requires clojure.tools.cli, so its POM must carry it"))))))
@@ -268,6 +268,9 @@
   ;; BOU-872: the name still says platform; wagoe-core ships it.
   (is (= "core" (sut/ns->wagoe-lib "wagoe.platform.ports.privacy")))
   (is (= "platform" (sut/ns->wagoe-lib "wagoe.platform.ports.http")))
+  ;; BOU-871: a top-level file and a nested one, both in platform-sql.
+  (is (= "platform-sql" (sut/ns->wagoe-lib "wagoe.platform.database")))
+  (is (= "platform-sql" (sut/ns->wagoe-lib "wagoe.platform.shell.database.migrations")))
   (testing "and agrees with the tree, so the next move cannot skip `moved-namespaces`"
     (doseq [[ns-name lib] (check-isolation/namespace-owners)]
       (is (= lib (sut/ns->wagoe-lib ns-name)) ns-name))))

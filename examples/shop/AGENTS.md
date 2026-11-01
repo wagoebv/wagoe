@@ -515,6 +515,7 @@ In deps.edn but not switched on. `wagoe add <module>` writes its config key.
 - core (`com.wagoe/wagoe-core`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/core/AGENTS.md)
 - observability (`com.wagoe/wagoe-observability`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/observability/AGENTS.md)
 - platform (`com.wagoe/wagoe-platform`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/platform/AGENTS.md)
+- platform-sql (`com.wagoe/wagoe-platform-sql`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/platform-sql/AGENTS.md)
 - user (`com.wagoe/wagoe-user`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/user/AGENTS.md)
 - email (`com.wagoe/wagoe-email`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/email/AGENTS.md)
 - external (`com.wagoe/wagoe-external`) — [docs](https://github.com/wagoebv/wagoe/blob/main/libs/external/AGENTS.md)

@@ -19,7 +19,7 @@
 
 (def ^:private mentions-read-elsewhere
   "Code tests naming a docs-only file without reading the root copy."
-  {"libs/platform/test/wagoe/platform/shell/database/migrations_test.clj"
+  {"libs/platform-sql/test/wagoe/platform/shell/database/migrations_test.clj"
    "writes a scratch README.md into a temp migrations dir"
    "libs/workflow/test/wagoe/workflow/shell/service_test.clj"
    "reads libs/workflow/README.md, relative to the library"

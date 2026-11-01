@@ -47,8 +47,10 @@
    :docs-url            "https://github.com/wagoebv/wagoe/blob/main/libs/platform/AGENTS.md"}
 
   ;; platform brings it; depend on it directly for the SQL layer without
-  ;; Jetty, Reitit or Muuntaja (BOU-871).
+  ;; Jetty, Reitit or Muuntaja (BOU-871). :provided-by keeps it out of a
+  ;; project's "Not in deps.edn" list when platform is there.
   {:name                "platform-sql"
+   :provided-by         "platform"
    :description         "JDBC adapters, migrations, seeding and leases, without the HTTP stack"
    :clojars             com.wagoe/wagoe-platform-sql
    :version             "1.1.1"

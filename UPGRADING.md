@@ -10,6 +10,14 @@ mode you'd see without it, and the fix.
 > says where it went. Before deploying, `bb doctor --env prod` also catches
 > rate limiting with no active cache (BOU-456).
 
+## Unreleased
+
+### `wagoe-platform-sql` (BOU-871)
+
+Nothing to do: `wagoe-platform` depends on it, and the namespaces kept their names.
+Depend on `com.wagoe/wagoe-platform-sql` instead of platform when you want Wagoe's
+database layer without Jetty, Reitit and Muuntaja.
+
 ## 1.0.x → 1.1.0
 
 ### 1. API docs moved from Swagger 2.0 to OpenAPI 3.1 (BOU-462)

@@ -23,6 +23,9 @@ Every library follows the same FC/IS structure, making the codebase instantly fa
 | xref:platform.adoc[platform]
 | HTTP routing/interceptors, database integration, CLI/runtime wiring. Infrastructure for feature libraries.
 
+| xref:platform-sql.adoc[platform-sql]
+| The SQL layer platform brings: JDBC adapters, migrations, seeding, leases. Usable without the HTTP stack.
+
 | xref:ui-style.adoc[ui-style]
 | Shared UI contract: centralized CSS/JS bundles, tokens, and reusable style conventions across libraries.
 

@@ -19,6 +19,9 @@ Infrastructure layer for HTTP routing/interceptors, database integration, CLI/ru
 | `wagoe.platform.shell.adapters.database.*` | Engine adapters (PostgreSQL, MySQL, SQLite, H2), connection pooling |
 | `wagoe.platform.lease` | A lease row replicas take turns holding, timed by the database clock (jobs ticker, outbox relay) |
 
+The database, lease and transit namespaces ship in [wagoe-platform-sql](../platform-sql/AGENTS.md)
+under the same names; platform depends on it (BOU-871).
+
 ---
 
 ## HTTP Interceptor Architecture
