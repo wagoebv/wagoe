@@ -5,3 +5,4 @@
 ** xref:architecture:testing-strategy.adoc[Testing Strategy]
 ** xref:architecture:scaling.adoc[Sizing & Scaling]
 ** xref:architecture:deployment-topologies.adoc[Deployment Topologies]
+** xref:architecture:leaving-wagoe.adoc[Leaving Wagoe]

@@ -467,4 +467,6 @@ an unannounced break gets a fix or a revert, not a workaround.
 * xref:roadmap.adoc[Roadmap] — what comes after `1.0`
 * xref:architecture:fc-is.adoc[Functional Core / Imperative Shell] — why the
   `core/` ↔ `shell/` split is the stability boundary
+* xref:architecture:leaving-wagoe.adoc[Leaving Wagoe] — what you keep and what
+  you rewrite if you stop relying on any of this
 * https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md[CHANGELOG]
