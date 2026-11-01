@@ -10,6 +10,8 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [wagoe.tools.ansi :as ansi]
+            [wagoe.tools.check-isolation :as check-isolation]
+            [wagoe.tools.check-ports :as check-ports]
             [wagoe.tools.parsing :as parsing]))
 
 ;; ---------------------------------------------------------------------------
@@ -42,8 +44,9 @@
    ;; Encoding and hashing over in-memory values.
    #"^cheshire\.core$"
    #"^buddy\.core\."
-   ;; SQL as data. Building a query is pure; running it is the shell's job,
-   ;; and next.jdbc is deliberately not here.
+   ;; SQL as data. Building a query is pure, so purity lets it through; the
+   ;; SQL rule (sql-namespace-patterns) refuses it unless :allow-sql exempts
+   ;; the file. next.jdbc is not here: it runs queries.
    #"^honey\.sql"
    ;; Reading and rewriting Clojure source as data — the scaffolder's core.
    #"^rewrite-clj\."
@@ -194,6 +197,13 @@
    as the head."
   #{"apply" "partial"})
 
+(defn- require-keys!
+  "Throws when an allowlist entry lacks one of `ks`."
+  [label entries ks]
+  (doseq [e entries, k ks :when (str/blank? (str (get e k)))]
+    (throw (ex-info (str "check-fcis " label " entry " (pr-str e) " has no " k ".")
+                    {:entry e}))))
+
 (defn allowed-requires
   "`{ns-name #{required-ns …}}` from the `:allow-require` entries.
 
@@ -205,24 +215,30 @@
    is exempt\"."
   [m]
   (let [entries (:allow-require m)]
-    (doseq [{:keys [ns require why]} entries]
-      (when (str/blank? (str ns))
-        (throw (ex-info (str "check-fcis allowlist entry has no :ns: " (pr-str entries)) {})))
-      (when (str/blank? (str require))
-        (throw (ex-info (str "check-fcis allowlist entry for " ns " has no :require.") {:ns ns})))
-      (when (str/blank? why)
-        (throw (ex-info (str "check-fcis allowlist entry for " ns " has no :why.") {:ns ns}))))
+    (require-keys! ":allow-require" entries [:ns :require :why])
     (reduce (fn [acc {:keys [ns require]}]
               (update acc (str ns) (fnil conj #{}) (str require)))
             {} entries)))
 
+(defn allowed-sql
+  "The `:allow-sql` entries, checked: each needs a `:path` and a `:why`.
+
+   Keyed by path, not namespace: platform-sql owns `wagoe.platform.*`
+   namespaces, so a prefix would exempt all of platform with it. A path ending
+   in / covers the directory."
+  [m]
+  (let [entries (:allow-sql m)]
+    (require-keys! ":allow-sql" entries [:path :why])
+    entries))
+
 (defn read-config
   "Read the optional .wagoe/check-fcis.edn allowlist. Returns a map with
-   :allow-throw and :allow-mutable-state sets (namespace-name string members)
-   and :allow-require ({ns #{require}})."
+   :allow-throw and :allow-mutable-state sets (namespace-name string members),
+   :allow-require ({ns #{require}}) and :allow-sql ([{:path :why}])."
   []
   (let [f (io/file (System/getProperty "user.dir") ".wagoe" "check-fcis.edn")
-        empty-config {:allow-throw #{} :allow-mutable-state #{} :allow-require {}}]
+        empty-config {:allow-throw #{} :allow-mutable-state #{} :allow-require {}
+                      :allow-sql []}]
     (if (.exists f)
       (let [m (edn/read-string (slurp f))]
         {:allow-throw         (set (map str (:allow-throw m)))
@@ -231,7 +247,8 @@
          ;; swallowed and read as "no exemptions", which turns a typo into a
          ;; gate that reports violations nobody can silence — or, with the
          ;; inverted require list, one that passes for the wrong reason.
-         :allow-require       (allowed-requires m)})
+         :allow-require       (allowed-requires m)
+         :allow-sql           (allowed-sql m)})
       empty-config)))
 
 (defn- ns-meta-flag?
@@ -341,6 +358,17 @@
          test-support  (when (.exists test-support-file) [test-support-file])]
      (->> (concat libs-files app-files test-support)
           (distinct)))))
+
+(defn ports-source-paths
+  "Every ports.clj, and every .clj under a ports/ directory, in libs/*/src and
+   the project's own src/."
+  []
+  (->> (check-ports/source-roots)
+       (mapcat file-seq)
+       (filter #(and (.isFile %)
+                     (str/ends-with? (.getName %) ".clj")
+                     (or (= "ports.clj" (.getName %))
+                         (= "ports" (.getName (.getParentFile %))))))))
 
 (defn- core-clj-files
   "Backwards-compatible alias for core-source-paths."
@@ -458,87 +486,203 @@
                   all-patterns)))
          (mapcat identity))))
 
+;; ---------------------------------------------------------------------------
+;; core/ and ports know no SQL. Building a HoneySQL map is pure, so the rules
+;; above let it through, but it ties the functional core to one kind of store,
+;; and a SQL type in a port signature rules out any other store behind it. An
+;; opaque handle (`tx`, `conn`) may still pass through a port, untyped.
+;; ---------------------------------------------------------------------------
+
+(def ^:private sql-namespace-patterns
+  "Namespaces that tie code to a SQL store."
+  [#"^honey\.sql"
+   #"^next\.jdbc"
+   #"^wagoe\.platform\.database$"
+   #"^wagoe\.platform\.ports\.database$"])
+
+(def ^:private sql-type-pattern
+  "Words in a port that type an argument or return as SQL."
+  #"(?i)honey-?\.?sql|next\.jdbc|javax\.sql\.|java\.sql\.(?:Connection|Statement|PreparedStatement|CallableStatement|ResultSet|DriverManager)\b")
+
+(defn- sql-require? [req]
+  (some #(re-find % req) sql-namespace-patterns))
+
+(def ^:private project-root
+  (delay (str (str/replace (.getCanonicalPath (io/file (System/getProperty "user.dir"))) "\\" "/") "/")))
+
+(defn- rel-path
+  "`file` relative to the project root, with / separators."
+  [file]
+  (let [path (str/replace (.getCanonicalPath (io/file file)) "\\" "/")]
+    (cond-> path (str/starts-with? path @project-root) (subs (count @project-root)))))
+
+(defn- covers? [{:keys [path]} {rel :path}]
+  (and rel (or (= rel path)
+               (and (str/ends-with? path "/") (str/starts-with? rel path)))))
+
+(defn- blank-ns-form
+  "`content` with `ns-text` spaced out, newlines kept, so a scan of the body
+   does not see the requires again."
+  [content ns-text]
+  (cond-> content
+    ns-text (str/replace-first ns-text (str/replace ns-text #"[^\n]" " "))))
+
+(defn- sql-type-hits
+  "{:line :req} for each SQL type named in `text`, which starts on `line`."
+  [text line]
+  (keep-indexed (fn [idx l]
+                  (when-let [m (re-find sql-type-pattern l)]
+                    {:line (+ line idx) :req m}))
+                (str/split-lines text)))
+
+(defn- finding-base [file ns-name]
+  {:file (str file) :path (rel-path file) :ns ns-name :severity :error})
+
+(defn- sql-require-findings
+  "One :sql-require error per SQL namespace in `requires`."
+  [base requires]
+  (for [req requires :when (sql-require? req)]
+    (assoc base :req req :kind :sql-require)))
+
+(defn sql-port-findings
+  "SQL coupling in a ports file, before the allowlist.
+
+   A SQL require, or a SQL type named in code (an arglist, mostly), is an
+   error. In a docstring it is a warning: prose is fuzzy, and \"a transaction
+   of the store\" is fine where \"a next.jdbc transaction\" is not."
+  [file]
+  (let [content (slurp file)
+        ns-text (parsing/extract-ns-form-text content)
+        ns-form (parsing/read-ns-form file)
+        base    (finding-base file (str (second ns-form)))
+        body    (blank-ns-form content ns-text)]
+    (concat
+     (sql-require-findings base (map str (extract-requires ns-form)))
+     (for [cls (extract-imports ns-form) :when (re-find sql-type-pattern cls)]
+       (assoc base :req cls :kind :sql-require))
+     (for [hit (sql-type-hits (check-isolation/code-only body) 1)]
+       (merge base hit {:kind :sql-signature}))
+     (for [{:keys [text line regex?]} (parsing/string-literals content)
+           :when (not regex?)
+           hit   (sql-type-hits text line)]
+       (merge base hit {:kind :sql-doc :severity :warning})))))
+
+(def ^:private sql-kinds #{:sql-require :sql-signature :sql-doc})
+
+(defn- sql-allowed? [config finding]
+  (and (sql-kinds (:kind finding))
+       (some #(covers? % finding) (:allow-sql config))))
+
+(defn stale-sql-entries
+  "The `:allow-sql` entries that cover none of `findings`. An exemption that
+   exempts nothing is reported, so the burn-down cannot outlive the fix."
+  [config findings]
+  (remove (fn [entry] (some #(covers? entry %) findings))
+          (:allow-sql config)))
+
+(defn- check-file*
+  "check-file before the :allow-sql allowlist, which -main also needs to find
+   stale entries."
+  [file config]
+  (let [content  (slurp file)
+        ns-form  (parsing/read-ns-form file)
+        ns-name  (str (second ns-form))
+        requires (extract-requires ns-form)
+        imports  (extract-imports ns-form)
+        exempt-reqs        (get (:allow-require config) ns-name #{})
+        require-violations (->> requires
+                                (map str)
+                                (filter #(forbidden-require? ns-name %))
+                                (remove exempt-reqs)
+                                (map (fn [req]
+                                       {:file (str file)
+                                        :ns   ns-name
+                                        :req  req
+                                        :kind :require})))
+        import-violations  (->> imports
+                                (filter forbidden-import?)
+                                (map (fn [cls]
+                                       {:file (str file)
+                                        :ns   ns-name
+                                        :req  cls
+                                        :kind :import})))
+        fq-violations (->> (concat (scan-fq-calls file content)
+                                   (scan-simple-static-calls file content imports))
+                           (remove (fn [{:keys [symbol]}]
+                                     (allowed-fq-violation? (str file) symbol)))
+                           (map (fn [{:keys [line symbol]}]
+                                  {:file (str file)
+                                   :ns   ns-name
+                                   :req  symbol
+                                   :line line
+                                   :kind :fq-call})))
+        impurity-violations (scan-impurity file content ns-form ns-name config)
+        ;; Only what purity lets through: next.jdbc is I/O and stays a
+        ;; :require, so :allow-sql cannot exempt it.
+        sql-violations      (sql-require-findings
+                             (finding-base file ns-name)
+                             (remove #(forbidden-require? ns-name %) (map str requires)))]
+    (concat require-violations import-violations fq-violations
+            impurity-violations sql-violations)))
+
 (defn check-file
   "Check a single core/ .clj file for forbidden requires, imports,
-   fully-qualified forbidden calls, bare I/O calls, (throw ...) calls, and
-   mutable state in the body.
+   fully-qualified forbidden calls, bare I/O calls, (throw ...) calls, mutable
+   state in the body, and SQL requires.
    Returns a seq of violation maps {:file :ns :req :kind [:line]}, or empty seq
    if clean. Public so callers (e.g. the wagoe-mcp verify loop) can check an
    arbitrary core file outside the monorepo's `core-source-paths` discovery.
    The 1-arity reads the .wagoe/check-fcis.edn allowlist itself."
   ([file] (check-file file (read-config)))
   ([file config]
-   (let [content  (slurp file)
-         ns-form  (parsing/read-ns-form file)
-         ns-name  (str (second ns-form))
-         requires (extract-requires ns-form)
-         imports  (extract-imports ns-form)
-         exempt-reqs        (get (:allow-require config) ns-name #{})
-         require-violations (->> requires
-                                 (map str)
-                                 (filter #(forbidden-require? ns-name %))
-                                 (remove exempt-reqs)
-                                 (map (fn [req]
-                                        {:file (str file)
-                                         :ns   ns-name
-                                         :req  req
-                                         :kind :require})))
-         import-violations  (->> imports
-                                 (filter forbidden-import?)
-                                 (map (fn [cls]
-                                        {:file (str file)
-                                         :ns   ns-name
-                                         :req  cls
-                                         :kind :import})))
-         fq-violations (->> (concat (scan-fq-calls file content)
-                                    (scan-simple-static-calls file content imports))
-                            (remove (fn [{:keys [symbol]}]
-                                      (allowed-fq-violation? (str file) symbol)))
-                            (map (fn [{:keys [line symbol]}]
-                                   {:file (str file)
-                                    :ns   ns-name
-                                    :req  symbol
-                                    :line line
-                                    :kind :fq-call})))
-         impurity-violations (scan-impurity file content ns-form ns-name config)]
-     (concat require-violations import-violations fq-violations
-             impurity-violations))))
+   (remove #(sql-allowed? config %) (check-file* file config))))
 
 ;; ---------------------------------------------------------------------------
 ;; Entry point
 ;; ---------------------------------------------------------------------------
 
+(defn- print-finding [{:keys [file ns req kind line severity]}]
+  (println (str (if (= :warning severity) "  WARNING: " "  VIOLATION: ")
+                file (when line (str ":" line))))
+  (println
+   (if (= :stale-allow-sql kind)
+     (str "    :allow-sql entry " (ansi/red req) " exempts nothing — remove it")
+     (str "    namespace " ns " "
+          (case kind
+            :fq-call       (str "calls " (ansi/red req))
+            :throw         (str "uses " (ansi/red "(throw ...)") " — core must return typed error values")
+            :mutable-state (str "uses mutable state " (ansi/red req) " — registries/state belong in the shell")
+            :import        (str "imports " (ansi/red req))
+            :require       (str "requires " (ansi/red req))
+            :sql-require   (str "requires " (ansi/red req) " — core/ and ports know no SQL")
+            (:sql-signature :sql-doc)
+            (str "names " (ansi/red req) " — a port may pass a store handle, not type it as SQL"))))))
+
 (defn -main [& _args]
-  (let [config     (read-config)
-        files      (core-clj-files)
-        violations (mapcat #(check-file % config) files)]
+  (let [config      (read-config)
+        files       (core-clj-files)
+        ports-files (ports-source-paths)
+        raw         (concat (mapcat #(check-file* % config) files)
+                            (mapcat sql-port-findings ports-files))
+        stale       (for [{:keys [path]} (stale-sql-entries config raw)]
+                      {:file ".wagoe/check-fcis.edn" :req path :kind :stale-allow-sql})
+        {warnings :warning violations :error}
+        (group-by #(:severity % :error)
+                  (concat (remove #(sql-allowed? config %) raw) stale))]
+    (when (seq warnings)
+      (println (ansi/yellow "FC/IS warnings:"))
+      (run! print-finding warnings)
+      (println))
     (if (seq violations)
       (do
         (println (ansi/red "FC/IS violations found:"))
         (println)
-        (doseq [{:keys [file ns req kind line]} violations]
-          (case kind
-            :fq-call
-            (do (println (str "  VIOLATION: " file ":" line))
-                (println (str "    namespace " ns " calls " (ansi/red req))))
-            :throw
-            (do (println (str "  VIOLATION: " file ":" line))
-                (println (str "    namespace " ns " uses " (ansi/red "(throw ...)")
-                              " — core must return typed error values")))
-            :mutable-state
-            (do (println (str "  VIOLATION: " file ":" line))
-                (println (str "    namespace " ns " uses mutable state " (ansi/red req)
-                              " — registries/state belong in the shell")))
-            :import
-            (do (println (str "  VIOLATION: " file))
-                (println (str "    namespace " ns " imports " (ansi/red req))))
-            :require
-            (do (println (str "  VIOLATION: " file))
-                (println (str "    namespace " ns " requires " (ansi/red req))))))
+        (run! print-finding violations)
         (println)
-        (println (str (count violations) " violation(s) found. Core namespaces must not import shell, I/O, logging, or DB code, throw, or hold mutable state."))
+        (println (str (count violations) " violation(s) found. Core namespaces must not import shell, I/O, logging, or DB code, throw, or hold mutable state; core and ports know no SQL."))
         (println (ansi/dim "Escape hatch: ^:wagoe/allow-throw / ^:wagoe/allow-mutable-state ns metadata, or .wagoe/check-fcis.edn allowlist."))
         (System/exit 1))
       (do
-        (println (ansi/green "FC/IS check passed.") (str (count files) " core file(s) scanned, 0 violations."))
+        (println (ansi/green "FC/IS check passed.")
+                 (str (count files) " core and " (count ports-files) " ports file(s) scanned, 0 violations."))
         (System/exit 0)))))
