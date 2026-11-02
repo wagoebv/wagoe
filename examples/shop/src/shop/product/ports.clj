@@ -9,13 +9,15 @@
   "Repository interface for product persistence operations."
 
   (find-by-id [this id]
-    "Find product by ID.")
+    "The product with this UUID, or nil.")
 
   (find-all [this options]
-    "Find all products with pagination and filtering.")
+    "A page of products, oldest first: by :created-at, then by id. `options`
+     holds :limit (default 20) and :offset (default 0).")
 
   (create [this entity]
-    "Create new product.")
+    "Store a new product, its :id and :created-at already set, and return it
+     as stored. An id or unique field already taken is a :conflict.")
 
   ;; `update-entity`, not `update-<entity>`: the service protocol below declares
   ;; `update-<entity>` too, and defprotocol interns its methods as vars in this
@@ -24,13 +26,16 @@
   ;; which would shadow clojure.core/update. The repository's other methods are
   ;; already generic (create, delete), so this matches its own family. (BOU-267)
   (update-entity [this entity]
-    "Update existing product.")
+    "Change the fields `entity` carries besides :id, stamp :updated-at, and
+     return the product as stored; nil when there is no such product. No field to
+     change is a :validation-error.")
 
   (delete [this id]
-    "Delete product by ID.")
+    "Delete the product with this id. An unknown id is not an error.")
 
   (transact [this f]
-    "Call `f` in one database transaction, and return what it returns."))
+    "Call `f` as one unit of work, and return what it returns. When `f`
+     throws, none of its writes remain."))
 
 ;; =============================================================================
 ;; Service Ports

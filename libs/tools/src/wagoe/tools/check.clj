@@ -50,7 +50,7 @@
    dev/ arity error.
 
    Keep this in step with the `--lint` paths in .github/workflows/ci.yml."
-  ["src" "test" "dev" "scripts" "examples/todo/src"])
+  ["src" "test" "dev" "scripts" "examples/todo/src" "examples/stores/src" "examples/stores/test"])
 
 (defn linting-cmd
   "Build the clj-kondo lint command with concrete, existing source paths."

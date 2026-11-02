@@ -117,7 +117,7 @@ jobs:
           clojure -M:clj-kondo --lint \
             src test dev scripts \
             libs/*/src libs/*/test \
-            examples/todo/src
+            examples/todo/src examples/stores/src examples/stores/test
 
   # =============================================================================
   # Build shared UI assets
@@ -454,10 +454,10 @@ jobs:
           fi
 
   # =============================================================================
-  # In-repo runnable examples must actually run (examples/todo, examples/shop)
+  # In-repo runnable examples must actually run (examples/todo, shop, stores)
   #
   # examples/shop is generated output, committed so it can be read and so this
-  # job runs it. Both resolve com.wagoe through :local/root, so a green run
+  # job runs it. Each resolves com.wagoe through :local/root, so a green run
   # means this commit works — not that the last release did (BOU-300).
   # =============================================================================
   example-smoke:
@@ -483,7 +483,7 @@ jobs:
           cli: 1.12.6.1673
           bb: latest
 
-      - name: Run both examples
+      - name: Run the examples
         run: ./scripts/example-smoke.sh
 
       # Separate from running it: an example that runs can still have stopped
@@ -1835,4 +1835,4 @@ jobs:
           echo "  - check:no-boundary (no residual boundary tokens)"
           echo "  - build-uberjar (deployable artifact builds and is versioned)"
           echo "  - test-tools (libs/tools + AGENTS.md generator tests)"
-          echo "  - example-smoke (examples/todo + examples/shop run)"
+          echo "  - example-smoke (examples/todo, shop and stores run)"

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Smoke test for examples/ (BOU-300).
+# Smoke test for examples/ (BOU-300, BOU-877).
 #
 # examples/todo is pure core — it prints and exits. examples/shop is a
 # generated application: it boots the framework and serves HTTP, so the check
 # is a request, not a line of stdout.
 #
-# Both resolve com.wagoe through :local/root, so this tests the checkout rather
+# Each resolves com.wagoe through :local/root, so this tests the checkout rather
 # than the last release. `bb example:regen --check` proves examples/shop is
 # still what the generators produce; this script proves it runs.
 set -euo pipefail
@@ -18,14 +18,14 @@ fail() { echo; echo "EXAMPLE SMOKE FAILURE: $*"; exit 1; }
 ok()   { echo "  ok — $*"; }
 
 # ── examples/todo ───────────────────────────────────────────────────────────
-echo "[1/2] examples/todo"
+echo "[1/3] examples/todo"
 out=$(cd "$REPO_ROOT/examples/todo" && clojure -M:run)
 echo "$out" | grep -q "3 todos, 2 remaining" \
   || { echo "$out"; fail "examples/todo output changed or the example failed to run"; }
 ok "prints what its README says it prints"
 
 # ── examples/shop ───────────────────────────────────────────────────────────
-echo "[2/2] examples/shop"
+echo "[2/3] examples/shop"
 cd "$REPO_ROOT/examples/shop"
 
 # The system test and the uberjar run the test profile, H2 in memory. The HTTP
@@ -190,6 +190,17 @@ java -jar target/shop-0.1.0.jar > /tmp/shop-jar.log 2>&1 &
 APP_PID=$!
 wait_for_health /tmp/shop-jar.log
 ok "the uberjar builds and boots on WAG_ENV=test with no external services"
+cleanup
+
+# ── examples/stores ─────────────────────────────────────────────────────────
+# examples/shop's product module on a second store, an atom. One contract suite
+# runs on the SQL repository and on it, and the app boots on either.
+echo "[3/3] examples/stores"
+(cd "$REPO_ROOT/examples/stores" && clojure -M:test) > /tmp/stores-test.log 2>&1 \
+  || { log_excerpt /tmp/stores-test.log 40; fail "clojure -M:test in examples/stores failed"; }
+grep -qE '(^|[^0-9])[1-9][0-9]* tests,' /tmp/stores-test.log \
+  || { log_excerpt /tmp/stores-test.log 30; fail "examples/stores ran no tests"; }
+ok "the product repository passes one contract on SQL and on an atom"
 
 echo
-echo "✅ examples/todo and examples/shop both run against this checkout"
+echo "✅ examples/todo, examples/shop and examples/stores run against this checkout"
