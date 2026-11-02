@@ -6,8 +6,12 @@
             [wagoe.audience.shell.module-wiring]))
 
 (def ^:private users
-  (reify ports/IUserDataSource
-    (query-users-sql [_ _] [])
+  ;; query-users-sql is deprecated; the service never calls it here.
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify
+    ports/IUserQuery
+    (query-user-ids [_ _] [])
+    ports/IUserDataSource
     (load-users [_ _] [])))
 
 (deftest ^:unit ^:security filter-fields-are-checked-at-boot

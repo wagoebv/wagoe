@@ -114,17 +114,37 @@
              {}
              row))
 
+(defn- select-ids
+  "Ids of the rows matching `clause`. A nil clause is every user, not no
+   users: an empty filter is the universe, and returning nothing for it
+   silently empties every audience whose filters are all predicate-phase
+   (libs/audience/AGENTS.md)."
+  [{:keys [datasource table field-mapping dialect]} clause]
+  (let [q (cond-> {:select [:id] :from [table]}
+            (some? clause)
+            (assoc :where (prepare-clause dialect field-mapping clause)))]
+    (mapv (comp ->uuid :id) (jdbc/execute! datasource (sql/format q) opts))))
+
+(defn- filter-clause
+  "The where clause for one filter. The service sends only filters SQL can
+   express; this refuses any other from a direct caller, since dropping it
+   would widen the audience."
+  [f]
+  (or (filter/filter->sql f)
+      (throw (ex-info "Filter cannot be evaluated in SQL"
+                      {:type :configuration-error :filter f}))))
+
 (defrecord SqlUserDataSource [datasource table field-mapping dialect]
+  ports/IUserQuery
+
+  (query-user-ids [this filters]
+    (select-ids this (when (seq filters)
+                       (into [:and] (map filter-clause) filters))))
+
   ports/IUserDataSource
 
-  (query-users-sql [_ honeysql-clause]
-    ;; A nil clause is "every user", not "no users" — an empty filter is the
-    ;; universe, and returning nothing for it silently empties every audience
-    ;; whose filters are all predicate-phase (libs/audience/AGENTS.md).
-    (let [q (cond-> {:select [:id] :from [table]}
-              (some? honeysql-clause)
-              (assoc :where (prepare-clause dialect field-mapping honeysql-clause)))]
-      (mapv (comp ->uuid :id) (jdbc/execute! datasource (sql/format q) opts))))
+  (query-users-sql [this clause]
+    (select-ids this clause))
 
   (load-users [_ user-ids]
     (if (empty? user-ids)

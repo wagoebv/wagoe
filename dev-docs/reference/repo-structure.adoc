@@ -324,7 +324,7 @@ storage  --> core, observability, platform
 user     --> config, core, email, i18n, observability, platform, shared-ui, tenant
 admin    --> core, events, i18n, platform, shared-ui, ui-style, user
 workflow --> admin, core, i18n, platform, shared-ui, user
-search   --> core, i18n, platform, shared-ui
+search   --> core, i18n, platform-sql
 payments, geo, reports, audience, scaffolder --> core
 ----
 

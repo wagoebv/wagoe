@@ -145,8 +145,12 @@
 
 (def ^:private users
   "Two users; a SQL filter narrows them to the first."
-  (reify ports/IUserDataSource
-    (query-users-sql [_ clause] (if clause [u1] [u1 u2]))
+  ;; query-users-sql is deprecated; the service never calls it here.
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify
+    ports/IUserQuery
+    (query-user-ids [_ filters] (if (seq filters) [u1] [u1 u2]))
+    ports/IUserDataSource
     (load-users [_ ids] (mapv (fn [id] {:id id}) ids))))
 
 (defn- request [method uri content-type body]
