@@ -709,3 +709,17 @@
       (is (= :enabled (state)))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration adding-a-module-platform-brings-adds-nothing
+  (let [tmp  (with-profiles! "provided-by-add")
+        home (System/getProperty "user.dir")
+        deps "{:deps {com.wagoe/wagoe-platform {:mvn/version \"1.0.0\"}}}"]
+    (try
+      (spit (io/file tmp "deps.edn") deps)
+      (System/setProperty "user.dir" tmp)
+      (let [out (with-out-str (add/-main ["platform-sql"]))]
+        (is (str/includes? out "already provided by com.wagoe/wagoe-platform") out)
+        (is (= deps (slurp (io/file tmp "deps.edn")))))
+      (finally
+        (System/setProperty "user.dir" home)
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
