@@ -3,11 +3,11 @@
             [wagoe.audience.core.compiler :as compiler]))
 
 (deftest ^:unit compile-all-sql-filters
-  (testing "all DB-evaluable filters go to :sql-clauses"
+  (testing "all DB-evaluable filters go to :query-filters"
     (let [plan (compiler/compile-segment
                 {:filters [{:type :demographics :field :plan :op :eq :value "premium"}
                            {:type :location :field :country :op :in :value ["NL"]}]})]
-      (is (= 2 (count (:sql-clauses plan))))
+      (is (= 2 (count (:query-filters plan))))
       (is (empty? (:predicates plan))))))
 
 (deftest ^:unit compile-mixed-filters
@@ -16,13 +16,13 @@
           plan (compiler/compile-segment
                 {:filters [{:type :demographics :field :plan :op :eq :value "premium"}
                            {:type :behavior :op :fn :value pred-fn}]})]
-      (is (= 1 (count (:sql-clauses plan))))
+      (is (= 1 (count (:query-filters plan))))
       (is (= 1 (count (:predicates plan)))))))
 
 (deftest ^:unit compile-no-filters
   (testing "empty filters produce empty plan"
     (let [plan (compiler/compile-segment {:filters []})]
-      (is (empty? (:sql-clauses plan)))
+      (is (empty? (:query-filters plan)))
       (is (empty? (:predicates plan))))))
 
 (deftest ^:unit compile-all-predicate-filters
@@ -30,7 +30,7 @@
     (let [plan (compiler/compile-segment
                 {:filters [{:type :behavior :op :fn :value (fn [_] true)}
                            {:type :behavior :op :fn :value (fn [_] false)}]})]
-      (is (empty? (:sql-clauses plan)))
+      (is (empty? (:query-filters plan)))
       (is (= 2 (count (:predicates plan)))))))
 
 (deftest ^:unit a-date-filter-without-a-date-is-reported-not-guessed
@@ -44,7 +44,7 @@
                 {:type :account-tenure :op :gte :value 30}]]
     (testing (str (:type filt) " without a date")
       (let [plan (compiler/compile-segment {:filters [filt]})]
-        (is (empty? (:sql-clauses plan)))
+        (is (empty? (:query-filters plan)))
         (is (empty? (:predicates plan))
             "a predicate was built that can only throw when it runs")
         (is (= [filt] (:unsupported plan)))))
@@ -52,12 +52,12 @@
     (testing (str (:type filt) " with one compiles to SQL")
       (let [plan (compiler/compile-segment {:filters [filt]}
                                            {:now (java.time.LocalDate/of 2026 9 10)})]
-        (is (= 1 (count (:sql-clauses plan))))
+        (is (= 1 (count (:query-filters plan))))
         (is (empty? (:unsupported plan)))))
 
     (testing (str (:type filt) " carrying its own :now compiles too")
       ;; The escape the docstring documents: `:now` on the filter itself.
       (let [plan (compiler/compile-segment
                   {:filters [(assoc filt :now (java.time.LocalDate/of 2026 9 10))]})]
-        (is (= 1 (count (:sql-clauses plan))))
+        (is (= 1 (count (:query-filters plan))))
         (is (empty? (:unsupported plan)))))))

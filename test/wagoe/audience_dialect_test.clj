@@ -13,7 +13,6 @@
             [next.jdbc :as jdbc]
             [support.embedded-pg :as epg]
             [wagoe.audience.core.compiler :as compiler]
-            [wagoe.audience.core.filter :as audience-filter]
             [wagoe.audience.shell.adapters.user-sql :as user-sql]
             [wagoe.audience.shell.cache :as audience-cache]
             [wagoe.audience.shell.service :as service]
@@ -92,11 +91,11 @@
                 (let [found (ports/find-audience store :premium)]
                   (is (= :premium (:id found)))
                   (is (= ["billing"] (:tags found)))
-                  (is (= (:sql-clauses (compiler/compile-segment definition))
-                         (:sql-clauses (compiler/compile-segment found)))
+                  (is (= (:query-filters (compiler/compile-segment definition))
+                         (:query-filters (compiler/compile-segment found)))
                       "the reloaded definition compiles to a different plan")
-                  (is (= [[:= :plan "premium"]]
-                         (:sql-clauses (compiler/compile-segment found)))
+                  (is (= [{:type :demographics :field :plan :op :eq :value "premium"}]
+                         (:query-filters (compiler/compile-segment found)))
                       "and not to the plan the filter describes"))))
 
             (testing "memberships are written and read against its own id type"
@@ -168,10 +167,10 @@
                                 id VARCHAR(64) PRIMARY KEY, name VARCHAR(255),
                                 last_login TIMESTAMP NULL)"])
           (let [source (user-sql/create-sql-user-data-source ds)]
-            (is (= [] (ports/query-users-sql source [:is :last_active_at nil]))
+            (is (= [] #_{:clj-kondo/ignore [:deprecated-var]} (ports/query-users-sql source [:is :last_active_at nil]))
                 "the filter's column name was not translated to the table's")
             (testing "and an unmapped column is passed through untouched"
-              (is (= [] (ports/query-users-sql source [:is :name nil])))))
+              (is (= [] #_{:clj-kondo/ignore [:deprecated-var]} (ports/query-users-sql source [:is :name nil])))))
           (finally (stop!)))))))
 
 (deftest ^:integration date-filters-resolve-on-every-adapter
@@ -217,9 +216,7 @@
                                     VALUES (?,?,?)" "stale" (->stored stale) (->stored stale)]))
             (let [source (user-sql/create-sql-user-data-source ds :date_filter_users)
                   ids    (fn [filt]
-                           (set (ports/query-users-sql
-                                 source
-                                 (audience-filter/filter->sql (assoc filt :now today)))))]
+                           (set (ports/query-user-ids source [(assoc filt :now today)])))]
               (testing ":last-active within 30 days finds the recent user only"
                 (is (= #{"recent"} (ids {:type :last-active :op :within-days :value 30}))))
 
@@ -238,10 +235,9 @@
           (doseq [[id city] [["u" "a_b"] ["x" "axb"] ["p" "50%"]]]
             (jdbc/execute! ds ["INSERT INTO contains_users (id, city) VALUES (?,?)" id city]))
           (let [source (user-sql/create-sql-user-data-source ds :contains_users)
-                ids    #(set (ports/query-users-sql
+                ids    #(set (ports/query-user-ids
                               source
-                              (audience-filter/filter->sql {:type :demographics :field :city
-                                                            :op :contains :value %})))]
+                              [{:type :demographics :field :city :op :contains :value %}]))]
             (is (= #{"u"} (ids "a_b")))
             (is (= #{"p"} (ids "%"))))
           (finally (stop!)))))))
@@ -275,7 +271,7 @@
 
         (testing "and refuses when the compiler could not express a filter"
           (with-redefs [compiler/compile-segment
-                        (fn [& _] {:sql-clauses [] :predicates [] :unsupported [filt]})]
+                        (fn [& _] {:query-filters [] :predicates [] :unsupported [filt]})]
             (let [ex (is (thrown? clojure.lang.ExceptionInfo
                                   (ports/resolve-audience resolver :undecidable
                                                           {:force-refresh? true})))]
@@ -315,10 +311,9 @@
                                    id (->stored instant)]))
 
               (let [source (user-sql/create-sql-user-data-source ds :boundary_users)
-                    found  (set (ports/query-users-sql
+                    found  (set (ports/query-user-ids
                                  source
-                                 (audience-filter/filter->sql
-                                  {:type :last-active :op :within-days :value 30 :now today})))]
+                                 [{:type :last-active :op :within-days :value 30 :now today}]))]
                 (is (= (set (keys cases)) found)
                     (str "a user at or just after the cutoff was excluded; found "
                          (pr-str (sort found))))))
@@ -356,7 +351,7 @@
                                    id (->stored instant)]))
 
               (let [source (user-sql/create-sql-user-data-source ds :custom_clause_users)
-                    found  (set (ports/query-users-sql source [:between :expires_at start end]))]
+                    found  (set #_{:clj-kondo/ignore [:deprecated-var]} (ports/query-users-sql source [:between :expires_at start end]))]
                 (is (= #{"at-start" "start-plus-ms" "mid"} found)
                     (str ":between left an instant unconverted; found " (pr-str (sort found))))))
             (finally (stop!))))))))

@@ -345,7 +345,8 @@
      orphan job; commit means a worker will pick it up).
 
     Args:
-      tx         - an OPEN next.jdbc transaction, not a datasource
+      tx         - an open transaction on the queue's database, as
+                   `with-transaction` binds it; not a datasource
       queue-name - Queue name
       job        - Job map
 

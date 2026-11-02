@@ -27,18 +27,33 @@
 ;; Mock IUserDataSource
 ;; =============================================================================
 
+(defn- matches-filter?
+  "Equality on a demographics filter, enough for these tests."
+  [user {:keys [field value]}]
+  (= (get user field) value))
+
 (defn- mock-user-data-source
-  "Returns an IUserDataSource that serves from a fixed user list.
-   query-users-sql returns all user :id values when clause is nil, or
-   filters by the first SQL clause (field = value equality only).
-   load-users returns the matching user maps."
+  "An IUserQuery + IUserDataSource serving a fixed user list. No filters is
+   every user."
   [users]
+  ;; query-users-sql is deprecated; the service never calls it here.
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify
+    ports/IUserQuery
+    (query-user-ids [_ filters]
+      (mapv :id (filter (fn [u] (every? #(matches-filter? u %) filters)) users)))
+    ports/IUserDataSource
+    (load-users [_ user-ids]
+      (filterv #(contains? (set user-ids) (:id %)) users))))
+
+(defn- legacy-user-data-source
+  "A source written before IUserQuery: the service hands it the compiled clause."
+  [users clauses]
   (reify ports/IUserDataSource
     (query-users-sql [_ clause]
-      ;; clause is nil (no filter) or e.g. [:= :plan \"premium\"]
+      (swap! clauses conj clause)
       (if (nil? clause)
         (mapv :id users)
-        ;; Naively apply equality clause for test purposes
         (let [[_op field value] clause]
           (mapv :id (filter #(= (get % field) value) users)))))
     (load-users [_ user-ids]
@@ -138,6 +153,47 @@
       (let [result (ports/resolve-audience svc :enterprise-only)]
         (is (empty? (:user-ids result)))
         (is (= 0 (:count result)))))))
+
+;; =============================================================================
+;; Candidate query — IUserQuery, or the deprecated clause path
+;; =============================================================================
+
+(deftest ^:unit an-iuserquery-source-gets-the-filters-as-data
+  (let [seen (atom nil)
+        u    {:id (uuid) :plan "premium"}
+        src  #_{:clj-kondo/ignore [:missing-protocol-method]}
+             (reify
+               ports/IUserQuery
+               (query-user-ids [_ filters] (reset! seen filters) [(:id u)])
+               ports/IUserDataSource
+               (load-users [_ _] [u]))
+        svc  (service/create-audience-service
+              {:user-data-source src
+               :filter-fields    (filter/allowed-filter-fields #{:plan})})]
+    (registry/register-audience!
+     {:id :premium :label "Premium"
+      :filters [{:type :demographics :field :plan :op :eq :value "premium"}
+                {:type :behavior :op :fn :value (constantly true)}]})
+    (is (= #{(:id u)} (:user-ids (ports/resolve-audience svc :premium))))
+    (is (= [{:type :demographics :field :plan :op :eq :value "premium"}]
+           (map #(dissoc % :now) @seen))
+        "only the SQL-phase filter, as the definition holds it")))
+
+(deftest ^:unit a-source-without-iuserquery-still-gets-the-clause
+  (let [clauses (atom [])
+        premium {:id (uuid) :plan "premium"}
+        svc     (service/create-audience-service
+                 {:user-data-source (legacy-user-data-source [premium {:id (uuid) :plan "free"}]
+                                                             clauses)
+                  :filter-fields    (filter/allowed-filter-fields #{:plan})})]
+    (registry/register-audience!
+     {:id :premium :label "Premium"
+      :filters [{:type :demographics :field :plan :op :eq :value "premium"}]})
+    (registry/register-audience!
+     {:id :everyone :label "Everyone" :filters []})
+    (is (= #{(:id premium)} (:user-ids (ports/resolve-audience svc :premium))))
+    (is (= 2 (:count (ports/resolve-audience svc :everyone))))
+    (is (= [[:= :plan "premium"] nil] @clauses))))
 
 ;; =============================================================================
 ;; Hybrid resolution — SQL + behavior predicate
