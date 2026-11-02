@@ -1,12 +1,11 @@
 (ns wagoe.audience.ports
   "Port definitions for the wagoe-audience library.
 
-   Four protocols cover the full lifecycle:
-
    IAudienceResolver    — evaluate audiences and check membership
    IAudienceRepository  — persist and retrieve audience definitions
    IAudienceCache       — cache evaluated audience results
-   IUserDataSource      — query users for filter evaluation")
+   IUserDataSource      — load users for filter evaluation
+   IUserQuery           — find the users matching a set of filters")
 
 ;; =============================================================================
 ;; IAudienceResolver  — evaluation
@@ -145,11 +144,12 @@
 (defprotocol IUserDataSource
   "Protocol for querying user data during filter evaluation."
 
-  (query-users-sql [this honeysql-clause]
-    "Execute a HoneySQL query against the users table.
+  (^{:deprecated "1.2" :superseded-by "wagoe.audience.ports/query-user-ids"}
+   query-users-sql [this clause]
+    "Deprecated: implement IUserQuery instead; removed in 2.0 (BOU-875).
 
-     Args:
-       honeysql-clause - HoneySQL map (select/where/join etc.)
+     Ids of the users matching `clause`, a where clause the core compiled from
+     the filters. nil means every user.
 
      Returns:
        Vector of user IDs (UUIDs)")
@@ -162,3 +162,23 @@
 
      Returns:
        Vector of user maps (kebab-case keys)"))
+
+;; =============================================================================
+;; IUserQuery  — candidate selection
+;; =============================================================================
+
+(defprotocol IUserQuery
+  "Find users by filter, in whatever query language the store speaks.
+   Replaces IUserDataSource/query-users-sql; the service uses it when the
+   source implements it (BOU-875)."
+
+  (query-user-ids [this filters]
+    "Ids of the users matching every filter.
+
+     Args:
+       filters - AudienceFilter maps as a definition holds them, date filters
+                 carrying :now: those `filter->sql` can express. The rest run
+                 as predicates over load-users. Empty means every user.
+
+     Returns:
+       Vector of user IDs (UUIDs)"))

@@ -29,12 +29,19 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Security
+
+- **A search filter key could inject SQL on PostgreSQL** (BOU-875), and reach past the tenant filter. Upgrade if you serve
+  `wagoe-search` routes.
+
 ### Added
 
 - **`wagoe.core.http.errors` and `wagoe.core.http.access`**: the error body and access checks, without cheshire (BOU-930).
   The `wagoe.platform.core.http` namespaces delegate to them; nothing to change.
 - **`com.wagoe/wagoe-platform-sql`**: platform's database, migration, lease and transit namespaces, same names (BOU-871).
   `wagoe-platform` depends on it; nothing to change.
+- **`wagoe.audience.ports/IUserQuery`**: `query-user-ids` takes the audience's filters as data (BOU-875).
+  A custom `IUserDataSource` should implement it; the service uses it when present.
 
 ### Fixed
 
@@ -58,6 +65,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Deprecated
 
 - **`wagoe.jobs.shell.tenant-context/tenant-runner` and `:wagoe/job-tenant-runner`** (BOU-931). Use tenant's `:wagoe/in-tenant`.
+- **`wagoe.audience.ports/query-users-sql`** (BOU-875), removed in 2.0 (BOU-935). Implement `IUserQuery/query-user-ids`.
 
 ## [1.1.1] — 2026-10-31
 

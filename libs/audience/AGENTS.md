@@ -318,14 +318,17 @@ segments and read their member ids, and the global authentication only *sets* `:
 credentials are present rather than demanding them. The routes component refuses to
 initialise with an empty middleware vector (BOU-419).
 
-**Note**: `:user-data-source` is required; without it `:wagoe/audience` refuses to boot. The wired default is the SQL source above. To use your own, provide any implementation of `IUserDataSource`:
+**Note**: `:user-data-source` is required; without it `:wagoe/audience` refuses to boot. The wired default is the SQL source above. To use your own, implement `IUserQuery` and `IUserDataSource`:
 
 ```clojure
 (defrecord MyUserDataSource [db]
+  ports/IUserQuery
+  (query-user-ids [_ filters] ...)   ; the filter maps; empty means every user
   ports/IUserDataSource
-  (query-users-sql [_ clause] ...)
   (load-users [_ user-ids] ...))
 ```
+
+`IUserDataSource/query-users-sql` is deprecated (BOU-875) and is called only on a source without `IUserQuery`. clj-kondo reports it missing from your record; `#_{:clj-kondo/ignore [:missing-protocol-method]}` silences that until 2.0.
 
 ---
 
@@ -387,8 +390,8 @@ it refers to.
 ### 6. Member count vs user-id set
 `SegmentResult` always carries both `:count` (integer) and `:user-ids` (set of UUIDs). The `:count` in the DB row (`member_count`) is a cached integer for display. Always use `:user-ids` for actual membership decisions.
 
-### 7. `query-users-sql` with nil clause
-Passing `nil` as the HoneySQL clause means "all users". Implement your `IUserDataSource` to handle `nil` explicitly, otherwise you may return an empty set rather than the universe.
+### 7. `query-user-ids` with no filters
+An empty filter vector means "all users". Handle it explicitly, otherwise you may return an empty set rather than the universe.
 
 ---
 

@@ -10,8 +10,8 @@
    - :on-conflict — INSERT … ON CONFLICT DO UPDATE; without it, delete and
      insert in one transaction"
   (:require [wagoe.search.ports :as ports]
-            [wagoe.search.core.index :as index]
             [wagoe.search.core.query :as qry]
+            [wagoe.search.shell.query-sql :as query-sql]
             [wagoe.platform.ports.database :as db-ports]
             [wagoe.search.shell.trigram :as trigram]
             [cheshire.core :as json]
@@ -40,7 +40,7 @@
   [filters]
   (when (seq filters)
     (json/generate-string
-     (into {} (map (fn [[k v]] [(index/filter-key->json-key k) (str v)]) filters)))))
+     (into {} (qry/filter-terms filters)))))
 
 ;; =============================================================================
 ;; Row <-> Entity mapping
@@ -91,7 +91,7 @@
   [datasource state threshold sql-vec]
   (try
     (jdbc/with-transaction [tx datasource]
-      (jdbc/execute! tx (qry/build-trigram-threshold-sql threshold))
+      (jdbc/execute! tx (query-sql/build-trigram-threshold-sql threshold))
       (jdbc/execute! tx sql-vec {:builder-fn rs/as-unqualified-lower-maps}))
     (catch java.sql.SQLException e
       (when-not (= "42883" (.getSQLState e)) (throw e))
@@ -160,10 +160,10 @@
     (let [{:keys [language limit offset highlight? filters]
            :or   {limit 20 offset 0 language "english" highlight? false}} opts
           sql-vec (if full-text?
-                    (qry/build-postgres-search-sql
+                    (query-sql/build-postgres-search-sql
                      (kw->str index-id) (kw->str entity-type)
                      language query limit offset highlight? filters)
-                    (qry/build-fallback-search-sql
+                    (query-sql/build-fallback-search-sql
                      (kw->str index-id) (kw->str entity-type)
                      (content-match adapter query) limit offset filters))
           rows (jdbc/execute! datasource sql-vec
@@ -175,10 +175,10 @@
                {:entity-type entity-type :query query})
     (let [{:keys [language index-id filters] :or {language "english"}} opts
           sql-vec (if full-text?
-                    (qry/build-postgres-count-sql
+                    (query-sql/build-postgres-count-sql
                      (kw->str index-id) (kw->str entity-type)
                      language query filters)
-                    (qry/build-fallback-count-sql
+                    (query-sql/build-fallback-count-sql
                      (kw->str index-id) (kw->str entity-type)
                      (content-match adapter query) filters))
           row (jdbc/execute-one! datasource sql-vec
@@ -196,12 +196,12 @@
           et      (kw->str entity-type)
           rows    (or (when (and full-text? (trigram? trigram-state datasource))
                         (trigram-suggest datasource trigram-state threshold
-                                         (qry/build-postgres-suggest-sql idx et query limit filters)))
+                                         (query-sql/build-postgres-suggest-sql idx et query limit filters)))
                       (let [match (content-match adapter query)]
                         (jdbc/execute! datasource
                                        (if full-text?
-                                         (qry/build-postgres-like-suggest-sql idx et match limit filters)
-                                         (qry/build-fallback-suggest-sql idx et match limit filters))
+                                         (query-sql/build-postgres-like-suggest-sql idx et match limit filters)
+                                         (query-sql/build-fallback-suggest-sql idx et match limit filters))
                                        {:builder-fn rs/as-unqualified-lower-maps})))]
       (mapv db->result rows)))
 
