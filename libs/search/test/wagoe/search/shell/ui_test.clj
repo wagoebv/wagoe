@@ -1,6 +1,6 @@
-(ns wagoe.search.core.ui-test
+(ns wagoe.search.shell.ui-test
   (:require [clojure.test :refer [deftest is]]
-            [wagoe.search.core.ui :as ui]
+            [wagoe.search.shell.ui :as ui]
             [wagoe.shared.ui.core.home :as home]))
 
 (defn- back-href [page]

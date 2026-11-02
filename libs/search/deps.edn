@@ -2,7 +2,6 @@
 
  :deps  {org.clojure/clojure {:mvn/version "1.12.6"}
          wagoe/core {:local/root "../core"}
-         wagoe/shared-ui  {:local/root "../shared-ui"}
          wagoe/platform-sql {:local/root "../platform-sql"}
          wagoe/i18n       {:local/root "../i18n"}
          integrant/integrant {:mvn/version "1.0.1"}
@@ -16,6 +15,8 @@
               :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
                             ;; Booting system-config loads the always-on email module.
                             wagoe/email {:local/root "../email"}
+                            ;; The admin pages render with it; apps bring it (BOU-932).
+                            wagoe/shared-ui {:local/root "../shared-ui"}
                             com.h2database/h2 {:mvn/version "2.5.250"}
                             org.xerial/sqlite-jdbc {:mvn/version "3.53.4.0"}}
               :main-opts   ["-m" "kaocha.runner"]}

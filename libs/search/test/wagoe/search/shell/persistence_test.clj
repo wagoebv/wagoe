@@ -16,7 +16,7 @@
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.persistence :as persistence]
             [wagoe.search.shell.trigram :as trigram]
-            [wagoe.search.core.query :as qry]
+            [wagoe.search.shell.query-sql :as query-sql]
             [clojure.string :as str]
             [support.test-db :as test-db]
             [next.jdbc :as jdbc])
@@ -281,7 +281,7 @@
         (ports/suggest-documents @test-store :product-search :product "wid" {:limit 5})
         (is (nil? @(:trigram-state @test-store))))
       (let [{:keys [datasource]} @test-store
-            [sql & params]       (qry/build-postgres-suggest-sql "product-search" "product" "wid" 5 nil)
+            [sql & params]       (query-sql/build-postgres-suggest-sql "product-search" "product" "wid" 5 nil)
             plan                 (jdbc/with-transaction [tx datasource {:rollback-only true}]
                                    ;; On a test-sized table the planner prefers the btrees on
                                    ;; index_id and entity_type, or reads it whole. Without
@@ -289,7 +289,7 @@
                                    (jdbc/execute! tx ["DROP INDEX idx_search_documents_index_id, idx_search_documents_entity"])
                                    (jdbc/execute! tx ["ALTER TABLE search_documents DROP CONSTRAINT search_documents_index_id_entity_id_key"])
                                    (jdbc/execute! tx ["SET LOCAL enable_seqscan = off"])
-                                   (jdbc/execute! tx (qry/build-trigram-threshold-sql 0.3))
+                                   (jdbc/execute! tx (query-sql/build-trigram-threshold-sql 0.3))
                                    (->> (jdbc/execute! tx (into [(str "EXPLAIN " sql)] params))
                                         (map (comp str first vals))
                                         (str/join "\n")))]

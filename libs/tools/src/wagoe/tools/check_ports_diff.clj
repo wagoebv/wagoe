@@ -209,16 +209,19 @@
 
 (defn- lines [s] (remove str/blank? (str/split-lines s)))
 
+(defn latest-final-tag
+  "The newest final release tag reachable from HEAD (`1.0.1`, not `1.1.0-rc-1`)."
+  []
+  (let [{:keys [exit out]} (process/shell {:out :string :err :string :continue true}
+                                          "git" "describe" "--tags" "--abbrev=0"
+                                          "--match" "[0-9]*.[0-9]*.[0-9]*" "--exclude" "*-*" "HEAD")]
+    (when (zero? exit) (str/trim out))))
+
 (defn base-ref
-  "The ref to compare against: the argument, then `PORTS_BASE`, then the newest
-   final release tag reachable from HEAD (`1.0.1`, not `1.1.0-rc-1`)."
+  "The ref to compare against: the argument, then `PORTS_BASE`, then
+   `latest-final-tag`."
   [arg]
-  (or arg
-      (System/getenv "PORTS_BASE")
-      (let [{:keys [exit out]} (process/shell {:out :string :err :string :continue true}
-                                              "git" "describe" "--tags" "--abbrev=0"
-                                              "--match" "[0-9]*.[0-9]*.[0-9]*" "--exclude" "*-*" "HEAD")]
-        (when (zero? exit) (str/trim out)))))
+  (or arg (System/getenv "PORTS_BASE") (latest-final-tag)))
 
 (defn- version-in [content]
   (second (re-find #"\(def version\s+\"([^\"]+)\"" (str content))))

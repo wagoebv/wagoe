@@ -136,13 +136,13 @@
   ;; snippet, and a template that had never heard of it.
   ;;
   ;; What builds the key moved out of config.clj.tmpl and into
-  ;; `wagoe.platform.shell.modules/framework-modules`, so that is what this
+  ;; `wagoe.platform.shell.module-registry/framework-modules`, so that is what this
   ;; reads. As source text, not as a var: wagoe-cli depends on no Wagoe library,
   ;; and this test is not a reason to give it one.
   (let [modules-src (or (some #(when (.exists (io/file %)) (slurp %))
-                              ["../platform/src/wagoe/platform/shell/modules.clj"
-                               "libs/platform/src/wagoe/platform/shell/modules.clj"])
-                        (throw (ex-info "platform's modules.clj not found — cannot check" {})))
+                              ["../platform-sql/src/wagoe/platform/shell/module_registry.clj"
+                               "libs/platform-sql/src/wagoe/platform/shell/module_registry.clj"])
+                        (throw (ex-info "platform-sql's module_registry.clj not found — cannot check" {})))
         table       (subs modules-src
                           (str/index-of modules-src "(def framework-modules")
                           (str/index-of modules-src "(def always-on-modules"))
@@ -196,7 +196,7 @@
 (deftest ^:unit always-on-matches-the-platform
   ;; AGENTS.md lists these as installed without a config key; the platform's
   ;; always-on-modules is what makes that true (BOU-573).
-  (let [src      (some #(let [f (io/file % "platform/src/wagoe/platform/shell/modules.clj")]
+  (let [src      (some #(let [f (io/file % "platform-sql/src/wagoe/platform/shell/module_registry.clj")]
                           (when (.exists f) (slurp f)))
                        [".." "libs"])
         platform (clojure.edn/read-string

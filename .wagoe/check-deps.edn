@@ -12,8 +12,6 @@
    :why "Deprecated :i18n input to :wagoe/http-handler (BOU-131); only runs when the app supplied the i18n component, so i18n is already on its classpath."}
   {:lib "platform" :dep "devtools"
    :why "Dev-only request capture; falls back to the plain handler when devtools is absent."}
-  {:lib "platform-sql" :dep "platform"
-   :why "Migrations skip switched-off modules by platform's module registry; platform depends on platform-sql, so a static require is a cycle (BOU-871)."}
   {:lib "devtools" :dep "admin"
    :why "(explain-entity) works only in a system with admin, and says so when there is none."}
   {:lib "email" :dep "jobs"
@@ -29,7 +27,9 @@
   {:lib "jobs" :dep "tenant"
    :why "wagoe.jobs.shell.tenant-context takes a tenant service, so tenant is loaded whenever it runs; the workers get tenant's :wagoe/in-tenant (BOU-931)."}
   {:lib "realtime" :dep "observability"
-   :why "An error reporter exists only when observability is loaded (BOU-848)."}]
+   :why "An error reporter exists only when observability is loaded (BOU-848)."}
+  {:lib "search" :dep "shared-ui"
+   :why "The admin pages render with it and are mounted only when it is on the classpath; declaring it brings the platform's HTTP stack (BOU-932)."}]
 
  ;; Declared libs nothing in src/ requires.
  :allow-unused

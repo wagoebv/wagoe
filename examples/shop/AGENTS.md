@@ -104,7 +104,8 @@ src/shop/
 
 Every module MUST define `ports.clj`.
 
-- core/ may require only pure libraries (clojure.string/set/walk/edn, malli, hiccup, cheshire, buddy.core, honey.sql) and its own core/schema/ports — an allowlist, so anything else is refused by default
+- core/ may require only pure libraries (clojure.string/set/walk/edn, malli, hiccup, cheshire, buddy.core) and its own core/schema/ports — an allowlist, so anything else is refused by default
+- core/ and ports know no SQL: neither requires honey.sql, next.jdbc or wagoe.platform.database, and no port signature or docstring types a value as a HoneySQL map or a next.jdbc datasource or transaction — an opaque store handle (tx, conn) may pass through untyped (exceptions: :allow-sql in .wagoe/check-fcis.edn, each with a :why)
 - core/ must not throw — return typed error values ({:error {:type ... :message ...}}); the shell translates them into HTTP responses (escape hatch: ^:wagoe/allow-throw ns metadata or .wagoe/check-fcis.edn)
 - core/ must not hold mutable state (defonce/atom/swap!/reset!) — definition registries and process state live in the shell (wagoe.<lib>.shell.registry)
 - cross-module calls go through service ports

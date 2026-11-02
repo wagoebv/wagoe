@@ -9,6 +9,7 @@
             [clojure.edn :as edn]
             [clojure.string :as str]
             [wagoe.tools.check-deps :as check-deps]
+            [wagoe.tools.check-isolation :as check-isolation]
             [wagoe.tools.parsing :as parsing]))
 
 (def docs-only-paths
@@ -82,12 +83,24 @@
 
 (defn- test-uses
   "Libraries test file `f` names at all: namespace, keyword or path. Test uses
-   are not followed further, so over-reading only runs a few more jobs."
-  [libs f]
+   are not followed further, so over-reading only runs a few more jobs.
+   `own` are the library's own test namespaces, which no owner claims and
+   whose prefix may name another library: platform-sql's are `wagoe.platform.*`."
+  [own libs f]
   (let [text (slurp f)]
     ;; The whole dotted name: a namespace that moved library keeps its prefix (BOU-871).
-    (-> (set (ns-libs (map second (re-seq #"wagoe\.([a-z0-9-]+(?:\.[a-z0-9-]+)*)" text))))
+    (-> (set (ns-libs (remove own (map second (re-seq #"wagoe\.([a-z0-9-]+(?:\.[a-z0-9-]+)*)" text)))))
         (into (filter #(or (names-path text %) (str/includes? text (str ":wagoe/" %)))) libs))))
+
+(def ^:private test-dirs ["test" "test-pg" "dev"])
+
+(defn- test-namespaces
+  "`lib`'s test namespaces as `test-uses` matches them, without the `wagoe.`."
+  [root lib]
+  (into #{}
+        (comp (mapcat #(check-isolation/namespaces-under (fs/file root "libs" lib %)))
+              (keep #(second (re-find #"^wagoe\.(.+)" %))))
+        test-dirs))
 
 (defn dependency-graph
   "{lib {:src #{libs its code uses} :test #{libs only its tests use}}}."
@@ -104,7 +117,7 @@
                 :let [f    (fs/file root "libs" lib "deps.edn")
                       deps (when (fs/exists? f) (edn/read-string (slurp f)))]]
             [lib {:src  (edges lib (local-roots (:deps deps)) code-uses ["src" "resources"])
-                  :test (edges lib (local-roots (:aliases deps)) test-uses ["test" "test-pg" "dev"])}]))))
+                  :test (edges lib (local-roots (:aliases deps)) (partial test-uses (test-namespaces root lib)) test-dirs)}]))))
 
 (defn loaded-by
   "Libraries a library's test run loads: itself, what its tests use, and the
