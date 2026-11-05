@@ -3,6 +3,7 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [wagoe.platform.core.csrf :as csrf]
+            [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.layout :as layout]
             [wagoe.user.core.ui :as user-ui]
             [wagoe.user.ports :as ports]
@@ -35,18 +36,22 @@
 (defn- submit [svc cfg form]
   (with-token #((web-handlers/login-submit-handler svc cfg) {:form-params form})))
 
-(deftest ^:unit the-default-login-page-is-unchanged
+(deftest ^:unit the-default-login-page-is-the-auth-shell
   (let [opts {:logo-url "/logo.svg" :return-to "/web/x"}]
-    (is (= (layout/pilot-page-layout
+    (is (= (layout/admin-pilot-page-layout
             [:t :user/link-signin]
-            [:div.login-page.auth-page
-             [:div.page-header.auth-header
-              [:img.auth-logo {:src "/logo.svg" :alt "" :style "height:48px; width:auto; display:block; margin:0 auto 12px;"}]
-              [:h1 [:t :wagoe/app-name]]
-              [:p [:t :user/login-subtitle]]]
-             nil
-             (user-ui/login-form {:return-to "/web/x"} {})]
-            opts)
+            [:div.auth-shell
+             [:aside.auth-brand
+              [:img.auth-logo {:src "/logo.svg" :alt ""}]
+              [:div.auth-brand-copy
+               [:h1 [:t :wagoe/app-name]]
+               [:p [:t :user/login-subtitle]]]]
+             [:div.auth-main
+              [:div.auth-toolbar (icons/theme-toggle-button)]
+              [:div.login-page.auth-page
+               nil
+               (user-ui/login-form {:return-to "/web/x"} {})]]]
+            (assoc opts :skip-header true :js layout/pilot-js))
            (user-ui/login-page {} {} opts))))
   (testing "through the handler, with no hook set"
     (let [body (body-of (with-token #((web-handlers/login-page-handler {}) {})))]
@@ -63,7 +68,7 @@
     (is (str/includes? body "action=\"/web/login\""))
     (is (str/includes? body "csrf-token-123") "the CSRF field stays in the form")
     (is (str/includes? body "value=\"/web/y\"") "return-to is kept")
-    (is (not (str/includes? body "auth-header")) "Wagoe's own header is left out")
+    (is (not (str/includes? body "auth-brand")) "Wagoe's own header is left out")
     (is (not (str/includes? body "pilot")) "and so is its CSS")
     (is (= :login (:page @seen)))
     (is (some? (:request @seen)))

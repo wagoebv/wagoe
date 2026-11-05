@@ -328,7 +328,8 @@
                         (catch Exception _ nil)))]
         (if session
           (response/redirect (landing-path config (:user session) request))
-          (html-response request (user-ui/web-root-page {})))))))
+          (html-response request (user-ui/web-root-page
+                                  {:logo-url (get-in config [:wagoe/settings :logo-url])})))))))
 
 (defn- users-list
   "The users table's users, table query, total and filters for `query-params`."

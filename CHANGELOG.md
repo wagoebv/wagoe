@@ -64,6 +64,8 @@ for what is public API, what is internal, and how deprecations are announced.
   Declare `wagoe-shared-ui` to keep them, and `wagoe-platform` if you got it through search.
 - **`bb check:fcis`: core and ports know no SQL** — `honey.sql` in `core/` now fails (BOU-874).
   Move query building to the shell, or list the file under `:allow-sql` in `.wagoe/check-fcis.edn`.
+- **Sign-in, registration, MFA and the `/web` landing page take the admin's look** (BOU-937).
+  An app's `:login-layout` gets the forms as before; registration's way back to sign-in is now a link inside its form.
 
 ### Deprecated
 
