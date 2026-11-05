@@ -620,18 +620,6 @@ input[type="number"] {
   @apply mx-auto flex w-full max-w-2xl flex-col gap-4 py-6;
 }
 
-.auth-header {
-  @apply rounded-box border border-base-300 bg-base-100 p-5 text-center shadow-sm;
-}
-
-.auth-header h1 {
-  @apply text-2xl font-bold;
-}
-
-.auth-header p {
-  @apply mt-1 text-sm text-base-content/70;
-}
-
 .auth-page .auth-card .form-actions {
   @apply mt-4 border-t border-base-300 pt-4;
 }

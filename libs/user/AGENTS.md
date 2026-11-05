@@ -29,7 +29,8 @@ User web pages must use shared layout functions that already apply the central b
 
 Rules:
 - Pages a signed-in user reaches render in the admin shell (`wagoe.shared.ui.core.shell/shell-page`);
-  `layout/pilot-page-layout` is for sign-in, registration and error pages.
+  sign-in, registration and the `/web` landing page share `auth-shell` in `core/ui.clj` (the admin's stylesheet,
+  a brand panel beside one card); `layout/pilot-page-layout` is for error pages.
 - Do not pass module-local hardcoded `:css [...]` lists from user feature namespaces.
 - Keep form/table/badge visuals on shared classes and token variables (no per-page color overrides).
 

@@ -4375,3 +4375,332 @@ time.tone-danger  { color: var(--tone-danger-fg);  font-weight: 600; }
     border-radius: var(--radius-box);
   }
 }
+
+/* -----------------------------------------------------------------------------
+   10. Sign-in pages and the landing page: the sidebar's dark green as a brand
+   panel beside one card (BOU-937). The card's markup is shared with apps that
+   bring their own :login-layout, so everything here is scoped to .auth-shell.
+   ----------------------------------------------------------------------------- */
+
+.main-content:has(> .auth-shell) {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  animation: none;
+}
+
+.auth-shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(360px, 38%) 1fr;
+  min-height: 100dvh;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* The brand panel */
+.auth-shell .auth-brand {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 48px;
+  overflow: hidden;
+  padding: 40px 48px 56px;
+  border-right: 1px solid var(--wg-chrome-hover);
+  background-color: var(--wg-ink);
+  background-image: radial-gradient(120% 70% at 0% 0%, var(--wg-chrome-active), transparent 60%);
+  color: var(--wg-chrome-text);
+}
+/* The mark, large and faint, bleeding off the corner */
+.auth-shell .auth-brand::after {
+  content: "";
+  position: absolute;
+  right: -30%;
+  bottom: -22%;
+  width: 100%;
+  aspect-ratio: 1;
+  background: url("/assets/wagoe-dark-512-icon.png") center / contain no-repeat;
+  opacity: 0.04;
+  pointer-events: none;
+}
+.auth-shell .auth-mark { display: block; width: 64px; height: 64px; margin: -12px 0 0 -12px; }
+.auth-shell .auth-logo { display: block; height: 40px; width: auto; max-width: 200px; }
+
+.auth-shell .auth-brand-copy { position: relative; max-width: 30ch; }
+.auth-shell .auth-brand-copy::before {
+  content: "";
+  display: block;
+  width: 32px;
+  height: 2px;
+  margin-bottom: 20px;
+  background: var(--wg-teal);
+}
+.auth-shell .auth-brand h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--wg-chrome-strong);
+}
+.auth-shell .auth-brand p {
+  margin: 12px 0 0;
+  font-size: 15px;
+  color: var(--wg-chrome-dim);
+}
+
+/* The working side */
+.auth-shell .auth-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 72px 24px;
+  background: var(--surface-1);
+}
+.auth-shell .auth-toolbar { position: absolute; top: 16px; right: 16px; }
+.auth-shell .auth-toolbar .theme-toggle {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-field);
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+}
+.auth-shell .auth-toolbar .theme-toggle:hover { background: var(--row-hover); color: var(--text-primary); }
+.auth-shell .auth-toolbar .theme-toggle svg { width: 16px; height: 16px; }
+
+.auth-shell .auth-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 400px;
+  margin: 0;
+  padding: 0;
+  animation: fadeInUp 0.35s ease-out both;
+}
+.auth-shell .register-page { max-width: 440px; }
+/* The provider callback's one link, a moment before the redirect */
+.auth-shell .auth-page > p { text-align: center; }
+.auth-shell .mfa-enrolment-page { max-width: 520px; }
+@media (prefers-reduced-motion: reduce) {
+  .auth-shell .auth-page { animation: none; }
+}
+
+.auth-shell .auth-card {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-box);
+  background: var(--color-base-100);
+  box-shadow: var(--shadow-sm);
+}
+.auth-shell .auth-card > .card-body {
+  gap: 0;
+  padding: 32px;
+  color: var(--text-primary);
+}
+
+.auth-shell .auth-title {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  margin: 0 0 24px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.auth-shell .auth-title:has(+ .auth-subtitle) { margin-bottom: 6px; }
+.auth-shell .auth-title svg { width: 20px; height: 20px; color: var(--color-primary); }
+.auth-shell .auth-subtitle,
+.auth-shell .auth-card .card-body > p {
+  margin: 0 0 24px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+/* The form: fields straight on the card, no card inside it */
+.auth-shell form.form-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.auth-shell form .form-field { margin: 0; }
+.auth-shell .form-field label {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.auth-shell :is(.form-control, .ui-input, .mfa-code-input) {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-field);
+  background: var(--color-base-100);
+  color: var(--text-primary);
+  font-size: 14px;
+  box-shadow: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.auth-shell :is(.form-control, .ui-input, .mfa-code-input):focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-primary-light);
+}
+.auth-shell .mfa-code-input {
+  height: 48px;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  letter-spacing: 0.4em;
+  text-align: center;
+}
+.auth-shell .form-field:has(> .form-checkbox) {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+.auth-shell .form-field:has(> .form-checkbox) label { margin: 0; font-weight: 400; color: var(--text-muted); }
+.auth-shell .form-field input.form-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+.auth-shell .password-requirements { border-radius: var(--radius-box); background: var(--surface-1); }
+
+/* MFA setup: the steps are sections of the card, not cards inside it */
+.auth-shell .auth-card :is(.mfa-step, .mfa-backup-codes) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.auth-shell .mfa-step + .mfa-step {
+  margin-top: 8px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-subtle);
+}
+.auth-shell .mfa-step h3 { font-size: 15px; }
+.auth-shell .mfa-backup-codes h2 { font-family: var(--font-display); font-size: 20px; }
+.auth-shell :is(.qr-code-container, .manual-entry) { border-radius: var(--radius-box); }
+
+.auth-shell .auth-card .button {
+  height: 40px;
+  min-height: 40px;
+  border-radius: var(--radius-field);
+  font-size: 14px;
+  font-weight: 600;
+}
+.auth-shell form .button.primary,
+.auth-shell .card-body > .button.primary,
+.auth-shell .oidc-providers .button { width: 100%; }
+.auth-shell .mfa-login-actions { display: flex; gap: 8px; }
+.auth-shell .mfa-login-actions .button.primary { flex: 1; }
+
+/* Errors: the admin's danger tone */
+.auth-shell .auth-page > .alert,
+.auth-shell .validation-errors {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, var(--tone-danger-fg) 25%, transparent);
+  border-radius: var(--radius-box);
+  background: var(--tone-danger-bg);
+  color: var(--tone-danger-fg);
+  font-size: 13px;
+}
+.auth-shell .validation-errors p { margin: 0; }
+.auth-shell .field-errors .error { font-size: 12px; color: var(--tone-danger-fg); }
+
+/* Another way in */
+.auth-shell .oidc-providers { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+.auth-shell .auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.auth-shell .auth-divider::before,
+.auth-shell .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--border-default); }
+
+/* The card's foot: a sentence and a link, not a second button */
+.auth-shell .auth-footer {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 13px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.auth-shell .auth-footer p { margin: 0; }
+.auth-shell .auth-footer p + p { margin-top: 4px; }
+.auth-shell .auth-footer p:has(+ a) { display: inline; }
+.auth-shell .auth-footer a,
+.auth-shell .auth-footer a.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: auto;
+  min-height: 0;
+  margin: 0 0 0 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.auth-shell .auth-footer a:hover,
+.auth-shell .auth-footer a.button:hover {
+  background: none;
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.auth-shell .auth-footer a svg { width: 14px; height: 14px; }
+
+/* A narrow screen: the panel a band across the top */
+@media (max-width: 1023px) {
+  .auth-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .auth-shell .auth-brand {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 14px 20px;
+    border-right: 0;
+  }
+  .auth-shell .auth-brand::after,
+  .auth-shell .auth-brand-copy::before,
+  .auth-shell .auth-brand p { display: none; }
+  .auth-shell .auth-mark { width: 40px; height: 40px; margin: -6px -4px -6px -8px; }
+  .auth-shell .auth-logo { height: 28px; }
+  .auth-shell .auth-brand h1 { font-size: 18px; }
+  .auth-shell .auth-main { position: static; justify-content: flex-start; padding: 32px 16px 40px; }
+  /* In the band, as the admin's topbar has it */
+  .auth-shell .auth-toolbar { top: 14px; }
+  .auth-shell .auth-toolbar .theme-toggle { border-color: var(--wg-chrome-hover); color: var(--wg-chrome-text); }
+  .auth-shell .auth-toolbar .theme-toggle:hover { background: var(--wg-chrome-hover); color: var(--wg-chrome-strong); }
+  .auth-shell .auth-card > .card-body { padding: 24px 20px; }
+}
