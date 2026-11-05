@@ -1,0 +1,10 @@
+;; examples/shop's product module, unchanged, and a second repository for it.
+;; Shop's migrations come through resources/wagoe/migration-paths/shop.edn.
+{:paths ["src" "resources"]
+ :deps  {shop/shop {:local/root "../shop"}}
+ :aliases
+ {:test {:extra-paths ["test"]
+         :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
+                       com.wagoe/wagoe-test {:local/root "../../libs/test"}}
+         :main-opts   ["-m" "kaocha.runner"]
+         :jvm-opts    ["--enable-native-access=ALL-UNNAMED" "-Duser.timezone=UTC"]}}}

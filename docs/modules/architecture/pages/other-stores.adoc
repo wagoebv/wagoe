@@ -27,6 +27,8 @@ commit together.
 
 Keep the repository protocol `bb scaffold` wrote, and keep SQL out of it: no
 table names, no JDBC values, no HoneySQL maps in a signature or a return value.
+Its docstrings are the contract: what the SQL repository does that callers rely
+on, so your adapter does it too (see <<what-the-port-assumes>>).
 
 [source,clojure]
 ----
@@ -99,6 +101,12 @@ the client API:
 The SQL repository returns the stored row from `create` and `update-entity`,
 and the HTTP handler answers 404 when `update-entity` returns nil. Keep both.
 
+Left out above, and needed for the port's contract: `:created-at` and
+`:updated-at`. `find-all` is oldest first and `update-entity` stamps
+`:updated-at`, so store both (Datomic's instant type takes a `java.util.Date`)
+and sort on them. A `create` with a taken id is a `:conflict`, and Datomic
+upserts on a unique identity, so check first or in a transaction function.
+
 `transact` means "run `f` as one unit of work". A Datomic transaction is one
 `d/transact` call, not a block you open and close. When two writes must land together, build both into one `:tx-data`, or use a
 transaction function. `(f)` above gives no atomicity across two calls.
@@ -156,32 +164,58 @@ cover SQL tables only.
 === Testing
 
 The scaffolded service test already runs against a `reify` of the port, so it
-needs no change (see xref:guides:testing.adoc[Testing]). For tests that
-exercise more than one call, an in-memory adapter over an atom implements the
-same port:
+needs no change (see xref:guides:testing.adoc[Testing]).
 
-[source,clojure]
-----
-(defrecord MemoryOrders [state]
-  ports/IOrderRepository
-  (find-by-id    [_ id] (get @state id))
-  (find-all      [_ {:keys [limit offset]}]
-    (->> (vals @state) (sort-by :id) (drop (or offset 0)) (take (or limit 20))))
-  (create        [_ e] (swap! state assoc (:id e) e) e)
-  (update-entity [_ {:keys [id] :as e}]   ; changed fields only; nil when unknown
-    (when (contains? @state id)
-      (get (swap! state update id merge e) id)))
-  (delete        [_ id] (swap! state dissoc id) nil)
-  (transact      [_ f] (f)))
+Write the repository's cases once and run them on every adapter, so they
+cannot drift apart. Test the Datomic adapter against Datomic Local with
+`:storage-dir :mem`, so it needs no running database.
 
-(def repo (->MemoryOrders (atom {})))
-----
+== The sample
 
-Test the Datomic adapter itself against Datomic Local with `:storage-dir :mem`,
-so it needs no running database either. Run the same cases on both adapters and
-they cannot drift apart.
+https://github.com/wagoebv/wagoe/tree/main/examples/stores[`examples/stores`]
+runs this in CI. It takes `examples/shop`'s product module as the scaffolder
+wrote it and adds one file, `shell/memory.clj`: a repository over an atom.
 
-A runnable sample module on another store is planned.
+* `repository_contract_test.clj` runs one set of cases on the scaffolded SQL
+  repository, on H2 and on SQLite, and on the atom.
+* `system_test.clj` boots the whole shop app twice. `:store :memory` under
+  `:wagoe/product` swaps the repository's Integrant key for one derived from
+  it, so the service's reference finds the atom. The product API answers the
+  same on both, and on the atom the `products` table stays empty.
+
+[[what-the-port-assumes]]
+=== What the port assumes
+
+Running both adapters on one contract showed what a scaffolded repository
+promises beyond its signatures. The docstrings in `ports.clj` now say it.
+
+* *The service assigns the id and `:created-at`.* Ids are UUIDs, and the store
+  sets neither. A store that assigns its own ids, such as a REST API, maps them.
+* *The repository stamps `:updated-at`* in `update-entity`, the one value the
+  store sets.
+* *`find-all` pages by `:limit` and `:offset`, oldest first:* by `:created-at`,
+  then by id. A store with cursors or without an order sorts and drops. Ties
+  order by the id as a string, which is how a database orders a UUID;
+  `UUID.compareTo` compares signed halves and orders them differently.
+* *A taken id or unique field is a `:conflict`.* The SQL repository gets this
+  from the database's constraint. Another adapter checks and throws
+  `(ex-info … {:type :conflict})`.
+* *`transact` is all or nothing.* A store without transactions undoes the
+  writes itself. The atom adapter restores a snapshot, which is not isolated:
+  a concurrent write made while `f` runs is undone with it.
+* *Values have the schema's types.* The scaffolded SQL repository used to return
+  what the driver read: a string id, a double for a decimal and strings for
+  timestamps on SQLite, `OffsetDateTime` timestamps on H2. It converts them now,
+  so an entity is the same whichever store is under it.
+
+What does not assume SQL: the platform's service and persistence interceptors
+take the store's context as an opaque value, and a scaffolded module does not
+use them.
+
+What does: the admin. It lists, filters and edits an entity from its SQL table's
+metadata, not through the module's port. With the product module on another
+store, the admin still shows the `products` table, which no longer holds the
+products. Leave such an entity out of the admin's allowlist.
 
 == Framework libraries run on SQL
 

@@ -1134,15 +1134,16 @@ Also add the lib's `:id` test suite to `tests.edn` and its source/test paths to 
 
 ## Examples
 
-Two, both in this repository and both run by CI on every commit:
+Three, all in this repository and all run by CI on every commit:
 
 | Path | What it is |
 |---|---|
 | `examples/shop` | A generated application — `wagoe new` + `bb scaffold` output, committed. Boots, serves HTTP, has one module to copy from. |
+| `examples/stores` | `examples/shop`'s module on a second store, an atom. One contract suite runs on both repositories. |
 | `examples/todo` | Functional core / imperative shell with no framework at all. ~200 lines, prints and exits. |
 
 ```bash
-./scripts/example-smoke.sh     # runs both, asserts on what they do
+./scripts/example-smoke.sh     # runs all three, asserts on what they do
 bb example:regen               # rebuild examples/shop from the current generators
 bb example:regen --check       # CI: fail if it has drifted from generator output
 ```
@@ -1150,7 +1151,7 @@ bb example:regen --check       # CI: fail if it has drifted from generator outpu
 `examples/shop` is regenerated rather than maintained, so it cannot describe a
 project shape nobody gets. See `examples/shop/README.md`.
 
-The former `wagoe-examples` repository is archived; these two are the examples.
+The former `wagoe-examples` repository is archived; these are the examples.
 
 ### SQLite `nil` LIMIT/OFFSET pitfall
 

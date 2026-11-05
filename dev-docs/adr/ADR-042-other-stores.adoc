@@ -127,9 +127,19 @@ Planned, not shipped:
   Datomic, XTDB or a REST API in one Integrant system. Documented in
   `docs/modules/architecture/pages/other-stores.adoc`.
 * We do not ship a store abstraction, so there is none to keep compatible.
+* `examples/stores` proves the seam in CI (BOU-877): one contract suite on the
+  scaffolded SQL repository (H2, SQLite) and on one over an atom. It found that
+  the SQL repository returned the driver's types (a string id on SQLite,
+  `OffsetDateTime` on H2); the scaffolder now converts them to the schema's.
+* Limits a scaffolded port keeps on purpose, which another store's adapter
+  imitates: the service assigns UUID ids and `:created-at`; the repository
+  stamps `:updated-at`; `find-all` pages by limit and offset, oldest first; a
+  taken key is a `:conflict`; `transact` is all or nothing. They are in the
+  port's docstrings.
+* Admin works from SQL table metadata, not a module's port, so it cannot manage
+  an entity kept in another store.
 
 == Not decided here
 
-* A runnable sample module on another store (later ticket).
 * Whether any framework library gets a non-SQL adapter. That is a per-library
   decision with its own ADR.

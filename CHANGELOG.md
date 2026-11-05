@@ -50,6 +50,9 @@ for what is public API, what is internal, and how deprecations are announced.
 - **A successful storage upload or URL lookup went out unencoded** (BOU-930). Upgrade if you serve `wagoe-storage` routes.
 - **A CLI pipeline answered a rate limit or a refused login with a 500** (BOU-871): its error table had drifted from HTTP's.
   Nothing to change.
+- **A scaffolded repository returned the driver's types**: a string id on SQLite, `OffsetDateTime` on H2 (BOU-877).
+  New modules convert to the schema's; copy `->entity` and what it calls from a fresh `bb scaffold`.
+- **`wagoe add platform-sql` added it beside `wagoe-platform`, which already brings it** (BOU-934). It now adds nothing.
 
 ### Changed
 

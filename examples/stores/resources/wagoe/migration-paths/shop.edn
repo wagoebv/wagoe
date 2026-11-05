@@ -1,0 +1,4 @@
+;; examples/shop's migrations, read from the directory beside this one. A
+;; generated project reads its own from migrations/, which is not on shop's
+;; classpath.
+{:paths ["../shop/migrations/"]}

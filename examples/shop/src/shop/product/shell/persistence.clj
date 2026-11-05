@@ -1,6 +1,7 @@
 (ns shop.product.shell.persistence
   "Persistence layer for product module."
   (:require [shop.product.ports :as ports]
+            [wagoe.core.utils.type-conversion :as tc]
             [wagoe.platform.database :as db])
   (:import [java.time Instant LocalDate]))
 
@@ -20,14 +21,32 @@
   "SQLite reads a boolean back as 0 or 1, and 0 is truthy."
   #{})
 
+(def ^:private uuid-fields
+  "SQLite reads a UUID back as a string."
+  #{:id})
+
+(def ^:private inst-fields
+  "H2 reads a timestamp back as an OffsetDateTime, SQLite as a string."
+  #{:created-at :updated-at :deleted-at})
+
+(def ^:private decimal-fields
+  "SQLite reads a decimal back as a double."
+  #{:price})
+
+(defn- coerce [m ks read? f]
+  (reduce (fn [m k] (cond-> m (read? (get m k)) (update k f))) m ks))
+
 (defn- ->row [entity]
-  (reduce (fn [m k] (cond-> m (keyword? (get m k)) (update k name))) entity enum-fields))
+  (coerce entity enum-fields keyword? name))
 
 (defn- ->entity [row]
   (some-> row
           (update-vals date->iso)
-          (as-> r (reduce (fn [m k] (cond-> m (string? (get m k)) (update k keyword))) r enum-fields))
-          (as-> r (reduce (fn [m k] (cond-> m (number? (get m k)) (update k (complement zero?)))) r boolean-fields))))
+          (coerce enum-fields string? keyword)
+          (coerce boolean-fields number? (complement zero?))
+          (coerce uuid-fields string? parse-uuid)
+          (coerce inst-fields some? #(or (tc/string->instant %) %))
+          (coerce decimal-fields number? bigdec)))
 
 (defn- select-by-id [db-ctx id]
   (->entity (db/execute-one! db-ctx {:select [:*] :from [:products] :where [:= :id id]})))
