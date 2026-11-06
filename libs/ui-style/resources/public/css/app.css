@@ -1299,66 +1299,14 @@ dialog.modal .modal-action {
   margin: var(--space-8) auto;
 }
 
-/* =============================================================================
-   Web Root Landing Page
-   ============================================================================= */
-
-.web-root-page {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 80vh;
-}
-
-.web-root-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: var(--space-4);
-  max-width: 480px;
-}
-
-.web-root-logo {
-  margin-bottom: var(--space-2);
-}
-
-.web-root-content h1 {
-  margin: 0;
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
-  letter-spacing: -0.025em;
-}
-
-.web-root-content p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--text-lg);
-}
-
-.web-root-actions {
-  display: flex;
-  gap: var(--space-3);
-  margin-top: var(--space-2);
-}
-
-.web-root-actions .button {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-6);
-}
-
-/* Form heading with icons */
-#login-form h2,
-#register-form h2 {
+/* Form heading with icons, in an app's :login-layout; .auth-shell has its own */
+:not(.auth-main) > .auth-page > :is(#login-form, #register-form) h2 {
   display: inline-flex;
   align-items: center;
   margin-bottom: var(--space-6);
 }
 
-#login-form h2 svg,
-#register-form h2 svg {
+:not(.auth-main) > .auth-page > :is(#login-form, #register-form) h2 svg {
   flex-shrink: 0;
   color: var(--color-primary-600);
 }
