@@ -92,6 +92,7 @@
                    :subject - Email subject
                    :body - Email body
                    Optional keys:
+                   :html-body - The body as HTML, sent beside :body
                    :headers - Map of email headers
                    :attachments - Vector of attachment maps
                    :metadata - Map of metadata
@@ -105,6 +106,7 @@
        :from - From address
        :subject - Subject line
        :body - Email body
+       :html-body - The body as HTML (if provided)
        :headers - Normalized headers (if provided)
        :attachments - Attachments (if provided)
        :metadata - Metadata (if provided)
@@ -117,6 +119,9 @@
              :subject (:subject email-input)
              :body (:body email-input)
              :created-at now}
+
+      (:html-body email-input)
+      (assoc :html-body (:html-body email-input))
 
       (:headers email-input)
       (assoc :headers (format-headers (:headers email-input)))

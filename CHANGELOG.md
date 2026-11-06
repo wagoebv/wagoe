@@ -44,6 +44,10 @@ for what is public API, what is internal, and how deprecations are announced.
   `wagoe-platform` depends on it; nothing to change.
 - **`wagoe.audience.ports/IUserQuery`**: `query-user-ids` takes the audience's filters as data (BOU-875).
   A custom `IUserDataSource` should implement it; the service uses it when present.
+- **An HTML body beside the text one**: `:html-body` on an email goes out as `multipart/alternative` (BOU-???).
+  It was dropped before the SMTP transport; nothing to change without one.
+- **A `:markdown` admin widget** (BOU-???): a textarea marked `data-markdown`, which the field's `:editor-script`, the
+  app's own, may make an editor. Without a script it is a textarea.
 
 ### Fixed
 

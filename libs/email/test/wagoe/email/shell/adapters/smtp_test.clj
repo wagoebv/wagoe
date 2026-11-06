@@ -88,6 +88,15 @@
           outbound (#'smtp/email->outbound email)]
       (is (not (contains? outbound :attachments))))))
 
+(deftest ^:unit email->outbound-carries-html-body-test
+  (testing "the HTML body goes to the transport, which sends it beside :body"
+    (let [email {:to ["user@example.com"] :from "sender@example.com"
+                 :subject "Hi" :body "**hi**" :html-body "<p><strong>hi</strong></p>"}]
+      (is (= "<p><strong>hi</strong></p>" (:html-body (#'smtp/email->outbound email))))))
+  (testing "none when the email has none: plain text only"
+    (is (not (contains? (#'smtp/email->outbound {:to ["u@example.com"] :from "s@example.com" :subject "Hi" :body "hi"})
+                        :html-body)))))
+
 ;; =============================================================================
 ;; SMTP Sender Error Handling Tests
 ;; =============================================================================

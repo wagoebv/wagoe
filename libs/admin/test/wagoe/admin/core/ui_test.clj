@@ -2026,3 +2026,20 @@
     (testing "a create form has no record, so no tabs"
       (is (not-any? #(str/includes? (str %) "/rights")
                     (links (ui/entity-detail-page :users config nil nil sample-permissions nil)))))))
+
+(deftest ^:unit markdown-widget-test
+  (let [nodes   #(tree-seq coll? seq %)
+        area-of (fn [widget] (some #(when (and (vector? %) (= :textarea (first %))) %) (nodes widget)))]
+    (testing "a textarea marked data-markdown, full width, its value as written"
+      (let [widget (ui/render-field-widget :body "**Hallo**" {:widget :markdown :label "Body"} nil)
+            area   (area-of widget)]
+        (is (= "true" (get-in area [1 :data-markdown])))
+        (is (= "body" (get-in area [1 :name])))
+        (is (some #{"**Hallo**"} area))
+        (is (str/includes? (str (second widget)) "full-width"))))
+    (testing "with the app's editor script when the field names one"
+      (let [widget (ui/render-field-widget :body "" {:widget :markdown :label "Body" :editor-script "/js/md.js"} nil)]
+        (is (some #(and (map? %) (= "/js/md.js" (:src %)) (:defer %)) (nodes widget)))))
+    (testing "without one, a plain textarea and no script"
+      (let [widget (ui/render-field-widget :body "" {:widget :markdown :label "Body"} nil)]
+        (is (not-any? #(and (vector? %) (= :script (first %))) (nodes widget)))))))
