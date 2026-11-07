@@ -80,7 +80,14 @@
      (map nav-group nav)]
     [:div.admin-sidebar-footer
      (nav-link {:href home/*path*} :home [:t :admin/sidebar-dashboard])
-     (nav-link {:href "/web"} :external-link [:t :admin/sidebar-main-site])]]))
+     (nav-link {:href "/web"} :external-link [:t :admin/sidebar-main-site])]
+    ;; Drag, or arrow keys, to set the width (admin-ux.js)
+    [:div.sidebar-resizer {:role             "separator"
+                           :tabindex         "0"
+                           :aria-orientation "vertical"
+                           :aria-controls    "admin-sidebar"
+                           :aria-label       [:t :admin/sidebar-resize]
+                           :title            [:t :admin/sidebar-resize]}]]))
 
 (defn admin-shell
   "`content` in the shell. `opts`: :user, :page-title, :logo-url, and :nav to

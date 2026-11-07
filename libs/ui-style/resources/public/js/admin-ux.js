@@ -3,6 +3,7 @@
  *
  * Features:
  * 0. Alpine.js sidebar store (must run before Alpine init)
+ * 0b. Sidebar width: drag its edge
  * 1. Top-of-page progress bar for HTMX requests
  * 3. Clickable table rows
  * 4. Skeleton loading for tables
@@ -117,17 +118,28 @@ document.addEventListener('alpine:init', function () {
     };
   });
 
-  // NavGroup: a module's sidebar group. The group holding the current page is
-  // open, so its marked item shows; the others are as last left.
+  // NavGroup: a module's sidebar group. One group is open at a time: the one
+  // holding the current page, or on a page outside every group the one last
+  // opened. Opening a group closes the others.
+  var NAV_KEY = 'wagoe-admin-nav-open';
   window.Alpine.data('navGroup', function (id, active) {
-    var key = 'wagoe-admin-nav-' + id;
-    var stored = load(key);
     return {
-      open: active || stored === true,
+      open: active ||
+        (!document.querySelector('.nav-module.has-active') && load(NAV_KEY) === id),
+
+      init: function () {
+        var self = this;
+        window.addEventListener('admin:nav-group-open', function (e) {
+          if (e.detail !== id) self.open = false;
+        });
+      },
 
       toggle: function () {
         this.open = !this.open;
-        save(key, this.open);
+        if (this.open) {
+          window.dispatchEvent(new CustomEvent('admin:nav-group-open', { detail: id }));
+        }
+        save(NAV_KEY, this.open ? id : null);
       }
     };
   });
@@ -1026,4 +1038,72 @@ document.addEventListener('alpine:init', function () {
   } else {
     init();
   }
+})();
+
+// =========================================================================
+// 0b. Sidebar width
+//    Drag the sidebar's edge, or arrow keys on it; a double-click resets it.
+//    The width is --nav-width on <html>; init.js applies the stored one
+//    before first paint.
+// =========================================================================
+(function () {
+  var KEY = 'wagoe-admin-sidebar-width';
+  var MIN = 180, MAX = 480, STEP = 16;
+  var root = document.documentElement;
+
+  // The target width, not the rendered one, which lags it during a transition
+  var width = function () {
+    return parseFloat(getComputedStyle(root).getPropertyValue('--nav-width'));
+  };
+  var setWidth = function (handle, w) {
+    w = Math.round(Math.min(MAX, Math.max(MIN, w)));
+    root.style.setProperty('--nav-width', w + 'px');
+    handle.setAttribute('aria-valuenow', w);
+  };
+  var store = function () {
+    try {
+      window.localStorage.setItem(KEY, Math.round(width()));
+    } catch (e) { /* this page only */ }
+  };
+  var handleOf = function (e) {
+    return e.target.closest && e.target.closest('.sidebar-resizer');
+  };
+
+  document.addEventListener('pointerdown', function (e) {
+    var handle = handleOf(e);
+    if (!handle || e.button !== 0) return;
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    root.classList.add('sidebar-resizing');
+    // The sidebar sits at the left edge, so the pointer's x is the width
+    var move = function (ev) { setWidth(handle, ev.clientX); };
+    var up = function () {
+      root.classList.remove('sidebar-resizing');
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+      store();
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    var handle = handleOf(e);
+    if (!handle || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    e.preventDefault();
+    setWidth(handle, width() + (e.key === 'ArrowRight' ? STEP : -STEP));
+    store();
+  });
+
+  document.addEventListener('dblclick', function (e) {
+    var handle = handleOf(e);
+    if (!handle) return;
+    root.style.removeProperty('--nav-width');
+    handle.removeAttribute('aria-valuenow');
+    try {
+      window.localStorage.removeItem(KEY);
+    } catch (e2) { /* nothing stored */ }
+  });
 })();

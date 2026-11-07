@@ -46,7 +46,7 @@
 }
 
 /* =============================================================================
-   Sidebar - Fixed 200px (Desktop)
+   Sidebar - 240px, resizable by dragging its edge (Desktop)
    ============================================================================= */
 
 .admin-sidebar {
@@ -62,6 +62,32 @@
   z-index: var(--z-sidebar);
   overflow: hidden;
   transition: width var(--transition-normal);
+}
+
+/* The drag handle on the sidebar's right edge (admin-ux.js). No transition
+   while dragging, or the edge lags the pointer. */
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 1;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer:focus-visible,
+:root.sidebar-resizing .sidebar-resizer {
+  background: var(--color-primary-light);
+  outline: none;
+}
+
+:root.sidebar-resizing,
+:root.sidebar-resizing * {
+  cursor: col-resize !important;
+  user-select: none;
+  transition: none !important;
 }
 
 /* =============================================================================
@@ -288,6 +314,10 @@
   }
 
   :root[data-sidebar="closed"] .admin-shell .sidebar-brand-logo {
+    display: none;
+  }
+
+  :root[data-sidebar="closed"] .admin-shell .sidebar-resizer {
     display: none;
   }
 
@@ -1213,6 +1243,10 @@
   .toolbar-actions {
     width: 100%;
   }
+  .sidebar-resizer {
+    display: none;
+  }
+
   /* Sidebar becomes a drawer */
   .admin-sidebar {
     width: 280px;

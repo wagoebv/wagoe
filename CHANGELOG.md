@@ -56,6 +56,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **The admin sidebar is wider (240px) and resizable** (BOU-939): drag its edge, double-click to reset. Opening a module group
+  closes the others. Nothing to change.
 - **`wagoe-search` no longer depends on `wagoe-admin`**, which it never used (BOU-869).
   Declare `wagoe-email` (always on) and any of `wagoe-admin`/`wagoe-user` you got through search.
 - **`wagoe.platform.ports.privacy` ships in `wagoe-core`** under the same name (BOU-872).
