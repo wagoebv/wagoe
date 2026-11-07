@@ -65,6 +65,7 @@
    :select           ; Dropdown select
    :multiselect      ; Multiple selection dropdown
    :textarea         ; Multi-line text input
+   :markdown         ; Markdown text: a textarea an :editor-script may make an editor
    :date-input       ; Date picker
    :datetime-input   ; Date and time picker
    :file-input       ; File upload
@@ -308,6 +309,8 @@
   (closed-map :name :label :type :widget :required :readonly :hidden :searchable
               :sortable :filterable :primary-key :default-value :options :min :max
               :pattern :help-text :placeholder :width :rows
+              ;; The app's script that makes a :markdown textarea an editor
+              [:editor-script :string]
               ;; The overview (ADR-040)
               [:display DisplayRole]
               [:tones [:map-of :keyword (into [:enum] (sort display/tones))]]

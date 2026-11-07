@@ -31,8 +31,6 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
-- **A search filter key could inject SQL on PostgreSQL** (BOU-875), and reach past the tenant filter. Upgrade if you serve
-  `wagoe-search` routes.
 - **The CSP allowed inline script and eval** (BOU-898): `script-src` is now `'self'`. An app's own inline `<script>`,
   `onclick` or `hx-on` stops running; move it to a `.js` file, or set your own CSP.
 
@@ -75,6 +73,20 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **`wagoe.jobs.shell.tenant-context/tenant-runner` and `:wagoe/job-tenant-runner`** (BOU-931). Use tenant's `:wagoe/in-tenant`.
 - **`wagoe.audience.ports/query-users-sql`** (BOU-875), removed in 2.0 (BOU-935). Implement `IUserQuery/query-user-ids`.
+
+## [1.1.2] — 2026-11-07
+
+### Security
+
+- **A search filter key could inject SQL on PostgreSQL** (BOU-875), and reach past the tenant filter. Upgrade if you serve
+  `wagoe-search` routes.
+
+### Added
+
+- **An HTML body beside the text one**: `:html-body` on an email goes out as `multipart/alternative`.
+  It was dropped before the SMTP transport; nothing to change without one.
+- **A `:markdown` admin widget**: a textarea marked `data-markdown`, which the field's `:editor-script`, the
+  app's own, may make an editor. Without a script it is a textarea.
 
 ## [1.1.1] — 2026-10-31
 

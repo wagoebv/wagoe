@@ -29,7 +29,7 @@
    Returns:
      String CSS class ('full-width' or 'half-width')"
   [widget-type]
-  (if (#{:textarea :file-input :hidden} widget-type)
+  (if (#{:textarea :markdown :file-input :hidden} widget-type)
     "full-width"
     "half-width"))
 
@@ -156,6 +156,19 @@
                      :readonly readonly?
                      :class "form-control"
                      :rows (or (:rows field-config) 4)})
+
+       ;; Markdown: a textarea marked data-markdown, which the app's
+       ;; :editor-script, when set, makes an editor; without it, a textarea.
+       (= widget-type :markdown)
+       (list (assoc-in (ui/textarea field-name value
+                                    {:placeholder placeholder
+                                     :required required?
+                                     :readonly readonly?
+                                     :class "form-control"
+                                     :rows (or (:rows field-config) 8)})
+                       [1 :data-markdown] "true")
+             (when-let [script (:editor-script field-config)]
+               [:script {:src script :defer true}]))
 
        ;; Date/time inputs. The stored value is coerced to the shape the widget
        ;; accepts — handed a full ISO instant, a date input silently drops it
