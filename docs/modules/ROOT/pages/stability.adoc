@@ -13,7 +13,7 @@ promises.
 | |
 
 | Current version
-| `1.1.1`
+| `1.1.2`
 
 | Stability
 | Stable. Semantic Versioning applies to the public surface — see
