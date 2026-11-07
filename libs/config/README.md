@@ -5,7 +5,7 @@
 Configuration loading and typed accessors for Wagoe applications.
 
 ```clojure
-{:deps {com.wagoe/wagoe-config {:mvn/version "1.1.1"}}}
+{:deps {com.wagoe/wagoe-config {:mvn/version "1.1.2"}}}
 ```
 
 ## Usage
