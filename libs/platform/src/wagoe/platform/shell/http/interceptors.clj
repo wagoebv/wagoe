@@ -1037,17 +1037,12 @@
    - Cross-Origin-Opener-Policy: Isolate top-level browsing context
    - Referrer-Policy: Control referrer information
 
-   Note: Uses Alpine.js CSP build (@alpinejs/csp) which avoids eval()/new Function().
-   All Alpine components are registered via Alpine.data() in components.js / admin-ux.js.
-   'unsafe-inline' is kept in script-src because several UI components still use inline
-   event handlers (onclick, onchange, onsubmit) and inline [:script] blocks (e.g. Alpine
-   store init, audit modal wiring). Remove 'unsafe-inline' only after those are externalised.
-   'unsafe-eval' is kept in script-src because HTMX 2.x has allowEval:true by default and
-   hx-on::* expression attrs (e.g. hx-on::afterRequest in admin entity forms) depend on it.
-   Remove 'unsafe-eval' only after htmx.config.allowEval is disabled or all hx-on attrs
-   are replaced."
+   script-src is 'self' alone: no inline script, no onclick, no hx-on, no eval.
+   Markup asks for behaviour with data-* attributes that components.js handles,
+   and Alpine is the CSP build (BOU-898). style-src keeps 'unsafe-inline' for
+   style attributes in markup and htmx's indicator styles."
   {"Content-Security-Policy" (str "default-src 'self'; "
-                                  "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                                  "script-src 'self'; "
                                   "style-src 'self' 'unsafe-inline'; "
                                   "img-src 'self' data: https:; "
                                   "font-src 'self'; "
@@ -1092,7 +1087,7 @@
      Prevents XSS attacks by restricting where resources can be loaded from
      Current policy:
        * default-src 'self' - Only load resources from same origin by default
-       * script-src - Allow scripts from self + HTMX from CDN
+       * script-src 'self' - Scripts from same-origin files only
        * style-src - Allow styles from self and inline
        * img-src - Allow images from self, data URLs, and HTTPS
        * frame-ancestors 'none' - Prevent embedding in iframes (clickjacking)

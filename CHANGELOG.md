@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **A search filter key could inject SQL on PostgreSQL** (BOU-875), and reach past the tenant filter. Upgrade if you serve
   `wagoe-search` routes.
+- **The CSP allowed inline script and eval** (BOU-898): `script-src` is now `'self'`. An app's own inline `<script>`,
+  `onclick` or `hx-on` stops running; move it to a `.js` file, or set your own CSP.
 
 ### Added
 

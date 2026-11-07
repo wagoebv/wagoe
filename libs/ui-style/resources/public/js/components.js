@@ -311,3 +311,45 @@ document.addEventListener('alpine:init', function () {
     };
   });
 });
+
+/**
+ * Behaviour markup asks for with data-* attributes. The CSP's script-src
+ * 'self' runs no inline handler and no hx-on (BOU-898).
+ */
+(function () {
+  if (window.wagoeDataActionsWired) return;
+  window.wagoeDataActionsWired = true;
+
+  document.addEventListener('click', function (event) {
+    var el = event.target.closest && event.target.closest('[data-remove-closest], [data-copy], [data-print]');
+    if (!el) return;
+    if (el.dataset.removeClosest) {
+      var gone = el.closest(el.dataset.removeClosest);
+      if (gone) gone.remove();
+    }
+    if (el.hasAttribute('data-print')) window.print();
+    if (el.hasAttribute('data-copy') && navigator.clipboard) {
+      navigator.clipboard.writeText(el.dataset.copy);
+      if (!el.dataset.label) {
+        el.dataset.label = el.innerHTML;
+        el.textContent = 'Copied!';
+        setTimeout(function () { el.innerHTML = el.dataset.label; delete el.dataset.label; }, 2000);
+      }
+    }
+  });
+
+  // [data-clear-on-request="<selector>"]: empties those inputs as the request starts
+  document.addEventListener('htmx:beforeRequest', function (event) {
+    var sel = event.detail.elt.dataset && event.detail.elt.dataset.clearOnRequest;
+    if (sel) document.querySelectorAll(sel).forEach(function (input) { input.value = ''; });
+  });
+
+  // [data-success-event="<name>"]: a window event once the element's own request
+  // succeeds. requestConfig.elt: an element the swap removed reaches document only
+  // through htmx's re-trigger on an ancestor, which replaces detail.elt.
+  document.addEventListener('htmx:afterRequest', function (event) {
+    var elt = event.detail.requestConfig && event.detail.requestConfig.elt;
+    var name = event.detail.successful && elt && elt.dataset && elt.dataset.successEvent;
+    if (name) window.dispatchEvent(new CustomEvent(name, { detail: { elt: elt } }));
+  });
+})();

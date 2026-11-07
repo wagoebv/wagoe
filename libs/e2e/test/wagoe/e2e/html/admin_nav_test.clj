@@ -20,7 +20,7 @@
   (page/locator pg (str "nav.admin-sidebar-nav a[href='" href "']")))
 
 (defn- await! [pg js]
-  (is (not (map? (page/wait-for-function pg js {:timeout 5000.0}))) js))
+  (is (not (map? (fx/wait-for-js pg js {:timeout 5000.0}))) js))
 
 (deftest ^:integration ^:e2e the-sidebar-groups-pages-by-module
   (spel/with-testing-page [pg]

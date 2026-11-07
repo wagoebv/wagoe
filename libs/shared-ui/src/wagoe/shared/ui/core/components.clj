@@ -240,16 +240,15 @@
    
    Args:
      text: Button text
-     opts: Optional map with :type, :class, :disabled, :onclick, etc.
+     opts: Optional map with :type, :class, :disabled
      
    Returns:
      Hiccup button element"
   [text & [opts]]
-  (let [{:keys [type class disabled onclick]} opts]
+  (let [{:keys [type class disabled]} opts]
     [:button (merge {:type (or type "button")}
                     (when class {:class class})
-                    (when disabled {:disabled disabled})
-                    (when onclick {:onclick onclick}))
+                    (when disabled {:disabled disabled}))
      text]))
 
 (defn submit-button

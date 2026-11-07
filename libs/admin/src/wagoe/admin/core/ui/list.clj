@@ -45,9 +45,8 @@
          [:button.icon-button {:type "submit" :aria-label [:t :common/button-search]}
           (icons/icon :search {:size 20})]
          (when (seq current-search)
-           [:button.icon-button.secondary {:type "button"
-                                           :aria-label [:t :admin/button-clear-search]
-                                           :onclick (str "window.location.href='/web/admin/" (name entity-name) "';")}
+           [:a.icon-button.secondary {:href (str "/web/admin/" (name entity-name))
+                                      :aria-label [:t :admin/button-clear-search]}
             (icons/icon :x {:size 20})])]]])))
 
 (defn record-count-badge
@@ -301,7 +300,7 @@
                   :hx-push-url "true"
                   ;; The search box keeps what was typed; clearing it is the
                   ;; user's call, so this clears the filters and the search
-                  "hx-on::before-request" "var s=document.querySelector('.toolbar-search .search-input'); if (s) s.value='';"}
+                  :data-clear-on-request ".toolbar-search .search-input"}
          [:t :admin/button-clear-filters-and-search]]]
 
        (empty? records)
@@ -484,9 +483,8 @@
           ;; Typing searches; the icon only says what the field is
           [:span {:class "search-icon" :aria-hidden "true"} (icons/icon :search {:size 15})]
           (when (seq search-value)
-            [:button.icon-button.secondary {:type "button"
-                                            :aria-label [:t :admin/button-clear-search]
-                                            :onclick (str "window.location.href='/web/admin/" (name entity-name) "';")}
+            [:a.icon-button.secondary {:href (str "/web/admin/" (name entity-name))
+                                       :aria-label [:t :admin/button-clear-search]}
              (icons/icon :x {:size 18})])])
 
        [:div.toolbar-actions

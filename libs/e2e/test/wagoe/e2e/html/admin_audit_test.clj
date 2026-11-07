@@ -12,7 +12,7 @@
 (use-fixtures :each fx/with-fresh-seed)
 
 (defn- await! [pg js]
-  (is (not (map? (page/wait-for-function pg js {:timeout 5000.0}))) js))
+  (is (not (map? (fx/wait-for-js pg js {:timeout 5000.0}))) js))
 
 (defn- rows [pg]
   (loc/count-elements (page/locator pg "table.data-table tbody tr")))

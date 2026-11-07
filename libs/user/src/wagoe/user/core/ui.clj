@@ -473,7 +473,7 @@
                  :hx-include "[name='ids[]'], #users-table-container .table-state input"
                  :class      "flex flex-wrap items-center gap-2"
                  ;; The rows it acted on are gone or changed: start over
-                 "hx-on::after-request" "if (event.detail.successful) window.dispatchEvent(new CustomEvent('bulk-clear'))"}
+                 :data-success-event "bulk-clear"}
     :controls   [[:select#bulk-action-select {:name "action" :class "select select-sm"
                                               :aria-label [:t :user/bulk-action-apply-title]}
                   [:option {:value "deactivate"} [:t :user/bulk-action-deactivate]]

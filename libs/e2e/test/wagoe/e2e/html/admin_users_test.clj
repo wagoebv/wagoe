@@ -225,12 +225,12 @@
           "named by its title")
       (loc/click (page/locator pg "dialog[open] button[value='cancel']"))
       ;; Closing is a task away; wait for the dialog to be gone
-      (is (not (map? (page/wait-for-function pg "!document.querySelector('dialog.modal:not([id])')" {:timeout 5000.0})))
+      (is (not (map? (fx/wait-for-js pg "!document.querySelector('dialog.modal:not([id])')" {:timeout 5000.0})))
           "removed on close")
       (is (nil? (page/evaluate pg "window.confirmed")))
       (page/evaluate pg "window.AdminUX.showConfirmModal({onConfirm: () => { window.confirmed = 1; }})")
       (loc/click (page/locator pg "dialog[open] button[value='confirm']"))
-      (is (not (map? (page/wait-for-function pg "window.confirmed === 1 && !document.querySelector('dialog.modal:not([id])')"
+      (is (not (map? (fx/wait-for-js pg "window.confirmed === 1 && !document.querySelector('dialog.modal:not([id])')"
                                              {:timeout 5000.0})))
           "confirmed and removed"))
     (testing "hx-confirm on a delete asks in the dialog, with its data-confirm labels"
@@ -331,7 +331,7 @@
       (loc/click (page/locator pg "#create-user-form button[type='submit']"))
       ;; Constraint validation focuses the offending field — the one observable
       ;; effect of the click, and what there is to wait for.
-      (is (not (map? (page/wait-for-function
+      (is (not (map? (fx/wait-for-js
                       pg
                       "document.activeElement && document.activeElement.id === 'email'"
                       {:timeout 5000.0 :polling 50.0})))
