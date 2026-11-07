@@ -389,6 +389,12 @@
       (let [dev (read (profile/profile-file "dev"))]
         (and (:text dev) (empty? (absent dev [{:k module-key}]))))))
 
+(defn- present-provider
+  "The module that brings `m` along, when `deps` has it: platform brings platform-sql."
+  [deps m]
+  (when-let [p (some-> (:provided-by m) cat/find-module)]
+    (when (some? (dep-coords deps (:clojars p) (:scope p))) p)))
+
 (defn module-states
   "Each catalogue module with where the project has it: :enabled, :configurable
    (in deps.edn, not switched on) or :absent. A module with a :module-key is on
@@ -402,6 +408,8 @@
     (for [m (:modules (cat/load-catalogue))
           :let [dep (dep-coords deps (:clojars m) (:scope m))]]
       [m (cond
+           ;; Installed, though deps.edn never names it.
+           (and (nil? dep) (present-provider deps m)) :enabled
            (or (nil? dep) (= :unreadable dep)) :absent
            (:module-key m)                     (if (switched-on? (:module-key m) read @extra) :enabled :configurable)
            (or (= :core (:category m))
@@ -479,8 +487,14 @@
               ;; positives when two modules share a config key.
               ;; Nothing is written before patch-configs!, so one reader serves both.
               read         (profile/reader dir)
-              wired?       (installed? dir module dep-present? read)]
+              wired?       (installed? dir module dep-present? read)
+              provider     (when-not dep-present? (present-provider deps-content module))]
           (cond
+            ;; Its provider depends on it, so it is on the classpath already (BOU-934).
+            provider
+            (println (str "Module '" module-name "' is already provided by " (:clojars provider)
+                          ". Nothing to add."))
+
             ;; A core module's version moves with the rest of Wagoe, and
             ;; switching it on touches config only (BOU-667).
             (and dep-present? existing-ver (not= existing-ver (:version module))

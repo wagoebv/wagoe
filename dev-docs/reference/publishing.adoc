@@ -41,7 +41,7 @@ Add these to your shell profile (`~/.zshrc` or `~/.bashrc`) for convenience.
 
 == Library overview
 
-All 33 libraries are published to the `com.wagoe` group on Clojars. The order
+All 34 libraries are published to the `com.wagoe` group on Clojars. The order
 below is `bb deploy`'s publish order — a topological sort of `all-libs` by each
 library's `deps.edn` Wagoe dependencies, so every library appears after
 everything it depends on.
@@ -78,11 +78,11 @@ the code is right. A previous version of this table listed 22 libraries and gave
 |*ai*            |`com.wagoe/wagoe-ai`            |config, core
 |*ui-style*      |`com.wagoe/wagoe-ui-style`      |—
 |*shared-ui*     |`com.wagoe/wagoe-shared-ui`     |core, platform, ui-style
-|*user*          |`com.wagoe/wagoe-user`          |config, core, email, external, i18n, observability, platform, shared-ui, tenant
+|*user*          |`com.wagoe/wagoe-user`          |config, core, email, i18n, observability, platform, shared-ui, tenant
 |*calendar*      |`com.wagoe/wagoe-calendar`      |core, shared-ui
 |*admin*         |`com.wagoe/wagoe-admin`         |core, events, i18n, platform, shared-ui, ui-style, user
 |*workflow*      |`com.wagoe/wagoe-workflow`      |admin, core, i18n, platform, shared-ui, user
-|*search*        |`com.wagoe/wagoe-search`        |admin, core, i18n, platform, shared-ui
+|*search*        |`com.wagoe/wagoe-search`        |core, i18n, platform-sql
 |*test*          |`com.wagoe/wagoe-test`          |config, events, jobs, platform, realtime, tenant, user
 |*wagoe-cli*     |`com.wagoe/wagoe-cli`           |—
 |*tools*         |`com.wagoe/wagoe-tools`         |wagoe-cli
@@ -98,7 +98,7 @@ in-repo end-to-end test harness, not a library.
 == Version management
 
 Each publishable artifact has a `(def version "…")` in its own `build.clj`.
-This includes all 33 libraries under `libs/*` — `libs/tools` among them. It is
+This includes all 34 libraries under `libs/*` — `libs/tools` among them. It is
 dev-only in the sense that applications do not depend on it at runtime, but it
 is published like everything else, as `com.wagoe/wagoe-tools`.
 
@@ -136,14 +136,14 @@ Always bump the version before deploying — you cannot re-deploy the same versi
 
 == Deploying locally
 
-=== All 33 artifacts in one command
+=== All 34 artifacts in one command
 
 [source,bash]
 ----
 bb deploy --all
 ----
 
-This deploys all 33 publishable artifacts in dependency order. There is no
+This deploys all 34 publishable artifacts in dependency order. There is no
 pause between them: each library is installed into `~/.m2` first, so the next
 one never waits on Clojars indexing.
 

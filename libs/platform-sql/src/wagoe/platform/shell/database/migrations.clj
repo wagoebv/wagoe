@@ -26,7 +26,7 @@
             [wagoe.core.utils.migration-id :as migration-id]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.shell.adapters.database.config :as db-config]
-            [wagoe.platform.shell.modules :as modules]
+            [wagoe.platform.shell.module-registry :as registry]
             [clojure.edn :as edn]
             [clojure.set :as set]
             [clojure.java.io :as io]
@@ -423,7 +423,7 @@
   [dirs enabled-libs k]
   (if (nil? enabled-libs)
     dirs
-    (let [framework (set (vals modules/framework-modules))
+    (let [framework (set (vals registry/framework-modules))
           by-lib    (library-manifests k)
           off?      (fn [[lib _]] (and (framework lib) (not (enabled-libs lib))))
           skip      (set/difference (set (mapcat second (filter off? by-lib)))
@@ -472,7 +472,7 @@
   "The libraries the active profile's config switches on, for the CLI, which
    has no running system to ask."
   []
-  (modules/enabled-libraries
+  (registry/enabled-libraries
    (:active (db-config/load-config (db-config/detect-environment)))))
 
 (defn- migrate-reserved!
@@ -711,7 +711,7 @@
 
    Args:
      datasource   - the javax.sql.DataSource to migrate
-     enabled-libs - the libraries whose modules are on (`modules/enabled-libraries`);
+     enabled-libs - the libraries whose modules are on (`registry/enabled-libraries`);
                     nil migrates every library on the classpath
 
    Returns:

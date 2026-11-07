@@ -13,7 +13,7 @@
 
 (defn- await! [pg js]
   ;; spel answers a timeout with an anomaly map rather than throwing
-  (let [result (page/wait-for-function pg js {:timeout 5000.0})]
+  (let [result (fx/wait-for-js pg js {:timeout 5000.0})]
     (is (not (map? result)) (str "never true: " js))))
 
 (defn- await-ready! [pg]

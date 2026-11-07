@@ -4,6 +4,7 @@
   :kaocha/source-paths ["src"
                         "libs/core/src"
                         "libs/observability/src"
+                        "libs/platform-sql/src"
                         "libs/platform/src"
                         "libs/user/src"
                         "libs/admin/src"

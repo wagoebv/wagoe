@@ -42,6 +42,48 @@ for what is public API, what is internal, and how deprecations are announced.
   It was dropped before the SMTP transport; nothing to change without one.
 - **A `:markdown` admin widget**: a textarea marked `data-markdown`, which the field's `:editor-script`, the
   app's own, may make an editor. Without a script it is a textarea.
+- **The CSP allowed inline script and eval** (BOU-898): `script-src` is now `'self'`. An app's own inline `<script>`,
+  `onclick` or `hx-on` stops running; move it to a `.js` file, or set your own CSP.
+
+### Added
+
+- **`wagoe.core.http.errors` and `wagoe.core.http.access`**: the error body and access checks, without cheshire (BOU-930).
+  The `wagoe.platform.core.http` namespaces delegate to them; nothing to change.
+- **`com.wagoe/wagoe-platform-sql`**: platform's database, migration, lease and transit namespaces, same names (BOU-871).
+  `wagoe-platform` depends on it; nothing to change.
+- **`wagoe.audience.ports/IUserQuery`**: `query-user-ids` takes the audience's filters as data (BOU-875).
+  A custom `IUserDataSource` should implement it; the service uses it when present.
+
+### Fixed
+
+- **The stability page's opening line said Wagoe is at `1.0.1`** under a `1.1.1` table. It now points at the table,
+  the one version claim `check:versions` gates. Nothing to change.
+- **A successful storage upload or URL lookup went out unencoded** (BOU-930). Upgrade if you serve `wagoe-storage` routes.
+- **A CLI pipeline answered a rate limit or a refused login with a 500** (BOU-871): its error table had drifted from HTTP's.
+  Nothing to change.
+- **A scaffolded repository returned the driver's types**: a string id on SQLite, `OffsetDateTime` on H2 (BOU-877).
+  New modules convert to the schema's; copy `->entity` and what it calls from a fresh `bb scaffold`.
+- **`wagoe add platform-sql` added it beside `wagoe-platform`, which already brings it** (BOU-934). It now adds nothing.
+
+### Changed
+
+- **`wagoe-search` no longer depends on `wagoe-admin`**, which it never used (BOU-869).
+  Declare `wagoe-email` (always on) and any of `wagoe-admin`/`wagoe-user` you got through search.
+- **`wagoe.platform.ports.privacy` ships in `wagoe-core`** under the same name (BOU-872).
+  Nothing to change; `wagoe-platform` depends on core.
+- **`wagoe-jobs` no longer depends on `wagoe-tenant`**: tenant's `:wagoe/in-tenant` runs a tenant's job (BOU-931).
+  Declare `wagoe-tenant` if you got it through jobs.
+- **`wagoe-search` no longer depends on `wagoe-shared-ui`**, so not on the HTTP stack; its admin pages mount when shared-ui is on the classpath (BOU-932).
+  Declare `wagoe-shared-ui` to keep them, and `wagoe-platform` if you got it through search.
+- **`bb check:fcis`: core and ports know no SQL** — `honey.sql` in `core/` now fails (BOU-874).
+  Move query building to the shell, or list the file under `:allow-sql` in `.wagoe/check-fcis.edn`.
+- **Sign-in, registration, MFA and the `/web` landing page take the admin's look** (BOU-937).
+  An app's `:login-layout` gets the forms as before; registration's way back to sign-in is now a link inside its form.
+
+### Deprecated
+
+- **`wagoe.jobs.shell.tenant-context/tenant-runner` and `:wagoe/job-tenant-runner`** (BOU-931). Use tenant's `:wagoe/in-tenant`.
+- **`wagoe.audience.ports/query-users-sql`** (BOU-875), removed in 2.0 (BOU-935). Implement `IUserQuery/query-user-ids`.
 
 ## [1.1.1] — 2026-10-31
 

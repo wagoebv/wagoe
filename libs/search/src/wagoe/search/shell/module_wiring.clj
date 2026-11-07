@@ -48,22 +48,37 @@
 ;; Search Routes Component
 ;; =============================================================================
 
+(defn- admin-ui?
+  "Whether wagoe-shared-ui, which the admin pages render with, is on the
+   classpath. Search does not declare it (BOU-932); an app with a web UI has it.
+   Loaded rather than looked up as a .clj resource, which an AOT jar may lack."
+  []
+  (try
+    (some? (requiring-resolve 'wagoe.shared.ui.core.layout/admin-pilot-page-layout))
+    (catch java.io.FileNotFoundException _ false)))
+
 (defmethod ig/init-key :wagoe/search-routes
   [_ {:keys [search-service]}]
   (log/info "Initializing search routes")
   (when-not (satisfies? ports/ISearchDefinitions (:engine search-service))
     (throw (ex-info "WGE-107: the search engine does not implement ISearchDefinitions"
                     {:type :configuration-error :wagoe/error-code "WGE-107" :missing ['index-definition]})))
-  {:api    (search-http/search-routes (:engine search-service))
-   :web    (search-http/search-web-routes (:engine search-service))
-   :static []
-   ;; Mounted alongside the admin UI rather than at /web, because that is where
-   ;; a reader looks for it. Platform used to hold this fact (BOU-330).
-   :web-prefix "/web/admin"
-   :nav        {:search {:label [:t :search/nav-title]
-                         :icon  :search
-                         :items [{:href "/web/admin/search" :icon :database :access :admin
-                                  :label [:t :search/page-indices-heading]}]}}})
+  (let [engine (:engine search-service)
+        routes {:api    (search-http/search-routes engine)
+                :web    []
+                :static []}]
+    (if (admin-ui?)
+      (assoc routes
+             :web (search-http/search-web-routes engine)
+             ;; Mounted alongside the admin UI rather than at /web, because that is where
+             ;; a reader looks for it. Platform used to hold this fact (BOU-330).
+             :web-prefix "/web/admin"
+             :nav        {:search {:label [:t :search/nav-title]
+                                   :icon  :search
+                                   :items [{:href "/web/admin/search" :icon :database :access :admin
+                                            :label [:t :search/page-indices-heading]}]}})
+      (do (log/info "Search admin pages off: wagoe-shared-ui is not on the classpath")
+          routes))))
 
 (defmethod ig/halt-key! :wagoe/search-routes
   [_ _routes]

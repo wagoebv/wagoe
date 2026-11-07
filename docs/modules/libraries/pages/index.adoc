@@ -1,9 +1,11 @@
 = Library Overview
-:description: All 33 independently publishable Wagoe libraries, application and tooling alike.
+:description: All 34 independently publishable Wagoe libraries, application and tooling alike.
 
-Wagoe is a monorepo of 33 libraries published to Clojars under the `com.wagoe`
+Wagoe is a monorepo of 34 libraries published to Clojars under the `com.wagoe`
 group.
 Every library follows the same FC/IS structure, making the codebase instantly familiar across libraries.
+
+Before you commit to one: xref:architecture:other-stores.adoc[Other stores] covers keeping your own modules off SQL, and xref:architecture:leaving-wagoe.adoc[Leaving Wagoe] what you keep if you drop the framework.
 
 == Foundation
 
@@ -22,6 +24,9 @@ Every library follows the same FC/IS structure, making the codebase instantly fa
 
 | xref:platform.adoc[platform]
 | HTTP routing/interceptors, database integration, CLI/runtime wiring. Infrastructure for feature libraries.
+
+| xref:platform-sql.adoc[platform-sql]
+| The SQL layer platform brings: JDBC adapters, migrations, seeding, leases. Usable without the HTTP stack.
 
 | xref:ui-style.adoc[ui-style]
 | Shared UI contract: centralized CSS/JS bundles, tokens, and reusable style conventions across libraries.

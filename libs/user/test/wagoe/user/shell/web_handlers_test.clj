@@ -18,6 +18,7 @@
             [wagoe.i18n.shell.catalogue :as catalogue]
             [clojure.test :refer [deftest testing is]]
             [clojure.tools.logging.test :as log-test]
+            [cheshire.core :as json]
             [clojure.string :as str])
   (:import [java.util UUID]
            [java.time Instant]))
@@ -524,9 +525,9 @@
           response (handler request)]
 
       (is (= 200 (:status response)))
-      (is (html-contains? response "pendingToast"))
-      (is (html-contains? response "User New User created"))
-      (is (html-contains? response "/web/admin/users"))))
+      (is (= "/web/admin/users" (get-in response [:headers "HX-Redirect"])))
+      (is (= {"type" "success" "message" "User New User created"}
+             (json/parse-string (get-in response [:headers "X-Toast"]))))))
 
   (testing "falls back to /web/admin/users when return-to is missing or unsafe"
     (let [service (create-mock-service)
@@ -542,8 +543,7 @@
           response (handler request)]
 
       (is (= 200 (:status response)))
-      (is (html-contains? response "/web/admin/users"))
-      (is (not (html-contains? response "evil.example.com")))))
+      (is (= "/web/admin/users" (get-in response [:headers "HX-Redirect"])))))
 
   (testing "returns validation errors for invalid data"
     (let [service (create-mock-service)
@@ -656,7 +656,7 @@
       (is (= ["welcome@example.com"] (:to (first @sent-emails))))
       (is (= "hello@test.com" (:from (first @sent-emails))))
       (is (str/includes? (:subject (first @sent-emails)) "TestApp"))
-      (is (html-contains? response "welcome email sent"))))
+      (is (str/includes? (get-in response [:headers "X-Toast"]) "welcome email sent"))))
 
   (testing "gracefully handles welcome email failure"
     (let [service (create-mock-service)
@@ -674,8 +674,8 @@
           response (handler request)]
 
       (is (= 200 (:status response)))
-      (is (html-contains? response "User Fail User created"))
-      (is (not (html-contains? response "welcome email sent"))))))
+      (is (str/includes? (get-in response [:headers "X-Toast"]) "User Fail User created"))
+      (is (not (str/includes? (get-in response [:headers "X-Toast"]) "welcome email sent"))))))
 
 ;; =============================================================================
 ;; Integration Tests
@@ -700,7 +700,7 @@
 
       (is (= 200 (:status list-response)))
       (is (= 200 (:status create-response)))
-      (is (html-contains? create-response "pendingToast"))
+      (is (= "/web/admin/users" (get-in create-response [:headers "HX-Redirect"])))
       (is (= ["integration@example.com"] (map :email (:users (ports/list-users service {}))))))))
 
 (deftest ^:contract ^:security login-cookie-secure-attribute-test

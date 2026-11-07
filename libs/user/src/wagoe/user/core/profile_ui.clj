@@ -397,10 +397,7 @@
       [:p [:t :user/mfa-manual-entry-prompt]]
       [:div.secret-code
        [:code secret]
-       [:button.button.secondary.small {:type "button"
-                                        :onclick (str "navigator.clipboard.writeText('" secret "');"
-                                                      "this.textContent='Copied!';"
-                                                      "setTimeout(()=>this.textContent='Copy',2000);")}
+       [:button.button.secondary.small {:type "button" :data-copy secret}
         [:t :common/button-copy]]]]]
     [:div.mfa-step
      [:h3 [:t :user/mfa-step2-title]]
@@ -456,16 +453,10 @@
               [:code code]])]
           [:div.backup-codes-actions
            [:button.button.secondary {:type "button"
-                                      :onclick (str "const codes = "
-                                                    (pr-str (str/join "\n" backup-codes))
-                                                    ";"
-                                                    "navigator.clipboard.writeText(codes);"
-                                                    "this.textContent='Copied!';"
-                                                    "setTimeout(()=>this.textContent='Copy All',2000);")}
+                                      :data-copy (str/join "\n" backup-codes)}
             (icons/icon :copy {:size 16})
             " " [:t :user/button-copy-all]]
-           [:button.button.secondary {:type "button"
-                                      :onclick "window.print();"}
+           [:button.button.secondary {:type "button" :data-print true}
             (icons/icon :download {:size 16})
             " " [:t :common/button-print]]]
           [:div.backup-codes-confirm

@@ -3,6 +3,7 @@
   :kaocha/source-paths ["src"
                         "libs/core/src"
                         "libs/observability/src"
+                        "libs/platform-sql/src"
                         "libs/platform/src"
                         "libs/user/src"
                         "libs/admin/src"
@@ -51,6 +52,10 @@
 
           {:id :platform
            :test-paths ["libs/platform/test"]
+           :ns-patterns ["wagoe.platform.*-test"]}
+
+          {:id :platform-sql
+           :test-paths ["libs/platform-sql/test"]
            :ns-patterns ["wagoe.platform.*-test"]}
 
           {:id :user

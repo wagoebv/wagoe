@@ -42,7 +42,7 @@ JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test
 # run. Bare `clojure -M:test` runs the lean set: fine for a suite that needs
 # nothing extra, and it fails on ClassNotFoundException for one that does.
 #
-#   :test/pg      admin, platform, scaffolder, tenant, workflow (embedded PostgreSQL, Linux binary)
+#   :test/pg      admin, platform, platform-sql, scaffolder, tenant, workflow (embedded PostgreSQL, Linux binary)
 #   :test/pg-mac  add to :test/pg on Apple Silicon — CI is ubuntu-only
 #   :test/otel    observability             (OpenTelemetry in-memory exporters)
 #   :test/http    devtools                  (clj-http-lite)
@@ -55,6 +55,7 @@ WAGOE_TEST_DB=mysql clojure -M:test:test/pg :admin # admin, user, workflow, sear
 clojure -M:test :core                              # Core library tests
 clojure -M:test:test/otel :observability           # Observability library tests
 clojure -M:test:test/pg :platform                  # Platform library tests
+clojure -M:test:test/pg :platform-sql              # Platform SQL library tests (MySQL: bb test:services up)
 clojure -M:test :user                              # User library tests
 clojure -M:test:test/pg :admin                     # Admin library tests
 clojure -M:test :storage                           # Storage library tests
@@ -145,7 +146,7 @@ bb scripts/docs_lint.clj                           # Run documentation drift lin
 # Quality Gates (all run in CI + check:fcis/check:ports run in pre-commit)
 bb check:fcis                                      # FC/IS enforcement: core/ must not import shell/IO/logging/DB, throw, or hold mutable state
 bb check:placeholder-tests                         # Detect (is true) placeholder assertions in tests
-bb check:deps                                      # Dependency direction + cycles + undeclared third-party deps
+bb check:deps                                      # Declared wagoe deps = used ones, both ways; cycles; undeclared third-party deps
 bb check:ports                                     # Hexagonal: modules must define ports.clj; shell/web must not bypass protocols
 bb check:ports-diff                                # A stable library's protocols gained, lost or moved no method since the last release (Convention 5)
 bb check:poms                                      # Published POMs must carry inter-Wagoe deps (build-shared rewrite + pom-basis)
@@ -362,11 +363,13 @@ clojure -M:test --watch :{module-name}  # Watch tests
 
 Every module MUST define `ports.clj`.
 
-- core/ may require only pure libraries (clojure.string/set/walk/edn, malli, hiccup, cheshire, buddy.core, honey.sql) and its own core/schema/ports — an allowlist, so anything else is refused by default
+- core/ may require only pure libraries (clojure.string/set/walk/edn, malli, hiccup, cheshire, buddy.core) and its own core/schema/ports — an allowlist, so anything else is refused by default
+- core/ and ports know no SQL: neither requires honey.sql, next.jdbc or wagoe.platform.database, and no port signature or docstring types a value as a HoneySQL map or a next.jdbc datasource or transaction — an opaque store handle (tx, conn) may pass through untyped (exceptions: :allow-sql in .wagoe/check-fcis.edn, each with a :why)
 - core/ must not throw — return typed error values ({:error {:type ... :message ...}}); the shell translates them into HTTP responses (escape hatch: ^:wagoe/allow-throw ns metadata or .wagoe/check-fcis.edn)
 - core/ must not hold mutable state (defonce/atom/swap!/reset!) — definition registries and process state live in the shell (wagoe.<lib>.shell.registry)
 - cross-module calls go through service ports
 - web/HTTP layers never require *.shell.persistence directly
+- a module picks its store (SQL, Datomic, a REST API) in shell/persistence.clj behind a domain-shaped port; Wagoe's own libraries stay on SQL — see https://wagoe.org/docs/architecture/other-stores.html (ADR-042)
 
 ```clojure
 (ns myapp.core.product)
@@ -1052,9 +1055,9 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 
 | Gate | Command | What it catches | Hard fail? |
 |------|---------|-----------------|------------|
-| **FC/IS enforcement** | `bb check:fcis` | A core namespace requiring anything outside a small allowlist of pure libraries and its own core/schema/ports; throwing; or holding mutable state (defonce/atom/swap!/reset!, including via `apply`). Reads operator position, so a newline between `(` and the symbol does not hide a call. Exceptions: `^:wagoe/allow-throw` / `^:wagoe/allow-mutable-state` ns metadata, or `.wagoe/check-fcis.edn` (`:allow-require` entries need a `:why`) | Yes |
+| **FC/IS enforcement** | `bb check:fcis` | A core namespace requiring anything outside a small allowlist of pure libraries and its own core/schema/ports; throwing; or holding mutable state (defonce/atom/swap!/reset!, including via `apply`). Reads operator position, so a newline between `(` and the symbol does not hide a call. Exceptions: `^:wagoe/allow-throw` / `^:wagoe/allow-mutable-state` ns metadata, or `.wagoe/check-fcis.edn` (`:allow-require` entries need a `:why`). Also SQL in core or ports: a `honey.sql`/`next.jdbc`/`wagoe.platform.database` require or a SQL-typed port arglist fails, a SQL-typed port docstring warns; `:allow-sql` entries need a `:why`, and one that exempts nothing fails | Yes |
 | **Placeholder tests** | `bb check:placeholder-tests` | Read with edamame, per runtime feature set: `(is true)`-style shapes (alias-qualified too), a deftest or `testing` block with no assertion at all (helpers like `check-snapshot!` count via a named list; for a `testing`, so does a helper in the file that asserts, directly or through another, and an `assert-*`/`expect-*` call into another namespace), and identical-argument `(= x x)` tautologies. Escape hatch: `^:wagoe/allow-placeholder` on the deftest name, on one `testing`, or on one assertion for a deliberate sentinel | Yes |
-| **Dependency direction** | `bb check:deps` | Core independence violations, circular deps between libraries, third-party namespaces required but not declared (so the published POM would omit them), requires no artifact mapping covers, unparseable `deps.edn` | Yes (cycles/core/new undeclared/unmapped); warn (allowlisted) |
+| **Dependency direction** | `bb check:deps` | A library's main `:deps` wagoe libs differing from what its `src/` uses, either way: a require or `requiring-resolve` of an undeclared lib, or a declared lib nothing uses. A dep used only for a classpath resource goes under `:wagoe/resource-deps` in that deps.edn; a deliberate soft ref or unused dep goes in `.wagoe/check-deps.edn` (`:allow-soft` / `:allow-unused`, each with a `:why`; stale entries fail). Also core independence, circular deps, third-party namespaces required but not declared, requires no artifact mapping covers, unparseable `deps.edn` | Yes |
 | **Ports / hexagonal** | `bb check:ports` | Modules missing `ports.clj`; a shell namespace requiring *any* of another module's `shell.*` namespaces (composition roots exempt); web/HTTP requiring `shell.persistence` directly; an allowlist prefix that no longer exempts anything | Yes |
 | **Stable ports vs release** | `bb check:ports-diff` | A protocol in a stable library's `ports`/`protocols` namespace that, since the last final release tag, lost or moved a method or arity (callers break) or gained one (implementers break), with no backticked name under `[Unreleased]` `### Breaking`. Incubating and tooling libraries are reported, not failed; a major version skips it. Pass a ref or set `PORTS_BASE` to compare with another | Yes |
 | **POM dep completeness** | `bb check:poms` | Published POMs dropping inter-Wagoe deps: `build_shared` losing the `:local/root`→mvn rewrite, a publishable `build.clj` bypassing `pom-basis`, or a referenced wagoe dep that is not itself publishable | Yes |
@@ -1098,6 +1101,7 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) 
 | [observability](https://github.com/wagoebv/wagoe/blob/main/libs/observability/AGENTS.md) | Interceptor-based metrics, logging, and error reporting                                             |
 | [payments](https://github.com/wagoebv/wagoe/blob/main/libs/payments/AGENTS.md)           | PSP abstraction — Mollie, Stripe, Mock checkout and webhook verification                            |
 | [platform](https://github.com/wagoebv/wagoe/blob/main/libs/platform/AGENTS.md)           | HTTP server, Reitit router, Ring middleware pipeline                                                |
+| [platform-sql](https://github.com/wagoebv/wagoe/blob/main/libs/platform-sql/AGENTS.md)   | JDBC adapters, migrations, seeding and leases, without the HTTP stack                               |
 | [push](https://github.com/wagoebv/wagoe/blob/main/libs/push/AGENTS.md)                   | Multi-platform push notifications — FCM (Firebase) + APNs (Apple)                                   |
 | [realtime](https://github.com/wagoebv/wagoe/blob/main/libs/realtime/AGENTS.md)           | WebSocket pub/sub messaging                                                                         |
 | [reports](https://github.com/wagoebv/wagoe/blob/main/libs/reports/AGENTS.md)             | PDF/CSV export and scheduled report generation                                                      |
@@ -1130,15 +1134,16 @@ Also add the lib's `:id` test suite to `tests.edn` and its source/test paths to 
 
 ## Examples
 
-Two, both in this repository and both run by CI on every commit:
+Three, all in this repository and all run by CI on every commit:
 
 | Path | What it is |
 |---|---|
 | `examples/shop` | A generated application — `wagoe new` + `bb scaffold` output, committed. Boots, serves HTTP, has one module to copy from. |
+| `examples/stores` | `examples/shop`'s module on a second store, an atom. One contract suite runs on both repositories. |
 | `examples/todo` | Functional core / imperative shell with no framework at all. ~200 lines, prints and exits. |
 
 ```bash
-./scripts/example-smoke.sh     # runs both, asserts on what they do
+./scripts/example-smoke.sh     # runs all three, asserts on what they do
 bb example:regen               # rebuild examples/shop from the current generators
 bb example:regen --check       # CI: fail if it has drifted from generator output
 ```
@@ -1146,7 +1151,7 @@ bb example:regen --check       # CI: fail if it has drifted from generator outpu
 `examples/shop` is regenerated rather than maintained, so it cannot describe a
 project shape nobody gets. See `examples/shop/README.md`.
 
-The former `wagoe-examples` repository is archived; these two are the examples.
+The former `wagoe-examples` repository is archived; these are the examples.
 
 ### SQLite `nil` LIMIT/OFFSET pitfall
 
@@ -1169,7 +1174,7 @@ rename a released id: databases that recorded it would run it again. Per-module 
 {:paths ["libs/tools/src" "libs/tools/resources" ...]}
 ```
 
-> **Note:** the monorepo reads `libs/tools` from source, not from Clojars — but it *is* published, as `com.wagoe/wagoe-tools`, and `bb deploy --all` includes it along with the other 32. "Dev-only" describes when you use it, not whether it ships.
+> **Note:** the monorepo reads `libs/tools` from source, not from Clojars — but it *is* published, as `com.wagoe/wagoe-tools`, and `bb deploy --all` includes it along with the other 33. "Dev-only" describes when you use it, not whether it ships.
 
 ### Namespaces
 
@@ -1183,11 +1188,11 @@ rename a released id: databases that recorded it would run it again. Per-module 
 | `wagoe.tools.integrate` | `bb scaffold integrate` — guide module integration (Integrant config + wiring) |
 | `wagoe.tools.i18n` | `bb i18n:find/scan/missing/unused` |
 | `wagoe.tools.admin` | `bb create-admin` |
-| `wagoe.tools.deploy` | `bb deploy` (handles all 33 libs) |
+| `wagoe.tools.deploy` | `bb deploy` (handles all 34 libs) |
 | `wagoe.tools.dev` | `bb migrate`, `bb check-links`, `bb smoke-check`, `bb install-hooks` |
 | `wagoe.tools.check-fcis` | `bb check:fcis` — FC/IS boundary enforcement (ADR-021) |
 | `wagoe.tools.check-tests` | `bb check:placeholder-tests` — placeholder assertion detection |
-| `wagoe.tools.check-deps` | `bb check:deps` — dependency direction linting, cycle detection, third-party declaration completeness |
+| `wagoe.tools.check-deps` | `bb check:deps` — declared wagoe deps = used ones, cycle detection, third-party declaration completeness |
 | `wagoe.tools.check-ports` | `bb check:ports` — hexagonal boundary enforcement (ports.clj presence + protocol usage) |
 | `wagoe.tools.check-poms` | `bb check:poms` — published-POM dependency completeness (build-shared rewrite + pom-basis usage + publishable deps) |
 | `wagoe.tools.check-roadmap` | `bb check:roadmap` — one roadmap, and it may not plan what `scaling.adoc` marks shipped |

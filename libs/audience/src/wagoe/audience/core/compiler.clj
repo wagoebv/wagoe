@@ -5,7 +5,10 @@
 
 (defn compile-segment
   "Compile a segment definition into an execution plan.
-   Returns {:sql-clauses [...] :predicates [...] :unsupported [...]}
+   Returns {:query-filters [...] :predicates [...] :unsupported [...]}
+
+   `:query-filters` are the filters `filter->sql` can express, left as data for
+   the user source to translate.
 
    `:unsupported` holds the filters that could be turned into neither a clause
    nor a predicate — today that means a date filter compiled without `:now`.
@@ -26,7 +29,7 @@
             sql (f/filter->sql filter-with-now)]
         (cond
           sql
-          (update plan :sql-clauses conj sql)
+          (update plan :query-filters conj filter-with-now)
 
           ;; A filter that can be expressed neither way. The date filters answer
           ;; nil to both when no `:now` reached them, and building a predicate
@@ -37,5 +40,5 @@
           (if-let [pred (f/filter->predicate filter-with-now)]
             (update plan :predicates conj pred)
             (update plan :unsupported conj filter-def)))))
-    {:sql-clauses [] :predicates [] :unsupported []}
+    {:query-filters [] :predicates [] :unsupported []}
     (:filters definition))))

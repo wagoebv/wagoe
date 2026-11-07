@@ -120,4 +120,14 @@
  {:ticket "BOU-849"
   :since  "1.1.0-rc-1"
   :note   "wagoe.push.shell.service/generate-callback-token, verify-callback-token and the 3-arity with-callback: a token over the id alone, valid for any push and never expiring. Still accepted until 2.0."
-  :manual "Mint tokens with callback-token and check them with callback-verdict, or call with-callback with the device. The arguments differ, so no rewrite."}]
+  :manual "Mint tokens with callback-token and check them with callback-verdict, or call with-callback with the device. The arguments differ, so no rewrite."}
+
+ {:ticket "BOU-931"
+  :since  "Unreleased"
+  :note   "wagoe.jobs.shell.tenant-context/tenant-runner and the :wagoe/job-tenant-runner component. The job workers take tenant's :wagoe/in-tenant; both work until 2.0."
+  :manual "Ref :wagoe/in-tenant where your config named :wagoe/job-tenant-runner, and drop calls to tenant-runner. A rewrite cannot tell a hand-built runner from the module's."}
+
+ {:ticket "BOU-875"
+  :since  "Unreleased"
+  :note   "wagoe.audience.ports/query-users-sql. The service calls IUserQuery/query-user-ids when the user data source implements it; the old method works until 2.0."
+  :manual "Implement IUserQuery/query-user-ids on a custom IUserDataSource: it receives the filter maps, not a SQL clause, so a rewrite cannot translate the body."}]

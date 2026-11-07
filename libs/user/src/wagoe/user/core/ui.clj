@@ -28,27 +28,36 @@
    content
    opts))
 
-(defn- auth-header
-  "Wagoe's logo, app name and `subtitle` above a sign-in form."
-  [opts subtitle]
-  [:div.page-header.auth-header
-   (when-let [logo-url (:logo-url opts)]
-     [:img.auth-logo {:src logo-url :alt "" :style "height:48px; width:auto; display:block; margin:0 auto 12px;"}])
-   [:h1 [:t :wagoe/app-name]]
-   [:p [:t subtitle]]])
+(defn- auth-shell
+  "`main` beside the brand panel, in the admin's stylesheet: the sign-in
+   pages and the landing page. `subtitle`, a translation key, may be nil."
+  [title subtitle main opts]
+  (layout/admin-pilot-page-layout
+   title
+   [:div.auth-shell
+    [:aside.auth-brand
+     (if-let [logo-url (:logo-url opts)]
+       [:img.auth-logo {:src logo-url :alt ""}]
+       [:img.auth-mark {:src "/assets/wagoe-dark-512-icon.png" :alt ""}])
+     [:div.auth-brand-copy
+      [:h1 [:t :wagoe/app-name]]
+      (when subtitle [:p [:t subtitle]])]]
+    [:div.auth-main
+     [:div.auth-toolbar (icons/theme-toggle-button)]
+     main]]
+   ;; Pilot's scripts: no admin keyboard shortcuts on a sign-in form
+   (assoc opts :skip-header true :js layout/pilot-js)))
 
 (defn- auth-page
-  "A sign-in page: Wagoe's `header` above `content` in the pilot layout, or,
-   when opts carry the app's `:login-layout`, `content` alone handed to it.
-   The forms, CSRF field and errors are in `content` either way."
-  [title page page-class header content opts]
+  "A sign-in page: `content` beside Wagoe's brand panel, or, when opts carry
+   the app's `:login-layout`, `content` alone handed to it. The forms, CSRF
+   field and errors are in `content` either way."
+  [title page page-class subtitle content opts]
   (if-let [app-layout (:login-layout opts)]
     (app-layout title
                 (into [page-class] content)
                 (-> opts (dissoc :login-layout) (assoc :page page)))
-    (page-layout title
-                 (into (cond-> [page-class] header (conj header)) content)
-                 opts)))
+    (auth-shell title subtitle (into [page-class] content) opts)))
 
 ;; =============================================================================
 ;; User Table Components
@@ -464,7 +473,7 @@
                  :hx-include "[name='ids[]'], #users-table-container .table-state input"
                  :class      "flex flex-wrap items-center gap-2"
                  ;; The rows it acted on are gone or changed: start over
-                 "hx-on::after-request" "if (event.detail.successful) window.dispatchEvent(new CustomEvent('bulk-clear'))"}
+                 :data-success-event "bulk-clear"}
     :controls   [[:select#bulk-action-select {:name "action" :class "select select-sm"
                                               :aria-label [:t :user/bulk-action-apply-title]}
                   [:option {:value "deactivate"} [:t :user/bulk-action-deactivate]]
@@ -585,19 +594,18 @@
    Returns:
      Complete HTML page structure"
   [& [opts]]
-  (page-layout
+  (auth-shell
    [:t :user/page-welcome-title]
-   [:div.web-root-page
-    [:div.web-root-content
-     [:div.web-root-logo
-      (icons/brand-logo {:size 180})]
-     [:h1 [:t :user/page-welcome-heading]]
-     [:p [:t :user/page-welcome-description]]
-     [:div.web-root-actions
+   nil
+   [:div.auth-page
+    [:div {:class "auth-card ui-card"}
+     [:div.card-body
+      [:h2.auth-title [:t :user/page-welcome-heading]]
+      [:p.auth-subtitle [:t :user/page-welcome-description]]
       [:a.button.primary {:href "/web/login"}
        (icons/icon :log-in {:size 18})
        [:span [:t :user/link-signin]]]]]]
-   (assoc opts :skip-header true)))
+   opts))
 
 ;; =============================================================================
 ;; Login Form & Page
@@ -668,7 +676,7 @@
      [:t :user/link-signin]
      :login
      :div.login-page.auth-page
-     (auth-header opts :user/login-subtitle)
+     :user/login-subtitle
      [(when-let [message (:error opts)]
         (ui/error-message message))
       (login-form data-with-return errors)]
@@ -682,7 +690,7 @@
    [:t :user/mfa-title]
    :oidc-mfa
    :div.mfa-login-page.auth-page
-   nil
+   :user/mfa-subtitle
    [[:div#mfa-login-form {:class "auth-card ui-card"}
      [:div.card-body
       [:h2.auth-title (icons/icon :shield {:size 24}) [:span [:t :user/mfa-title]]]
@@ -707,7 +715,7 @@
    [:t :user/link-signin]
    :oidc-continue
    :div.auth-page
-   nil
+   :user/login-subtitle
    [[:p [:a {:href location} [:t :user/oidc-continue]]]]
    opts))
 
@@ -783,7 +791,7 @@
      [:t :user/mfa-title]
      :mfa
      :div.mfa-login-page.auth-page
-     (auth-header opts :user/mfa-subtitle)
+     :user/mfa-subtitle
      [(mfa-login-form data-with-return errors)]
      opts)))
 
@@ -798,7 +806,7 @@
 
 (defn- enrolment-page [title body opts]
   (auth-page title :mfa-enrolment :div.mfa-enrolment-page.auth-page
-             (auth-header opts :user/mfa-subtitle)
+             :user/mfa-subtitle
              [[:div {:class "auth-card ui-card"} (into [:div.card-body] body)]]
              opts))
 
@@ -808,7 +816,8 @@
   [{:keys [secret qr-code-url issuer account-name backup-codes]} errors opts]
   (enrolment-page
    [:t :user/mfa-enrolment-title]
-   [[:p [:t :user/mfa-enrolment-intro]]
+   [[:h2.auth-title (icons/icon :shield {:size 24}) [:span [:t :user/mfa-enrolment-title]]]
+    [:p.auth-subtitle [:t :user/mfa-enrolment-intro]]
     (profile-ui/mfa-qr-code-step secret qr-code-url issuer account-name backup-codes errors
                                  {:action mfa-enrolment-path :cancel "/web/login"})]
    opts))
@@ -876,7 +885,12 @@
         ;; shape, so a password error in the form-level panel made one
         ;; submission answer in two different voices (BOU-393).
        (ui/field-errors (ui/field-error-id :password) (:password errors))]
-      (ui/submit-button [:t :user/button-create-account] {:loading-text [:t :user/button-create-loading]})]]])
+      (ui/submit-button [:t :user/button-create-account] {:loading-text [:t :user/button-create-loading]})]
+     ;; In the form, not the page: an app layout keeps the way back.
+     [:div.auth-footer
+      [:a {:href "/web/login"}
+       (icons/icon :arrow-left {:size 16})
+       [:span [:t :user/button-back-to-login]]]]]])
   ([data errors]
    (register-form data errors nil default-password-policy)))
 
@@ -896,14 +910,7 @@
      :register
      :div.register-page.auth-page
      nil
-     ;; In the content, not the header: an app layout keeps the way back.
-     [[:div.page-header.auth-header
-       [:h1 [:t :user/button-create-account]]
-       [:div.page-actions
-        [:a.button {:href "/web/login"}
-         (icons/icon :arrow-left {:size 16})
-         [:span [:t :user/button-back-to-login]]]]]
-      (register-form data-with-return errors)]
+     [(register-form data-with-return errors)]
      opts)))
 
 ;; =============================================================================

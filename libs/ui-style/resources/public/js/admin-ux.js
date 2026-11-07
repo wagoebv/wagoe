@@ -449,6 +449,9 @@ document.addEventListener('alpine:init', function () {
       });
     });
 
+    // data-success-event (components.js): applying or clearing filters closes the drawer
+    window.addEventListener('admin:close-drawer', closeDrawer);
+
     // Close, previous and next inside the drawer
     document.addEventListener('click', function (event) {
       var control = event.target.closest('[data-drawer]');

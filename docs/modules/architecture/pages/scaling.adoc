@@ -522,20 +522,20 @@ What it does, and what it deliberately does not:
 | Easy
 | Leaf / infra; no sibling deps. (Usually shared libs, not standalone services.)
 
-| user, tenant, external
+| user, tenant, external, search
 | With work
 | Depend on platform + the in-process service assumption in middleware. The remote adapter exists and the cycles are gone; what remains is deciding data ownership and pointing consumers at a remote adapter instead of the local component — a wiring change in the *application's* config, which is why `deploy/compose/per-service.yml` demonstrates the mechanism without making it for you.
 
-| admin, search, workflow
+| admin, workflow
 | Entangled
-| `search`/`workflow` depend on `admin`'s schema provider — a one-directional dep, but a heavy one: slicing either means the schema provider goes over the wire or gets extracted behind its own port. `admin→user` is now one-directional too, so this is coupling to untangle, no longer a cycle to break.
+| `workflow` depends on `admin`'s schema provider — a one-directional dep, but a heavy one: slicing it means the schema provider goes over the wire or gets extracted behind its own port. `admin→user` is now one-directional too, so this is coupling to untangle, no longer a cycle to break.
 |===
 
 [TIP]
 ====
 Recommended path: prove the remote-port adapter by extracting *payments* as a
 standalone service (it depends on `core` alone), then `user`, which the
-reference topology slices out. `admin`/`search`/`workflow` are last — not because of
+reference topology slices out. `admin`/`workflow` are last — not because of
 cycles any more, but because of the shared schema provider.
 ====
 

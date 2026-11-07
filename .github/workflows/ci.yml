@@ -117,7 +117,7 @@ jobs:
           clojure -M:clj-kondo --lint \
             src test dev scripts \
             libs/*/src libs/*/test \
-            examples/todo/src
+            examples/todo/src examples/stores/src examples/stores/test
 
   # =============================================================================
   # Build shared UI assets
@@ -389,7 +389,7 @@ jobs:
         include:
           - libs: [admin, ai, audience, cache, calendar, config]
           - libs: [core, devtools, email, events, external, geo]
-          - libs: [i18n, jobs, observability, payments, platform, push]
+          - libs: [i18n, jobs, observability, payments, platform, platform-sql, push]
           - libs: [realtime, reports, scaffolder, search, shared-ui, storage]
           - libs: [tenant, test, ui-style, user, wagoe-cli, wagoe-mcp, webhooks, workflow]
 
@@ -454,10 +454,10 @@ jobs:
           fi
 
   # =============================================================================
-  # In-repo runnable examples must actually run (examples/todo, examples/shop)
+  # In-repo runnable examples must actually run (examples/todo, shop, stores)
   #
   # examples/shop is generated output, committed so it can be read and so this
-  # job runs it. Both resolve com.wagoe through :local/root, so a green run
+  # job runs it. Each resolves com.wagoe through :local/root, so a green run
   # means this commit works — not that the last release did (BOU-300).
   # =============================================================================
   example-smoke:
@@ -483,7 +483,7 @@ jobs:
           cli: 1.12.6.1673
           bb: latest
 
-      - name: Run both examples
+      - name: Run the examples
         run: ./scripts/example-smoke.sh
 
       # Separate from running it: an example that runs can still have stopped
@@ -616,6 +616,39 @@ jobs:
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
         run: clojure -M:test:test/pg :platform
+
+  test-platform-sql:
+    name: Test wagoe/platform-sql
+    runs-on: ubuntu-latest
+    needs: [warm-deps, changes]
+    if: contains(format(' {0} ', needs.changes.outputs.libs), ' platform-sql ')
+
+    services:
+      # The adapter conformance suite runs on all four engines (ADR-039).
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: probe
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -uroot -pprobe --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Clojure + warm deps
+        uses: ./.github/actions/clojure-deps
+        with:
+          aliases: -M:test:test/pg
+
+      - name: Run tests
+        env:
+          JWT_SECRET: "ci-test-secret-minimum-32-characters"
+        run: clojure -M:test:test/pg :platform-sql
 
   test-user:
     name: Test wagoe/user
@@ -1733,7 +1766,7 @@ jobs:
     # always(): with the default, a failed job skips this one, and GitHub
     # counts a skipped required check as passing (BOU-615).
     if: always()
-    needs: [changes, warm-deps, checks, lint, first-run-smoke, build-ui-assets, docs-lint, command-smoke, i18n-scan, check-isolation-matrix, build-uberjar, test-tools, example-smoke, test-i18n, test-config, test-app, test-core, test-observability, test-platform, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-test-kit, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-mysql-suites, mysql-smoke, web-crawl-smoke, test-scaffolder, test-external, test-payments, test-push, test-webhooks, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui, e2e]
+    needs: [changes, warm-deps, checks, lint, first-run-smoke, build-ui-assets, docs-lint, command-smoke, i18n-scan, check-isolation-matrix, build-uberjar, test-tools, example-smoke, test-i18n, test-config, test-app, test-core, test-observability, test-platform, test-platform-sql, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-test-kit, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-mysql-suites, mysql-smoke, web-crawl-smoke, test-scaffolder, test-external, test-payments, test-push, test-webhooks, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui, e2e]
 
     steps:
       - name: Every job passed, or was skipped on a docs-only change or untouched library
@@ -1756,6 +1789,7 @@ jobs:
           echo "  - wagoe/core"
           echo "  - wagoe/observability"
           echo "  - wagoe/platform"
+          echo "  - wagoe/platform-sql"
           echo "  - wagoe/user"
           echo "  - wagoe/admin"
           echo "  - wagoe/ui-style"
@@ -1801,4 +1835,4 @@ jobs:
           echo "  - check:no-boundary (no residual boundary tokens)"
           echo "  - build-uberjar (deployable artifact builds and is versioned)"
           echo "  - test-tools (libs/tools + AGENTS.md generator tests)"
-          echo "  - example-smoke (examples/todo + examples/shop run)"
+          echo "  - example-smoke (examples/todo, shop and stores run)"

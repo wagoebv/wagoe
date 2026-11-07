@@ -48,8 +48,9 @@
      `:wagoe/error-reporting` and `:on-outcome` (`wagoe.jobs.shell.outcomes`).
 
    :wagoe/job-tenant-runner
-     With the tenant module on: what runs a job that carries a tenant in that
-     tenant's schema. The workers take it; without it such a job fails.
+     Deprecated, and defined by the tenant module now: with it on, the workers
+     take tenant's `:wagoe/in-tenant` (fn [tenant-id f]), so jobs does not
+     depend on tenant (BOU-931).
 
    :wagoe/job-dead-letter-retention
      The `:jobs/dead-letter` retention policy, contributed under `:retention`.
@@ -66,8 +67,6 @@
             [wagoe.jobs.shell.adapters.redis :as redis]
             [wagoe.jobs.shell.outcomes :as outcomes]
             [wagoe.jobs.shell.recurring :as recurring]
-            [wagoe.jobs.shell.tenant-context :as tenant-context]
-            [wagoe.tenant.shell.provisioning :as provisioning]
             [wagoe.jobs.shell.worker :as worker]))
 
 (defmethod ig/init-key :wagoe/jobs [_ config] config)
@@ -199,12 +198,6 @@
 
 (defmethod ig/halt-key! :wagoe/job-registry [_ _] nil)
 
-(defmethod ig/init-key :wagoe/job-tenant-runner
-  [_ {:keys [db-ctx tenant-service]}]
-  (tenant-context/tenant-runner db-ctx tenant-service (provisioning/create-tenant-schema-provider)))
-
-(defmethod ig/halt-key! :wagoe/job-tenant-runner [_ _] nil)
-
 (defn- resolve-hook
   "`:on-outcome` as config.edn names it, a symbol, resolved to its fn."
   [hook]
@@ -217,6 +210,9 @@
 (defmethod ig/init-key :wagoe/job-workers
   [_ {:keys [queue store registry workers tenant-runner metrics error-reporter
              on-outcome report-failures-every-ms idempotency]}]
+  (when-not (or (nil? tenant-runner) (ifn? tenant-runner))
+    (throw (ex-info ":wagoe/job-workers :tenant-runner must be a (fn [tenant-id f])"
+                    {:type :configuration-error :tenant-runner (class tenant-runner)})))
   (let [count*  (:count workers 1)
         ;; One reporter for every pool: the error-tracker throttle is per job
         ;; type, whichever queue it runs on, and on whichever node.
@@ -329,9 +325,7 @@
                             :idempotency    (ig/ref :wagoe/idempotency-store)}
        :wagoe/job-dead-letter-retention {:store (ig/ref :wagoe/job-store)}}
       :retention {:jobs/dead-letter (ig/ref :wagoe/job-dead-letter-retention)}}
+      ;; Tenant's, so jobs runs a tenant's job without depending on tenant.
       tenancy?
-      (-> (assoc-in [:components :wagoe/job-tenant-runner]
-                    {:db-ctx         (ig/ref :wagoe/db-context)
-                     :tenant-service (ig/ref :wagoe/tenant-service)})
-          (assoc-in [:components :wagoe/job-workers :tenant-runner]
-                    (ig/ref :wagoe/job-tenant-runner))))))
+      (assoc-in [:components :wagoe/job-workers :tenant-runner]
+                (ig/ref :wagoe/in-tenant)))))

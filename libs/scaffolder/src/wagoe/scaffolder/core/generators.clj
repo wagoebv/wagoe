@@ -185,14 +185,18 @@
      (str "(defprotocol I" entity-name "Repository\n"
           "  \"Repository interface for " e " persistence operations.\"\n"
           "\n"
+          ;; The docstrings are the contract: what the SQL adapter does that a
+          ;; caller relies on, so an adapter on another store does it too.
           "  (" find-by-id " [this id]\n"
-          "    \"Find " e " by ID.\")\n"
+          "    \"The " e " with this UUID, or nil.\")\n"
           "\n"
           "  (" find-all " [this options]\n"
-          "    \"Find all " e "s with pagination and filtering.\")\n"
+          "    \"A page of " e "s, oldest first: by :created-at, then by id. `options`\n"
+          "     holds :limit (default 20) and :offset (default 0).\")\n"
           "\n"
           "  (" create " [this entity]\n"
-          "    \"Create new " e ".\")\n"
+          "    \"Store a new " e ", its :id and :created-at already set, and return it\n"
+          "     as stored. An id or unique field already taken is a :conflict.\")\n"
           "\n"
           (when (get entity :primary? true)
             (str "  ;; `update-entity`, not `update-<entity>`: the service protocol below declares\n"
@@ -202,13 +206,16 @@
                  "  ;; which would shadow clojure.core/update. The repository's other methods are\n"
                  "  ;; already generic (create, delete), so this matches its own family. (BOU-267)\n"))
           "  (" update " [this entity]\n"
-          "    \"Update existing " e ".\")\n"
+          "    \"Change the fields `entity` carries besides :id, stamp :updated-at, and\n"
+          "     return the " e " as stored; nil when there is no such " e ". No field to\n"
+          "     change is a :validation-error.\")\n"
           "\n"
           "  (" delete " [this id]\n"
-          "    \"Delete " e " by ID.\")"
+          "    \"Delete the " e " with this id. An unknown id is not an error.\")"
           (when-let [t (transact-fn entity)]
             (str "\n\n  (" t " [this f]\n"
-                 "    \"Call `f` in one database transaction, and return what it returns.\")"))
+                 "    \"Call `f` as one unit of work, and return what it returns. When `f`\n"
+                 "     throws, none of its writes remain.\")"))
           (when-let [c (count-fn entity)]
             (str "\n\n  (" c " [this " (:belongs-to entity) "-id]\n"
                  "    \"How many " (:entity-plural entity) " the " (:belongs-to entity) " has. In a transaction, it\n"
@@ -906,11 +913,14 @@ DROP TABLE IF EXISTS %s;
 ;; =============================================================================
 
 (defn- field-set
-  "The entity's fields of `field-type` as a set literal, e.g. `#{:status}`."
-  [entity field-type]
-  (str "#{" (str/join " " (for [f (:fields entity) :when (= field-type (:field-type f))]
-                            (str ":" (:field-name-kebab f))))
-       "}"))
+  "The entity's fields of `field-type` as a set literal, e.g. `#{:status}`.
+   With a set of types, after the `fixed` keys every table has."
+  ([entity field-type] (field-set entity #{field-type} []))
+  ([entity field-types fixed]
+   (str "#{" (str/join " " (concat fixed
+                                   (for [f (:fields entity) :when (field-types (:field-type f))]
+                                     (str ":" (:field-name-kebab f)))))
+        "}")))
 
 (defn- enum-field-set [entity] (field-set entity :enum))
 
@@ -947,6 +957,7 @@ DROP TABLE IF EXISTS %s;
      (str "(ns " base-ns "." module-name "." (shell-ns entity :persistence-ns) "\n"
           "  \"Persistence layer for " module-name " module.\"\n"
           "  (:require [" base-ns "." module-name ".ports :as ports]\n"
+          "            [wagoe.core.utils.type-conversion :as tc]\n"
           "            [wagoe.platform.database :as db])\n"
           "  (:import [java.time Instant LocalDate]))\n"
           "\n"
@@ -968,14 +979,35 @@ DROP TABLE IF EXISTS %s;
           "  \"SQLite reads a boolean back as 0 or 1, and 0 is truthy.\"\n"
           "  " (field-set entity :boolean) ")\n"
           "\n"
+          ;; The schema's types on every engine, so what a caller gets does not
+          ;; depend on the store under it.
+          "(def ^:private uuid-fields\n"
+          "  \"SQLite reads a UUID back as a string.\"\n"
+          "  " (field-set entity #{:uuid :relation} [":id"]) ")\n"
+          "\n"
+          "(def ^:private inst-fields\n"
+          "  \"H2 reads a timestamp back as an OffsetDateTime, SQLite as a string.\"\n"
+          "  " (field-set entity #{:inst} [":created-at" ":updated-at" ":deleted-at"]) ")\n"
+          "\n"
+          "(def ^:private decimal-fields\n"
+          "  \"SQLite reads a decimal back as a double.\"\n"
+          "  " (field-set entity :decimal) ")\n"
+          "\n"
+          "(defn- coerce [m ks read? f]\n"
+          "  (reduce (fn [m k] (cond-> m (read? (get m k)) (update k f))) m ks))\n"
+          "\n"
           "(defn- ->row [entity]\n"
-          "  (reduce (fn [m k] (cond-> m (keyword? (get m k)) (update k name))) entity enum-fields))\n"
+          "  (coerce entity enum-fields keyword? name))\n"
           "\n"
           "(defn- ->entity [row]\n"
           "  (some-> row\n"
           "          (update-vals date->iso)\n"
-          "          (as-> r (reduce (fn [m k] (cond-> m (string? (get m k)) (update k keyword))) r enum-fields))\n"
-          "          (as-> r (reduce (fn [m k] (cond-> m (number? (get m k)) (update k (complement zero?)))) r boolean-fields))))\n"
+          "          (coerce enum-fields string? keyword)\n"
+          "          (coerce boolean-fields number? (complement zero?))\n"
+          "          (coerce uuid-fields string? parse-uuid)\n"
+          ;; string->instant answers nil for what it cannot read; keep the value.
+          "          (coerce inst-fields some? #(or (tc/string->instant %) %))\n"
+          "          (coerce decimal-fields number? bigdec)))\n"
           "\n"
           "(defn- select-by-id [db-ctx id]\n"
           "  (->entity (db/execute-one! db-ctx {:select [:*] :from [:" table-name "] :where [:= :id id]})))\n"
@@ -3379,19 +3411,29 @@ ALTER TABLE %s ADD COLUMN %s %s%s%s%s%s;%s"
         (z/append-child* node))
     (z/append-child* loc node)))
 
-(defn- enum-fields-set? [loc]
-  (and (= :set (z/tag loc))
-       (= '[def enum-fields] (vec (take 2 (child-sexprs (z/up loc)))))))
+(def persistence-set
+  "The set in a generated persistence.clj that converts a field of this type
+   as it is read or written. Other types have none."
+  {:enum 'enum-fields :boolean 'boolean-fields :uuid 'uuid-fields
+   :relation 'uuid-fields :inst 'inst-fields :decimal 'decimal-fields})
+
+(defn add-field-to-persistence
+  "`source` with `field` in the set its type needs (`persistence-set`), or nil
+   when the type needs none or `source` has no such set (BOU-656, BOU-877)."
+  [source field]
+  (when-let [set-name (persistence-set (:type field))]
+    (when-let [loc (first-loc source #(and (= :set (z/tag %))
+                                           (= ['def set-name] (vec (take 2 (child-sexprs (z/up %)))))))]
+      (let [k (keyword (:field-name-kebab (template/build-field-context field)))]
+        (if (some #{k} (child-sexprs loc))
+          source
+          (z/root-string (append-item loc (n/keyword-node k) false)))))))
 
 (defn add-enum-field-to-persistence
   "`source` with `field` in its enum-fields set (BOU-656), or nil when it has
    no such set."
   [source field]
-  (when-let [loc (first-loc source enum-fields-set?)]
-    (let [k (keyword (:field-name-kebab (template/build-field-context field)))]
-      (if (some #{k} (child-sexprs loc))
-        source
-        (z/root-string (append-item loc (n/keyword-node k) false))))))
+  (add-field-to-persistence source (assoc field :type :enum)))
 
 (defn- append-entry
   "The map at `loc` with `k v` added on a line of its own, the value in the

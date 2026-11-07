@@ -697,3 +697,29 @@
         (is (= "{:users {:label \"Mine\"}}" (slurp (io/file tmp "resources/conf/dev/admin/users.edn")))))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration a-module-platform-brings-is-installed-with-platform
+  ;; platform depends on platform-sql, so a project with platform has it (BOU-871).
+  (let [tmp   (with-profiles! "provided-by")
+        state #(some (fn [[m s]] (when (= "platform-sql" (:name m)) s)) (add/module-states tmp))]
+    (try
+      (spit (io/file tmp "deps.edn") "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"}}}")
+      (is (= :absent (state)))
+      (spit (io/file tmp "deps.edn") "{:deps {com.wagoe/wagoe-platform {:mvn/version \"1.0.0\"}}}")
+      (is (= :enabled (state)))
+      (finally
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:integration adding-a-module-platform-brings-adds-nothing
+  (let [tmp  (with-profiles! "provided-by-add")
+        home (System/getProperty "user.dir")
+        deps "{:deps {com.wagoe/wagoe-platform {:mvn/version \"1.0.0\"}}}"]
+    (try
+      (spit (io/file tmp "deps.edn") deps)
+      (System/setProperty "user.dir" tmp)
+      (let [out (with-out-str (add/-main ["platform-sql"]))]
+        (is (str/includes? out "already provided by com.wagoe/wagoe-platform") out)
+        (is (= deps (slurp (io/file tmp "deps.edn")))))
+      (finally
+        (System/setProperty "user.dir" home)
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))

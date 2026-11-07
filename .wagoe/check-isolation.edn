@@ -65,6 +65,22 @@
    :why "TO FIX. BOU-307 follow-up. Optional-companion binding like the others, but it
          reaches past the jobs ports into its core — a layering question on top of
          the dependency one. jobs should expose what workflow needs on its port."}
+  {:lib "jobs"      :namespace "wagoe.tenant.ports"
+   :why "BY DESIGN. tenant_context.clj takes a tenant service or provider, so tenant
+         is loaded whenever it runs. The workers use tenant's :wagoe/in-tenant, so
+         an app without tenancy need not ship it (BOU-931). Reason inline there."}
+
+  {:lib "search"    :namespace "wagoe.shared.ui.core.layout"
+   :why "BY DESIGN. Optional companion: search's admin pages render with
+         shared-ui and are mounted only when it is on the classpath. Declaring
+         it would put Jetty and Reitit under every search user (BOU-932).
+         Reason inline in shell/ui.clj and module_wiring.clj."}
+  {:lib "search"    :namespace "wagoe.shared.ui.core.components"
+   :why "BY DESIGN. As layout's above (BOU-932)."}
+  {:lib "search"    :namespace "wagoe.shared.ui.core.icons"
+   :why "BY DESIGN. As layout's above (BOU-932)."}
+  {:lib "search"    :namespace "wagoe.shared.ui.core.home"
+   :why "BY DESIGN. As layout's above (BOU-932)."}
 
   {:lib "realtime"  :namespace "wagoe.observability.errors.ports"
    :why "BY DESIGN. Optional companion: handlers get a clean error context only

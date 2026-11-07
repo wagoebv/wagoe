@@ -7,7 +7,7 @@
 
 **Wagoe** is a batteries-included Clojure web framework that enforces the **Functional Core / Imperative Shell (FC/IS)** pattern: pure business logic in `core/`, side effects in `shell/`, and clean interfaces through `ports.clj` protocols.
 
-**Status: 1.0.1, stable.** The public surface follows Semantic Versioning: a breaking change needs a major version, after a deprecation of at least one minor release and 90 days. A few libraries are *incubating* — usable, outside that guarantee, and marked as such in `wagoe list modules`. See [Stability](https://wagoe.org/docs/stability.html).
+**Status: stable since 1.0.** The public surface follows Semantic Versioning: a breaking change needs a major version, after a deprecation of at least one minor release and 90 days. A few libraries are *incubating* — usable, outside that guarantee, and marked as such in `wagoe list modules`. See [Stability](https://wagoe.org/docs/stability.html).
 
 Questions go to [GitHub Discussions](https://github.com/wagoebv/wagoe/discussions); bugs and feature requests to [Issues](https://github.com/wagoebv/wagoe/issues/new/choose).
 
@@ -75,7 +75,7 @@ exist and CI calls them directly; you do not need to know which is which.
 
 ## Why Wagoe?
 
-**For developers:** 33 independently-publishable libraries on Clojars — use just `wagoe-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
+**For developers:** 34 independently-publishable libraries on Clojars — use just `wagoe-core` for validation utilities, or go full-stack with JWT + MFA auth, auto-generated CRUD UIs, background jobs, multi-tenancy, real-time WebSockets, and more. Every library follows the same FC/IS structure, making any Wagoe codebase instantly familiar.
 
 **Ship faster:** The scaffolder generates fully structured modules (entity + routes + tests) in seconds. The admin UI auto-generates CRUD interfaces from your schema — no manual forms. Built-in observability, RFC 5988 pagination, and declarative interceptors mean you write business logic, not plumbing. AI tooling (`bb scaffold ai`, and the experimental `bb ai gen-tests` and `bb ai sql`) handles the repetitive parts.
 
@@ -128,7 +128,7 @@ Each library also has its own `AGENTS.md` with library-specific documentation.
 
 ## Libraries
 
-Wagoe is a monorepo of **33 independently publishable libraries**, application and development tooling alike:
+Wagoe is a monorepo of **34 independently publishable libraries**, application and development tooling alike:
 
 | Library | Description |
 |---------|-------------|
@@ -136,6 +136,7 @@ Wagoe is a monorepo of **33 independently publishable libraries**, application a
 | [core](libs/core/) | Foundation: validation, utilities, interceptor pipeline, feature flags |
 | [observability](libs/observability/) | Logging, metrics, error reporting (Datadog, Sentry) |
 | [platform](libs/platform/) | HTTP, database, CLI infrastructure |
+| [platform-sql](libs/platform-sql/) | JDBC adapters, migrations, seeding and leases, without the HTTP stack |
 | [user](libs/user/) | Authentication, authorization, MFA, session management |
 | [admin](libs/admin/) | Auto-generated CRUD admin UI (Hiccup + HTMX) |
 | [storage](libs/storage/) | File storage: local filesystem, S3 and GCS |

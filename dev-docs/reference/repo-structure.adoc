@@ -233,7 +233,7 @@ libs/user/
 [source]
 ----
 wagoe/
-├── libs/                        # All 33 publishable libraries (+ e2e, an in-repo test harness)
+├── libs/                        # All 34 publishable libraries (+ e2e, an in-repo test harness)
 │   ├── core/                    # Foundation utilities, validation
 │   ├── observability/           # Logging, metrics, error reporting
 │   ├── platform/                # HTTP, database, CLI infrastructure
@@ -321,10 +321,10 @@ realtime --> i18n
 storage  --> core, observability, platform
 
 ;; Domain modules
-user     --> config, core, email, external, i18n, observability, platform, shared-ui, tenant
+user     --> config, core, email, i18n, observability, platform, shared-ui, tenant
 admin    --> core, events, i18n, platform, shared-ui, ui-style, user
 workflow --> admin, core, i18n, platform, shared-ui, user
-search   --> admin, core, i18n, platform, shared-ui
+search   --> core, i18n, platform-sql
 payments, geo, reports, audience, scaffolder --> core
 ----
 

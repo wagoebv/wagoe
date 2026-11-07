@@ -7,9 +7,9 @@
    - Tenant activation/suspension
    
    All routes require the global admin role (BOU-568)."
-  (:require [wagoe.platform.core.http.access :as access]
+  (:require [wagoe.core.http.access :as access]
             [wagoe.platform.core.http.client-ip :as client-ip]
-            [wagoe.platform.core.http.errors :as errors]
+            [wagoe.core.http.errors :as errors]
             [wagoe.platform.ports.privacy :as privacy]
             [wagoe.tenant.core.audit :as audit]
             [wagoe.tenant.ports :as tenant-ports]

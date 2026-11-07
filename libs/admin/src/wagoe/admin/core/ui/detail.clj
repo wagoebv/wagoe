@@ -384,7 +384,7 @@
                              (get-in child-cfg [:fields field])
                              (get errors field)
                              display))]
-     [:button.button.secondary {:type "button" "hx-on:click" "this.closest('.child-row').remove()"}
+     [:button.button.secondary {:type "button" :data-remove-closest ".child-row"}
       (icons/icon :trash {:size 14})
       [:t :admin/button-remove-row]]]))
 
@@ -584,11 +584,7 @@
                :x-on:input "track()"
                :x-on:change "track()"
                :x-on:keydown.meta.s.window.prevent "save()"
-               :x-on:keydown.ctrl.s.window.prevent "save()"
-               ;; The form's own save only: a field's live check bubbles up here too
-               "hx-on::afterRequest" (str "if (event.detail.successful && event.detail.elt === this) { localStorage.setItem('"
-                                          optional-details-key
-                                          "', 'false'); }")}
+               :x-on:keydown.ctrl.s.window.prevent "save()"}
               ;; htmx sends url-encoded otherwise, and the file never arrives
               (when (or (uploads? entity-config editable-fields)
                         (some (fn [{:keys [rel]}] (uploads? (:entity-config rel) (:fields rel))) nested))

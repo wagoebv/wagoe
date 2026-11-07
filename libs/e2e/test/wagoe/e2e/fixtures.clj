@@ -6,7 +6,8 @@
    the running test-profile server (port 3100). The returned SeedResult
    (tenant/admin/user with plain-text passwords) is bound to `*seed*` so
    individual tests can read credentials without re-seeding."
-  (:require [wagoe.e2e.helpers.reset :as reset]))
+  (:require [com.blockether.spel.page :as page]
+            [wagoe.e2e.helpers.reset :as reset]))
 
 (def ^:dynamic *seed*
   "Per-test seed result. Bound by `with-fresh-seed` to the parsed body
@@ -21,3 +22,10 @@
   (let [seed (reset/reset-db!)]
     (binding [*seed* seed]
       (f))))
+
+(defn wait-for-js
+  "`page/wait-for-function` for a JavaScript expression. Playwright evals an
+   expression string in the page, which script-src 'self' refuses (BOU-898);
+   a function string goes over CDP instead."
+  [pg expr opts]
+  (page/wait-for-function pg (str "() => (" expr ")") opts))

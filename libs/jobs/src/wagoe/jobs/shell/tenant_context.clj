@@ -22,13 +22,24 @@
      ;; Process job with tenant context
      (tenant-jobs/process-tenant-job! job handler-fn db-ctx tenant-service)
    
-   See ADR-004 for architecture details (lines 525-554)."
+   See ADR-004 for architecture details (lines 525-554).
+
+   Needs wagoe-tenant on the classpath, which jobs no longer depends on: its
+   ports are resolved when called, and every function here takes a tenant
+   service or provider, which only that library makes (BOU-931)."
   (:require [wagoe.jobs.ports :as ports]
             [wagoe.platform.database :as db]
             [wagoe.platform.ports.database :as db-ports]
-            [wagoe.tenant.ports :as tenant-ports]
             [wagoe.jobs.shell.worker :as worker]
             [clojure.tools.logging :as log]))
+
+;; Late-bound: jobs does not declare tenant, and these run only with a tenant
+;; service or provider, which only tenant makes (BOU-931).
+(defn- get-tenant [tenant-service tenant-id]
+  ((requiring-resolve 'wagoe.tenant.ports/get-tenant) tenant-service tenant-id))
+
+(defn- with-tenant-schema [provider db-ctx schema f]
+  ((requiring-resolve 'wagoe.tenant.ports/with-tenant-schema) provider db-ctx schema f))
 
 ;; =============================================================================
 ;; Job Creation with Tenant Context
@@ -124,7 +135,7 @@
                  {:job-id (:id job)
                   :tenant-id tenant-id})
 
-      (if-let [tenant (tenant-ports/get-tenant tenant-service tenant-id)]
+      (if-let [tenant (get-tenant tenant-service tenant-id)]
         {:tenant-id tenant-id
          :tenant-slug (:slug tenant)
          :tenant-schema (:schema-name tenant)
@@ -228,7 +239,7 @@
                              :message "Tenant jobs require tenant-schema-provider parameter"})))
 
           ;; Use protocol method to execute in tenant schema
-          (tenant-ports/with-tenant-schema tenant-schema-provider db-ctx tenant-schema
+          (with-tenant-schema tenant-schema-provider db-ctx tenant-schema
             (fn [tx]
               ;; Handler receives args and db context with transaction
               (binding [db/*tenant-id* tenant-id]
@@ -296,14 +307,16 @@
   (fn [job]
     (process-tenant-job! job handler-fn db-ctx tenant-service tenant-schema-provider)))
 
-(defn tenant-runner
+(defn ^:deprecated tenant-runner
   "The worker's `:tenant-runner`: (fn [tenant-id f]) that calls `f` in one
    transaction on the tenant's schema, with `db/*tenant-id*` bound. Throws when
    the tenant is gone or the database has no schemas, so a tenant's job never
-   runs against public."
+   runs against public.
+
+   Deprecated: use tenant's `:wagoe/in-tenant` (BOU-931)."
   [db-ctx tenant-service tenant-schema-provider]
   (fn [tenant-id f]
     (let [{:keys [tenant-schema]} (extract-tenant-context {:metadata {:tenant-id tenant-id}}
                                                           tenant-service)]
-      (tenant-ports/with-tenant-schema tenant-schema-provider db-ctx tenant-schema
+      (with-tenant-schema tenant-schema-provider db-ctx tenant-schema
         (fn [_tx] (binding [db/*tenant-id* tenant-id] (f)))))))

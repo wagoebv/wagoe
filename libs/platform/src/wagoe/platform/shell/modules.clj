@@ -9,7 +9,8 @@
   For now, only the `:user` module is supported."
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [integrant.core :as ig]))
+            [integrant.core :as ig]
+            [wagoe.platform.shell.module-registry :as registry]))
 
 (defn enabled-modules
   "Return the vector of enabled modules based on app config.
@@ -461,38 +462,12 @@
 ;; declares which modules it wants — not how they are built.
 
 (def framework-modules
-  "`:active` key -> the library that owns it.
-
-   The wiring namespace is derived (`wagoe.<lib>.shell.module-wiring`) rather
-   than listed, so a new module is one entry. Four keys predate the convention
-   and cannot be derived from their own name; they are spelled out.
-
-   These are keyword-to-string pairs, not namespace loads: platform still
-   depends on none of these libraries, and `bb check:isolation` still passes."
-  (into {:wagoe/payment-provider    "payments"
-         :wagoe/ai-service          "ai"
-         :wagoe/geo-service         "geo"
-         :wagoe.external/smtp       "external"
-         :wagoe.external/imap       "external"
-         :wagoe.external/twilio     "external"
-         :wagoe.external/ftps       "external"
-         :wagoe.external/soap       "external"
-         :wagoe/dev-error-enricher  "devtools"
-         :wagoe/dashboard           "devtools"}
-        (map (juxt #(keyword "wagoe" %) identity))
-        ["email" "i18n" "user" "cache" "tenant" "admin" "workflow" "search" "events"
-         "push" "audience" "storage" "jobs" "realtime" "reports" "calendar"
-         "ui-style" "webhooks"]))
+  "`:active` key -> the library that owns it. See `registry/framework-modules`."
+  registry/framework-modules)
 
 (def always-on-modules
-  "Modules every application gets whether or not its config mentions them.
-
-   Both fall back to a working default — the logging email sender, an
-   English-only catalogue — and the HTTP handler takes a ref to i18n's
-   middleware unconditionally, so leaving them out is not an option an
-   application has. They are modules rather than core components because the
-   wiring lives in their own library, and platform depends on neither."
-  #{:wagoe/email :wagoe/i18n})
+  "Modules every application gets. See `registry/always-on-modules`."
+  registry/always-on-modules)
 
 (def dev-only-modules
   "Modules that refuse to assemble outside `:wagoe/profile :dev`, and why.
@@ -567,24 +542,10 @@
    library is a real error and throws."
   #{:wagoe/dev-error-enricher :wagoe/dashboard})
 
-(defn- module-entries
-  "The framework modules `active` switches on, as [key lib] pairs.
-
-   `extra` names modules an application enables in code rather than in config;
-   projects generated before BOU-667 enable user this way."
-  [active extra]
-  (->> framework-modules
-       (filter (fn [[k _]] (or (contains? extra k)
-                               (and (contains? active k)
-                                    (not (false? (:enabled? (get active k))))))))
-       (sort-by key)))
-
-(defn enabled-libraries
-  "The libraries whose framework modules `active` switches on, or `extra`
-   enables in code, as names (\"geo\", \"workflow\"). Always-on ones included."
-  ([active] (enabled-libraries active #{}))
-  ([active extra]
-   (into #{} (map val) (module-entries active (into always-on-modules extra)))))
+(def ^{:arglists '([active] [active extra])} enabled-libraries
+  "The libraries whose framework modules `active` switches on. See
+   `registry/enabled-libraries`."
+  registry/enabled-libraries)
 
 (defn- module-graph
   "Ask one module for its graph, or fall back to passing its settings through.
@@ -627,7 +588,7 @@
    `load-wiring!` and `resolve-var` are injected so this is testable without a
    module on the classpath; `system-config` passes the real ones."
   [active {:keys [extra-modules] :as ctx} load-wiring! resolve-var]
-  (let [enabled (into #{} (map key) (module-entries active extra-modules))
+  (let [enabled (into #{} (map key) (registry/module-entries active extra-modules))
         ctx     (assoc ctx :enabled enabled)]
     (reduce
      (fn [acc [k lib]]
@@ -652,4 +613,4 @@
                         " from :active in resources/conf/<env>/config.edn.")
                    {:type :wagoe/module-library-missing :module-key k :namespace (str wiring)})))))
      no-graph
-     (module-entries active extra-modules))))
+     (registry/module-entries active extra-modules))))

@@ -169,8 +169,9 @@ interceptor metadata.
   three used to define `validate-with-transform`, and the one in
   `wagoe.core.validation` chose its return shape at runtime from
   `WAG_DEVEX_VALIDATION` — both are gone.
-- **`default-error-mappings` lives in `interceptor-context`**, inlined there on
-  purpose to avoid a `core → platform` circular dependency — do not re-home it.
+- **`default-error-mappings` lives in `wagoe.core.http.error-status`**. The
+  vars of that name in `interceptor-context` and platform's `problem-details`
+  point at it (BOU-871), so there is one table.
 
 ---
 

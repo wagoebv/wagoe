@@ -19,7 +19,7 @@
 
 (def ^:private mentions-read-elsewhere
   "Code tests naming a docs-only file without reading the root copy."
-  {"libs/platform/test/wagoe/platform/shell/database/migrations_test.clj"
+  {"libs/platform-sql/test/wagoe/platform/shell/database/migrations_test.clj"
    "writes a scratch README.md into a temp migrations dir"
    "libs/workflow/test/wagoe/workflow/shell/service_test.clj"
    "reads libs/workflow/README.md, relative to the library"
@@ -84,13 +84,22 @@
 
 (def ^:private root (if (fs/exists? "libs/tools") "." "../.."))
 
+(def ^:private repo-graph (delay (sut/dependency-graph root)))
+
 (deftest ^:unit every-library-test-job-is-gated-on-its-own-library
-  (let [graph (sut/dependency-graph root)
+  (let [graph @repo-graph
         gated (sut/gated-jobs (slurp (str root "/.github/workflows/ci.yml")) (set (keys graph)))]
     (is (<= 30 (count gated)) "the per-library jobs lost their gate")
     (doseq [[job lib] gated]
       (is (#{(str "test-" lib) ({"test" "test-test-kit" "wagoe-mcp" "test-mcp"} lib)} job)
           (str job " is gated on " lib)))))
+
+(deftest ^:unit platform-depends-on-platform-sql-not-the-reverse
+  ;; platform-sql's namespaces and tests are `wagoe.platform.*` (BOU-934).
+  (let [graph @repo-graph]
+    (is (contains? (get-in graph ["platform" :src]) "platform-sql"))
+    (is (not-any? #(contains? % "platform") (vals (get graph "platform-sql"))))
+    (is (contains? (sut/libs-to-test graph ["libs/platform-sql/src/x.clj"]) "platform"))))
 
 (deftest ^:unit platform-reaches-devtools-in-one-place
   ;; The ["platform" "devtools"] false edge rests on this: request capture,

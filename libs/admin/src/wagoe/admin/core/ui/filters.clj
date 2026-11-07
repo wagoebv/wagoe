@@ -491,7 +491,7 @@
              :hx-swap    "outerHTML"
              :hx-push-url "true"
              :hx-include ".toolbar-search .search-input, #entity-table-container .table-sort input"
-             "hx-on::after-request" "if (event.detail.successful && event.detail.elt === this) window.AdminUX.closeDrawer()"}
+             :data-success-event "admin:close-drawer"}
       [:div {:class "filter-fields"}
        (for [field ordered]
          (drawer-field entity-name field (filter-field-config entity-config field) (get current field)))]
@@ -504,5 +504,5 @@
                  :hx-swap   "outerHTML"
                  :hx-push-url "true"
                  :hx-include ".toolbar-search .search-input, #entity-table-container .table-sort input"
-                 "hx-on::after-request" "if (event.detail.successful) window.AdminUX.closeDrawer()"}
+                 :data-success-event "admin:close-drawer"}
         [:t :admin/button-clear-all-filters]]]]]))

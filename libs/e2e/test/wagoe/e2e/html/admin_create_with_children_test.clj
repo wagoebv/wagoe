@@ -39,7 +39,7 @@
 
     (testing "a row is added through HTMX"
       (loc/click (page/locator pg "fieldset.child-rows button[hx-get]"))
-      (page/wait-for-function pg (str "document.querySelectorAll(\"" description-inputs "\").length === 2")
+      (fx/wait-for-js pg (str "document.querySelectorAll(\"" description-inputs "\").length === 2")
                               {:timeout 10000.0 :polling 50.0})
       (is (= 2 (rows pg))))
     (loc/fill (loc/nth-element (page/locator pg description-inputs) 1) "Travel")

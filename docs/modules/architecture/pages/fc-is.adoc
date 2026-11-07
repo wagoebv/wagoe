@@ -84,6 +84,14 @@ The most common violation is when a core namespace requires a shell namespace (f
 `bb check:fcis` catches this on every commit, but the structure is self-enforcing if you ask:
 *"Can I test this function without any mocks?"*
 
+=== core/ and ports know no SQL
+
+Building a HoneySQL map is pure, but it ties the core to a SQL store, and a SQL type in a port signature rules out any other store behind that port.
+So neither `core/` nor `ports.clj` may require `honey.sql`, `next.jdbc` or `wagoe.platform.database`, and a port may not type an argument or return as a HoneySQL map or a `next.jdbc` datasource or transaction.
+A store handle such as `tx` may still pass through a port, as long as the port does not say what it is: "an open transaction of the store", not "a next.jdbc transaction".
+`bb check:fcis` fails on a require or a port arglist, and warns on a docstring.
+The few places where SQL is the point, such as the SQL implementation itself, are listed under `:allow-sql` in `.wagoe/check-fcis.edn`, each with a `:why`.
+
 == Why this matters
 
 === Tests without mocks
@@ -112,7 +120,7 @@ not touching any business logic.
 
 [source,bash]
 ----
-# FC/IS gate: core requires (an allowlist), throws, mutable state, non-determinism
+# FC/IS gate: core requires (an allowlist), throws, mutable state, non-determinism, SQL in core and ports
 bb check:fcis
 ----
 

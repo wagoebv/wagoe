@@ -1,8 +1,5 @@
 (ns wagoe.search.core.query-test
-  "Unit tests for query sanitization and SQL builder functions."
   (:require [clojure.test :refer [deftest testing is]]
-            [clojure.string :as str]
-            [wagoe.platform.shell.adapters.database.common.adapter :as adapter]
             [wagoe.search.core.query :as query]))
 
 ;; =============================================================================
@@ -52,7 +49,7 @@
     (is (not (query/empty-query? "  widget  ")))))
 
 ;; =============================================================================
-;; build-postgres-search-sql
+;; filter-terms
 ;; =============================================================================
 
 (deftest ^:unit build-postgres-search-sql-test

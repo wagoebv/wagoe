@@ -63,20 +63,6 @@
   [config]
   (get (wagoe-config/app-config config) :secure-cookies? true))
 
-(defn- escape-js-string
-  "Escape a string for safe embedding inside a JavaScript single-quoted
-   string literal within a <script> tag. Prevents XSS via quote-breaking
-   and </script> tag injection."
-  [s]
-  (-> (str s)
-      (str/replace "\\" "\\\\")
-      (str/replace "'" "\\'")
-      (str/replace "\"" "\\\"")
-      (str/replace "\n" "\\n")
-      (str/replace "\r" "\\r")
-      (str/replace "\u0000" "\\u0000")
-      (str/replace "</" "<\\/")))
-
 (defn- safe-return-url
   "Validate and sanitize return URL to prevent open redirect attacks.
    
@@ -328,7 +314,8 @@
                         (catch Exception _ nil)))]
         (if session
           (response/redirect (landing-path config (:user session) request))
-          (html-response request (user-ui/web-root-page {})))))))
+          (html-response request (user-ui/web-root-page
+                                  {:logo-url (get-in config [:wagoe/settings :logo-url])})))))))
 
 (defn- users-list
   "The users table's users, table query, total and filters for `query-params`."
@@ -1068,21 +1055,8 @@
                                   false)))
                 flash-msg (str "User " (:name user-result) " created"
                                (when email-sent?
-                                 (str ", welcome email sent to " (:email user-result))))
-                toast-json (str "{\"type\":\"success\",\"message\":\""
-                                (escape-js-string flash-msg) "\"}")
-                ;; Return inline script that stores toast + redirects.
-                ;; This avoids HX-Redirect (which skips XHR event listeners)
-                ;; and cached JS issues (inline script always executes fresh).
-                body (str "<script>"
-                          "try{sessionStorage.setItem('pendingToast','"
-                          (escape-js-string toast-json)
-                          "')}catch(e){}"
-                          "window.location.href='" (escape-js-string return-to) "';"
-                          "</script>")]
-            (-> (response/response body)
-                (response/status 200)
-                (response/header "Content-Type" "text/html; charset=utf-8")))
+                                 (str ", welcome email sent to " (:email user-result))))]
+            (redirect-with-toast request return-to :success flash-msg))
           (catch clojure.lang.ExceptionInfo e
             ;; A duplicate email and a password the policy rejects both pass the
             ;; request schema and are refused by the service. They used to reach
