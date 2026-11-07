@@ -87,7 +87,7 @@
 (def AdminFieldWidget
   "Widgets the admin renders — wagoe.admin.schema/FieldWidget."
   [:enum :text-input :email-input :password-input :number-input :checkbox :select
-   :multiselect :textarea :date-input :datetime-input :file-input :color-input
+   :multiselect :textarea :markdown :date-input :datetime-input :file-input :color-input
    :url-input :hidden])
 
 (def AdminFieldOverride
@@ -112,6 +112,7 @@
    [:placeholder   {:optional true} :string]
    [:width         {:optional true} [:int {:min 1}]]
    [:rows          {:optional true} :any]
+   [:editor-script {:optional true} :string]
    ;; The overview (ADR-040)
    [:display       {:optional true} [:enum :boolean :count :date :datetime :email :enum :identifier
                                      :money :number :percent :relation :text :title :url]]
