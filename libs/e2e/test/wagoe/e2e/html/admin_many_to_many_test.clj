@@ -49,11 +49,11 @@
 
     (testing "each watcher picked is a chip; picking clears the text"
       (pick! pg watchers "Customer 007")
-      (page/wait-for-function pg (str "document.querySelectorAll(\"" watcher-chips "\").length === 1")
+      (fx/wait-for-js pg (str "document.querySelectorAll(\"" watcher-chips "\").length === 1")
                               {:timeout 10000.0 :polling 50.0})
       (is (= "" (loc/input-value (page/locator pg watchers))))
       (pick! pg watchers "Customer 008")
-      (page/wait-for-function pg (str "document.querySelectorAll(\"" watcher-chips "\").length === 2")
+      (fx/wait-for-js pg (str "document.querySelectorAll(\"" watcher-chips "\").length === 2")
                               {:timeout 10000.0 :polling 50.0})
       (is (= 2 (chips pg))))
 

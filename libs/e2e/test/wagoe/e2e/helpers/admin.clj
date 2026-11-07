@@ -5,6 +5,7 @@
   (:require [clojure.string :as str]
             [com.blockether.spel.page :as page]
             [com.blockether.spel.locator :as loc]
+            [wagoe.e2e.fixtures :as fx]
             [wagoe.e2e.helpers.reset :as reset]))
 
 (def ^:private base-url (reset/default-base-url))
@@ -102,7 +103,7 @@
    answer was empty\" is the shape both admin search tests failed in —
    intermittently, which is worse (BOU-297)."
   [pg marked selector]
-  (let [result (page/wait-for-function
+  (let [result (fx/wait-for-js
                 pg
                 ;; The swap only has to clear one of the marks: an innerHTML
                 ;; swap keeps the target and drops its children, an outerHTML
@@ -172,7 +173,7 @@
    flight: an element swapped in a moment ago has no htmx listener yet, and a
    click or change before that requests nothing."
   [pg selector]
-  (let [ready (page/wait-for-function
+  (let [ready (fx/wait-for-js
                pg
                (str "(() => { const s = document.querySelector(\"" selector "\");"
                     " return !!(s && s['htmx-internal-data'])"

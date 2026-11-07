@@ -40,7 +40,7 @@
                        .map(v => v.id + ': ' + v.nodes.slice(0, 3).map(n => n.target.join(' ') + ' (' + n.failureSummary + ')').join(', ')))"))
 
 (defn- wait-for! [pg expr what]
-  (let [r (page/wait-for-function pg expr {:timeout 10000.0 :polling 50.0})]
+  (let [r (fx/wait-for-js pg expr {:timeout 10000.0 :polling 50.0})]
     (when (map? r)
       (throw (ex-info (str "never true: " what) {:type :wagoe.e2e/timeout :expr expr})))))
 

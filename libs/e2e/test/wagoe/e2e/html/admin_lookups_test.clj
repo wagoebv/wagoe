@@ -35,7 +35,7 @@
   (loc/click (page/locator pg "button.filter-open"))
   ;; The drawer is swapped in: its combobox works once htmx and Alpine have
   ;; processed it, a moment after it appears.
-  (page/wait-for-function pg (str "(() => { const i = document.querySelector('#filter-customer-id');"
+  (fx/wait-for-js pg (str "(() => { const i = document.querySelector('#filter-customer-id');"
                                   " return !!(i && i['htmx-internal-data'] && i.closest('.combobox')._x_dataStack); })()")
                           {:timeout 10000.0 :polling 50.0})
   (pick! pg "#filter-customer-id" customer customer)
