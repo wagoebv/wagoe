@@ -137,7 +137,7 @@
                       :checked (boolean value)
                       :autofocus true}])
 
-       (= widget-type :textarea)
+       (#{:textarea :markdown} widget-type)
        [:textarea.inline-input
         {:name (name field)
          :required required?
@@ -210,7 +210,7 @@
                        :class "error"
                        :autofocus true}])
 
-        (= widget-type :textarea)
+        (#{:textarea :markdown} widget-type)
         [:textarea.inline-input.error
          {:name (name field)
           :required required?

@@ -191,10 +191,9 @@ to `*err*` and records emails in-memory instead of delivering them. Inspect with
 5. **Gmail** requires a 16-char App Password, not the account password.
 6. **Port ↔ transport security:** 587 → `:tls? true`; 465 → `:ssl? true`
    (`:tls? false`); 25 → both false. `create-smtp-sender` defaults `:tls? true`.
-7. **HTML body:** the domain `Email` carries a plain-text `:body` only, and
-   `email->outbound` does not set `:html-body`. `libs/external`'s adapter *can*
-   render HTML multipart when `:html-body` is present — reach for the external
-   transport directly (or extend `email->outbound`) if you need HTML.
+7. **HTML body:** put the HTML beside the text as `:html-body` (BOU-???);
+   `email->outbound` passes it on and the external MIME builder sends both as
+   `multipart/alternative`. Keep `:body`: clients that show no HTML read it.
 8. **Attachments are supported** (BOU-150): put an `:attachments` vector on the
    `Email`; `email->outbound` passes it through to the external MIME builder.
    (Earlier docs claiming "no attachment support" are stale.)

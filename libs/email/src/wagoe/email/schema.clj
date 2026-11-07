@@ -40,6 +40,8 @@
    [:from EmailAddress]
    [:subject [:string {:min 1}]]
    [:body :string]
+   ;; The same mail as HTML, sent beside :body as multipart/alternative.
+   [:html-body {:optional true} :string]
    [:headers {:optional true} [:map-of :keyword :string]]
    [:attachments {:optional true} [:vector Attachment]]
    [:created-at inst?]
@@ -53,6 +55,8 @@
    [:from EmailAddress]
    [:subject [:string {:min 1}]]
    [:body :string]
+   ;; The same mail as HTML, sent beside :body as multipart/alternative.
+   [:html-body {:optional true} :string]
    [:headers {:optional true} [:map-of :keyword :string]]
    [:attachments {:optional true} [:vector Attachment]]
    [:metadata {:optional true} [:map-of :keyword :any]]])
