@@ -113,6 +113,19 @@
       (is (some? (:user body)))
       (is (not-any? #{:mfa-backup-codes-used :mfaBackupCodesUsed} (keys (:user body)))))))
 
+(deftest ^:contract ^:security a-login-response-carries-no-secret
+  ;; Anywhere in the body, on both login routes (BOU-899)
+  (let [{:keys [svc] :as f} (fixture)
+        secret #{:password-hash :passwordHash :mfa-secret :mfaSecret
+                 :mfa-backup-codes :mfaBackupCodes :mfa-backup-codes-used :mfaBackupCodesUsed}]
+    (update-bob! f {:mfa-secret "JBSWY3DPEHPK3PXP" :mfa-backup-codes ["hash-of-a-code"]})
+    (doseq [[path handler] (login-routes svc)]
+      (testing path
+        (let [resp (post handler {:email "bob@x.org" :password password})
+              ks   (->> (tree-seq coll? seq (:body resp)) (filter map?) (mapcat keys) set)]
+          (is (= 200 (:status resp)))
+          (is (empty? (filter secret ks))))))))
+
 (deftest ^:unit a-lockout-auth-shell-reports-is-still-a-429
   ;; A lockout set by a concurrent request reaches us as :authentication-failed.
   (let [enter (:enter user-interceptors/format-session-creation-response)

@@ -42,6 +42,8 @@ for what is public API, what is internal, and how deprecations are announced.
   `wagoe-platform` depends on it; nothing to change.
 - **`wagoe.audience.ports/IUserQuery`**: `query-user-ids` takes the audience's filters as data (BOU-875).
   A custom `IUserDataSource` should implement it; the service uses it when present.
+- **`bb release:check`**: a release with an open Urgent/High security issue, a known vulnerability or no `### Security`
+  section in its entry does not publish (BOU-899). Nothing to change in an app.
 
 ### Fixed
 
