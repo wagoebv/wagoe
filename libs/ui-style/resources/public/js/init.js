@@ -13,6 +13,8 @@
 // 5. Admin sidebar: puts the stored open/closed state on <html> as
 //    data-sidebar before first paint, so the page never shows the other state
 //    first. The old pin keys (BOU-761) are read once: pinned and collapsed is closed.
+// 6. Admin sidebar width: the width the user dragged it to (admin-ux.js), as
+//    --nav-width on <html>, before first paint.
 
 try{var t=localStorage.getItem('wagoe-theme')||((window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches)?'dark':'light');document.documentElement.setAttribute('data-theme',t)}catch(e){}
 document.addEventListener('DOMContentLoaded',function(){for(var l=document.querySelectorAll('link[media=print]'),i=0;i<l.length;i++)l[i].media='all'})
@@ -30,3 +32,4 @@ try{var z=Intl.DateTimeFormat().resolvedOptions().timeZone;if(z)document.cookie=
   }catch(e){}
   document.documentElement.setAttribute('data-sidebar',state==='closed'?'closed':'open');
 })();
+try{var w=parseInt(localStorage.getItem('wagoe-admin-sidebar-width'),10);if(w>=180&&w<=480)document.documentElement.style.setProperty('--nav-width',w+'px')}catch(e){}

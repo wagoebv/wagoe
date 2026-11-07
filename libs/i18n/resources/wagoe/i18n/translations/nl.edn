@@ -789,6 +789,7 @@
  :admin/flash-bulk-deleted-partial "{count} verwijderd, {failed} mislukt"
  :admin/breadcrumb-admin           "Admin"
  :admin/sidebar-toggle-hint        "Menu tonen of verbergen (Ctrl+B)"
+ :admin/sidebar-resize            "Sleep om het menu breder of smaller te maken; dubbelklik herstelt"
  :admin/audit-trail-title          "Audittrail"
  :admin/audit-trail-description    "Bekijk systeemactiviteit en auditlogboeken."
  :admin/groups-title "Groepen"

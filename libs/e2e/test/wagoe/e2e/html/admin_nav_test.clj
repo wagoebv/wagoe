@@ -1,5 +1,5 @@
 (ns wagoe.e2e.html.admin-nav-test
-  "The admin sidebar groups pages by module, remembers which groups are open,
+  "The admin sidebar groups pages by module, keeps one group open at a time,
    and shows a collapsed group's pages in a flyout."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [com.blockether.spel.core :as spel]
@@ -39,17 +39,18 @@
     (testing "an entity no module claims is under Other"
       (is (= 1 (loc/count-elements (page/locator pg "[x-data^=\"navGroup('other'\"] a[href='/web/admin/e2e-orders']")))))
 
-    (testing "a group opened by keyboard stays open on the next page and after a reload"
+    (testing "opening a group by keyboard closes the others"
       (loc/press (toggle pg "tenant") "Enter")
       (is (= "true" (expanded pg "tenant")))
       (is (loc/is-visible? (link pg "/web/admin/tenants")))
+      (is (= "false" (expanded pg "user")))
+      (is (not (loc/is-visible? (link pg "/web/admin/groups")))))
+
+    (testing "the next page opens its own group, and only that one"
       (page/navigate pg (admin/admin-url "/e2e-orders"))
       (await! pg "document.querySelector(\"[x-data^=\\\"navGroup('other'\\\"] > button\")?.getAttribute('aria-expanded') === 'true'")
-      (is (= "true" (expanded pg "tenant")))
-      (is (= "false" (expanded pg "user")) "no longer the current page's group")
-      (page/reload pg)
-      (await! pg "!!window.Alpine && !!document.querySelector('.nav-module')")
-      (is (= "true" (expanded pg "tenant"))))
+      (is (= "false" (expanded pg "tenant")))
+      (is (= "false" (expanded pg "user"))))
 
     (testing "the current page's group opens again, though it was closed"
       (loc/click (toggle pg "other"))
@@ -80,3 +81,28 @@
                                ".map(a => [a.getAttribute('href'), a.querySelector('.entity-card-title, .dashboard-link-label').textContent]).sort()])"))]
       (is (seq dashboard))
       (is (= sidebar dashboard) "the same groups in the same order, with the same items and labels"))))
+
+(deftest ^:integration ^:e2e the-sidebar-width-can-be-set
+  (spel/with-testing-page [pg]
+    (admin/login-as-admin! pg fx/*seed*)
+    (page/navigate pg (admin/admin-url "/"))
+    (await! pg "!!window.Alpine && !!document.querySelector('.sidebar-resizer')")
+    (let [js     "Math.round(document.getElementById('admin-sidebar').getBoundingClientRect().width)"
+          ;; The width animates: wait for it to settle, then read it
+          width  (fn [w] (fx/wait-for-js pg (str js " === " w) {:timeout 5000.0})
+                   (page/evaluate pg js))
+          handle (page/locator pg ".sidebar-resizer")]
+      (is (= 240 (width 240)))
+      (is (= "240" (loc/get-attribute handle "aria-valuenow")))
+
+      (testing "arrow keys on the edge widen it, and the width survives a reload"
+        (loc/press handle "ArrowRight")
+        (is (= 256 (width 256)))
+        (page/reload pg)
+        (await! pg "!!document.querySelector('.sidebar-resizer')")
+        (is (= 256 (width 256)))
+        (is (= "256" (loc/get-attribute handle "aria-valuenow"))))
+
+      (testing "a double-click resets it"
+        (loc/dblclick handle)
+        (is (= 240 (width 240)))))))
