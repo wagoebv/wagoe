@@ -45,6 +45,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The stability page's opening line said Wagoe is at `1.0.1`** under a `1.1.1` table. It now points at the table,
+  the one version claim `check:versions` gates. Nothing to change.
 - **A successful storage upload or URL lookup went out unencoded** (BOU-930). Upgrade if you serve `wagoe-storage` routes.
 - **A CLI pipeline answered a rate limit or a refused login with a 500** (BOU-871): its error table had drifted from HTTP's.
   Nothing to change.

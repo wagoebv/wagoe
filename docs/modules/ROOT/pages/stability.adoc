@@ -2,8 +2,9 @@
 :description: What Wagoe promises about API stability, how versions are numbered, and how breaking changes are announced.
 
 This page states what you can rely on, what you cannot, and how a change that
-breaks you will reach you. It describes the framework as it is today — Wagoe is
-at `1.0.1`, and the surface below is the one it promises.
+breaks you will reach you. It describes the framework as it is today — the
+current version is in the table below, and the surface below is the one it
+promises.
 
 == Current status
 
