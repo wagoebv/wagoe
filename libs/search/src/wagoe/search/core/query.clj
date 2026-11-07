@@ -9,7 +9,8 @@
    Filter support: callers may pass a :filters map of keyword->string pairs.
    Filter values are matched against the JSON \"filters\" column using
    DB-appropriate JSON path syntax."
-  (:require [wagoe.search.core.index :as index]
+  (:require [cheshire.core :as json]
+            [wagoe.search.core.index :as index]
             [honey.sql :as sql]
             [clojure.string :as str]))
 
@@ -46,7 +47,10 @@
   "Build PostgreSQL WHERE conditions for a filter map.
 
    Each filter is rendered as:
-     AND d.filters::jsonb->>'<key>' = ?
+     AND d.filters::jsonb->>?::text = ?
+
+   The key is bound, not spliced: it comes from the request body, and a quote
+   in it would otherwise end the literal and OR past the tenant filter.
 
    A NULL filters column or absent key causes the condition to evaluate to
    NULL (which is falsy), so documents without that filter value are excluded.
@@ -58,12 +62,8 @@
   (if (empty? filters)
     [""]
     (let [sorted (sort-by (comp name first) (seq filters))
-          sql    (str/join " "
-                           (map (fn [[k _]]
-                                  (str "AND d.filters::jsonb->>'"
-                                       (index/filter-key->json-key k) "' = ?"))
-                                sorted))
-          params (mapv (fn [[_ v]] (str v)) sorted)]
+          sql    (str/join " " (repeat (count sorted) "AND d.filters::jsonb->>?::text = ?"))
+          params (into [] (mapcat (fn [[k v]] [(index/filter-key->json-key k) (str v)])) sorted)]
       (into [sql] params))))
 
 (defn- build-filter-sql-fallback
@@ -86,8 +86,11 @@
     [""]
     (let [sorted (sort-by (comp name first) (seq filters))
           sql    (str/join " " (map (fn [_] "AND INSTR(filters, ?) > 0") sorted))
+          ;; Encoded as filters->json stores it, so a quote or backslash in a
+          ;; value is escaped on both sides.
           params (mapv (fn [[k v]]
-                         (str "\"" (index/filter-key->json-key k) "\":\"" v "\""))
+                         (let [pair (json/generate-string {(index/filter-key->json-key k) (str v)})]
+                           (subs pair 1 (dec (count pair)))))
                        sorted)]
       (into [sql] params))))
 

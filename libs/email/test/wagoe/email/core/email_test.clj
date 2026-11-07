@@ -109,6 +109,18 @@
       (is (= "Hello" (:body result)))
       (is (inst? (:created-at result)))))
 
+  (testing "Prepare email with an HTML body beside the text one"
+    (let [result (email/prepare-email {:to "user@example.com" :from "sender@example.com" :subject "Test"
+                                       :body "Hello" :html-body "<p>Hello</p>"}
+                                      (UUID/randomUUID) (Instant/now))]
+      (is (= "Hello" (:body result)))
+      (is (= "<p>Hello</p>" (:html-body result)))))
+
+  (testing "No :html-body without one"
+    (is (not (contains? (email/prepare-email {:to "user@example.com" :from "sender@example.com" :subject "Test" :body "Hello"}
+                                             (UUID/randomUUID) (Instant/now))
+                        :html-body))))
+
   (testing "Prepare email with vector of recipients"
     (let [email-input {:to ["user1@example.com" "user2@example.com"]
                        :from "sender@example.com"
