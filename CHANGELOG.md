@@ -31,6 +31,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [1.1.2] — 2026-11-07
 
+### Security
+
+- **A search filter key could inject SQL on PostgreSQL** (BOU-875), and reach past the tenant filter. Upgrade if you serve
+  `wagoe-search` routes.
+
 ### Added
 
 - **An HTML body beside the text one**: `:html-body` on an email goes out as `multipart/alternative`.
