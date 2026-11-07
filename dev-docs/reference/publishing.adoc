@@ -254,6 +254,9 @@ GitHub Actions will:
 . **Require green CI on the tagged commit** — see <<ci-gate>> below; the release aborts in seconds if the commit was never tested
 . Build the Tailwind CSS bundle (required for the `ui-style` jar)
 . Check that every `build.clj` carries the release version (`bb deploy --check-versions`)
+. Refuse a release with an open Urgent or High security issue or bug in the Linear project "Security & stability",
+  a known vulnerability, or no `### Security` section in its CHANGELOG entry (`bb release:check`, BOU-899).
+  Needs the `LINEAR_API_KEY` secret (read-only) on the `release` environment
 . Run `bb deploy --missing` with the Clojars credentials, so a re-run skips what already landed
 . Check every artifact is on Clojars (`bb deploy --verify`)
 . Create a GitHub Release. A version with a stage (`1.1.0-rc-1`) is marked pre-release, so `/releases/latest`, which
@@ -360,6 +363,8 @@ Before pushing a release tag:
 * [ ] All quality gates pass: `bb check` (a failing gate always exits non-zero;
   `--ci` is accepted but no longer needed)
 * [ ] `CHANGELOG.md` updated
+* [ ] `bb release:check NEW` passes (`LINEAR_API_KEY` and `GITHUB_TOKEN` set); the version's entry has a
+  `### Security` section, saying None. if there is nothing
 * [ ] Version bumped with `bb bump NEW`, and `bb check:versions` passes
 * [ ] Changes committed and pushed to `main`
 * [ ] Local deploy works: `bb deploy core` (quick smoke check)

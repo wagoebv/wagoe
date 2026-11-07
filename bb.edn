@@ -18,6 +18,7 @@
              [wagoe.tools.test-all    :as test-all]
              [wagoe.tools.ci-changes  :as ci-changes]
              [wagoe.tools.check-vulns :as check-vulns]
+             [wagoe.tools.release-check :as release-check]
              [wagoe.tools.coverage    :as coverage]
              [wagoe.tools.test-services :as test-services]
              [wagoe.tools.i18n        :as i18n]
@@ -159,6 +160,8 @@
                  :task (check-jdk/-main)}
   check:vulns {:doc "Known vulnerabilities in every deps.edn, aliases included; needs GITHUB_TOKEN (bb check:vulns, BOU-451)"
                :task (check-vulns/-main)}
+  release:check {:doc "Before a release publishes: no open Urgent/High security issue or bug in Linear, check:vulns green, a ### Security section for the version; needs LINEAR_API_KEY and GITHUB_TOKEN (bb release:check [version], BOU-899)"
+                 :task (apply release-check/-main *command-line-args*)}
   ci:changes {:doc "Whether a PR changes code or only docs no code test reads (bb ci:changes <base-ref>, BOU-615)"
               :task (apply ci-changes/-main *command-line-args*)}
   check:roadmap {:doc "One roadmap, and it may not plan what scaling.adoc marks shipped (bb check:roadmap)"
