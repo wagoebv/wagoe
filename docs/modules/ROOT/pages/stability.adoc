@@ -323,6 +323,12 @@ depend on it rather than from this page afterwards.
 * Transitive dependencies. A library may stop bringing in another Wagoe library
   or a third-party artifact it does not use. Declare what you require yourself.
 
+== Security fixes
+
+Only the latest minor gets security fixes, in its next patch release. How to
+report a vulnerability, the timelines and what we publish are in
+https://github.com/wagoebv/wagoe/blob/main/SECURITY.md[SECURITY.md].
+
 == The HTTP server is Jetty
 
 `:wagoe/http-server` starts Jetty through `ring/ring-jetty-adapter` (Jetty 12).
