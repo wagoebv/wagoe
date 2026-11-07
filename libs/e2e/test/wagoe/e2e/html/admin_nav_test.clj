@@ -87,17 +87,22 @@
     (admin/login-as-admin! pg fx/*seed*)
     (page/navigate pg (admin/admin-url "/"))
     (await! pg "!!window.Alpine && !!document.querySelector('.sidebar-resizer')")
-    (let [width  "Math.round(document.getElementById('admin-sidebar').getBoundingClientRect().width)"
-          is-w   #(await! pg (str width " === " %))
+    (let [js     "Math.round(document.getElementById('admin-sidebar').getBoundingClientRect().width)"
+          ;; The width animates: wait for it to settle, then read it
+          width  (fn [w] (fx/wait-for-js pg (str js " === " w) {:timeout 5000.0})
+                   (page/evaluate pg js))
           handle (page/locator pg ".sidebar-resizer")]
-      (is-w 240)
+      (is (= 240 (width 240)))
+      (is (= "240" (loc/get-attribute handle "aria-valuenow")))
+
       (testing "arrow keys on the edge widen it, and the width survives a reload"
         (loc/press handle "ArrowRight")
-        (is-w 256)
+        (is (= 256 (width 256)))
         (page/reload pg)
         (await! pg "!!document.querySelector('.sidebar-resizer')")
-        (is-w 256))
+        (is (= 256 (width 256)))
+        (is (= "256" (loc/get-attribute handle "aria-valuenow"))))
 
       (testing "a double-click resets it"
         (loc/dblclick handle)
-        (is-w 240)))))
+        (is (= 240 (width 240)))))))

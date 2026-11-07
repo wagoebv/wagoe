@@ -1101,9 +1101,20 @@ document.addEventListener('alpine:init', function () {
     var handle = handleOf(e);
     if (!handle) return;
     root.style.removeProperty('--nav-width');
-    handle.removeAttribute('aria-valuenow');
+    handle.setAttribute('aria-valuenow', Math.round(width()));
     try {
       window.localStorage.removeItem(KEY);
     } catch (e2) { /* nothing stored */ }
   });
+
+  // The markup says the default width; init.js may have applied another
+  var sync = function () {
+    var handle = document.querySelector('.sidebar-resizer');
+    if (handle) handle.setAttribute('aria-valuenow', Math.round(width()));
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', sync);
+  } else {
+    sync();
+  }
 })();

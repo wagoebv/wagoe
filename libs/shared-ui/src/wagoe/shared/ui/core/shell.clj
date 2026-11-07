@@ -81,10 +81,14 @@
     [:div.admin-sidebar-footer
      (nav-link {:href home/*path*} :home [:t :admin/sidebar-dashboard])
      (nav-link {:href "/web"} :external-link [:t :admin/sidebar-main-site])]
-    ;; Drag, or arrow keys, to set the width (admin-ux.js)
+    ;; Drag, or arrow keys, to set the width (admin-ux.js). A focusable
+    ;; separator needs a value: the default, until admin-ux.js reads the real one.
     [:div.sidebar-resizer {:role             "separator"
                            :tabindex         "0"
                            :aria-orientation "vertical"
+                           :aria-valuemin    "180"
+                           :aria-valuemax    "480"
+                           :aria-valuenow    "240"
                            :aria-controls    "admin-sidebar"
                            :aria-label       [:t :admin/sidebar-resize]
                            :title            [:t :admin/sidebar-resize]}]]))
