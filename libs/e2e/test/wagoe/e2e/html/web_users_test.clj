@@ -50,7 +50,7 @@
             "the revoked session no longer signs anyone in")))))
 
 (defn- await! [pg js]
-  (is (not (map? (page/wait-for-function pg js {:timeout 5000.0}))) js))
+  (is (not (map? (fx/wait-for-js pg js {:timeout 5000.0}))) js))
 
 (defn- active-tab [pg]
   (str/trim (loc/inner-text (page/locator pg "nav.record-tabs a[aria-current='page']"))))

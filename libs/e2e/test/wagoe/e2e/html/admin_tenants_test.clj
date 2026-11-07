@@ -137,7 +137,7 @@
         (page/wait-for-selector pg ".form-field:has(input[name='name']) .field-errors" {:timeout 10000.0})
         (is (= "true" (loc/get-attribute (page/locator pg field) "aria-invalid")))
         (leave "Acme again")
-        (page/wait-for-function
+        (fx/wait-for-js
          pg "!document.querySelector(\".form-field:has(input[name='name']) .field-errors\")"
          {:timeout 10000.0 :polling 50.0})
         (is (nil? (loc/get-attribute (page/locator pg field) "aria-invalid")))
@@ -161,7 +161,7 @@
         (page/wait-for-selector pg "#delete-record-confirm[open]" {:timeout 5000.0})
         (is (= "cancel" (focused-value pg)) "focus starts on cancel")
         (loc/press (page/locator pg "#delete-record-confirm button[value='cancel']") "Escape")
-        (page/wait-for-function pg "!document.getElementById('delete-record-confirm').open"
+        (fx/wait-for-js pg "!document.getElementById('delete-record-confirm').open"
                                 {:timeout 5000.0 :polling 50.0})
         (is (= url (page/url pg)) "Esc sends no request")
         (is (= "delete-record-confirm" (focused-value pg)) "focus returns to the trigger")
@@ -189,6 +189,6 @@
       (page/wait-for-selector pg "#bulk-delete-confirm[open]" {:timeout 5000.0})
       (loc/click (page/locator pg "#bulk-delete-confirm button[value='confirm']"))
       ;; Skeleton rows stand in while the request runs
-      (page/wait-for-function pg "!document.querySelector(\"table.data-table tbody input[name='ids[]'], tr.skeleton-row\")"
+      (fx/wait-for-js pg "!document.querySelector(\"table.data-table tbody input[name='ids[]'], tr.skeleton-row\")"
                               {:timeout 10000.0 :polling 50.0})
       (is (zero? (admin/table-row-count pg))))))

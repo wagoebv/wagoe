@@ -5,6 +5,7 @@
    All tests are tagged ^:security ^:unit."
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.string :as str]
+            [clojure.java.io :as io]
             [wagoe.platform.core.csrf :as csrf]
             [wagoe.platform.core.http.problem-details :as problem-details]
             [wagoe.platform.shell.http.interceptors :as interceptors]
@@ -411,6 +412,11 @@
         (is (str/includes? csp "default-src 'self'"))
         (is (str/includes? csp "object-src 'none'"))
         (is (str/includes? csp "base-uri 'self'"))))
+    (testing "script-src is 'self' alone: no inline script, no eval (BOU-898)"
+      (let [script-src (->> (str/split (get headers "Content-Security-Policy") #";")
+                            (map str/trim)
+                            (filter #(str/starts-with? % "script-src")))]
+        (is (= ["script-src 'self'"] script-src))))
     (testing "referrer, cross-origin isolation, and feature policy are locked down"
       (is (= "strict-origin-when-cross-origin" (get headers "Referrer-Policy")))
       (is (= "same-origin" (get headers "Cross-Origin-Opener-Policy")))
@@ -423,3 +429,19 @@
       (is (= "DENY" (get-in resp [:headers "X-Frame-Options"]))
           "a routed response carries the security headers → interceptor is wired in")
       (is (some? (get-in resp [:headers "Strict-Transport-Security"]))))))
+
+(deftest ^:security ^:unit no-inline-script-in-ui-source-test
+  ;; script-src 'self' blocks these in the browser, silently. The devtools
+  ;; dashboard is its own server without the header, so it may.
+  (let [inline #"[\":]hx-on|[\":]on(click|dblclick|change|submit|input|load|error|key\w+|mouse\w+|focus|blur)[\s\"]|\[:script\s+(\(|\"|\{[^}]*\}\s+[\"(])|\"<script|\"javascript:"
+        files  (for [f     (file-seq (io/file "libs"))
+                     :let  [path (str f)]
+                     :when (and (re-find #"/src/.*\.cljc?$" path)
+                                (not (str/includes? path "libs/devtools/")))]
+                 f)
+        hits   (for [f        files
+                     [n line] (map-indexed vector (str/split-lines (slurp f)))
+                     :when    (re-find inline line)]
+                 (str f ":" (inc n)))]
+    (is (seq files) "run from the repo root")
+    (is (empty? hits) "use a data-* attribute that components.js handles")))
