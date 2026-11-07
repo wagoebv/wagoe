@@ -53,7 +53,7 @@
    :provided-by         "platform"
    :description         "JDBC adapters, migrations, seeding and leases, without the HTTP stack"
    :clojars             com.wagoe/wagoe-platform-sql
-   :version             "1.1.1"
+   :version             "1.1.2"
    :category            :core
    :tier                :stable
    :config-snippet      ""
