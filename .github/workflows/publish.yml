@@ -211,6 +211,15 @@ jobs:
       - name: Guard — source version matches the release
         run: bb deploy --check-versions "${{ steps.version.outputs.version }}"
 
+      # Every release closes the known security issues (BOU-899): none open in
+      # Linear, check:vulns green on this commit, and a ### Security section in
+      # the version's CHANGELOG entry. Before anything reaches Clojars.
+      - name: Guard — no open security issue, no known vulnerability
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bb release:check "${{ steps.version.outputs.version }}"
+
       # Deploy only artifacts not yet on Clojars at this version. Clojars
       # coordinates are immutable, so a re-run after a partial/transient failure
       # must skip already-published libs (re-deploying them 409s and aborts the
