@@ -325,9 +325,13 @@ depend on it rather than from this page afterwards.
 
 == Security fixes
 
-Only the latest minor gets security fixes, in its next patch release. How to
-report a vulnerability, the timelines and what we publish are in
-https://github.com/wagoebv/wagoe/blob/main/SECURITY.md[SECURITY.md].
+A release does not publish while an Urgent or High security issue is open or a
+dependency has a known vulnerability: `bb release:check` refuses it. Only the latest minor gets security fixes, in its
+next patch release. How to report a vulnerability, the timelines and what we
+publish are in
+https://github.com/wagoebv/wagoe/blob/main/SECURITY.md[SECURITY.md]; what the
+framework does for you, and the test behind each measure, is in
+xref:architecture:secure-by-default.adoc[Secure by Default].
 
 == The HTTP server is Jetty
 
