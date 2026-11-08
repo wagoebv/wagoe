@@ -1,7 +1,6 @@
 (ns wagoe.tenant-isolation-registry-test
   "A library that carries a tenant id says how it keeps tenants apart and names
-   its :security tests or the ticket for the gap (BOU-900). The model:
-   dev-docs/threat-model-tenancy.adoc."
+   its :security tests or the ticket for the gap (BOU-900)."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
