@@ -13,6 +13,10 @@
 
 (def ^:private test-root "target/test-wiring-storage")
 
+(def ^:private lookup
+  "An upload index the storage routes accept: it can say who owns a file."
+  (reify ports/IUploadLookup (find-upload [_ _] nil)))
+
 (defn- cleanup []
   (let [dir (io/file test-root)]
     (when (.exists dir)
@@ -42,7 +46,7 @@
 (deftest ^:unit storage-routes-key-emits-api-routes
   (cleanup)
   (try
-    (let [component (ig/init-key :wagoe/storage {:provider :local :root test-root})
+    (let [component (ig/init-key :wagoe/storage {:provider :local :root test-root :upload-index lookup})
           routes    (ig/init-key :wagoe/storage-routes {:storage component})]
       (testing "routes component exposes Reitit :api data"
         ;; [path {method {...}}] — ADR-037.
@@ -54,10 +58,20 @@
       (ig/halt-key! :wagoe/storage component))
     (finally (cleanup))))
 
+(deftest ^:unit ^:security the-routes-refuse-to-boot-without-an-owner-lookup
+  ;; Without IUploadLookup the routes could not tell whose file a key names (BOU-945).
+  (let [component (ig/init-key :wagoe/storage {:provider :local :root test-root})]
+    (try
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"WGE-107"
+                            (ig/init-key :wagoe/storage-routes {:storage component})))
+      (is (map? (ig/init-key :wagoe/storage-routes {:storage component :mounted? false}))
+          "unmounted, as Integrant builds it without :expose-http?, it boots")
+      (finally (ig/halt-key! :wagoe/storage component) (cleanup)))))
+
 (deftest ^:unit ig-config-assembles-the-service-and-mounts-routes-on-request
   ;; BOU-421: the routes component existed and no application ever mounted it.
   ;; The module owns its graph now — but mounting stays opt-in, because the
-  ;; endpoints carry no authorization: anonymous upload and delete by key.
+  ;; endpoints let any signed-in user upload, to any path.
   (let [base {:provider :local :root "/tmp/x"}]
     (testing "assembled by default, mounted by nobody"
       (let [{:keys [components routes]} (wagoe.storage.shell.module-wiring/ig-config base {})]
@@ -119,7 +133,8 @@
                                                            :root root
                                                            :url-base public
                                                            :signing-secret "s3cr3t"
-                                                           :http-base-path base})}))
+                                                           :http-base-path base
+                                                           :upload-index lookup})}))
         paths   (set (map first routes))]
     (try
       (testing "the mounted path follows :http-base-path"

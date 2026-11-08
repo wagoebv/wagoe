@@ -82,6 +82,8 @@ retention policy read the index. A store straight through `IFileStorage` is
 not recorded. Keys are compared case-sensitively on every engine
 (`db/ensure-binary-collation!` on MySQL), and a re-store of one key is a
 `db/upsert!`, which retries a racing insert and a MySQL deadlock.
+`IUploadLookup/find-upload`, beside it, tells the mounted routes who owns a key;
+they refuse to boot without it (WGE-107).
 
 ### `IImageProcessor` — optional image ops
 

@@ -159,9 +159,55 @@
                    (assoc params "expires" "not-a-number")]]
         (is (= 403 (:status (call bad))) (pr-str bad))))
 
-    (testing "without a configured secret the route serves as before"
-      (is (= 200 (:status ((sut/download-file-handler svc nil)
+    (testing "without a configured secret, a file nobody is recorded as owning is not served"
+      (is (= 404 (:status ((sut/download-file-handler svc nil)
                            {:path-params {:file-key key} :query-params {}})))))))
+
+(defn- indexed-service
+  "A storage service whose upload index holds `uploads`, keyed by file key."
+  [uploads]
+  (let [records (atom uploads)]
+    (service/create-storage-service
+     {:storage      (local/create-local-storage {:base-path test-dir :url-base "http://x/files"})
+      :upload-index (reify
+                      wagoe.storage.ports/IUploadIndex
+                      (record-upload! [_ u] (swap! records assoc (:key u) u))
+                      (remove-upload! [_ k] (some? (first (swap-vals! records dissoc k))))
+                      (find-uploads [_ _ _] [])
+                      (uploads-stored-before [_ _ _] [])
+                      wagoe.storage.ports/IUploadLookup
+                      (find-upload [_ k] (get @records k)))})))
+
+(deftest ^:unit ^:security a-file-is-reached-only-by-its-owner-its-tenant-or-an-admin
+  ;; Download, delete and URL used to act on any key a signed-in user named (BOU-945).
+  (let [tenant-file "a1/report.pdf"
+        own-file    "a1/notes.txt"
+        _           (do (.mkdirs (io/file test-dir "a1"))
+                        (spit (io/file test-dir tenant-file) "pdf")
+                        (spit (io/file test-dir own-file) "txt"))
+        svc         (indexed-service {tenant-file {:key tenant-file :user-id "alice" :tenant-id "t1"}
+                                      own-file    {:key own-file :user-id "alice"}})
+        as          (fn [key user tenant member?]
+                      (cond-> {:path-params {:file-key key} :query-params {} :user user}
+                        tenant  (assoc :tenant {:id tenant})
+                        member? (assoc :tenant-membership {:role :member})))]
+    (doseq [[route handler] {"download" (sut/download-file-handler svc nil)
+                             "url"      (sut/get-file-url-handler svc)}]
+      (testing (str route ", a file stored in a tenant")
+        (is (= 404 (:status (handler (as tenant-file {:id "bob"} nil false)))) "another user")
+        (is (= 404 (:status (handler (as tenant-file {:id "bob"} "t2" true)))) "a member of another tenant")
+        (is (= 404 (:status (handler (as tenant-file {:id "bob"} "t1" false)))) "naming the tenant without being in it")
+        (is (= 404 (:status (handler (as tenant-file {:id "alice"} nil false)))) "its uploader, outside the tenant")
+        (is (not= 404 (:status (handler (as tenant-file {:id "bob"} "t1" true)))) "a member of its tenant")
+        (is (not= 404 (:status (handler (as tenant-file {:id "root" :role :admin} nil false)))) "a platform admin"))
+      (testing (str route ", a file stored outside any tenant")
+        (is (= 404 (:status (handler (as own-file {:id "bob"} nil false)))) "another user")
+        (is (not= 404 (:status (handler (as own-file {:id "alice"} nil false)))) "its uploader")))
+    (testing "delete"
+      (let [delete (sut/delete-file-handler svc)]
+        (is (= 404 (:status (delete (as tenant-file {:id "bob"} "t2" true)))) "a member of another tenant")
+        (is (.exists (io/file test-dir tenant-file)) "and the file is still there")
+        (is (= 204 (:status (delete (as tenant-file {:id "alice"} "t1" true)))) "its tenant deletes it")))))
 
 (deftest ^:unit every-mounted-handler-refuses-a-repeated-parameter
   ;; Ring gives a repeated parameter as a vector, and each consumer here —

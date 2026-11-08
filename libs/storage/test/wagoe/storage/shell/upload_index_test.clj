@@ -26,6 +26,8 @@
       (let [u (upload "ab/one.png" :user "u1" :tenant "t1")]
         (ports/record-upload! index u)
         (is (= [u] (ports/find-uploads index {:user-id "u1"} {})))
+        (is (= u (ports/find-upload index "ab/one.png")))
+        (is (nil? (ports/find-upload index "ab/none.png")))
         (ports/record-upload! index (assoc u :size 7 :user-id "u2"))
         (is (empty? (ports/find-uploads index {:user-id "u1"} {})))
         (is (= [7] (map :size (ports/find-uploads index {:user-id "u2"} {}))))

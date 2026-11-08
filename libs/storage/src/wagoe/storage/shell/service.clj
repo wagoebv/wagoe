@@ -280,6 +280,11 @@
                           :error (.getMessage e)}))
         nil))))
 
+(defn upload-at
+  "The upload index's record of `file-key`, or nil when there is no index or no record."
+  [service file-key]
+  (some-> (:upload-index service) (ports/find-upload file-key)))
+
 ;; ============================================================================
 ;; Factory
 ;; ============================================================================
