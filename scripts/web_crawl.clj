@@ -53,9 +53,12 @@
   (let [c     (client)
         get!  #(http/get (str base %) {:client c :throw false
                                        :headers {"Accept" "text/html"}})
+        ;; A new app checks CSRF on the sign-in form too (BOU-940)
+        token (some->> (:body (get! "/web/login")) (re-find #"name=\"__anti-forgery-token\"[^>]*value=\"([^\"]*)\"") second)
         login (http/post (str base "/web/login")
                          {:client c :throw false
-                          :form-params {"email" email "password" password "remember" "false"}})]
+                          :form-params {"email" email "password" password "remember" "false"
+                                        "__anti-forgery-token" (str token)}})]
     (when (or (>= (:status login) 400) (str/includes? (str (:uri login)) "/web/login"))
       (println "FAIL sign-in:" (:status login) (str (:uri login)))
       (System/exit 1))

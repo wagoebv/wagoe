@@ -25,6 +25,11 @@
    :wagoe/authorization
    {:mode :enforce}
 
+   ;; CSRF on, as in dev; the wagoe.test client sends the token. No rate
+   ;; limit: a test fires requests faster than any user.
+   :wagoe/http
+   {:security {:csrf {:enabled? true}}}
+
    ;; INFO, not quieter: the port the app bound is logged at INFO, and
    ;; scripts/example-smoke.sh reads it from there.
    :wagoe/logging

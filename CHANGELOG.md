@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A new app validated no CSRF token and had no rate limit** (BOU-940): `wagoe new` turns both on now, and the boot warns
+  while CSRF is off. Set `:wagoe/http :security :csrf :enabled? true` in an existing app.
 - **An upload to a named `path` could overwrite another user's file and take it over** (BOU-950). It is refused now.
   Upgrade if you set `:expose-http? true`.
 - **Storage download, delete and URL acted on any key a signed-in user named** (BOU-945). They now check the upload

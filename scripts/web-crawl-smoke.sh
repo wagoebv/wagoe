@@ -77,17 +77,24 @@ step "$WORK/migrate.log" "bb migrate up" bb migrate up </dev/null
 PW='Crawl-pass-12345'
 printf '%s\n%s\n' "$PW" "$PW" | step "$WORK/admin.log" "bb create-admin" \
   bb create-admin --email admin@crawl.test --name Admin
-HTTP_PORT=3302 clojure -M:run >"$LOG" 2>&1 &
+# A crawler is no user: the dev profile's rate limit would answer it 429.
+HTTP_PORT=3302 HTTP_RATE_LIMIT_ENABLED=false clojure -M:run >"$LOG" 2>&1 &
 APP_PID=$!
 wait_for_health "$LOG" 150
 B="http://localhost:$PORT"
 # Users through the create form, so lists, detail and rights pages have rows
 JAR="$WORK/cookies"
-curl -fsS -o /dev/null -c "$JAR" -d "email=admin@crawl.test" -d "password=$PW" -d remember=false "$B/web/login" \
+CSRF=$(web_csrf "$JAR" "$B/web/login")
+[ -n "$CSRF" ] || fail "GET /web/login carried no CSRF token"
+curl -fsS -o /dev/null -c "$JAR" -b "$JAR" -d "__anti-forgery-token=$CSRF" \
+     -d "email=admin@crawl.test" -d "password=$PW" -d remember=false "$B/web/login" \
   || fail "sign-in failed"
+# Signed in, the token binds to the session: take a fresh one.
+CSRF=$(web_csrf "$JAR" "$B/web/users")
+[ -n "$CSRF" ] || fail "GET /web/users carried no CSRF token"
 for n in ada bram chen daan; do
-  curl -fsS -o /dev/null -b "$JAR" -d "name=$n" -d "email=$n@crawl.test" -d "password=Sample-pass-2026x" \
-       -d role=user "$B/web/users" || { log_excerpt "$LOG" 30; fail "creating user $n failed"; }
+  curl -fsS -o /dev/null -b "$JAR" -H "x-csrf-token: $CSRF" -d "name=$n" -d "email=$n@crawl.test" \
+       -d "password=Sample-pass-2026x" -d role=user "$B/web/users" || { log_excerpt "$LOG" 30; fail "creating user $n failed"; }
 done
 ok "booted on $ENGINE with an admin and four users"
 

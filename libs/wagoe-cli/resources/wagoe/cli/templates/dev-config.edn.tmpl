@@ -36,7 +36,15 @@
    {:port       #or [#env HTTP_PORT 3000]
     :host       #or [#env HTTP_HOST "0.0.0.0"]
     :join?      false
-    :port-range {:start 3000 :end 3099}}
+    :port-range {:start 3000 :end 3099}
+    ;; A per-process counter here; in production turn it on with an active
+    ;; :wagoe/cache (Redis), or the boot refuses.
+    :rate-limit {:enabled?  #boolean #or [#env HTTP_RATE_LIMIT_ENABLED "true"]
+                 :limit     #long #or [#env HTTP_RATE_LIMIT 1000]
+                 :window-ms 60000}
+    ;; Every state-changing web request carries a token; webhooks that cannot
+    ;; go under :exempt-paths. Keep this on in every profile you deploy.
+    :security   {:csrf {:enabled? true}}}
 
    :wagoe/router
    ;; No :adapter — Reitit is the router (ADR-037). :conflicts nil switches off

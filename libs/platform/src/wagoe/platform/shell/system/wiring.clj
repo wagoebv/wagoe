@@ -470,6 +470,11 @@
                                  "state-changing requests would NOT be CSRF-validated. "
                                  "Set CSRF_SECRET or JWT_SECRET, or :wagoe/http :security :csrf :secret.")
                             {:type :configuration-error :csrf/enabled? true :csrf/secret-present? false})))
+        ;; Off stays the default so an upgrade cannot 403 an app; said out loud so
+        ;; it is a choice (BOU-940).
+        _ (when-not (or (:enabled? csrf-config) (= :test (:wagoe/profile config)))
+            (log/warn (str "CSRF protection is off: state-changing web requests are not "
+                           "token-checked. Set :wagoe/http :security :csrf :enabled? true.")))
 
         ;; Rate-limit config consumed by the http-rate-limit-protection interceptor.
         ;; Opt-in like CSRF: disabled by default so a framework upgrade cannot start

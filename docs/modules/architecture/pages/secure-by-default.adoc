@@ -19,10 +19,10 @@ row with no test says so.
 | {repo}libs/platform/test/wagoe/platform/shell/security_test.clj[`security-response-headers-test`, `no-inline-script-in-ui-source-test`]
 
 | CSRF token on state-changing web routes
-| *Off.* Every form carries a token, but nothing validates it until you enable it. An enabled check with no secret refuses to boot.
+| On in a new app's dev and test profiles. The framework default is off, so an upgrade cannot break an app, and the boot warns while it is. An enabled check with no secret refuses to boot.
 | `:wagoe/http {:security {:csrf {:enabled? true}}}`; secret from `CSRF_SECRET`, else `JWT_SECRET`
 | 1.0.0
-| {repo}libs/platform/test/wagoe/platform/shell/security_test.clj[`csrf-interceptor-protection-test`, `csrf-default-is-opt-in-test`]
+| {repo}libs/platform/test/wagoe/platform/shell/security_test.clj[`csrf-interceptor-protection-test`, `csrf-default-is-opt-in-test`], {repo}libs/wagoe-cli/test/wagoe/cli/new_test.clj[`a-new-app-checks-csrf-in-every-profile-it-generates`]
 
 | Session cookie: `HttpOnly`, `SameSite=Strict`, `Secure`
 | On. `Secure` unless you turn it off; the generated dev profile does, for plain HTTP.
@@ -49,7 +49,7 @@ row with no test says so.
 | {repo}libs/user/test/wagoe/user/shell/auth_lockout_fixation_security_test.clj[`lockout-blocks-correct-password-after-max-attempts`], {repo}libs/user/test/wagoe/user/shell/session_token_storage_security_test.clj[`parallel-attempts-stop-at-the-limit`]
 
 | HTTP rate limiting
-| *Off.* Enabled in production with no `:wagoe/cache` active, it refuses to boot.
+| On in a new app's dev profile, off in test. Enabled in production with no `:wagoe/cache` active, it refuses to boot.
 | `:wagoe/http {:rate-limit {:enabled? true :limit 100 :window-ms 60000}}`
 | 1.0.0
 | {repo}libs/platform/test/wagoe/platform/shell/http/rate_limit_interceptor_test.clj[`exceeding-limit-returns-429-shape`, `absent-config-is-a-noop`]
@@ -140,7 +140,7 @@ change; the others run in their library's job.
 
 * *TLS.* Wagoe sets HSTS and `Secure` cookies; something in front of it has to
   terminate HTTPS.
-* *CSRF and rate limiting.* Turn both on for production, as the table says.
+* *CSRF and rate limiting.* Keep both on in the profile you deploy; rate limiting there needs an active `:wagoe/cache`.
 * *Secrets.* Keep them in your platform's secret store and read them with
   `#secret` or `#env`.
 * *Backups, OS and JVM patches, database access.* Outside the framework.
