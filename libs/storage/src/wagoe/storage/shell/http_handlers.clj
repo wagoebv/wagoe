@@ -4,6 +4,8 @@
   Provides Ring-compatible handlers for file operations."
   (:require [wagoe.storage.shell.service :as service]
             [wagoe.storage.shell.adapters.local :as local]
+            [wagoe.storage.core.uploads :as uploads]
+            [wagoe.core.http.access :as access]
             [wagoe.core.http.errors :as errors]
             [clojure.java.io :as io]
             [clojure.string :as str])
@@ -120,6 +122,15 @@
   {:user-id   (get-in request [:user :id])
    :tenant-id (get-in request [:tenant :id])})
 
+(defn- reachable?
+  "`uploads/may-access?` for the request's caller (BOU-945); an admin needs no lookup."
+  [storage-service request file-key]
+  (let [caller (-> (request-owner request)
+                   (update :tenant-id #(when (access/in-tenant-scope? request) %))
+                   (assoc :admin? (access/platform-admin? (:user request))))]
+    (or (:admin? caller)
+        (uploads/may-access? (service/upload-at storage-service file-key) caller))))
+
 (defn upload-file-handler
   "Handler for file upload endpoint.
 
@@ -235,7 +246,7 @@
   - file-key: Storage key of the file"
   ([storage-service] (download-file-handler storage-service nil))
   ([storage-service signing-secret]
-   (fn [{:keys [path-params query-params]}]
+   (fn [{:keys [path-params query-params] :as request}]
      (let [file-key (let [k (get path-params :file-key)] (when-not (str/blank? k) k))]
 
        (cond
@@ -254,6 +265,8 @@
                     {:expires   (get query-params "expires")
                      :signature (get query-params "signature")})))
          (forbidden "Missing, invalid or expired signature")
+         (and (not signing-secret) (not (reachable? storage-service request file-key)))
+         (not-found "File not found" {:file-key file-key})
 
          :else
 
@@ -274,7 +287,7 @@
   Path parameter:
   - file-key: Storage key of the file"
   [storage-service]
-  (fn [{:keys [path-params]}]
+  (fn [{:keys [path-params] :as request}]
     (let [file-key (let [k (get path-params :file-key)] (when-not (str/blank? k) k))]
 
       (if-not file-key
@@ -282,7 +295,8 @@
          "Missing required parameter: file-key"
          {:missing-parameter "file-key"})
 
-        (if (service/remove-file storage-service file-key)
+        (if (and (reachable? storage-service request file-key)
+                 (service/remove-file storage-service file-key))
           {:status 204
            :body nil}
 
@@ -299,7 +313,7 @@
   Query parameter:
   - expiration: Expiration time in seconds (optional, default: 3600)"
   [storage-service]
-  (fn [{:keys [path-params query-params]}]
+  (fn [{:keys [path-params query-params] :as request}]
     (if-let [bad (repeated-params query-params ["expiration"])]
       (repeated-params-response bad)
       (let [file-key (let [k (get path-params :file-key)] (when-not (str/blank? k) k))
@@ -312,7 +326,8 @@
            "Missing required parameter: file-key"
            {:missing-parameter "file-key"})
 
-          (if-let [url (service/get-file-url storage-service file-key expiration)]
+          (if-let [url (and (reachable? storage-service request file-key)
+                            (service/get-file-url storage-service file-key expiration))]
             {:status 200
              :body {:url url
                     :expiration-seconds expiration}}

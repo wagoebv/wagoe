@@ -31,6 +31,7 @@
             [wagoe.storage.shell.export-job-store :as export-job-store]
             [wagoe.storage.shell.export-jobs :as export-jobs]
             [wagoe.storage.shell.http-handlers :as http-handlers]
+            [wagoe.storage.ports :as ports]
             [wagoe.storage.shell.upload-index :as upload-index]
             [clojure.tools.logging :as log]))
 
@@ -128,8 +129,15 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/storage-routes
-  [_ {:keys [storage]}]
+  [_ {:keys [storage mounted?]}]
   (log/info "Initializing storage routes")
+  ;; The routes answer only who owns a file, which the index tells them (BOU-945).
+  ;; Integrant builds this key unmounted too; an app that never mounts it may
+  ;; keep an index without the lookup.
+  (when (and (not (false? mounted?))
+             (not (satisfies? ports/IUploadLookup (get-in storage [:service :upload-index]))))
+    (throw (ex-info "WGE-107: the storage upload index does not implement IUploadLookup"
+                    {:type :configuration-error :wagoe/error-code "WGE-107" :missing ['find-upload]})))
   ;; The signing secret travels with the routes: when one is configured the
   ;; URLs this module issues are signed and expiring, and the route that
   ;; serves them has to enforce that (BOU-421).
@@ -156,11 +164,9 @@
    defined and never built by anyone), but mounting it is opt-in:
    `:expose-http? true`.
 
-   Opt-in because these endpoints carry no authorization of their own: upload,
-   download, delete and signed-URL all act on any key the caller names, and
-   the adapter cannot tell a private object from a public one. Mounting them
-   on every application that stores a file would publish anonymous delete.
-   Enable it when the routes sit behind your own auth.
+   Opt-in because any signed-in user may upload, and a named `path` can still
+   land on another user's file. Download, delete and URL check the owner in the
+   upload index (BOU-945). Enable it when that suits your app.
 
    Two settings have to agree when `:signing-secret` is set, and nothing can
    check it from here: `:http-base-path` places the routes (default
@@ -182,7 +188,7 @@
               :wagoe.storage/upload-index     {:ctx    (ig/ref :wagoe/db-context)
                                                :schema (ig/ref :wagoe.storage/db-schema)}
               :wagoe/storage                  (assoc settings :upload-index (ig/ref :wagoe.storage/upload-index))
-              :wagoe/storage-routes           {:storage (ig/ref :wagoe/storage)}
+              :wagoe/storage-routes           {:storage (ig/ref :wagoe/storage) :mounted? expose?}
               :wagoe.storage/data-exporter    {:upload-index (ig/ref :wagoe.storage/upload-index)
                                                :storage      (ig/ref :wagoe/storage)}
               :wagoe.storage/upload-retention {:upload-index (ig/ref :wagoe.storage/upload-index)

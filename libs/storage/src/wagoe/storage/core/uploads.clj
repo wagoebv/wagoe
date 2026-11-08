@@ -13,6 +13,16 @@
    :content-type (:content-type stored)
    :stored-at    now})
 
+(defn may-access?
+  "Whether `caller` ({:user-id :tenant-id :admin?}) may act on `upload`: an admin,
+  its tenant, or, outside any tenant, its uploader. An unknown upload is nobody's."
+  [upload {:keys [user-id tenant-id admin?]}]
+  (boolean (or admin?
+               (when upload
+                 (if-let [t (:tenant-id upload)]
+                   (= t (some-> tenant-id str))
+                   (and user-id (= (:user-id upload) (str user-id))))))))
+
 (defn subject-owner
   "The owner whose uploads belong to export `subject`, or nil for a type of
   subject that owns none."

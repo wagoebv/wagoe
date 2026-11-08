@@ -96,6 +96,13 @@
   (uploads-stored-before [this cutoff limit]
     "At most `limit` uploads stored before `cutoff`, an Instant."))
 
+(defprotocol IUploadLookup
+  "Who owns one file. Beside `IUploadIndex`, not in it, so an index written
+  before it still compiles; the storage routes refuse to boot without it."
+
+  (find-upload [this file-key]
+    "The upload at `file-key`, or nil."))
+
 ;; ============================================================================
 ;; Export Job Store Port
 ;; ============================================================================

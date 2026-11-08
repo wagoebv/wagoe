@@ -52,6 +52,11 @@
    :stored-at    (tc/string->instant (:stored-at row))})
 
 (defrecord JdbcUploadIndex [ctx]
+  ports/IUploadLookup
+  (find-upload [_ file-key]
+    (some-> (db/execute-one! ctx {:select [:*] :from [:storage_uploads] :where [:= :file_key file-key]})
+            row->upload))
+
   ports/IUploadIndex
   (record-upload! [_ upload]
     ;; Two uploads to one path race to insert; the loser updates instead.
