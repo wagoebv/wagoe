@@ -6,6 +6,7 @@
   represents the imperative shell that coordinates pure validation logic
   with side-effectful storage operations."
   (:require [wagoe.storage.ports :as ports]
+            [wagoe.storage.shell.adapters.local :as local]
             [wagoe.storage.core.uploads :as uploads]
             [wagoe.storage.core.validation :as validation]
             [wagoe.observability.logging.ports :as logging])
@@ -78,6 +79,16 @@
         (try (ports/delete-file storage (:key stored)) (catch Exception _ nil))
         (throw e)))))
 
+(defn- refused-key?
+  "Whether `metadata` names a key that holds a file `may-replace?` says no to (BOU-950).
+   Only the local adapter writes a named key as is; S3 and GCS add a random suffix."
+  [storage metadata {:keys [may-replace?]}]
+  (when-let [k (and may-replace?
+                    (instance? wagoe.storage.shell.adapters.local.LocalFileStorage storage)
+                    (local/named-storage-key metadata))]
+    ;; ponytail: checked before the write, not with it; two uploads racing for one path can both pass.
+    (and (ports/file-exists? storage k) (not (may-replace? k)))))
+
 (defrecord StorageService [storage image-processor logger upload-index]
   IStorageService
 
@@ -97,8 +108,22 @@
             ;; Validate file
             validation-result (validation/validate-file file-data sanitized-metadata options)]
 
-        (if (:valid? validation-result)
-          ;; Store file
+        (cond
+          (not (:valid? validation-result))
+          (do
+            (when logger
+              (logging/warn logger "Upload file validation failed"
+                            {:event ::upload-file-validation-failed
+                             :filename (:filename metadata)
+                             :errors (:errors validation-result)}))
+            {:success false
+             :errors (:errors validation-result)})
+
+          (refused-key? storage sanitized-metadata options)
+          {:success false
+           :errors [{:code :forbidden :message "That path holds a file you may not replace"}]}
+
+          :else
           (let [result (ports/store-file storage file-data (dissoc sanitized-metadata :owner))]
             (index-upload! storage upload-index result (:owner metadata))
             (when logger
@@ -107,17 +132,7 @@
                              :key (:key result)
                              :size (:size result)}))
             {:success true
-             :data result})
-
-          ;; Return validation errors
-          (do
-            (when logger
-              (logging/warn logger "Upload file validation failed"
-                            {:event ::upload-file-validation-failed
-                             :filename (:filename metadata)
-                             :errors (:errors validation-result)}))
-            {:success false
-             :errors (:errors validation-result)})))
+             :data result})))
 
       (catch Exception e
         (when logger
@@ -167,7 +182,7 @@
                   thumb-metadata (assoc metadata :filename thumb-filename)
                   thumb-data {:bytes thumb-bytes
                               :content-type "image/jpeg"}
-                  thumb-result (upload-file this thumb-data thumb-metadata {})]
+                  thumb-result (upload-file this thumb-data thumb-metadata (select-keys options [:may-replace?]))]
 
               (if (:success thumb-result)
                 (do
@@ -279,6 +294,11 @@
                           :key file-key
                           :error (.getMessage e)}))
         nil))))
+
+(defn file-at?
+  "Whether the storage backend holds a file at `file-key`."
+  [service file-key]
+  (ports/file-exists? (:storage service) file-key))
 
 (defn upload-at
   "The upload index's record of `file-key`, or nil when there is no index or no record."

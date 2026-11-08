@@ -191,7 +191,7 @@
         ext (validation/get-file-extension filename)]
     (path-join (subs id 0 2) (cond-> (str (System/currentTimeMillis) "-" id) ext (str "." ext)))))
 
-(defn- named-storage-key
+(defn named-storage-key
   "The key a caller names with `:path`, or nil."
   [{:keys [filename path]}]
   (when path

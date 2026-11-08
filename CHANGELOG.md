@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **An upload to a named `path` could overwrite another user's file and take it over** (BOU-950). It is refused now.
+  Upgrade if you set `:expose-http? true`.
 - **Storage download, delete and URL acted on any key a signed-in user named** (BOU-945). They now check the upload
   index: its tenant, its uploader, or a platform admin. Upgrade if you set `:expose-http? true`.
 - **The CSP allowed inline script and eval** (BOU-898): `script-src` is now `'self'`. An app's own inline `<script>`,

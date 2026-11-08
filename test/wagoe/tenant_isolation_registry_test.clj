@@ -38,8 +38,8 @@
    "audience"      {:scoped-by "may filter on :tenant-id, not forced to" :gaps ["BOU-948"]}
    "storage"       {:scoped-by "download, delete and URL check the uploader or tenant in the upload index"
                     :tests     {"libs/storage/test/wagoe/storage/shell/http_handlers_test.clj"
-                                ["a-file-is-reached-only-by-its-owner-its-tenant-or-an-admin"]}
-                    :gaps      ["BOU-950"]}
+                                ["a-file-is-reached-only-by-its-owner-its-tenant-or-an-admin"
+                                 "an-upload-cannot-replace-another-users-file"]}}
    "push"          {:scoped-by "tenant_id columns, never written or read" :gaps ["BOU-946"]}
    "events"        {:scoped-by "events carry :tenant-id; subscribers do not filter" :gaps ["BOU-947"]}
    "realtime"      {:scoped-by "no tenant concept; topics need the app's :authorize-topic" :gaps ["BOU-947"]}

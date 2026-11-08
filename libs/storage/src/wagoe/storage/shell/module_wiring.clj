@@ -164,9 +164,9 @@
    defined and never built by anyone), but mounting it is opt-in:
    `:expose-http? true`.
 
-   Opt-in because any signed-in user may upload, and a named `path` can still
-   land on another user's file. Download, delete and URL check the owner in the
-   upload index (BOU-945). Enable it when that suits your app.
+   Opt-in because any signed-in user may upload. Download, delete, URL and an
+   upload to a taken `path` check the owner in the upload index (BOU-945,
+   BOU-950). Enable it when that suits your app.
 
    Two settings have to agree when `:signing-secret` is set, and nothing can
    check it from here: `:http-base-path` places the routes (default
