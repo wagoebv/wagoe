@@ -280,7 +280,7 @@
     (is (= 403 (:status response)))
     (is (nil? (get-in response [:headers "Location"])))))
 
-(deftest ^:unit every-api-route-refuses-a-caller-outside-the-tenant
+(deftest ^:unit ^:security every-api-route-refuses-a-caller-outside-the-tenant
   (let [tenant-a (UUID/randomUUID)
         tenant-b (UUID/randomUUID)
         refused  (zipmap (keys route-success) (repeat 403))]

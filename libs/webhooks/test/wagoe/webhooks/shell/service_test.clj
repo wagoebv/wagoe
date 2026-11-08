@@ -129,7 +129,7 @@
       (is (= "URL must use https"
              (get-in (subscribe! svc "http://127.0.0.1/hook") [:error :message]))))))
 
-(deftest ^:integration only-the-events-tenant-is-delivered
+(deftest ^:integration ^:security only-the-events-tenant-is-delivered
   (support/with-receiver (constantly {:status 200})
     (fn [{:keys [url seen]}]
       (with-service

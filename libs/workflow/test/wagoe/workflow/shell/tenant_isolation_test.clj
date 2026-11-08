@@ -59,7 +59,7 @@
                               WHERE table_schema = ? AND table_name = ? AND column_name = ?"
                              schema table column])))
 
-(deftest ^:integration a-tenant-sees-only-its-own-instances
+(deftest ^:integration ^:security a-tenant-sees-only-its-own-instances
   (let [ctx      @db-ctx
         suffix   (System/nanoTime)
         [a b]    [(str "tenant_wfa" suffix) (str "tenant_wfb" suffix)]
@@ -130,7 +130,7 @@
                 set))
         "workflow's public migrations, so a new one reaches tenants with no twin")))
 
-(deftest ^:integration tenant-work-never-falls-back-to-public
+(deftest ^:integration ^:security tenant-work-never-falls-back-to-public
   (let [ctx   @db-ctx
         bare  (str "tenant_wfbare" (System/nanoTime))
         store (persistence/create-workflow-store (:datasource ctx))]

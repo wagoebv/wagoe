@@ -11,7 +11,7 @@
             [wagoe.tenant.ports :as tenant-ports]
             [wagoe.tenant.shell.provisioning :as provisioning]))
 
-(deftest ^:integration a-tenant-job-reads-its-tenants-schema
+(deftest ^:integration ^:security a-tenant-job-reads-its-tenants-schema
   (let [pg  (epg/start!)
         ctx (epg/db-context pg)
         tenant-id (random-uuid)]
