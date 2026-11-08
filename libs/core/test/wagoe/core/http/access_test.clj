@@ -34,7 +34,7 @@
   (is (access/same-id? tenant-a (str tenant-a)))
   (is (not (access/same-id? nil nil))))
 
-(deftest ^:unit in-tenant-scope
+(deftest ^:unit ^:security in-tenant-scope
   (testing "in a tenant: a member, a user of it, a platform admin"
     (is (access/in-tenant-scope? (in-a {:role :user :tenant-id tenant-b} {:role :member})))
     (is (access/in-tenant-scope? (in-a {:role :user :tenant-id (str tenant-a)})))
@@ -45,7 +45,7 @@
     (is (access/in-tenant-scope? {:user {:role :user}}))
     (is (not (access/in-tenant-scope? {:user {:role :admin :tenant-id tenant-a}})))))
 
-(deftest ^:unit tenant-admin
+(deftest ^:unit ^:security tenant-admin
   (testing "another tenant's admin, a plain member here, is not one"
     (is (not (access/tenant-admin? (in-a {:role :admin :tenant-id tenant-b} {:role :member})))))
   (testing "an admin by membership, an admin user of the tenant, a platform admin"

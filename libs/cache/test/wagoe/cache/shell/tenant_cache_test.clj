@@ -18,7 +18,7 @@
 ;; Unit Tests - Key Prefixing
 ;; =============================================================================
 
-(deftest ^:unit tenant-cache-key-test
+(deftest ^:unit ^:security tenant-cache-key-test
   (testing "Prefixing keys with tenant ID"
     (is (= "tenant:acme:user-123"
            (tenant-cache/tenant-cache-key "acme" :user-123)))

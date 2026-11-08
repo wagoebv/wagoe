@@ -1,0 +1,53 @@
+= Threat model: tenancy
+
+What keeps one tenant's data from another, what does not, and which test holds
+each part. The per-library answer lives in code, in
+`test/wagoe/tenant_isolation_registry_test.clj`: a library that carries a tenant
+id without an entry there fails the `:security` set.
+
+== The threat
+
+A signed-in member of tenant A reads, changes or receives data of tenant B. In
+an app that holds personal data for its own customers, this is the worst
+failure it can have.
+
+== What schema-per-tenant guarantees
+
+On PostgreSQL a tenant-bound request runs in one transaction with
+`SET LOCAL search_path TO tenant_<slug>, public`. A table that exists in the
+tenant schema is that tenant's alone: a query cannot reach another tenant's copy
+without naming its schema.
+
+Only libraries that ship `:tenant-paths` migrations get tables in tenant
+schemas. Today that is workflow alone.
+
+== What it does not
+
+Everything else is in `public`, shared by all tenants, and kept apart by code:
+
+* *Shared tables* (users, memberships, uploads, webhooks, push, search
+  documents, job rows): a `tenant_id` column the code must filter on, and route
+  guards (`require-tenant-member`, `in-tenant-scope?`, `tenant-admin?`) that
+  must be on the route.
+* *Caches and Redis keys*: a `tenant:<id>:` prefix, only through
+  `create-tenant-cache`.
+* *Job queues*: a job runs in its tenant's schema only when enqueued with one.
+* *Event bus and realtime*: events carry `:tenant-id`; subscribers and SSE
+  topics do not filter on it yet.
+* *Logs and error reports*: carry the tenant id, hold no tenant data beyond
+  what redaction lets through.
+* *H2* (`:allow-h2?`, used by tests): no schemas at all, so it isolates
+  nothing. A test that means to prove isolation runs on embedded PostgreSQL.
+
+== The class, by example
+
+1.1.0-rc-1 fixed "any signed-in user could read every workflow instance through
+the API, across tenants" (BOU-748, BOU-751). Two things were missing at once:
+the API routes checked only that a user was signed in, and the store took a
+fresh pooled connection outside the request's tenant transaction, while all
+tenants shared one `public.workflow_instances`. A route guard, the request's
+transaction and tenant-schema tables each close one of those, and workflow now
+has tests for all three.
+
+Every library with shared tables can make the same mistake. That is why the
+registry is a test, and why a gap in it is a ticket rather than a comment.

@@ -25,7 +25,7 @@
 
 (defn- ids [topic event] (set (map :id (d/matching-subscriptions subs* topic event))))
 
-(deftest ^:unit per-tenant-filtering
+(deftest ^:unit ^:security per-tenant-filtering
   (is (= #{"global" "t1"} (ids :orders/placed {:tenant-id "t1"})))
   (is (= #{"global" "t2"} (ids :orders/placed {:tenant-id "t2"})))
   (is (= #{"global"} (ids :orders/placed {})) "an event without a tenant reaches no tenant")
