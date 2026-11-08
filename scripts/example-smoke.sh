@@ -74,7 +74,12 @@ CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Content-Type: applicat
 ok "the scaffolded API refuses a request without a signed-in user"
 
 # Sign up through the web form, then log in over the API for a bearer token.
-CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+# As a browser does: the form's CSRF token and its cookie go back with the post.
+JAR=/tmp/shop-smoke.cookies
+: > "$JAR"
+CSRF=$(web_csrf "$JAR" "http://localhost:$PORT/web/register")
+[ -n "$CSRF" ] || fail "GET /web/register carried no CSRF token"
+CODE=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X POST --data-urlencode "__anti-forgery-token=$CSRF" \
             --data-urlencode "name=Smoke" --data-urlencode "email=smoke@example.test" \
             --data-urlencode "password=Example-pass-1" "http://localhost:$PORT/web/register")
 [ "$CODE" = "303" ] || { log_excerpt /tmp/shop-smoke.log 30; fail "POST /web/register answered $CODE, expected 303"; }
@@ -95,6 +100,10 @@ printf '%s\n%s\n' "$ADMIN_PW" "$ADMIN_PW" \
 ADMIN_TOKEN=$(login_token "http://localhost:$PORT" admin@example.test "$ADMIN_PW")
 [ -n "$ADMIN_TOKEN" ] || fail "POST /api/v1/auth/login returned no jwt-token for the admin"
 AUTH=(-H "Authorization: Bearer $ADMIN_TOKEN")
+# /web writes check CSRF even under a bearer token (BOU-940).
+WEB_CSRF=$(web_csrf "$JAR" "http://localhost:$PORT/web/admin/" "${AUTH[@]}")
+[ -n "$WEB_CSRF" ] || fail "GET /web/admin/ carried no CSRF token"
+AUTH+=(-b "$JAR" -H "x-csrf-token: $WEB_CSRF")
 ok "the first admin, made with bb create-admin, gets in"
 
 # Everyone, every signed-in user's group (wagoe.user.core.group/everyone-id).

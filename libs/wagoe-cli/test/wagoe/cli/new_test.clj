@@ -448,8 +448,8 @@
   ;; carried auth, sessions, MFA, an audit trail and four tables whether or not
   ;; it had accounts (BOU-234). Booting both variants: default serves
   ;; /web/login and creates auth_users/users/user_sessions/user_audit_log;
-  ;; --no-user serves /health, 404s /web/login, creates no tables, and needs no
-  ;; JWT_SECRET.
+  ;; --no-user serves /health, 404s /web/login and creates no tables. It still
+  ;; needs JWT_SECRET or CSRF_SECRET, to sign CSRF tokens (BOU-940).
   (let [render (fn [opts]
                  (let [dir (str (System/getProperty "java.io.tmpdir")
                                 "/wagoe-new-test-" (System/nanoTime))]
@@ -697,3 +697,10 @@
         (is (re-find #"(?s)In deps\.edn but not switched on.*\| user \|.*`wagoe add user`" (block "wagoe:available-modules"))))
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:unit ^:security a-new-app-checks-csrf-in-every-profile-it-generates
+  ;; The framework default stays off so an upgrade cannot 403 an app; a new app starts on (BOU-940).
+  (doseq [profile ["dev" "test"]]
+    (let [config (edn/read-string {:default (fn [_ v] v)}
+                                  (slurp (io/resource (str "wagoe/cli/templates/" profile "-config.edn.tmpl"))))]
+      (is (true? (get-in config [:active :wagoe/http :security :csrf :enabled?])) profile))))

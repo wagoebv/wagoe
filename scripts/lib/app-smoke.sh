@@ -2,7 +2,7 @@
 # and APP_PID set; wait_for_health sets PORT.
 
 # Read the port the app reports rather than assuming one. The generated test
-# profile carries no :wagoe/http block, so HTTP_PORT does not reach it there and
+# profile's :wagoe/http sets no :port, so HTTP_PORT does not reach it there and
 # the platform default applies — and the port manager may move off a taken port
 # anyway. Both would show up as "the app did not start" if this hardcoded 3000.
 # `:port` with the colon, deliberately: the port manager also logs the range it
@@ -35,4 +35,13 @@ login_token() {
               -d "{\"email\":\"$2\",\"password\":\"$3\"}" "$1/api/v1/auth/login" || true)
   echo "$body" | grep -oE '"jwt-token":"[^"]+"' | cut -d'"' -f4 \
     || echo "POST /api/v1/auth/login answered: $body" >&2
+}
+
+# The CSRF token the page at $2 carries, its csrf-session cookie kept in jar $1;
+# further curl arguments follow. A new app checks it on every /web write (BOU-940).
+web_csrf() {
+  local jar="$1" url="$2"; shift 2
+  curl -fsSL -c "$jar" -b "$jar" "$@" "$url" \
+    | grep -o '<meta[^>]*name="csrf-token"[^>]*>' | sed 's/.*content="\([^"]*\)".*/\1/' | head -1 \
+    || true
 }
