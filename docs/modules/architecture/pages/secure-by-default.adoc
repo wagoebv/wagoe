@@ -1,0 +1,155 @@
+= Secure by Default
+:description: Each security measure Wagoe takes for you: what is on by default, the key that changes it, and the test that fails when it breaks.
+:repo: https://github.com/wagoebv/wagoe/blob/main/
+
+This is an inventory, not a claim. Each row says what a generated application
+does without configuration, where you change it, and which test holds it. A
+row with no test says so.
+
+== Measures
+
+[cols="3,3,3,1,3",options="header"]
+|===
+| Measure | Default | Change it with | Since | Held by
+
+| Security headers: CSP `script-src 'self'`, HSTS (one year, preload), `X-Frame-Options: DENY`, `nosniff`, COOP, `Referrer-Policy`, `Permissions-Policy`
+| On, on every routed response. No inline script, `onclick` or `hx-on` runs.
+| Not a config key: build your own stack with `http-security-headers` and a header map
+| 1.0.0; CSP without `'unsafe-inline'`/`'unsafe-eval'`: unreleased
+| {repo}libs/platform/test/wagoe/platform/shell/security_test.clj[`security-response-headers-test`, `no-inline-script-in-ui-source-test`]
+
+| CSRF token on state-changing web routes
+| *Off.* Every form carries a token, but nothing validates it until you enable it. An enabled check with no secret refuses to boot.
+| `:wagoe/http {:security {:csrf {:enabled? true}}}`; secret from `CSRF_SECRET`, else `JWT_SECRET`
+| 1.0.0
+| {repo}libs/platform/test/wagoe/platform/shell/security_test.clj[`csrf-interceptor-protection-test`, `csrf-default-is-opt-in-test`]
+
+| Session cookie: `HttpOnly`, `SameSite=Strict`, `Secure`
+| On. `Secure` unless you turn it off; the generated dev profile does, for plain HTTP.
+| `:wagoe/settings {:secure-cookies? false}`
+| 1.0.0
+| {repo}libs/user/test/wagoe/user/shell/web_handlers_test.clj[`login-cookie-hardening-test`, `login-cookie-secure-attribute-test`]
+
+| Session tokens stored hashed
+| On. The database holds a hash, never the token.
+| —
+| 1.1.0
+| {repo}libs/user/test/wagoe/user/shell/session_token_storage_security_test.clj[`a-login-stores-the-hash-not-the-token`]
+
+| Password hashing
+| bcrypt+SHA-512 (buddy-hashers), at the library's default work factor.
+| —
+| 1.0.0
+| No test pins the work factor yet.
+
+| Login lockout
+| On: 5 failed attempts lock the account for 15 minutes, counted atomically.
+| `:wagoe/user {:auth {:max-failed-attempts 5 :lockout-duration-minutes 15}}`
+| 1.1.0
+| {repo}libs/user/test/wagoe/user/shell/auth_lockout_fixation_security_test.clj[`lockout-blocks-correct-password-after-max-attempts`], {repo}libs/user/test/wagoe/user/shell/session_token_storage_security_test.clj[`parallel-attempts-stop-at-the-limit`]
+
+| HTTP rate limiting
+| *Off.* Enabled in production with no `:wagoe/cache` active, it refuses to boot.
+| `:wagoe/http {:rate-limit {:enabled? true :limit 100 :window-ms 60000}}`
+| 1.0.0
+| {repo}libs/platform/test/wagoe/platform/shell/http/rate_limit_interceptor_test.clj[`exceeding-limit-returns-429-shape`, `absent-config-is-a-noop`]
+
+| MFA (TOTP); turning it off needs the password or a code
+| Opt-in per user. The secret is encrypted at rest, backup codes are hashed, wrong proofs count toward the lockout.
+| A `:mfa-required?` hook to make it mandatory
+| 1.1.0
+| {repo}libs/user/test/wagoe/user/shell/mfa_test.clj[`disable-mfa-without-proof-is-refused`, `wrong-disable-proofs-count-towards-the-lockout`]
+
+| Login response carries no secret
+| No password hash, MFA secret or backup code in any login response.
+| —
+| 1.1.0
+| {repo}libs/user/test/wagoe/user/shell/api_login_status_test.clj[`a-login-response-carries-no-secret`]
+
+| JWT secret
+| A missing secret, or one under 32 characters, refuses to boot. The algorithm is pinned to HS256.
+| `JWT_SECRET`
+| 1.0.0
+| {repo}libs/user/test/wagoe/user/shell/auth_security_test.clj[`jwt-secret-validation-test`, `jwt-algorithm-pinning-test`]
+
+| Every route needs a signed-in user
+| On, unless the route says `:public true`.
+| Route data `:public true`
+| 1.0.0
+| {repo}test/wagoe/route_authentication_test.clj[`every-route-refuses-anonymous-callers-unless-public`]
+
+| Authorization rules enforced
+| `wagoe new` writes `:enforce`. With the key absent the framework does not enforce. An unknown mode refuses to boot.
+| `:wagoe/authorization {:mode :enforce}`
+| 1.1.0
+| {repo}libs/platform/test/wagoe/platform/shell/authorization_interceptor_test.clj[`enforce-applies-each-rule-in-order`, `an-unknown-mode-fails-boot`]. No test holds the generated `:enforce` yet.
+
+| Open redirects refused
+| A `return-to` that could leave the site falls back to a local path.
+| —
+| 1.0.0
+| {repo}libs/core/test/wagoe/core/utils/redirect_test.clj[`local-path?-refuses-anything-a-browser-could-leave-the-site-by`]
+
+| HTML output escaped
+| Hiccup escapes every string unless you mark it raw.
+| —
+| 1.0.0
+| {repo}libs/platform/test/wagoe/platform/shell/security_test.clj[`hiccup-xss-escaping-test`]
+
+| SQL parameterised
+| Queries go through HoneySQL with bound parameters.
+| —
+| 1.0.0
+| {repo}libs/platform/test/wagoe/platform/shell/security_test.clj[`sql-parameterization-test`] checks the mechanism, not every query.
+
+| Errors leak no internals
+| A 500 answers `Internal Server Error` and a correlation id; the exception stays in the log.
+| —
+| 1.0.0
+| {repo}libs/platform/test/wagoe/platform/shell/security_test.clj[`error-500-does-not-leak-internals-test`]
+
+| Personal data redacted in logs and error reports
+| On. Sentry redacts even without a `:redact` option; database values are stripped from logged exceptions.
+| Sentry `:redact`
+| 1.1.0
+| {repo}libs/core/test/wagoe/core/utils/pii_redaction_test.clj[`redact-for-log-test`], {repo}libs/observability/test/wagoe/observability/logging/shell/redacting_factory_test.clj[`a-direct-log-call-writes-no-quoted-value`]
+
+| Tenant isolation
+| A schema per tenant, on PostgreSQL only: other databases refuse to boot with tenancy on, H2 unless `:allow-h2? true`.
+| `:wagoe/tenant`
+| 1.0.0
+| {repo}libs/tenant/test/wagoe/tenant/shell/membership_http_test.clj[membership tests]. A cross-tenant suite over every library is not there yet.
+
+| Secrets outside config files
+| `#secret` and `#env` read secrets from the environment or a file.
+| `#secret`, `:secret-sources`
+| 1.1.0
+| {repo}libs/config/test/wagoe/config/secrets_test.clj[`secrets_test`]. Nothing refuses a literal secret in `config.edn` yet.
+
+| Known vulnerabilities in dependencies
+| Scanned weekly, on every change to a `deps.edn`, and before each release publishes.
+| `.wagoe/check-vulns.edn` to allowlist, with a reason
+| 1.1.0; release gate: unreleased
+| {repo}.github/workflows/security.yml[`security.yml`], {repo}libs/tools/test/wagoe/tools/check_vulns_test.clj[`check_vulns_test`]
+|===
+
+Tests tagged `:security` also run as their own required job on every code
+change; the others run in their library's job.
+
+== What you do yourself
+
+* *TLS.* Wagoe sets HSTS and `Secure` cookies; something in front of it has to
+  terminate HTTPS.
+* *CSRF and rate limiting.* Turn both on for production, as the table says.
+* *Secrets.* Keep them in your platform's secret store and read them with
+  `#secret` or `#env`.
+* *Backups, OS and JVM patches, database access.* Outside the framework.
+
+== What we do not claim
+
+Wagoe has had no external audit and no penetration test. It has one
+maintainer.
+
+== How a fix reaches you
+
+See xref:ROOT:stability.adoc#_security_fixes[Security fixes].
