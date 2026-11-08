@@ -175,7 +175,7 @@ File upload and storage functionality for the Wagoe framework. Supports local fi
 The routes are mounted only with `:expose-http? true` and require a signed-in
 user. Download, delete and URL answer 404 to anyone but the file's tenant, its
 uploader (for a file outside any tenant) or a platform admin; a signed link
-skips the check. Uploads to a taken `path` are not refused yet.
+skips the check. An upload to a `path` whose file the caller may not reach is refused.
 `:http-base-path` places them (default `/storage`, under `/api/v1`). With
 `:signing-secret` set, `:url-base` must be the public URL of that download
 route.

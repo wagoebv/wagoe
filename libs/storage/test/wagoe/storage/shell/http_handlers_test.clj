@@ -209,6 +209,29 @@
         (is (.exists (io/file test-dir tenant-file)) "and the file is still there")
         (is (= 204 (:status (delete (as tenant-file {:id "alice"} "t1" true)))) "its tenant deletes it")))))
 
+(deftest ^:unit ^:security an-upload-cannot-replace-another-users-file
+  ;; A named path is a predictable local key; the upload overwrote the file and took its record (BOU-950).
+  (let [files  {"file" ["report.pdf" "application/pdf"] "image" ["pic.png" "image/png"]}
+        _      (do (.mkdirs (io/file test-dir "docs"))
+                   (doseq [[name _] (vals files)] (spit (io/file test-dir "docs" name) "alice's")))
+        svc    (indexed-service (into {} (for [[name _] (vals files) :let [k (str "docs/" name)]]
+                                           [k {:key k :user-id "alice"}])))
+        upload (fn [handler filename type user]
+                 (handler {:multipart-params {"file" (make-multipart-file filename type "bob's") "path" "docs"}
+                           :query-params     {}
+                           :user             user}))]
+    (doseq [[route handler] {"file" (sut/upload-file-handler svc) "image" (sut/upload-image-handler svc)}
+            :let [[name type] (files route)]]
+      (testing route
+        (is (= 403 (:status (upload handler name type {:id "bob"}))))
+        (is (= "alice's" (slurp (io/file test-dir "docs" name))))
+        (is (= "alice" (:user-id (service/upload-at svc (str "docs/" name)))))))
+    (testing "a filename that sanitizes to the same name twice over"
+      (is (= 403 (:status (upload (sut/upload-file-handler svc) "report. . .pdf" "application/pdf" {:id "bob"}))))
+      (is (= "alice's" (slurp (io/file test-dir "docs/report.pdf")))))
+    (testing "its uploader may replace it"
+      (is (= 201 (:status (upload (sut/upload-file-handler svc) "report.pdf" "application/pdf" {:id "alice"})))))))
+
 (deftest ^:unit every-mounted-handler-refuses-a-repeated-parameter
   ;; Ring gives a repeated parameter as a vector, and each consumer here —
   ;; parse-int-safe, keyword, str/split — throws on one. Fixed in one place

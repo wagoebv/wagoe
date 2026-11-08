@@ -131,6 +131,12 @@
     (or (:admin? caller)
         (uploads/may-access? (service/upload-at storage-service file-key) caller))))
 
+(defn- upload-refused
+  "A 403 when the service refused to replace another caller's file (BOU-950)."
+  [result]
+  (when (some #(= :forbidden (:code %)) (:errors result))
+    (forbidden "That path holds a file you may not replace")))
+
 (defn upload-file-handler
   "Handler for file upload endpoint.
 
@@ -177,17 +183,15 @@
                           :owner (request-owner request)}
                 options {:max-size max-size
                          :allowed-types allowed-types
-                         :allowed-extensions allowed-extensions}
+                         :allowed-extensions allowed-extensions
+                         :may-replace? #(reachable? storage-service request %)}
 
                 result (service/upload-file storage-service file-data metadata options)]
 
-            (if (:success result)
-              {:status 201
-               :body (:data result)}
-
-              (bad-request
-               "File validation failed"
-               {:errors (:errors result)}))))))))
+            (cond
+              (:success result)       {:status 201 :body (:data result)}
+              (upload-refused result) (upload-refused result)
+              :else                   (bad-request "File validation failed" {:errors (:errors result)}))))))))
 
 (defn upload-image-handler
   "Handler for image upload endpoint with processing options.
@@ -224,20 +228,18 @@
                           :visibility visibility
                           :owner (request-owner request)}
                 options {:create-thumbnail create-thumbnail
-                         :thumbnail-size thumbnail-size}
+                         :thumbnail-size thumbnail-size
+                         :may-replace? #(reachable? storage-service request %)}
 
                 result (service/upload-image storage-service
                                              (:bytes file-data)
                                              metadata
                                              options)]
 
-            (if (:success result)
-              {:status 201
-               :body (dissoc result :success)}
-
-              (bad-request
-               "Image upload failed"
-               {:errors (:errors result)}))))))))
+            (cond
+              (:success result)       {:status 201 :body (dissoc result :success)}
+              (upload-refused result) (upload-refused result)
+              :else                   (bad-request "Image upload failed" {:errors (:errors result)}))))))))
 
 (defn download-file-handler
   "Handler for file download endpoint.
