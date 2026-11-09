@@ -230,12 +230,26 @@
          "   :pool {:minimum-idle      1\n"
          "          :maximum-pool-size 10}}\n")))
 
-(defn- http-template [_env]
-  (str "  :wagoe/http\n"
-       "  {:port       #or [#env HTTP_PORT 3000]\n"
-       "   :host       #or [#env HTTP_HOST \"0.0.0.0\"]\n"
-       "   :join?      false\n"
-       "   :port-range {:start 3000 :end 3099}}\n"))
+(defn- http-template
+  "CSRF on in every profile and rate limiting where it can be, as `wagoe new` writes them (BOU-951)."
+  [env cache]
+  (if (= env "test")
+    (str "  ;; No rate limit: a test fires requests faster than any user.\n"
+         "  :wagoe/http\n"
+         "  {:security {:csrf {:enabled? true}}}\n")
+    (let [prod?      (prod? env)
+          limit-on?  (or (not prod?) (= cache :redis))]
+      (str "  :wagoe/http\n"
+           "  {:port       #or [#env HTTP_PORT 3000]\n"
+           "   :host       #or [#env HTTP_HOST \"0.0.0.0\"]\n"
+           "   :join?      false\n"
+           "   :port-range {:start 3000 :end 3099}\n"
+           (when prod?
+             "   ;; Needs Redis as :wagoe/cache: with no cache the boot refuses it, and an in-process one counts per replica.\n")
+           "   :rate-limit {:enabled?  #boolean #or [#env HTTP_RATE_LIMIT_ENABLED \"" limit-on? "\"]\n"
+           "                :limit     #long #or [#env HTTP_RATE_LIMIT " (if prod? 300 1000) "]\n"
+           "                :window-ms 60000}\n"
+           "   :security   {:csrf {:enabled? true}}}\n"))))
 
 (defn- router-template [_env]
   (str "  :wagoe/router\n"
@@ -443,7 +457,7 @@
                        " {")
                   (settings-template (:project-name spec) env)
                   (database-template (:database spec) env)
-                  (when-not (= env "test") (http-template env))
+                  (http-template env (:cache spec))
                   (when-not (= env "test") (router-template env))
                   ;; wagoe new writes this key too (dev-config.edn.tmpl) — the
                   ;; WGE-code enrichment of BOU-321. Setup regenerates the whole
