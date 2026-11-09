@@ -316,7 +316,8 @@ initialisation rather than being handed H2 syntax.
 every route carries `:wagoe/admin-only-middleware` — these endpoints create and delete
 segments and read their member ids, and the global authentication only *sets* `:user` when
 credentials are present rather than demanding them. The routes component refuses to
-initialise with an empty middleware vector (BOU-419).
+initialise with an empty middleware vector (BOU-419). Segments span every tenant's users, so the
+routes also refuse a tenant's admin: only a platform admin passes (BOU-954).
 
 **Note**: `:user-data-source` is required; without it `:wagoe/audience` refuses to boot. The wired default is the SQL source above. To use your own, implement `IUserQuery` and `IUserDataSource`:
 

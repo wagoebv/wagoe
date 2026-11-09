@@ -119,3 +119,22 @@
         (is (not (str/includes? body (str doc-b))))))
     (testing "and is refused an index that holds every tenant's data"
       (is (= 403 (:status (search :open-items admin-of-a)))))))
+
+(defn- write
+  "POST /search/documents for `user`, through its middleware."
+  [user]
+  (let [data    (some (fn [[p d]] (when (= p "/search/documents") d)) (sut/search-routes *engine*))
+        handler (reduce (fn [h mw] (mw h)) (get-in data [:post :handler]) (reverse (get-in data [:post :middleware])))]
+    (handler {:request-method :post :uri "/api/v1/search/documents" :user user
+              :parameters {:body {:indexId "scoped-items" :entityId doc-b :fields {:title "taken"}
+                                  :filterValues {:tenant-id (str tenant-a)}}}})))
+
+(deftest ^:unit ^:security only-a-platform-admin-writes-documents
+  (testing "a tenant's admin could otherwise overwrite another tenant's document by its id"
+    (is (= 403 (:status (write {:id (UUID/randomUUID) :role :admin :tenant-id tenant-a}))))
+    (is (= #{(str doc-b)} (ids (call :search :scoped-items {:user {:id (UUID/randomUUID) :role :user}
+                                                            :tenant {:id tenant-b}
+                                                            :tenant-membership {:tenant-id tenant-b :role :member :status :active}}
+                                     {})))))
+  (testing "a platform admin may"
+    (is (= 200 (:status (write {:id (UUID/randomUUID) :role :admin}))))))

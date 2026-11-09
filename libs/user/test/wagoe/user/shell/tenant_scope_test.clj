@@ -43,6 +43,9 @@
           (is (= #{"a@example.com"} (listed {:user (user {:role :admin :tenant-id tenant-a})})))
           (is (= #{"a@example.com"} (listed {:user (user {:role :admin :tenant-id tenant-a})
                                              :tenant {:id tenant-a}}))))
+        (testing "a member of the resolved tenant who administers another lists no one here"
+          (is (nil? (listed {:user (user {:role :admin :tenant-id tenant-a}) :tenant {:id tenant-b}
+                             :tenant-membership {:tenant-id tenant-b :role :member}}))))
         (testing "a caller outside the resolved tenant lists no one"
           (is (nil? (listed {:user (user {:role :admin :tenant-id tenant-a}) :tenant {:id tenant-b}})))
           (is (nil? (listed {:user (user {}) :tenant {:id tenant-b}}))))

@@ -7,13 +7,8 @@
   "`opts` limited to the users `request` may list, or nil when none. The resolved
    tenant wins; without one a platform admin lists everyone, anyone else their own tenant (or none)."
   [request opts]
-  (let [user      (:user request)
-        tenant-id (get-in request [:tenant :id])]
-    (cond
-      tenant-id                     (when (access/in-tenant-scope? request)
-                                      (assoc opts :filter-tenant-id tenant-id))
-      (access/platform-admin? user) opts
-      :else                         (assoc opts :filter-tenant-id (:tenant-id user)))))
+  (when-let [reach (access/admin-reach request)]
+    (cond-> opts (contains? reach :tenant-id) (assoc :filter-tenant-id (:tenant-id reach)))))
 
 (defn lists?
   "Whether `user` is one that `request` may list."

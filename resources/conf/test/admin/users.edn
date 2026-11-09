@@ -21,6 +21,9 @@
   ;; end the user's sessions where they should, and keep one admin (BOU-665).
   :writer          :user
 
+  ;; A tenant's admin sees and changes only their tenant's users (BOU-954)
+  :scope           {:tenant-id :tenant-id}
+
   ;; Split-table update: fields listed under :secondary-fields are written to
   ;; :secondary-table instead of the primary :table-name. Both UPDATEs run in
   ;; a single transaction so they commit or roll back atomically.
