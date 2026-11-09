@@ -188,8 +188,8 @@ Call `ports/index-document!` from your module's service layer or event handler:
 
 ## HTTP Endpoints
 
-Searching takes a signed-in user; indexing, removing and the web UI take the
-admin role (BOU-568). Search, suggest and the web UI serve only an index that
+Searching takes a signed-in user and the web UI the admin role (BOU-568);
+indexing and removing take a platform admin, since they name a document by id alone (BOU-954). Search, suggest and the web UI serve only an index that
 opts in (see above).
 
 An index with `:tenant-id` in its `:filters` is tenant-scoped. Search and

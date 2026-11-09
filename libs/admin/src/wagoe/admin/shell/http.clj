@@ -25,6 +25,7 @@
    [wagoe.admin.core.ui.layout :as layout]
    [wagoe.admin.ports :as ports]
    [wagoe.admin.shell.scoped-service :as scoped-service]
+   [wagoe.core.http.access :as core-access]
    [wagoe.user.shell.middleware :as user-middleware]))
 
 ;; Facade re-export: consumers (e.g. http_test) resolve
@@ -52,9 +53,9 @@
   [admin-service schema-provider config user-service]
   (let [;; Reuse existing auth middleware from user module
         auth-middleware (user-middleware/flexible-authentication-middleware user-service)
-        ;; Under :report and :enforce the user carries their rights, and under
-        ;; :enforce each request gets the service scoped to them (ADR-041 §6).
-        ;; Otherwise the handlers are built once, as before.
+        ;; Under :report and :enforce the user carries their rights. A request
+        ;; gets the service scoped to them under :enforce (ADR-041 §6) and to
+        ;; the tenant they are bound to (BOU-954); else the handlers built once.
         access          (:access config)
         auth-middleware (if access
                           (fn [handler]
@@ -62,13 +63,16 @@
                              (fn [request]
                                (handler (update request :user (partial with-access config))))))
                           auth-middleware)
-        h               (if (and access (= :enforce (:authorization-mode config)))
-                          (fn [ctor]
+        h               (fn [ctor]
+                          (let [plain (ctor admin-service schema-provider config)]
                             (fn [request]
-                              ((ctor (scoped-service/for-user admin-service schema-provider (:user request))
-                                     schema-provider config)
-                               request)))
-                          (fn [ctor] (ctor admin-service schema-provider config)))]
+                              (let [svc (scoped-service/for-request admin-service schema-provider request)]
+                                (cond
+                                  (nil? svc)                     (core-access/forbidden-response
+                                                                  "Tenant membership required" request
+                                                                  (core-access/correlation-id request (str (random-uuid))))
+                                  (identical? svc admin-service) (plain request)
+                                  :else                          ((ctor svc schema-provider config) request))))))]
 
     [["/"
       {:middleware [auth-middleware]

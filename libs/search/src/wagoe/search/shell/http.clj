@@ -12,8 +12,8 @@
      GET    /search/:index-id              — index detail + live search form
      POST   /search/:index-id/search       — HTMX search results fragment
 
-   Searching takes a signed-in user; indexing, removing and the admin pages
-   take the admin role (BOU-568).
+   Searching takes a signed-in user; the admin pages take the admin role
+   (BOU-568), indexing and removing a platform admin (BOU-954).
 
    Search, suggest and the admin pages serve only an index whose definition
    opts in with `:api? true` or an `:api :authorize` fn; a hook, when set, must
@@ -310,11 +310,11 @@
   [["/search/documents"
     {:post {:handler    (fn [req] (handle-index-document engine req))
             :parameters {:body IndexDocumentBody}
-            :middleware [require-admin]
+            :middleware [access/require-platform-admin]
             :summary    "Index a search document"}}]
    ["/search/documents/:entity-type/:entity-id"
     {:delete {:handler    (fn [req] (handle-remove-document engine req))
-              :middleware [require-admin]
+              :middleware [access/require-platform-admin]
               :summary    "Remove a search document"}}]
    ;; After /search/documents: reitit matches literal segments before
    ;; parameters, but declaring the specific ones first says so to a reader.

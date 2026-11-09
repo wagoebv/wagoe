@@ -274,10 +274,12 @@
       (html-response request (group-ui/provider-members (ports/provider-members group-service group-id)) 200)
       (not-found request))))
 
-(defn remove-member [group-service]
+(defn remove-member [user-service group-service]
   (fn [request]
     (change group-service request :user.groups/flash-member-removed
-            (fn [id] (when-let [user-id (path-uuid request :user-id)] {:op :remove-member :group-id id :user-id user-id}))
+            ;; Another tenant's user is as unknown here as in add-member (BOU-953)
+            (fn [id] (when-let [u (tenant-scope/reachable-user user-service request (path-uuid request :user-id))]
+                       {:op :remove-member :group-id id :user-id (:id u)}))
             #(when % (ports/remove-group-member group-service (:group-id %) (:user-id %))))))
 
 (defn decode-scope

@@ -44,6 +44,7 @@
             [wagoe.user.shell.web-handlers :as web-handlers]
             [wagoe.user.shell.group-handlers :as group-handlers]
             [wagoe.user.shell.rights-handlers :as rights-handlers]
+            [wagoe.user.shell.tenant-scope :as tenant-scope]
             [wagoe.user.shell.mfa :as mfa]
             [wagoe.platform.ports.privacy :as privacy]
             [wagoe.user.core.audit :as audit]
@@ -398,7 +399,7 @@
                                    [:active {:optional true} :boolean]]}}}]
      ["/users/:id"
       {:authorization :self
-       :middleware [auth-middleware]
+       :middleware [auth-middleware (tenant-scope/wrap-target-user user-service)]
        :get    {:handler    (get-user-handler user-service)
                 ;; Read own record or admin — closes the cross-user IDOR
                 ;; (a non-admin cannot fetch another user's record by :id).
@@ -518,10 +519,10 @@
       (user-middleware/create-forbidden-response "Platform admin required, on another user's account"
                                                  :insufficient-role request))))
 
-(defn- account-recovery-route [path auth-middleware handler summary]
+(defn- account-recovery-route [path auth-middleware target-user handler summary]
   [path {:no-doc        true
          :authorization :self
-         :middleware    [auth-middleware account-recovery-middleware]
+         :middleware    [auth-middleware account-recovery-middleware target-user]
          :post          {:handler handler :summary summary}}])
 
 (defn web-routes
@@ -530,6 +531,8 @@
    Without the /web prefix — the platform adds it when mounting."
   [user-service mfa-service config]
   (let [auth-middleware (user-middleware/flexible-authentication-middleware user-service)
+        ;; Another tenant's user is not found (BOU-953)
+        target-user     (tenant-scope/wrap-target-user user-service)
         email-sender    (:email-sender config)]
     ;; filterv: the dashboard route is nil under `:dashboard false`, and
     ;; registration under `:registration false`.
@@ -614,7 +617,7 @@
       ["/users/:id"
        {:no-doc     true
         :authorization :self
-        :middleware [auth-middleware]
+        :middleware [auth-middleware target-user]
         :get {:handler      web-handlers/user-detail-redirect
               :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                              'wagoe.user.shell.http-interceptors/require-admin]
@@ -622,7 +625,7 @@
       ["/users/:id/hard-delete"
        {:no-doc     true
         :authorization :self
-        :middleware [auth-middleware]
+        :middleware [auth-middleware target-user]
         :post {:handler (web-handlers/hard-delete-user-handler user-service config)
                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                               'wagoe.user.shell.http-interceptors/require-admin]
@@ -631,7 +634,7 @@
       ["/users/:id/sessions"
        {:no-doc     true
         :authorization :self
-        :middleware [auth-middleware]
+        :middleware [auth-middleware target-user]
         :get {:handler (web-handlers/user-sessions-page-handler user-service config)
               ;; The handler reads the :id path param, so a non-admin must
               ;; not view another user's sessions (IDOR) — own or admin only.
@@ -641,7 +644,7 @@
       ["/users/:id/sessions/revoke-all"
        {:no-doc     true
         :authorization :self
-        :middleware [auth-middleware]
+        :middleware [auth-middleware target-user]
         :post {:handler (web-handlers/revoke-all-sessions-handler user-service config)
                ;; Revoking by :id path param — own or admin only, else a
                ;; non-admin could force-logout any user (IDOR / DoS).
@@ -651,15 +654,15 @@
       ["/users/:id/sessions/:session-id/revoke"
        {:no-doc     true
         :authorization :self
-        :middleware [auth-middleware]
+        :middleware [auth-middleware target-user]
         :post {:handler (web-handlers/revoke-session-handler user-service config)
                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                               'wagoe.user.shell.http-interceptors/require-self-or-admin]
                :summary "Revoke specific session"}}]
-      (account-recovery-route "/users/:id/unlock" auth-middleware
+      (account-recovery-route "/users/:id/unlock" auth-middleware target-user
                               (web-handlers/unlock-user-handler user-service config)
                               "End a user's sign-in lockout (admin)")
-      (account-recovery-route "/users/:id/mfa/reset" auth-middleware
+      (account-recovery-route "/users/:id/mfa/reset" auth-middleware target-user
                               (web-handlers/reset-mfa-handler user-service config)
                               "Turn off a user's second factor (admin)")
       ;; Audit trail routes
@@ -844,7 +847,7 @@
                     (route "/:id/provider-members"
                            {:get {:handler (group-handlers/provider-members group-service)}})
                     (route "/:id/members/:user-id/remove"
-                           {:post {:handler (group-handlers/remove-member group-service)}})
+                           {:post {:handler (group-handlers/remove-member user-service group-service)}})
                     (route "/:id/roles"
                            {:post {:handler (group-handlers/add-role group-service)}})
                     (route "/:id/roles/:assignment-id/remove"

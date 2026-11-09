@@ -10,4 +10,6 @@
    :member-count {:type :integer :label [:t :admin.audiences/field-member-count] :filterable true}
    :cached-at    {:type :instant :label [:t :admin.audiences/field-cached-at]    :filterable true}
    :created-at   {:type :instant :label [:t :admin.audiences/field-created-at]   :filterable true}}
-  :create-redirect-url "/web/audiences/builder"}}
+  :create-redirect-url "/web/audiences/builder"
+  ;; Segments span every tenant's users: none for a tenant's admin (BOU-954)
+  :scope       {:tenant-id wagoe.admin.core.permissions/no-tenants-rows}}}

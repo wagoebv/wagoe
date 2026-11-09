@@ -925,6 +925,8 @@
                           (nil? ids-param) []
                           (sequential? ids-param) ids-param
                           :else [ids-param])
+            ;; Unreachable or missing users are dropped here (BOU-953)
+            ids         (filterv #(tenant-scope/reachable-user user-service request (UUID/fromString %)) ids)
             _           (log/info "Bulk user operation" {:action action
                                                          :ids-count (count ids)})
             ;; Merge query params from URL and hidden form fields to
@@ -942,10 +944,8 @@
               (user-ports/deactivate-user user-service uuid)))
 
           "activate"
-          (doseq [id-str ids
-                  :let [uuid (UUID/fromString id-str)]
-                  :when (user-ports/get-user-by-id user-service uuid)]
-            (user-ports/update-user-profile user-service {:id uuid :active true}))
+          (doseq [id-str ids]
+            (user-ports/update-user-profile user-service {:id (UUID/fromString id-str) :active true}))
 
           "delete"
           (doseq [id-str ids]
@@ -953,16 +953,12 @@
               (user-ports/delete-user user-service uuid)))
 
           "role-admin"
-          (doseq [id-str ids
-                  :let [uuid (UUID/fromString id-str)]
-                  :when (user-ports/get-user-by-id user-service uuid)]
-            (user-ports/update-user-profile user-service {:id uuid :role :admin}))
+          (doseq [id-str ids]
+            (user-ports/update-user-profile user-service {:id (UUID/fromString id-str) :role :admin}))
 
           "role-user"
-          (doseq [id-str ids
-                  :let [uuid (UUID/fromString id-str)]
-                  :when (user-ports/get-user-by-id user-service uuid)]
-            (user-ports/update-user-profile user-service {:id uuid :role :user}))
+          (doseq [id-str ids]
+            (user-ports/update-user-profile user-service {:id (UUID/fromString id-str) :role :user}))
 
           (throw (ex-info "Unsupported bulk action"
                           {:type :bad-request
@@ -1047,19 +1043,22 @@
       (if-not valid?
         (rerender validation-errors nil)
         (try
-          (let [user-data (dissoc prepared-data :send-welcome)
-                user-result (user-ports/register-user user-service user-data)
-                email-sent? (when (and send-welcome? email-sender)
-                              (try
-                                (send-welcome-email! email-sender user-result config)
-                                true
-                                (catch Exception e
-                                  (log/warn e "Failed to send welcome email" {:email (:email user-result)})
-                                  false)))
-                flash-msg (str "User " (:name user-result) " created"
-                               (when email-sent?
-                                 (str ", welcome email sent to " (:email user-result))))]
-            (redirect-with-toast request return-to :success flash-msg))
+          (if-let [tenant (tenant-scope/new-user-tenant request)]
+            (let [user-data (merge (dissoc prepared-data :send-welcome) tenant)
+                  user-result (user-ports/register-user user-service user-data)
+                  email-sent? (when (and send-welcome? email-sender)
+                                (try
+                                  (send-welcome-email! email-sender user-result config)
+                                  true
+                                  (catch Exception e
+                                    (log/warn e "Failed to send welcome email" {:email (:email user-result)})
+                                    false)))
+                  flash-msg (str "User " (:name user-result) " created"
+                                 (when email-sent?
+                                   (str ", welcome email sent to " (:email user-result))))]
+              (redirect-with-toast request return-to :success flash-msg))
+            (access/forbidden-response "Tenant membership required" request
+                                       (access/correlation-id request (str (random-uuid)))))
           (catch clojure.lang.ExceptionInfo e
             ;; A duplicate email and a password the policy rejects both pass the
             ;; request schema and are refused by the service. They used to reach
