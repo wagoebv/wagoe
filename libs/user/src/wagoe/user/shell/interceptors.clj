@@ -12,6 +12,7 @@
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.user.shell.service :as user-service]
+            [wagoe.user.shell.tenant-scope :as tenant-scope]
             [wagoe.user.ports :as ports]
             [wagoe.user.schema :as schema]
             [clojure.string :as str])
@@ -366,13 +367,23 @@
                            :offset (or (:offset query-params) 0)
                            :filter-role (when (:role query-params)
                                           (keyword (:role query-params)))
-                           :filter-active (:active query-params)}]
+                           :filter-active (:active query-params)}
+                  ;; A CLI caller is the operator; an HTTP one lists its tenant's users (BOU-948).
+                  options (if (= :http interface-type)
+                            (tenant-scope/list-options (:request context) options)
+                            options)]
 
-              (-> context
-                  (assoc :list-options options)
-                  (ctx/add-breadcrumb :operation :list-users-transform-complete
-                                      {:options options
-                                       :interface-type interface-type}))))})
+              (if-not options
+                (ctx/fail-with-exception context
+                                         (ex-info "Tenant membership required"
+                                                  {:type :forbidden
+                                                   :message "Tenant membership required"
+                                                   :interface-type interface-type}))
+                (-> context
+                    (assoc :list-options options)
+                    (ctx/add-breadcrumb :operation :list-users-transform-complete
+                                        {:options options
+                                         :interface-type interface-type})))))})
 
 (def fetch-users
   "Fetches all users with options."

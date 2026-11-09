@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A tenant's user could list other tenants' users, and search an index without a tenant filter** (BOU-948). Listings
+  hold the caller's tenant now; mark an index that holds no tenant's data `:global? true`, or a tenant's caller gets 403.
 - **A profile `bb setup` wrote had CSRF and rate limiting off** (BOU-951). It writes them as `wagoe new` does now; prod
   limits rate only with Redis. An existing profile keeps its block: add `:security {:csrf {:enabled? true}}` yourself.
 - **A new app validated no CSRF token and had no rate limit** (BOU-940): `wagoe new` turns both on now, and the boot warns

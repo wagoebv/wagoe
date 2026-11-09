@@ -86,7 +86,7 @@ opts in:
 | Definition                              | Served to                                           |
 |-----------------------------------------|-----------------------------------------------------|
 | neither key                             | nobody: 404                                         |
-| `:api? true`                            | any signed-in user                                  |
+| `:api? true`                            | any signed-in user, within the tenant rule below    |
 | `:api {:authorize (fn [request def])}`  | requests the hook returns truthy for; 404 otherwise |
 
 A refused index answers the same 404 as an unknown one, so ids cannot be
@@ -197,6 +197,10 @@ suggest then filter on the request's resolved tenant, and only for an active
 member of it; a `tenant_id` the caller sends is ignored. With no tenant
 resolved, only a global admin may search it (across tenants, with their own
 filters); anyone else gets 403.
+
+An index without `:tenant-id` in its `:filters` is refused (403) to a caller in a
+tenant, resolved or their own, unless it says it holds no tenant's data with
+`:global? true`. A platform admin may search it either way (BOU-948).
 
 ### API Endpoints (mounted at `/api/v1/search/...`)
 

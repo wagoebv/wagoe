@@ -41,7 +41,9 @@
    ;; The generic search API and admin pages serve an index only when it opts
    ;; in. `:authorize` is (fn [request definition]) -> truthy to serve.
    [:api?        {:optional true} boolean?]
-   [:api         {:optional true} [:map [:authorize {:optional true} fn?]]]])
+   [:api         {:optional true} [:map [:authorize {:optional true} fn?]]]
+   ;; Holds no tenant's data: a caller in a tenant may search it without :filters [:tenant-id].
+   [:global?     {:optional true} boolean?]])
 
 (def SearchDocument
   "An indexed document stored in the search_documents table."
