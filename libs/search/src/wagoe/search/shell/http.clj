@@ -24,7 +24,10 @@
    tenant-scoped. A search of one reads the request's resolved tenant, and only
    for a caller in it (`access/in-tenant-scope?`); a `tenant_id` the caller
    sends is dropped. With no tenant resolved, only a global admin may search it, with
-   whatever filters they send. Anyone else gets 403."
+   whatever filters they send. Anyone else gets 403.
+
+   An index without that filter needs `:global? true` for a caller in a tenant,
+   unless a platform admin; the admin search page too (BOU-948)."
   (:require [wagoe.i18n.shell.middleware :as i18n-middleware]
             [wagoe.core.http.access :as access]
             [wagoe.i18n.shell.render :as i18n]
@@ -101,6 +104,10 @@
         tenant-id (get-in request [:tenant :id])
         scoped?   (some tenant-filter? (:filters definition))]
     (cond
+      (and (not scoped?)
+           (not (:global? definition))
+           (or tenant-id (:tenant-id (:user request)))
+           (not (access/platform-admin? (:user request)))) ::refused
       (not scoped?)                                own
       (and tenant-id (access/in-tenant-scope? request)) (assoc own :tenant-id tenant-id)
       (and (nil? tenant-id) (access/platform-admin? (:user request))) (or caller-filters {})
@@ -274,17 +281,21 @@
         form-params (get-in request [:form-params] {})
         query       (get form-params "query" "")
         definition  (served! engine request index-id)
-        results     (ports/search engine (:id definition) query
-                                  {:limit 20 :highlight? true})]
-    {:status  200
-     :headers {"Content-Type" "text/html; charset=utf-8"}
-     :body    (i18n/render
-               (search-ui/search-results-fragment
-                (:results results)
-                (:query results)
-                (:total results)
-                (:took-ms results))
-               (resolve-t request))}))
+        filters     (scoped-filters request definition nil)]
+    (if (= ::refused filters)
+      (refused request)
+      (let [results (ports/search engine (:id definition) query
+                                  (cond-> {:limit 20 :highlight? true}
+                                    (seq filters) (assoc :filters filters)))]
+        {:status  200
+         :headers {"Content-Type" "text/html; charset=utf-8"}
+         :body    (i18n/render
+                   (search-ui/search-results-fragment
+                    (:results results)
+                    (:query results)
+                    (:total results)
+                    (:took-ms results))
+                   (resolve-t request))}))))
 
 ;; =============================================================================
 ;; Route definitions

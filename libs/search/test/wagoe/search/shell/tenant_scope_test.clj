@@ -1,7 +1,8 @@
 (ns wagoe.search.shell.tenant-scope-test
   "A search of a tenant-scoped index reads the caller's tenant and nothing else,
    whatever filter the caller sends (BOU-568)."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [support.test-db :as test-db]
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.http :as sut]
@@ -28,12 +29,15 @@
                                     :fields [{:name :title :weight :a}]
                                     :filters [:tenant-id]}
                      :open-items   {:id :open-items :entity-type :item :api? true
+                                    :fields [{:name :title :weight :a}]}
+                     :global-items {:id :global-items :entity-type :item :api? true :global? true
                                     :fields [{:name :title :weight :a}]}})]
         (ports/index-document! engine :scoped-items doc-a {:title "widget alpha"}
                                {:filter-values {:tenant-id tenant-a}})
         (ports/index-document! engine :scoped-items doc-b {:title "widget beta"}
                                {:filter-values {:tenant-id tenant-b}})
         (ports/index-document! engine :open-items doc-open {:title "widget open"} {})
+        (ports/index-document! engine :global-items doc-open {:title "widget open"} {})
         (binding [*engine* engine] (f))))))
 
 (use-fixtures :each with-engine)
@@ -89,6 +93,29 @@
       (is (= #{(str doc-b)} (ids (call :search :scoped-items admin
                                        {:filters {:tenant_id (str tenant-b)}})))))))
 
-(deftest ^:unit an-index-without-a-tenant-filter-is-open-to-any-signed-in-user
-  (is (= #{(str doc-open)}
-         (ids (call :search :open-items {:user {:id (UUID/randomUUID) :role :user}} {})))))
+(deftest ^:unit ^:security an-index-without-a-tenant-filter-is-refused-to-a-caller-in-a-tenant
+  (testing "a member of a resolved tenant, or a user of one, is refused"
+    (is (= 403 (:status (call :search :open-items member-of-a {}))))
+    (is (= 403 (:status (call :suggest :open-items {:user {:id (UUID/randomUUID) :role :user
+                                                           :tenant-id tenant-a}} {})))))
+  (testing "unless the index says it is global"
+    (is (= #{(str doc-open)} (ids (call :search :global-items member-of-a {})))))
+  (testing "a user of no tenant, and a platform admin, read it"
+    (is (= #{(str doc-open)} (ids (call :search :open-items {:user {:id (UUID/randomUUID) :role :user}} {}))))
+    (is (= #{(str doc-open)} (ids (call :search :open-items {:user {:id (UUID/randomUUID) :role :admin}
+                                                             :tenant {:id tenant-a}} {}))))))
+
+(deftest ^:unit ^:security the-admin-search-page-is-scoped-as-the-api-is
+  (let [search (fn [index-id request]
+                 (sut/handle-search-fragment *engine*
+                                             (merge {:path-params {:index-id (name index-id)}
+                                                     :form-params {"query" "widget"}}
+                                                    request)))
+        admin-of-a {:user {:id (UUID/randomUUID) :role :admin :tenant-id tenant-a}
+                    :tenant {:id tenant-a}}]
+    (testing "a tenant's admin sees their tenant's documents only"
+      (let [body (:body (search :scoped-items admin-of-a))]
+        (is (str/includes? body (str doc-a)))
+        (is (not (str/includes? body (str doc-b))))))
+    (testing "and is refused an index that holds every tenant's data"
+      (is (= 403 (:status (search :open-items admin-of-a)))))))

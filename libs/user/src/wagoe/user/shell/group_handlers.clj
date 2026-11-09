@@ -18,6 +18,7 @@
             [wagoe.user.core.hygiene :as hygiene]
             [wagoe.user.core.rights-ui :as rights-ui]
             [wagoe.user.ports :as ports]
+            [wagoe.user.shell.tenant-scope :as tenant-scope]
             [wagoe.user.shell.web-handlers :refer [html-response]]))
 
 (defn page-opts [request]
@@ -218,10 +219,12 @@
   "The id of the user the member form names. Throws :not-found."
   [user-service request]
   ;; The lookup submits the user's id; a script may still send an email
-  (or (:id (if-let [user-id (some-> (form request "user-id") parse-uuid)]
-             (ports/get-user-by-id user-service user-id)
-             (some->> (form request "email") not-empty (ports/get-user-by-email user-service))))
-      (throw (ex-info "No such user" {:type :not-found :field :email}))))
+  (let [user (if-let [user-id (some-> (form request "user-id") parse-uuid)]
+               (ports/get-user-by-id user-service user-id)
+               (some->> (form request "email") not-empty (ports/get-user-by-email user-service)))]
+    ;; Another tenant's user is as unknown here as in the lookup (BOU-948)
+    (or (when (and user (tenant-scope/lists? request user)) (:id user))
+        (throw (ex-info "No such user" {:type :not-found :field :email})))))
 
 (defn form-expiry
   "The expiry date the form gives, `yyyy-mm-dd`, as the Instant that day
@@ -249,13 +252,14 @@
   (fn [request]
     (if-let [group-id (some->> (path-uuid request :id) (ports/get-group group-service) :id)]
       (let [q     (combobox/query request)
-            users (:users (ports/list-users user-service
-                                            (cond-> {:limit                 combobox/limit
-                                                     :filter-active         true
-                                                     :exclude-group-members group-id
-                                                     :sort-by               :email
-                                                     :sort-direction        :asc}
-                                              q (assoc :filter-name-or-email-contains q))))]
+            opts  (tenant-scope/list-options request
+                                             (cond-> {:limit                 combobox/limit
+                                                      :filter-active         true
+                                                      :exclude-group-members group-id
+                                                      :sort-by               :email
+                                                      :sort-direction        :asc}
+                                               q (assoc :filter-name-or-email-contains q)))
+            users (when opts (:users (ports/list-users user-service opts)))]
         (html-response request
                        (combobox/options :user-id (map (juxt :id user-label) users)
                                          [:t :user.groups/member-no-matches])

@@ -539,8 +539,7 @@
                          (contains? options :filter-active) (assoc :active (:filter-active options)))
 
           profile-filters (cond-> {}
-                            (:filter-role options) (assoc :role (:filter-role options))
-                            (:filter-tenant-id options) (assoc :tenant-id (:filter-tenant-id options)))
+                            (:filter-role options) (assoc :role (:filter-role options)))
 
           ;; Build WHERE clauses for each table
           auth-where (when (seq auth-filters)
@@ -563,6 +562,11 @@
                         ;; Its own condition: the where builder drops a nil value
                         (not (:include-deleted? options))
                         (conj [:= :a.deleted_at nil])
+
+                        ;; Its own condition too: nil means users of no tenant, and an id is
+                        ;; matched whole, not as the contains a string gets (BOU-948).
+                        (contains? options :filter-tenant-id)
+                        (conj [:= :u.tenant_id (type-conversion/uuid->string (:filter-tenant-id options))])
 
                         (:filter-email-contains options)
                         (conj (contains :a.email (:filter-email-contains options)))

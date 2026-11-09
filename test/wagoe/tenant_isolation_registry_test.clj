@@ -27,15 +27,16 @@
    "cache"         {:scoped-by "tenant:<id>: key prefix, when the app uses create-tenant-cache"
                     :tests     {"libs/cache/test/wagoe/cache/shell/tenant_cache_test.clj"
                                 ["tenant-cache-key-test"]}}
-   "search"        {:scoped-by "tenant_id filter from the request, for indexes that declare it"
+   "search"        {:scoped-by "tenant_id filter from the request; an index without it is refused to a tenant's caller unless :global?"
                     :tests     {"libs/search/test/wagoe/search/shell/tenant_scope_test.clj"
-                                ["a-member-reads-only-their-own-tenant"]}
-                    :gaps      ["BOU-948"]}
-   "user"          {:scoped-by "users.tenant_id; tenant-member guards on routes"
+                                ["a-member-reads-only-their-own-tenant"
+                                 "an-index-without-a-tenant-filter-is-refused-to-a-caller-in-a-tenant"]}}
+   "user"          {:scoped-by "users.tenant_id; listings forced to the caller's tenant; tenant-member guards on routes"
                     :tests     {"libs/user/test/wagoe/user/shell/authz_negative_security_test.clj"
-                                ["require-tenant-member-denies-non-member"]}
-                    :gaps      ["BOU-948"]}
-   "audience"      {:scoped-by "may filter on :tenant-id, not forced to" :gaps ["BOU-948"]}
+                                ["require-tenant-member-denies-non-member"]
+                                "libs/user/test/wagoe/user/shell/tenant_scope_test.clj"
+                                ["a-listing-holds-only-the-callers-tenant"]}}
+   "audience"      {:scoped-by "may filter on :tenant-id, not forced to" :gaps ["BOU-954"]}
    "storage"       {:scoped-by "download, delete and URL check the uploader or tenant in the upload index"
                     :tests     {"libs/storage/test/wagoe/storage/shell/http_handlers_test.clj"
                                 ["a-file-is-reached-only-by-its-owner-its-tenant-or-an-admin"

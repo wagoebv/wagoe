@@ -37,6 +37,7 @@
             [wagoe.user.shell.mfa :as mfa]
             [wagoe.user.shell.mfa-enrolment :as enrolment]
             [wagoe.user.shell.oidc :as oidc]
+            [wagoe.user.shell.tenant-scope :as tenant-scope]
             [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
@@ -318,15 +319,17 @@
                                   {:logo-url (get-in config [:wagoe/settings :logo-url])})))))))
 
 (defn- users-list
-  "The users table's users, table query, total and filters for `query-params`."
-  [user-service query-params]
+  "The users table's users, table query, total and filters for `query-params`:
+   none for a caller who may list no one here."
+  [user-service request query-params]
   (let [table-query (web-table/parse-table-query
                      query-params
                      {:default-sort      :created-at
                       :default-dir       :desc
                       :default-page-size 20})
         filters     (web-table/parse-search-filters query-params)
-        result      (user-ports/list-users user-service (build-user-list-opts table-query filters))]
+        opts        (tenant-scope/list-options request (build-user-list-opts table-query filters))
+        result      (if opts (user-ports/list-users user-service opts) {:users [] :total-count 0})]
     [(:users result) table-query (:total-count result) filters]))
 
 (defn users-page-handler
@@ -337,7 +340,7 @@
   [user-service _config]
   (fn [request]
     (try
-      (let [[users table-query total-count filters] (users-list user-service (:query-params request))]
+      (let [[users table-query total-count filters] (users-list user-service request (:query-params request))]
         ;; One URL, two bodies: a cache must not answer one with the other
         (-> (html-response request
                            (if (htmx/fragment-request? (:headers request) ["users-table-container"])
@@ -902,7 +905,7 @@
   (fn [request]
     (try
       (html-response request
-                     (apply user-ui/users-table-fragment (users-list user-service (:query-params request))))
+                     (apply user-ui/users-table-fragment (users-list user-service request (:query-params request))))
       (catch Exception e
         (server-error request e "Error in users-table-fragment-handler")))))
 
@@ -964,7 +967,7 @@
           (throw (ex-info "Unsupported bulk action"
                           {:type :bad-request
                            :action action})))
-        (html-response request (apply user-ui/users-table-fragment (users-list user-service qp))))
+        (html-response request (apply user-ui/users-table-fragment (users-list user-service request qp))))
       (catch IllegalArgumentException _
         (-> (html-response request (ui/error-message [:t :user/error-invalid-user-id-bulk]) 400)
             (with-error-toast request :user/error-invalid-user-id-bulk)))
