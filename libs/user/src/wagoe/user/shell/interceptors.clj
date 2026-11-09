@@ -119,16 +119,28 @@
                                      (:date-format raw-input)
                                      (assoc :date-format (:date-format raw-input))
                                      (:time-format raw-input)
-                                     (assoc :time-format (:time-format raw-input))))]
+                                     (assoc :time-format (:time-format raw-input))))
+                  ;; An HTTP caller creates in its own tenant, so an admin role it
+                  ;; grants stays there (BOU-953); a CLI caller is the operator.
+                  tenant (if (= :http interface-type)
+                           (tenant-scope/new-user-tenant (:request context))
+                           {})
+                  user-data (merge user-data tenant)]
 
-              (-> context
-                  (assoc :user-data user-data)
-                  (ctx/add-breadcrumb :transformation :user-data-normalized
-                                      {:interface-type interface-type
-                                       :email (:email user-data)
-                                       :role (:role user-data)
-                                       :active (:active user-data)
-                                       :has-password (some? (:password user-data))}))))})
+              (if-not tenant
+                (ctx/fail-with-exception context
+                                         (ex-info "Tenant membership required"
+                                                  {:type :forbidden
+                                                   :message "Tenant membership required"
+                                                   :interface-type interface-type}))
+                (-> context
+                    (assoc :user-data user-data)
+                    (ctx/add-breadcrumb :transformation :user-data-normalized
+                                        {:interface-type interface-type
+                                         :email (:email user-data)
+                                         :role (:role user-data)
+                                         :active (:active user-data)
+                                         :has-password (some? (:password user-data))})))))})
 
 (def invoke-user-registration
   "Invokes the core user registration business logic.

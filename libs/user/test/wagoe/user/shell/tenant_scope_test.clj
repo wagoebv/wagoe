@@ -1,6 +1,11 @@
 (ns wagoe.user.shell.tenant-scope-test
-  "A user listing holds the caller's tenant and nothing else (BOU-948)."
+  "A user listing holds the caller's tenant and nothing else (BOU-948), and a
+   tenant's admin acts on no other tenant's user (BOU-953)."
   (:require [clojure.test :refer [deftest is testing]]
+            [malli.core :as m]
+            [wagoe.user.schema :as schema]
+            [wagoe.user.shell.rights-handlers :as rights-handlers]
+            [wagoe.user.shell.web-handlers :as web-handlers]
             [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.persistence :as persistence]
@@ -64,3 +69,69 @@
                            (assoc of-a :tenant-id tenant-b)))))
     (testing "a platform admin names anyone"
       (is (sut/lists? {:user {:id (UUID/randomUUID) :role :admin}} of-a)))))
+
+(def ^:private admin-of-a {:id (UUID/randomUUID) :role :admin :tenant-id tenant-a})
+(def ^:private user-of-a  {:id (UUID/randomUUID) :role :user :tenant-id tenant-a})
+(def ^:private user-of-b  {:id (UUID/randomUUID) :role :user :tenant-id tenant-b})
+(def ^:private no-tenant  {:id (UUID/randomUUID) :role :user})
+
+(defn- service
+  "A user service holding the four users above; `acted` collects what it was told to do."
+  [acted]
+  (let [users (into {} (map (juxt :id identity)) [admin-of-a user-of-a user-of-b no-tenant])]
+    #_{:clj-kondo/ignore [:missing-protocol-method]}
+    (reify ports/IUserService
+      (get-user-by-id [_ id] (get users id))
+      (deactivate-user [_ id] (swap! acted conj [:deactivate id]) true)
+      (update-user-profile [_ u] (swap! acted conj [:update (:id u)]) u)
+      (register-user [_ u] (swap! acted conj [:register u]) (assoc u :id (UUID/randomUUID)))
+      (list-users [_ _] {:users [] :total-count 0}))))
+
+(deftest ^:unit ^:security a-route-naming-another-tenants-user-answers-404
+  (let [wrapped ((sut/wrap-target-user (service (atom []))) (constantly {:status 200}))
+        call    (fn [caller target & [tenant]]
+                  (:status (wrapped (cond-> {:user caller :path-params {:id (str (:id target))}}
+                                      tenant (assoc :tenant {:id tenant})))))]
+    (testing "a tenant's admin reaches their tenant's users, and only those"
+      (is (= 200 (call admin-of-a user-of-a)))
+      (is (= 404 (call admin-of-a user-of-b)))
+      (is (= 404 (call admin-of-a no-tenant)))
+      (is (= 404 (call admin-of-a user-of-a tenant-b)) "on another tenant's host"))
+    (testing "anyone reaches themselves"
+      (is (= 200 (call user-of-b user-of-b tenant-a))))
+    (testing "a platform admin reaches anyone; an unknown id is the handler's to answer"
+      (is (= 200 (call {:id (UUID/randomUUID) :role :admin} user-of-b)))
+      (is (= 200 (call {:id (UUID/randomUUID) :role :admin} {:id (UUID/randomUUID)}))
+          "a soft-deleted user, whom no lookup finds, can still be erased")
+      (is (= 200 (call admin-of-a {:id "not-a-uuid"}))))))
+
+(deftest ^:unit ^:security a-bulk-action-skips-another-tenants-users
+  (doseq [action ["deactivate" "role-admin"]]
+    (testing action
+      (let [acted (atom [])]
+        ((web-handlers/bulk-update-users-htmx-handler (service acted) {})
+         {:user        admin-of-a
+          :form-params {"ids[]" (mapv (comp str :id) [user-of-a user-of-b no-tenant]) "action" action}})
+        (is (= [(:id user-of-a)] (map second @acted)))))))
+
+(deftest ^:unit ^:security a-tenants-admin-creates-users-in-their-tenant
+  (let [create (fn [request]
+                 (let [acted (atom [])]
+                   [(:status ((web-handlers/create-user-htmx-handler (service acted) nil {})
+                              (assoc request :form-params {"name" "New" "email" "new@example.com"
+                                                           "password" "password123" "role" "admin"})))
+                    (some-> @acted first second :tenant-id)]))]
+    (testing "so the admin role they grant is their tenant's, not the platform's"
+      (is (m/validate schema/CreateUserRequest {:name "New" :email "new@example.com" :password "password123"
+                                                :role :admin :tenant-id tenant-a})
+          "the service's request schema takes the tenant")
+      (is (= [200 tenant-a] (create {:user admin-of-a})))
+      (is (= [200 tenant-a] (create {:user admin-of-a :tenant {:id tenant-a}}))))
+    (testing "outside the resolved tenant they create no one"
+      (is (= [403 nil] (create {:user admin-of-a :tenant {:id tenant-b}}))))
+    (testing "a platform admin creates a user of no tenant"
+      (is (= [200 nil] (create {:user {:id (UUID/randomUUID) :role :admin}}))))))
+
+(deftest ^:unit ^:security another-tenants-users-rights-are-not-found
+  (is (= 404 (:status ((rights-handlers/user-rights (service (atom [])) nil)
+                       {:user admin-of-a :path-params {:id (str (:id user-of-b))}})))))

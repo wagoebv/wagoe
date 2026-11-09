@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A tenant's admin could act on another tenant's users, and make a platform admin** (BOU-953). The user module's routes
+  by id answer 404 for them, bulk actions skip them, and a user they create is their tenant's.
 - **A tenant's user could list other tenants' users, and search an index without a tenant filter** (BOU-948). Listings
   hold the caller's tenant now; mark an index that holds no tenant's data `:global? true`, or a tenant's caller gets 403.
 - **A profile `bb setup` wrote had CSRF and rate limiting off** (BOU-951). It writes them as `wagoe new` does now; prod

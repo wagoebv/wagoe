@@ -31,11 +31,15 @@
                     :tests     {"libs/search/test/wagoe/search/shell/tenant_scope_test.clj"
                                 ["a-member-reads-only-their-own-tenant"
                                  "an-index-without-a-tenant-filter-is-refused-to-a-caller-in-a-tenant"]}}
-   "user"          {:scoped-by "users.tenant_id; listings forced to the caller's tenant; tenant-member guards on routes"
+   "user"          {:scoped-by "users.tenant_id; listings and routes by user id forced to the caller's tenant"
                     :tests     {"libs/user/test/wagoe/user/shell/authz_negative_security_test.clj"
                                 ["require-tenant-member-denies-non-member"]
                                 "libs/user/test/wagoe/user/shell/tenant_scope_test.clj"
-                                ["a-listing-holds-only-the-callers-tenant"]}}
+                                ["a-listing-holds-only-the-callers-tenant"
+                                 "a-route-naming-another-tenants-user-answers-404"
+                                 "a-bulk-action-skips-another-tenants-users"
+                                 "a-tenants-admin-creates-users-in-their-tenant"
+                                 "another-tenants-users-rights-are-not-found"]}}
    "audience"      {:scoped-by "may filter on :tenant-id, not forced to" :gaps ["BOU-954"]}
    "storage"       {:scoped-by "download, delete and URL check the uploader or tenant in the upload index"
                     :tests     {"libs/storage/test/wagoe/storage/shell/http_handlers_test.clj"
