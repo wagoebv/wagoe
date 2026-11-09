@@ -64,10 +64,10 @@
       (is (str/includes? config ":wagoe/h2"))
       (is (not (str/includes? config ":wagoe/postgresql")))))
 
-  (testing "omits HTTP and router for test"
+  (testing "omits the router for test, and HTTP but for CSRF"
     (let [config (setup/build-config minimal-spec "test")]
-      (is (not (str/includes? config ":wagoe/http")))
-      (is (not (str/includes? config ":wagoe/router"))))))
+      (is (not (str/includes? config ":wagoe/router")))
+      (is (not (str/includes? config ":rate-limit"))))))
 
 ;; =============================================================================
 ;; H2 — in-memory for test, file-backed for dev (BOU-265)
@@ -583,6 +583,21 @@
   (testing "--email none leaves the sender alone"
     (is (not (contains? (:active (resolve-config (setup/build-config (assoc full-spec :email :none) "prod") {}))
                         :wagoe/email)))))
+
+(deftest ^:unit ^:security setup-writes-wagoe-http-as-wagoe-new-does
+  ;; The key-only parity test above missed CSRF inside :wagoe/http (BOU-951).
+  (doseq [[env tmpl] [["dev" "dev-config.edn.tmpl"] ["test" "test-config.edn.tmpl"]]]
+    (is (= (get-in (read-config (lib-source (str "wagoe-cli/resources/wagoe/cli/templates/" tmpl)))
+                   [:active :wagoe/http])
+           (get-in (read-config (setup/build-config minimal-spec env)) [:active :wagoe/http]))
+        env))
+  (testing "prod checks CSRF, and limits rate only with Redis to share the count"
+    (let [http #(get-in (resolve-config (setup/build-config (assoc minimal-spec :cache %) "prod") {})
+                        [:active :wagoe/http])]
+      (is (true? (get-in (http :none) [:security :csrf :enabled?])))
+      (is (= "false" (get-in (http :none) [:rate-limit :enabled?])))
+      (is (= "false" (get-in (http :memory) [:rate-limit :enabled?])))
+      (is (= "true" (get-in (http :redis) [:rate-limit :enabled?]))))))
 
 (deftest ^:unit setup-writes-a-prod-config
   (let [dir (fs/create-temp-dir)]
