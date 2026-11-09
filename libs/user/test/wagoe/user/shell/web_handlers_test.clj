@@ -873,6 +873,7 @@
         (is (html-contains? response "error-generic"))))
     (testing "admin bulk action, an untyped ex-info"
       (let [svc (reify ports/IUserService
+                  (get-user-by-id [_ id] {:id id})
                   (deactivate-user [_ _]
                     (throw (ex-info "jdbc password=hunter2" {:type :internal-error}))))
             response ((web-handlers/bulk-update-users-htmx-handler svc {})
@@ -882,8 +883,9 @@
         (is (not (html-contains? response "hunter2")))
         (is (html-contains? response "error-generic"))))
     (testing "a curated bad-request message is still shown"
-      (let [response ((web-handlers/bulk-update-users-htmx-handler (create-mock-service) {})
-                      {:form-params {"ids[]" (str (UUID/randomUUID))
+      (let [id       (UUID/randomUUID)
+            response ((web-handlers/bulk-update-users-htmx-handler (create-mock-service {id {:id id}}) {})
+                      {:form-params {"ids[]" (str id)
                                      "action" "explode"}})]
         (is (= 400 (:status response)))
         (is (html-contains? response "Unsupported bulk action"))))

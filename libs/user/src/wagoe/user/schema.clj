@@ -286,6 +286,8 @@
        ;; :user is read as no role until 2.0.
        [:role {:optional true} [:maybe [:enum :admin :user]]]
        [:active {:optional true} :boolean]
+       ;; Set by the shell from the caller's tenant, never from the request body (BOU-953)
+       [:tenant-id {:optional true} [:maybe :uuid]]
        [:send-welcome {:optional true} :boolean]]
       (into user-preferences-flat-fields)
       (into user-date-time-preferences-flat-fields)))

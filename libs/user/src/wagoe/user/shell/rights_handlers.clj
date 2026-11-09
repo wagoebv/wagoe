@@ -14,6 +14,7 @@
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.group-handlers :as group-handlers]
             [wagoe.user.shell.group-service :as group-service]
+            [wagoe.user.shell.tenant-scope :as tenant-scope]
             [wagoe.user.shell.web-handlers :refer [html-response]]))
 
 (def ^:private page-opts group-handlers/page-opts)
@@ -217,8 +218,10 @@
      #(:audit-logs (ports/list-audit-logs user-service (assoc %2 :filter-action (first %1))))
      true user timeline-size)))
 
-(defn- user-of [user-service request]
-  (some->> (get-in request [:path-params :id]) str parse-uuid (ports/get-user-by-id user-service)))
+(defn- user-of
+  "The user `:id` names, unless `request` may not reach them (BOU-953)."
+  [user-service request]
+  (tenant-scope/reachable-user user-service request (parse-uuid (str (get-in request [:path-params :id])))))
 
 (defn user-rights
   "GET /web/users/:id/rights — the user's groups, effective permissions and
@@ -417,12 +420,14 @@
 (defn- named-users
   "The users `text` names, ids or emails separated by space, comma or line,
    or pasted as a log's `:user-id #uuid \"..\"`, at most
-   `group-core/preview-page-size`, and what named nobody."
-  [user-service text]
-  (let [found (for [s (take group-core/preview-page-size (distinct (remove str/blank? (remove #{"#uuid" ":user-id"} (str/split (str text) #"[\s,;\"{}]+")))))]
-                [s (if-let [id (parse-uuid s)]
-                     (ports/get-user-by-id user-service id)
-                     (ports/get-user-by-email user-service s))])]
+   `group-core/preview-page-size`, and what named nobody: a user `request`
+   may not reach included (BOU-953)."
+  [user-service request text]
+  (let [found (for [s (take group-core/preview-page-size (distinct (remove str/blank? (remove #{"#uuid" ":user-id"} (str/split (str text) #"[\s,;\"{}]+")))))
+                    :let [u (if-let [id (parse-uuid s)]
+                              (ports/get-user-by-id user-service id)
+                              (ports/get-user-by-email user-service s))]]
+                [s (when (tenant-scope/reaches? request u) u)])]
     [(distinct (keep second found)) (keep (fn [[s u]] (when-not u s)) found)]))
 
 (defn grant-bulk
@@ -433,7 +438,7 @@
   (fn [request]
     (let [params (:query-params request)
           {:keys [permission record] :as q} (asked-scope group-service params)
-          [users unknown] (if permission (named-users user-service (get params "users")) [[] []])
+          [users unknown] (if permission (named-users user-service request (get params "users")) [[] []])
           ;; The roles are read once for every user, not per option per user
           svc    (cond-> group-service (seq users) group-service/with-roles)
           [rows error] (try [(mapv (fn [u] {:user u :result (grant-options svc u permission record)}) users)]
