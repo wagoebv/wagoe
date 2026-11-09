@@ -4,13 +4,34 @@
    outside them is not found; a write that would leave a record outside them
    is refused. Built per request around the shared service, so every list the
    handlers ask for, a foreign key's options included, is scoped."
-  (:require [wagoe.admin.core.display :as display]
+  (:require [wagoe.core.http.access :as access]
+            [wagoe.admin.core.display :as display]
             [wagoe.admin.core.permissions :as permissions]
             [wagoe.admin.ports :as ports]
             [wagoe.platform.core.scope :as scope]))
 
-(defn- scopes-of [schema-provider user entity-name action]
-  (permissions/scopes user entity-name action (ports/get-entity-config schema-provider entity-name)))
+(defn- narrow
+  "`scope` kept to tenant `t`, or nil when it holds none of it."
+  [scope t]
+  (let [ts (if-let [v (:tenant-id scope)] (set (filter #(access/same-id? % t) v)) #{(str t)})]
+    (when (seq ts) (assoc scope :tenant-id ts))))
+
+(defn- in-tenant
+  "`scopes` kept to tenant `t`, for an entity that maps `:tenant-id` under `:scope` (BOU-954)."
+  [scopes t entity-config]
+  (if (and t (contains? (:scope entity-config) :tenant-id))
+    (into [] (keep #(narrow % t)) scopes)
+    scopes))
+
+(defn- scopes-of
+  "Where `user` may take `action`: their rights' scopes under `:enforce`, else
+   everywhere, kept to the tenant they are bound to."
+  [schema-provider user entity-name action]
+  (let [entity-config (ports/get-entity-config schema-provider entity-name)]
+    (in-tenant (if (= :enforce (permissions/mode user))
+                 (permissions/scopes user entity-name action entity-config)
+                 [{}])
+               (::tenant-id user) entity-config)))
 
 (defn- scoped
   "`options` keeping a list to the rows `user` may take `action` on; as they
@@ -37,7 +58,7 @@
    of it), as a write would leave it, lies inside `user`'s write scopes."
   [schema-provider user entity-name record]
   (let [entity-config (ports/get-entity-config schema-provider entity-name)
-        scopes        (permissions/scopes user entity-name :write entity-config)
+        scopes        (scopes-of schema-provider user entity-name :write)
         message       "Outside the scope you may change"]
     (when-not (or (scope/everywhere? scopes)
                   (permissions/record-in-scope? scopes entity-config (force record)))
@@ -168,3 +189,17 @@
   (if (= :enforce (permissions/mode user))
     (->ScopedAdminService admin-service schema-provider user)
     admin-service))
+
+(defn for-request
+  "`admin-service` as `request`'s caller may use it: as `for-user`, and kept to
+   one tenant's records when the caller is bound to one (BOU-954); nil when they
+   may reach no tenant's."
+  [admin-service schema-provider request]
+  ;; Under :enforce their rights decide who is an admin; otherwise the role does
+  (when-let [reach (if (= :enforce (permissions/mode (:user request)))
+                     (access/tenant-reach request)
+                     (access/admin-reach request))]
+    (let [user (:user request)]
+      (if-let [t (:tenant-id reach)]
+        (->ScopedAdminService admin-service schema-provider (assoc user ::tenant-id t))
+        (for-user admin-service schema-provider user)))))

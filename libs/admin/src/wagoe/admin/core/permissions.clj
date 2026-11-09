@@ -92,6 +92,12 @@
   [action]
   (if (= :delete action) :write action))
 
+(defn no-tenants-rows
+  "A `:scope` condition for an entity whose rows span every tenant: under
+   `:tenant-id` it admits none, so only a caller bound to no tenant sees them (BOU-954)."
+  [_tenant-ids]
+  [:= 1 0])
+
 (defn entity-permission
   "`admin.<entity>/read` or `admin.<entity>/write`, the one `action` needs."
   [entity-name action]

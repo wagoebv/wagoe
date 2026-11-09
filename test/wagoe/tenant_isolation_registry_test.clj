@@ -30,7 +30,8 @@
    "search"        {:scoped-by "tenant_id filter from the request; an index without it is refused to a tenant's caller unless :global?"
                     :tests     {"libs/search/test/wagoe/search/shell/tenant_scope_test.clj"
                                 ["a-member-reads-only-their-own-tenant"
-                                 "an-index-without-a-tenant-filter-is-refused-to-a-caller-in-a-tenant"]}}
+                                 "an-index-without-a-tenant-filter-is-refused-to-a-caller-in-a-tenant"
+                                 "only-a-platform-admin-writes-documents"]}}
    "user"          {:scoped-by "users.tenant_id; listings and routes by user id forced to the caller's tenant"
                     :tests     {"libs/user/test/wagoe/user/shell/authz_negative_security_test.clj"
                                 ["require-tenant-member-denies-non-member"]
@@ -40,7 +41,13 @@
                                  "a-bulk-action-skips-another-tenants-users"
                                  "a-tenants-admin-creates-users-in-their-tenant"
                                  "another-tenants-users-rights-are-not-found"]}}
-   "audience"      {:scoped-by "may filter on :tenant-id, not forced to" :gaps ["BOU-954"]}
+   "audience"      {:scoped-by "segments span every tenant, so only a platform admin reaches them"
+                    :tests     {"libs/audience/test/wagoe/audience/shell/http_test.clj"
+                                ["a-tenants-admin-gets-no-audience"]}}
+   "admin"         {:scoped-by "an entity mapping :tenant-id under :scope shows a tenant's caller only their tenant's records"
+                    :tests     {"libs/admin/test/wagoe/admin/shell/tenant_scope_test.clj"
+                                ["a-tenants-admin-reaches-only-their-tenants-records"
+                                 "a-platform-admin-reaches-every-tenant-or-the-resolved-one"]}}
    "storage"       {:scoped-by "download, delete and URL check the uploader or tenant in the upload index"
                     :tests     {"libs/storage/test/wagoe/storage/shell/http_handlers_test.clj"
                                 ["a-file-is-reached-only-by-its-owner-its-tenant-or-an-admin"

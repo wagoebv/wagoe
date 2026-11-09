@@ -63,3 +63,31 @@
           (= :admin (some-> request :tenant-membership :role keyword))
           (and (admin? request) (same-id? (:tenant-id user) tenant-id)))
       (admin? request))))
+
+(defn tenant-reach
+  "Whose data `request` may reach: `{}` for every tenant's (a platform admin with
+   no tenant resolved), `{:tenant-id t}` for one tenant's, t nil for no tenant's,
+   or nil for none (a caller outside the resolved tenant)."
+  [request]
+  (let [user      (:user request)
+        tenant-id (get-in request [:tenant :id])]
+    (cond
+      tenant-id              (when (in-tenant-scope? request) {:tenant-id tenant-id})
+      (platform-admin? user) {}
+      :else                  {:tenant-id (:tenant-id user)})))
+
+
+(defn admin-reach
+  "`tenant-reach` for an admin by role, who is one only where they are a tenant
+   admin: a member of the resolved tenant who administers another gets none."
+  [request]
+  (when (or (not (admin? request)) (tenant-admin? request))
+    (tenant-reach request)))
+
+(defn require-platform-admin
+  "Ring middleware: a platform admin, or 403."
+  [handler]
+  (fn [request]
+    (if (platform-admin? (:user request))
+      (handler request)
+      (forbidden-response "Platform admin required" request (correlation-id request (str (random-uuid)))))))

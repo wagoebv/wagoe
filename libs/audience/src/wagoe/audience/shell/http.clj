@@ -22,6 +22,7 @@
             [wagoe.audience.core.ui :as ui]
             [wagoe.audience.ports :as ports]
             [wagoe.audience.schema :as schema]
+            [wagoe.core.http.access :as access]
             [wagoe.core.utils.case-conversion :as cc]
             [cheshire.core :as json]
             [clojure.string :as str]
@@ -383,7 +384,8 @@
 ;; =============================================================================
 
 (defn- guarded
-  "Attach `middleware` to every route in `routes`.
+  "Attach `middleware` to every route in `routes`, and a platform-admin check:
+   segments span every tenant's users (BOU-954).
 
    Every route in this namespace manages segments or reads their membership, so
    the guard is applied to all of them rather than route by route — a new route
@@ -393,7 +395,7 @@
   (let [mw (vec middleware)]
     (if (empty? mw)
       routes
-      (mapv (fn [[path data]] [path (update data :middleware (fnil into []) mw)]) routes))))
+      (mapv (fn [[path data]] [path (update data :middleware (fnil into []) (conj mw access/require-platform-admin))]) routes))))
 
 (defn audience-web-routes
   "Reitit route data for the audience web pages. Mounted under /web.

@@ -133,7 +133,7 @@
   (let [mw     (fn [h] h)
         routes (concat (sut/audience-web-routes nil nil [mw]) (sut/audience-api-routes nil nil [mw]))]
     (is (= 8 (count routes)))
-    (is (every? (fn [[_ data]] (= [mw] (:middleware data))) routes)
+    (is (every? (fn [[_ data]] (= mw (first (:middleware data)))) routes)
         "every route is guarded, so a new one cannot ship open")
     (is (every? (fn [[_ data]] (nil? (:middleware data))) (sut/audience-api-routes nil nil))
         "no middleware given, none attached")))
@@ -369,3 +369,11 @@
     (testing "editing an unknown id is not found"
       (is (= 404 (:status (post :post "/audiences/builder/nope" {"label" "N" "filters-data" "[]"}))))
       (is (nil? (ports/find-audience s :nope))))))
+
+(deftest ^:unit ^:security a-tenants-admin-gets-no-audience
+  ;; Segments and their cache span every tenant's users (BOU-954)
+  (doseq [[path data] (concat (sut/audience-web-routes nil nil [identity]) (sut/audience-api-routes nil nil [identity]))
+          :let [handler (reduce (fn [h mw] (mw h)) (constantly {:status 200}) (reverse (:middleware data)))]]
+    (testing path
+      (is (= 403 (:status (handler {:user {:id (random-uuid) :role :admin :tenant-id (random-uuid)}}))))
+      (is (= 200 (:status (handler {:user {:id (random-uuid) :role :admin}})))))))

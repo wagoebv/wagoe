@@ -49,6 +49,8 @@ Also add the entity keyword to `:entity-discovery :allowlist`.
 `:scope {:domain-id :domain-id}` (a field) or a symbol naming `(fn [ids] honeysql-condition)`, its bare columns
 the entity's own table's (it runs as `pk IN (SELECT pk FROM table WHERE …)`). Every page, the home too, needs read
 on one entity in a scope that entity maps.
+An entity that maps `:tenant-id` under `:scope` is also kept to the caller's tenant in every mode: a tenant's admin
+sees only their tenant's records, and another tenant's is not found (BOU-954; `users.edn` maps it).
 Read opens the detail page; without write it renders read-only. Many-to-many titles are scoped by the linked
 entity's read, and a save keeps the links the user could not see.
 `:require-role` is deprecated and enforces nothing (outside `:off` it logs a warning); `wagoe add admin` and `bb setup` no longer write it.
