@@ -2,7 +2,8 @@
   "The storage module's contributions to data export and retention: a
    subject's uploads, listed and, in a zip export, included; and the upload
    retention policy."
-  (:require [wagoe.platform.ports.privacy :as privacy]
+  (:require [wagoe.platform.database :as db]
+            [wagoe.platform.ports.privacy :as privacy]
             [wagoe.storage.core.uploads :as core]
             [wagoe.storage.ports :as ports]))
 
@@ -46,22 +47,32 @@
   "Purge what `(fetch-page limit)` returns, a page at a time, with
    `(purge-one! item)`, until a page is short. Returns the number purged;
    throws, after purging the rest, naming the `(id-of item)`s that failed.
+   A lost database connection ends it at once (BOU-970).
 
    One item that will not purge must not hold back the rest: the oldest come
    first, so it would fail every run before anything newer was reached."
   [fetch-page id-of purge-one! noun]
   (loop [n 0 failed #{}]
-    (let [page    (fetch-page page-size)
-          batch   (remove (comp failed id-of) page)
-          stuck   (into #{} (keep #(try (purge-one! %) nil (catch Exception _ (id-of %)))) batch)
-          deleted (- (count batch) (count stuck))
-          n       (+ n deleted)
-          failed  (into failed stuck)]
+    (let [page   (fetch-page page-size)
+          batch  (remove (comp failed id-of) page)
+          {n' :n :keys [failed]}
+          (reduce (fn [acc item]
+                    (try (purge-one! item)
+                         (update acc :n inc)
+                         (catch Exception e
+                           ;; Every item after it would wait out the timeout to fail the same way
+                           (when (db/connection-lost? e)
+                             (throw (ex-info (str "Lost the database connection; " (:n acc) " " noun " deleted")
+                                             {:type :internal-error :keys (vec (sort (:failed acc))) :deleted (:n acc)}
+                                             e)))
+                           (update acc :failed conj (id-of item)))))
+                  {:n n :failed failed}
+                  batch)]
       (cond
-        (and (= page-size (count page)) (pos? deleted)) (recur n failed)
-        (seq failed) (throw (ex-info (str "Could not delete " (count failed) " " noun "; " n " deleted")
-                                     {:type :internal-error :keys (vec (sort failed)) :deleted n}))
-        :else        n))))
+        (and (= page-size (count page)) (> n' n)) (recur n' failed)
+        (seq failed) (throw (ex-info (str "Could not delete " (count failed) " " noun "; " n' " deleted")
+                                     {:type :internal-error :keys (vec (sort failed)) :deleted n'}))
+        :else        n'))))
 
 (defrecord UploadRetention [upload-index storage]
   privacy/IRetentionPolicy

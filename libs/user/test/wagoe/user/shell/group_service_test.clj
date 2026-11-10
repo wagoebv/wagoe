@@ -1086,3 +1086,31 @@
               ;; A failed diff is only warned about: every group expires
               (= :diff at) (is (nil? e) label)
               :else        (is (= 2 (count (.getSuppressed ^Throwable e))) label))))))))
+
+(deftest ^:integration a-lost-connection-ends-expiry-without-iexpiredaccess
+  ;; BOU-970: one transaction, so a lost connection is thrown, not retried without diffs
+  (doseq [[what error lost? at] [["pool timeout" #(java.sql.SQLTransientConnectionException. "Connection is not available") true :diff]
+                                 ["pool timeout" #(java.sql.SQLTransientConnectionException. "Connection is not available") true :audit]
+                                 ["a unique key" #(java.sql.SQLException. "duplicate" "23505") false :diff]]]
+    (with-service nil {:registry registry}
+      (fn [{:keys [svc audit user!]}]
+        (let [repo     (:group-repository svc)
+              past     (.minusSeconds (Instant/now) 60)
+              attempts (atom 0)
+              fail     (fn [& _] (swap! attempts inc) (throw (error)))
+              svc      (cond-> (assoc svc :expired-access? false)
+                         (= :diff at)  (assoc :resolve fail)
+                         (= :audit at) (assoc :audit-repository (refusing-audit audit (constantly true) fail)))
+              label    (str what " at the " (name at))]
+          (doseq [i (range 3)
+                  :let [g (ports/create-group svc {:name (str "G" i)})]]
+            (ports/insert-assignment repo {:group-id (:id g) :role :reports/viewer :scope {}})
+            (ports/insert-member-until repo (:id g) (:id (user! (str "u" i "@example.com"))) past))
+          (let [e    (try (ports/expire-access! svc (Instant/now)) nil (catch Exception e e))
+                left (count (:members (ports/find-expired repo (Instant/now))))]
+            (if lost?
+              (do (is (db/connection-lost? e) label)
+                  (is (= 1 @attempts) (str label ": nothing tried after it"))
+                  (is (= 3 left) (str label ": nothing removed")))
+              (do (is (nil? e) label)
+                  (is (zero? left) (str label ": every group expires"))))))))))

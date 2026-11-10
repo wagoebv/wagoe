@@ -32,6 +32,7 @@
                          without one, `instant->iso`
      :db->value          optional (fn [value] -> value) for each value read"
   (:require [wagoe.core.utils.type-conversion :as tc]
+            [wagoe.platform.core.database.connection-loss :as connection-loss]
             [wagoe.platform.ports.database :as protocols]
             [wagoe.platform.shell.adapters.database.common.introspection :as introspection]
             [clojure.tools.logging :as log]
@@ -120,7 +121,8 @@
    Session settings are best-effort: a connection that could not be told to use
    UTC still works. They are run independently because they used to share a
    single try — MySQL's `sql_mode` is rejected by MySQL 8, which meant the
-   timezone and charset statements after it never ran at all (BOU-367)."
+   timezone and charset statements after it never ran at all (BOU-367). A lost
+   connection is thrown: no statement after it can run either (BOU-970)."
   [label datasource statements]
   (when (nil? datasource)
     (throw (IllegalArgumentException. "Datasource cannot be nil")))
@@ -129,6 +131,7 @@
                              (jdbc/execute! datasource statement)
                              failed
                              (catch Exception e
+                               (when (connection-loss/connection-lost? e) (throw e))
                                (log/warn "Session statement failed, continuing"
                                          {:adapter label
                                           :statement (first statement)

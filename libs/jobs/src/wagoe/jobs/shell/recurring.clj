@@ -16,7 +16,8 @@
   (:require [clojure.tools.logging :as log]
             [wagoe.jobs.core.cron :as cron]
             [wagoe.jobs.core.job :as job]
-            [wagoe.jobs.ports :as ports])
+            [wagoe.jobs.ports :as ports]
+            [wagoe.platform.database :as db])
   (:import [java.time DateTimeException Instant ZoneId]
            [java.util.concurrent Executors ScheduledExecutorService TimeUnit]))
 
@@ -174,7 +175,8 @@
 
 (defn tick!
   "One ticker pass at `now`. Does nothing unless this scheduler holds the
-   lease. Returns the job types it enqueued."
+   lease. Returns the job types it enqueued; a lost database connection is
+   thrown (BOU-970)."
   [{:keys [state schedules owner opts held? next-due watch] :as scheduler} ^Instant now]
   (let [entries @schedules]
     (if-not (and (or (seq entries) watch) (ports/acquire-lease! state owner (:lease-ms opts)))
@@ -190,6 +192,8 @@
                                 (try
                                   (when (tick-schedule! scheduler job-type entry now) job-type)
                                   (catch Exception e
+                                    ;; Each schedule after it would wait out the timeout to fail the same way
+                                    (when (db/connection-lost? e) (throw e))
                                     (log/error e "Recurring job tick failed" {:job-type job-type})
                                     nil))))
                         entries)]
