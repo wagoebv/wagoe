@@ -32,8 +32,10 @@ Everything else is in `public`, shared by all tenants, and kept apart by code:
 * *Caches and Redis keys*: a `tenant:<id>:` prefix, only through
   `create-tenant-cache`.
 * *Job queues*: a job runs in its tenant's schema only when enqueued with one.
-* *Event bus and realtime*: events carry `:tenant-id`; subscribers and SSE
-  topics do not filter on it yet.
+* *Event bus and realtime*: an event takes the tenant bound when it is built,
+  and a subscriber registered in a tenant gets only that tenant's and system
+  events. Realtime role and broadcast messages reach only the sender's tenant;
+  topics are the app's `:authorize-topic` to keep apart.
 * *Logs and error reports*: carry the tenant id, hold no tenant data beyond
   what redaction lets through.
 * *H2* (`:allow-h2?`, used by tests): no schemas at all, so it isolates

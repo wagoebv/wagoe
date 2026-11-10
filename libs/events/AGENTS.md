@@ -175,7 +175,9 @@ member of a group, and to every group.
   one means each event is handled by one service and not the other, which looks
   like random message loss.
 
-Name the group after the service, not the topic.
+Name the group after the service, not the topic. A subscriber kept to one
+tenant (BOU-947) acknowledges other tenants' events it skips, so give it a
+group of its own; sharing one with another tenant's subscriber loses events.
 
 Within a process it does not apply: every `subscribe!` on a topic receives
 every event on it, as the port says and as the in-memory adapter does. The
@@ -228,8 +230,11 @@ not optional.
 **Expecting exactly-once.** No broker offers it. Build idempotency on `:id`.
 
 **Tenant leakage.** A subscriber must not see another tenant's events because it
-listens to the same topic. `core.event/matches-tenant?` is the check; an event
-with no `:tenant-id` is a system event and goes to everyone.
+listens to the same topic. `publisher/build` takes the tenant bound on the thread
+(`db/*tenant-id*`), and `subscribe!` while a tenant is bound, or
+`publisher/subscribe-for-tenant!`, delivers only that tenant's events. A
+subscriber registered in no tenant gets every tenant's; an event with no
+`:tenant-id` is a system event and goes to everyone (BOU-947).
 
 **One connection per subscribed topic.** Each topic's poller holds a Redis
 connection for the length of its blocking read. The pool defaults to 32

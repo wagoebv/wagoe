@@ -41,6 +41,20 @@
                     (or (seq (:roles user)) [(:role user)]))
      :email   (:email user)}))
 
+(defn connection-tenant
+  "The resolved tenant if the user may act in it, else the user's own; a client
+   can name the resolved one in a header (BOU-947). The rule of
+   `wagoe.core.http.access/in-tenant-scope?`, which realtime does not depend on."
+  [{:keys [user tenant] :as request}]
+  (let [own      (:tenant-id user)
+        resolved (:id tenant)]
+    (if (and resolved
+             (or (:tenant-membership request)
+                 (= (str own) (str resolved))
+                 (and (nil? own) (= :admin (some-> (:role user) keyword)))))
+      resolved
+      own)))
+
 (defn request-topics
   "The `topic` query parameter as a vector of topic names; repeated params
    arrive as a vector."

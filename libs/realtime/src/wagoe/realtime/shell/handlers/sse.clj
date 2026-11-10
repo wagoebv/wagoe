@@ -102,7 +102,9 @@
     (throw (ex-info "WGE-107: the realtime service does not implement IIdentifiedConnections"
                     {:type :configuration-error :wagoe/error-code "WGE-107" :missing ['connect-identified]})))
   (fn [request]
-    (let [identity (sse/user-identity (:user request))
+    (let [tenant   (sse/connection-tenant request)
+          identity (some-> (sse/user-identity (:user request))
+                           (cond-> tenant (assoc :tenant-id tenant)))
           decision (if identity
                      (sse/subscription-decision (sse/request-topics (:query-params request))
                                                 #(authorize-topic request %)
