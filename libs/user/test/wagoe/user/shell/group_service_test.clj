@@ -9,6 +9,7 @@
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
             [support.test-db :as test-db]
+            [wagoe.platform.database :as db]
             [wagoe.platform.core.authorization :as authz-core]
             [wagoe.platform.shell.authorization :as authorization]
             [wagoe.user.core.audit :as audit-core]
@@ -255,26 +256,6 @@
             "a group listed twice")
         (is (= :validation-error (:type (refusal #(ports/import-groups! svc [{:name "X" :colour "red"}] {})))))
         (is (empty? (ports/list-groups svc)) "nothing is written before every group is checked")))))
-
-(deftest ^:integration a-failed-audit-entry-rolls-the-import-back
-  (test-db/with-db "user_group_import_rollback"
-    (fn [ctx]
-      (persistence/initialize-user-schema! ctx)
-      (let [users  (persistence/create-user-repository ctx)
-            ada    (ports/create-user users {:email "ada@example.com" :name "Ada" :role :user :active true
-                                             :password-hash "x"})
-            broken (reify ports/IUserAuditRepository
-                     (create-audit-log [_ _] (throw (ex-info "audit down" {:type :internal-error})))
-                     (find-audit-logs [_ _] [])
-                     (find-audit-logs-by-user [_ _ _] [])
-                     ports/IUserAuditRetention
-                     (delete-audit-logs-before [_ _] 0))
-            repo   (group-persistence/create-group-repository ctx)
-            svc    (sut/create-group-service repo users broken (sut/prepare-settings nil))]
-        (is (= "audit down" (ex-message (try (ports/import-groups! svc [{:name "Finance" :members [(:id ada)]}] {})
-                                             nil
-                                             (catch clojure.lang.ExceptionInfo e e)))))
-        (is (empty? (ports/find-groups repo)))))))
 
 (deftest ^:integration concurrent-imports-of-a-new-group
   ;; One creates it; the other finds it or gets a :conflict, and a rerun works.
@@ -856,6 +837,20 @@
         (is (= [[:group-leave [{:permission :reports/read :scope {}}]]]
                (map (juxt :action :removed) (ports/rights-changes svc ada 10))))))))
 
+(deftest ^:integration an-expiry-whose-diff-fails-still-expires
+  ;; BOU-958: on PostgreSQL the failed read aborts the transaction, so it runs again without diffs
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc user! ctx]}]
+      (let [repo (:group-repository svc)
+            ada  (user! "ada@example.com")
+            desk (ports/create-group svc {:name "Desk"})
+            svc  (assoc svc :resolve (fn [_ _] (db/execute-query! ctx {:select [:x] :from [:no_such_table]})))]
+        (ports/insert-assignment repo {:group-id (:id desk) :role :reports/viewer :scope {}})
+        (ports/insert-member-until repo (:id desk) (:id ada) (.minusSeconds (Instant/now) 60))
+        (is (= 1 (count (:members (ports/expire-access! svc (Instant/now))))))
+        (is (= [[:group-leave []]] (map (juxt :action :removed) (ports/rights-changes svc ada 10)))
+            "written without what it took")))))
+
 (deftest ^:integration a-role-edit-over-many-groups-hides-no-older-change
   ;; BOU-911: its entries, one per group, collapse into one change, so they do not fill the timeline
   (with-service nil {:registry registry}
@@ -910,17 +905,20 @@
 
 (def ^:private both #{"ada@example.com" "bob@example.com"})
 
+(defn- bob-only? [svc {:keys [g]}]
+  (= #{"bob@example.com"} (members-of svc g)))
+
 (def ^:private audited-paths
   "Each path writing an entry the rights timeline reads. Where a path writes
    one entry per member, the second fails, so the first, already written, has
    to be rolled back too."
   [{:path   "add member"
-    :change (fn [svc state] (join-ada svc state))
-    :same?  (fn [svc {:keys [g]}] (= #{"bob@example.com"} (members-of svc g)))
+    :change join-ada
+    :same?  bob-only?
     :action :group-join}
    {:path   "add member until"
     :change (fn [svc {:keys [g ada]}] (ports/add-group-member-until svc (:id g) (:id ada) (.plusSeconds (Instant/now) 3600)))
-    :same?  (fn [svc {:keys [g]}] (= #{"bob@example.com"} (members-of svc g)))
+    :same?  bob-only?
     :action :group-join}
    {:path   "new group of one"
     :change (fn [svc {:keys [ada]}]

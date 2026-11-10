@@ -534,7 +534,8 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
 - These entries are written in the change's transaction (`IUserGroupRepository/in-transaction`): a failed
   entry rolls the change back, so the rights timeline misses none (BOU-958). A database audit repository
   joins it, writing on the transaction's connection; one on another store does not, so an entry written before
-  the failure stays. The user service's entries (create, update, deactivate, login, sessions) are not
+  the failure stays. An expiry whose diff cannot be read runs again without diffs, since on PostgreSQL
+  the failed read aborted the transaction. The user service's entries (create, update, deactivate, login, sessions) are not
   transactional: only the audit trail reads them. Most warn on failure; `update-user-profile`'s throws, after the
   update committed.
 - Tables `user_groups`, `user_group_members`, `user_roles`, `user_group_roles`, and
