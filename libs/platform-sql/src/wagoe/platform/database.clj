@@ -214,7 +214,9 @@
   ([ctx table row key-columns {:keys [update-columns]}]
    (let [where   (into [:and] (map (fn [k] [:= k (get row k)])) key-columns)
          set-map (if update-columns (select-keys row update-columns) (apply dissoc row key-columns))
-         tx      (current-transaction)
+         ;; The transaction ctx writes in, which need not be the innermost
+         ;; open on this thread when that one is another database's (BOU-967).
+         tx      (tx-connection (execution/current-datasource ctx))
          ;; Only the insert's conflict is the race: an update refused by
          ;; another unique key would be refused again, and on PostgreSQL
          ;; outside a savepoint it has aborted the caller's transaction.

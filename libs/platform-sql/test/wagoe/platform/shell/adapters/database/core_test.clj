@@ -236,6 +236,40 @@
       ;; Verify no records were committed due to rollback
       (is (= 0 (count (db/execute-query! ctx {:select [:*] :from [:test_users]})))))))
 
+(deftest ^:integration a-write-on-another-database-stays-out-of-the-transaction
+  ;; BOU-967
+  (let [ctx   @test-ctx
+        other (let [adapter (h2/new-adapter)]
+                {:adapter    adapter
+                 :datasource (db/create-connection-pool
+                              adapter {:adapter :h2 :database-path (str "mem:other-" (UUID/randomUUID))
+                                       :connection-params {:DB_CLOSE_DELAY "-1"}})})
+        notes #(set (map :k (db/execute-query! % {:select [:k] :from [:notes]})))
+        abort #(is (thrown-with-msg? Exception #"abort"
+                                     (db/with-transaction [tx ctx]
+                                       (db/execute-update! tx {:insert-into :notes :values [{:k "first"}]})
+                                       (%)
+                                       (throw (RuntimeException. "abort")))))]
+    (try
+      (doseq [c [ctx other]] (db/execute-ddl! c "CREATE TABLE notes (k VARCHAR(64) PRIMARY KEY)"))
+      (testing "a write on the second database outlives the first's rollback"
+        (abort #(db/execute-update! other {:insert-into :notes :values [{:k "second"}]}))
+        (is (= #{} (notes ctx)))
+        (is (= #{"second"} (notes other))))
+      (testing "a transaction on the second, opened inside, is its own"
+        (abort #(db/with-transaction [tx other]
+                  (db/execute-update! tx {:insert-into :notes :values [{:k "nested"}]})
+                  (db/execute-update! ctx {:insert-into :notes :values [{:k "joined"}]})))
+        (is (= #{} (notes ctx)) "a write on the first inside it joins the first's")
+        (is (= #{"second" "nested"} (notes other))))
+      (testing "its after-commit hooks run when it commits, not with the first"
+        (let [seen (atom [])]
+          (abort #(db/with-transaction [_ other]
+                    (execution/after-commit! (fn [] (swap! seen conj :second)))))
+          (is (= [:second] @seen))))
+      (finally
+        (.close ^java.io.Closeable (:datasource other))))))
+
 ;; =============================================================================
 ;; Query Building Tests
 ;; =============================================================================
