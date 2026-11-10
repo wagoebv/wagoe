@@ -228,16 +228,17 @@
                               (str "(ns wagoe.demo.core.noisy)\n"
                                    "(defn a [x] (println x) x)\n"
                                    "(defn b [x]\n  (tap> x)\n  (apply prn [x]))\n"
-                                   "(defn c [x] (with-out-str (print x)))\n"))
+                                   "(defn c [x] (with-out-str (print x)))\n"
+                                   "(defn d [x] (str (with-out-str (pr x)) (clojure.core/printf x)))\n"))
             found (check-fcis/check-file file {:allow-throw #{} :allow-mutable-state #{}})]
         (testing "println, tap> and apply prn warn, with file and line"
-          (is (= #{["println" 2] ["tap>" 4] ["prn" 5]}
+          (is (= #{["println" 2] ["tap>" 4] ["prn" 5] ["clojure.core/printf" 7]}
                  (set (map (juxt :req :line) found))))
           (is (every? #(and (= :warning (:severity %)) (= :print (:kind %))
                             (= (str file) (:file %)))
                       found)))
         (testing "print inside with-out-str is captured, so pure"
-          (is (not-any? #(= "print" (:req %)) found))))
+          (is (not-any? #(#{"print" "pr"} (:req %)) found))))
       (finally (delete-tree! root)))))
 
 ;; =============================================================================

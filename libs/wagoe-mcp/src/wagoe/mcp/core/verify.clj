@@ -14,7 +14,7 @@
      :error — kondo error, FC/IS (WGE-806) or convention (WGE-807) violation,
               or a failing test. Blocks (`:status :fail`) unless soft and
               overridden.
-     :warning — kondo warning; never blocks.
+     :warning — kondo warning or FC/IS print call; never blocks.
 
    FC/IS (WGE-806) and convention (WGE-807) issues are *soft* guardrails: an
    audited `{:allow true}` override turns a would-be `:fail` into `:overridden`
@@ -149,7 +149,8 @@
                                                     :error :ok))
                            fcis     (assoc :fcis (cond
                                                      (:error fcis)             :error
-                                                     (seq (:violations fcis))  :error
+                                                     (some #(= :error (:severity % :error))
+                                                           (:violations fcis)) :error
                                                      :else                     :ok))
                            tests    (assoc :tests (or test-status :unknown)))}
        (and (= :fail status) soft?) (assoc :overridable? true)))))

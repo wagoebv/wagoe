@@ -252,8 +252,9 @@
   (set "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789*+!-_'?<>=/.&%$#:"))
 
 (defn call-forms
-  "Every `(`-opened form in `content`, as {:head :arg1 :line :pos}, `:pos`
-   being the offset of the paren.
+  "Every `(`-opened form in `content`, as {:head :arg1 :line :pos :end}:
+   `:pos` and `:end` are the offsets of its parens, `:end` absent when the
+   form never closes.
 
    `:head` is the first token after the paren and `:arg1` the second — enough
    to see both `(swap! …)` and `(apply swap! …)`.
@@ -270,12 +271,20 @@
    symbol as the first token after the paren."
   [content]
   (let [n (count content)]
-    (loop [i 0, line 1, acc (transient [])]
+    ;; `open` holds, per unclosed paren, its form's index in `acc` (nil when
+    ;; it has no head), so the matching `)` can record :end.
+    (loop [i 0, line 1, acc (transient []), open ()]
       (if (>= i n)
         (persistent! acc)
         (let [c (.charAt ^String content i)]
           (cond
-            (= c \newline) (recur (inc i) (inc line) acc)
+            (= c \newline) (recur (inc i) (inc line) acc open)
+
+            (= c \))
+            (let [idx (first open)]
+              (recur (inc i) line
+                     (if idx (assoc! acc idx (assoc (nth acc idx) :end i)) acc)
+                     (rest open)))
 
             (= c \()
             ;; Read up to two tokens, counting the newlines crossed so the
@@ -295,9 +304,11 @@
                   [head h-end]       (read-tok h-start)
                   [a-start _]        (skip-ws h-end h-line)
                   [arg1 _]           (read-tok a-start)]
-              (recur (inc i) line
-                     (if (seq head)
-                       (conj! acc {:head head :arg1 (not-empty arg1) :line h-line :pos i})
-                       acc)))
+              (if (seq head)
+                (let [idx (count acc)]
+                  (recur (inc i) line
+                         (conj! acc {:head head :arg1 (not-empty arg1) :line h-line :pos i})
+                         (conj open idx)))
+                (recur (inc i) line acc (conj open nil))))
 
-            :else (recur (inc i) line acc)))))))
+            :else (recur (inc i) line acc open)))))))
