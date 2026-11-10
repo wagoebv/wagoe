@@ -401,6 +401,8 @@
         :user-id - User UUID
         :email - User email
         :roles - Set of role keywords
+        :tenant-id - The user's tenant, if any; without it the connection
+                     gets no tenant's role or broadcast messages (BOU-947)
         :permissions - Set of permission keywords
         :exp - Expiry timestamp (seconds since epoch)
         :iat - Issued-at timestamp

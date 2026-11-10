@@ -6,12 +6,21 @@
   (:require [wagoe.realtime.ports :as ports]
             [clojure.tools.logging :as log]))
 
+(defn- of-tenant
+  "Those of `adapters` whose connection belongs to `tenant-id`; all of them
+   without one (BOU-947). Per socket: the stable registry port finds no connection by tenant."
+  [registry tenant-id adapters]
+  (if tenant-id
+    (filterv #(= tenant-id (some-> (ports/find-connection registry (ports/connection-id %)) :metadata :tenant-id))
+             adapters)
+    adapters))
+
 (defn- adapters-for
-  [registry pubsub-manager {:keys [route target]}]
+  [registry pubsub-manager {:keys [route target tenant-id]}]
   (case route
     :user       (ports/find-by-user registry target)
-    :role       (ports/find-by-role registry target)
-    :broadcast  (ports/all-connections registry)
+    :role       (of-tenant registry tenant-id (ports/find-by-role registry target))
+    :broadcast  (of-tenant registry tenant-id (ports/all-connections registry))
     :connection (ports/find-adapters-by-ids registry [target])
     :topic      (if pubsub-manager
                   (ports/find-adapters-by-ids
