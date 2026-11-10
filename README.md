@@ -173,7 +173,7 @@ Wagoe enforces the **Functional Core / Imperative Shell** pattern throughout:
 
 ```
 libs/{library}/src/wagoe/{library}/
-├── core/       # Pure functions only — no I/O, no logging, no exceptions
+├── core/       # Pure: nothing the result depends on, no logging yet, no exceptions
 ├── shell/      # All side effects: persistence, services, HTTP handlers
 ├── ports.clj   # Protocol definitions (interfaces for dependency injection)
 └── schema.clj  # Malli validation schemas

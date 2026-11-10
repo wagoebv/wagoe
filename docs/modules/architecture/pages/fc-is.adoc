@@ -17,10 +17,21 @@ libs/{library}/src/wagoe/{library}/
 
 === Functional Core (`core/`)
 
-* Pure functions only — given the same input, always the same output
-* No I/O of any kind (no `println`, no `log/info`, no `jdbc/execute!`)
+Core does nothing its outcome depends on.
+The line is whether the outcome depends on an effect, not whether it touches the outside world.
+
+* No reads and no writes: not the database, not a file, not a cache
+* No clock and no randomness (`Instant/now`, `UUID/randomUUID`)
+* No mutable state
 * No exception throwing (return error maps instead)
-* No `java.util.Date/new`, `UUID/randomUUID`, or any other non-deterministic calls
+
+An effect is _observational_ when the application has no read path to its sink.
+Logs, metrics and traces are, by construction.
+A write to the application's own store never is, even an append-only table nothing reads today: a reader added later must not turn existing core code into a violation.
+So core returns an audit entry or an event as data, and the shell writes it.
+
+Core does not log either, with `log/info` or `println`.
+Not because logging is I/O, but because there is no observation channel yet that returns nil, never throws, and is bound by the shell.
 
 [source,clojure]
 ----
@@ -29,9 +40,9 @@ libs/{library}/src/wagoe/{library}/
   (when (re-matches #".+@.+\..+" email)
     email))
 
-;; ❌ WRONG — side effect in core/
+;; ❌ WRONG — core/ has no observation channel to log through
 (defn validate-email [email]
-  (log/info "Validating" email)  ; side effect!
+  (log/info "Validating" email)
   (when (re-matches #".+@.+\..+" email) email))
 ----
 
@@ -107,8 +118,9 @@ Core functions are plain Clojure functions. Testing them requires no database, n
 
 === Predictable behaviour
 
-When you see a function in `core/`, you know it has no surprises.
-It will not log to Datadog, write to disk, or call an external API.
+When you see a function in `core/`, its result depends on its arguments and nothing else.
+It reads no store, no clock and no state, and writes nothing the application can read back.
+Logging is kept out for now as well, so it will not reach Datadog either.
 
 === Safe refactoring
 

@@ -28,7 +28,8 @@ clojure -M:repl-clj         # development REPL (nREPL on 7888)
 
 ### The FC/IS rules, in short
 
-- `core/` is pure: no I/O, no logging, no exceptions, no mutable state. It
+- `core/` is pure: nothing its result depends on (no reads, writes, clock or
+  mutable state), no logging yet, no exceptions. It
   returns typed error values (`{:error {:type … :message …}}`).
 - `shell/` does the I/O, validation and side effects, and calls `core/` with
   clean data.

@@ -5,7 +5,9 @@
 
 == Status
 
-Accepted
+Accepted. Succeeded by xref:ADR-043-observational-effects.adoc[ADR-043]: the
+gate below stands, but the line is whether the outcome depends on an effect,
+not whether it is I/O. Logging stays out of core for a different reason.
 
 == Context
 

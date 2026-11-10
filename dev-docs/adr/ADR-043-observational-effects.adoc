@@ -1,0 +1,78 @@
+= ADR-043: The FC/IS Boundary Follows the Read Path
+:status: Accepted
+:date: 2026-11-10
+:deciders: wagoe-team
+
+== Status
+
+Accepted (BOU-955, BOU-956). Succeeds xref:ADR-021-fcis-boundary-rules.adoc[ADR-021]:
+its gate stands, its criterion changes.
+
+== Context
+
+ADR-021 put everything that touches the outside world in the shell, logging
+included, "because logging is a side effect". On ClojureVerse, Sean Corfield
+argued that logging does not change a function's result, so calling it
+imperative shell is a category error; the same holds for many append-only
+writes.
+
+He is right that "touches the outside world" is the wrong line. The question
+is whether the outcome depends on the effect. But "nobody reads it" is not
+something a gate can check, and it does not stay true: the audit log was
+write-only until the rights timeline started reading audit entries back
+(BOU-865). Had audit writes been allowed in core, adding a reader would have
+turned existing core code into a violation.
+
+== Decision
+
+=== The criterion
+
+An effect is *observational* when the application has no read path to its
+sink. Logs, metrics and traces are observational by construction: they leave
+the process. Anything written to the application's own store is not, even an
+append-only table that nothing reads today. Adding a reader must not change
+how existing writes are classified.
+
+=== What follows
+
+* Core does nothing its outcome depends on: no reads, no writes, no clock, no
+  mutable state. Unchanged.
+* Every write to the application's own store stays in the shell. Core returns
+  the entry as data and the shell writes it.
+* Core still may not log in 1.2. Not because logging is I/O, but because there
+  is no observation channel yet that returns nil, never throws, and is bound by
+  the shell. That channel, `wagoe.core.observe`, comes when there is a reason
+  to build it.
+
+`bb check:fcis` does not change with this ADR. Its allowlist of requires already
+refuses `clojure.tools.logging`.
+
+=== Why not wider now
+
+Widening the rule can happen in a minor: code that was refused becomes
+allowed, and nothing that passed breaks. Narrowing it later breaks code that
+passed, which only 2.0 may do. So 1.2 widens nothing it cannot take back, and
+the stability page gains no surface.
+
+== Alternatives rejected
+
+* *Allow `clojure.tools.logging` in core.* Its calls reach a global backend
+  that the classpath picks, not the shell, and nothing promises they return
+  nil or never throw. It would be the first I/O require on the allowlist, and
+  taking it off again is a 2.0 change.
+* *Mark observational writes in the port: metadata, or a separate protocol
+  kind.* It classifies a write by what reads it today, which is the property
+  that changed under the audit log. And it puts a promise in a stable port that
+  nothing can verify.
+
+== Open
+
+A logging macro that records file and line has to sit lexically where it
+fires, so it cannot be injected through a port or a binding. How
+`wagoe.core.observe` keeps call-site location without a macro that reaches a
+backend is not solved.
+
+== Related ADRs
+
+* ADR-021 — FC/IS Boundary Rules (the gate this ADR keeps)
+* ADR-042 — Other Stores (core and ports know no store)
