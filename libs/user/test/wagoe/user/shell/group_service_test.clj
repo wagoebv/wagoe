@@ -838,18 +838,23 @@
                (map (juxt :action :removed) (ports/rights-changes svc ada 10))))))))
 
 (deftest ^:integration an-expiry-whose-diff-fails-still-expires
-  ;; BOU-958: on PostgreSQL the failed read aborts the transaction, so it runs again without diffs
-  (with-service nil {:registry registry}
-    (fn [{:keys [svc user! ctx]}]
-      (let [repo (:group-repository svc)
-            ada  (user! "ada@example.com")
-            desk (ports/create-group svc {:name "Desk"})
-            svc  (assoc svc :resolve (fn [_ _] (db/execute-query! ctx {:select [:x] :from [:no_such_table]})))]
-        (ports/insert-assignment repo {:group-id (:id desk) :role :reports/viewer :scope {}})
-        (ports/insert-member-until repo (:id desk) (:id ada) (.minusSeconds (Instant/now) 60))
-        (is (= 1 (count (:members (ports/expire-access! svc (Instant/now))))))
-        (is (= [[:group-leave []]] (map (juxt :action :removed) (ports/rights-changes svc ada 10)))
-            "written without what it took")))))
+  ;; BOU-958: on PostgreSQL the failed read aborts the transaction, so one
+  ;; transaction for every group runs again without diffs; a group at a time
+  ;; reads the diffs before its transaction (BOU-965)
+  (doseq [by-group? [true false]]
+    (with-service nil {:registry registry}
+      (fn [{:keys [svc user! ctx]}]
+        (let [repo (:group-repository svc)
+              ada  (user! "ada@example.com")
+              desk (ports/create-group svc {:name "Desk"})
+              svc  (assoc svc
+                          :expired-access? by-group?
+                          :resolve (fn [_ _] (db/execute-query! ctx {:select [:x] :from [:no_such_table]})))]
+          (ports/insert-assignment repo {:group-id (:id desk) :role :reports/viewer :scope {}})
+          (ports/insert-member-until repo (:id desk) (:id ada) (.minusSeconds (Instant/now) 60))
+          (is (= 1 (count (:members (ports/expire-access! svc (Instant/now))))) (str "by group: " by-group?))
+          (is (= [[:group-leave []]] (map (juxt :action :removed) (ports/rights-changes svc ada 10)))
+              (str "written without what it took, by group: " by-group?)))))))
 
 (deftest ^:integration a-role-edit-over-many-groups-hides-no-older-change
   ;; BOU-911: its entries, one per group, collapse into one change, so they do not fill the timeline
@@ -873,21 +878,26 @@
 ;; A failed audit entry rolls the change back (BOU-958)
 ;; =============================================================================
 
-(defn- failing-audit
-  "`audit`, refusing an entry once `@ok` more have been written; nil `@ok`
-   refuses none."
-  [audit ok]
+(defn- refusing-audit
+  "`audit`, refusing each entry `refuse?` is true of."
+  [audit refuse?]
   (reify
     ports/IUserAuditRepository
     (create-audit-log [_ entry]
-      (when-let [n @ok]
-        (when (zero? n) (throw (ex-info "audit down" {:type :internal-error})))
-        (swap! ok dec))
+      (when (refuse? entry) (throw (ex-info "audit down" {:type :internal-error})))
       (ports/create-audit-log audit entry))
     (find-audit-logs [_ opts] (ports/find-audit-logs audit opts))
     (find-audit-logs-by-user [_ id opts] (ports/find-audit-logs-by-user audit id opts))
     ports/IUserAuditActions
     (find-audit-logs-with-actions [_ actions opts] (ports/find-audit-logs-with-actions audit actions opts))))
+
+(defn- failing-audit
+  "`audit`, refusing an entry once `@ok` more have been written; nil `@ok`
+   refuses none."
+  [audit ok]
+  (refusing-audit audit (fn [_]
+                          (when-let [n @ok]
+                            (or (zero? n) (do (swap! ok dec) false))))))
 
 (defn- members-of [svc g]
   (set (map :email (:members (ports/get-group svc (:id g))))))
@@ -976,6 +986,15 @@
               (= 1 (:n (jdbc/execute-one! (:datasource ctx)
                                           ["SELECT COUNT(*) AS n FROM user_group_members WHERE user_id = ?" (str (:id ada))]
                                           {:builder-fn rs/as-unqualified-lower-maps}))))
+    :action :group-leave}
+   {:path   "expiry without IExpiredAccess"
+    :setup  (fn [svc {:keys [g ada]}]
+              (ports/insert-member-until (:group-repository svc) (:id g) (:id ada) (.minusSeconds (Instant/now) 60)))
+    :change (fn [svc _] (ports/expire-access! (assoc svc :expired-access? false) (Instant/now)))
+    :same?  (fn [_ {:keys [ctx ada]}]
+              (= 1 (:n (jdbc/execute-one! (:datasource ctx)
+                                          ["SELECT COUNT(*) AS n FROM user_group_members WHERE user_id = ?" (str (:id ada))]
+                                          {:builder-fn rs/as-unqualified-lower-maps}))))
     :action :group-leave}])
 
 (deftest ^:integration a-failed-audit-entry-rolls-the-change-back
@@ -1001,3 +1020,27 @@
             (change svc state)
             (is (some #{action} (map :action (ports/rights-changes svc ada 50)))
                 (str path ": done, it is on the timeline"))))))))
+
+(deftest ^:integration a-group-whose-expiry-fails-leaves-the-others
+  ;; BOU-965: a transaction per group
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc audit user!]}]
+      (let [repo (:group-repository svc)
+            past (.minusSeconds (Instant/now) 60)
+            [ada bob] (mapv user! ["ada@example.com" "bob@example.com"])
+            ops  (ports/create-group svc {:name "Ops"})
+            desk (ports/create-group svc {:name "Desk"})]
+        (ports/insert-member-until repo (:id ops) (:id ada) past)
+        (ports/insert-member-until repo (:id desk) (:id bob) past)
+        (ports/insert-assignment repo {:group-id (:id desk) :role :reports/viewer :scope {} :expires-at past})
+        (is (thrown-with-msg? Exception #"audit"
+                              (ports/expire-access! (assoc svc :audit-repository (refusing-audit audit #(= "Ops" (get-in % [:metadata :group-name]))))
+                                                    (Instant/now))))
+        (let [left (ports/find-expired repo (Instant/now))]
+          (is (= [[(:id ops) (:id ada)]] (map (juxt :group-id :user-id) (:members left))) "Ops' row stays")
+          (is (empty? (:assignments left)) "Desk's role went"))
+        (is (= [:group-leave] (map :action (ports/rights-changes svc bob 10))) "Desk's leave is audited")
+        (is (empty? (ports/rights-changes svc ada 10)))
+        (testing "the next run removes it"
+          (is (= [(:id ada)] (map :user-id (:members (ports/expire-access! svc (Instant/now))))))
+          (is (= [:group-leave] (map :action (ports/rights-changes svc ada 10)))))))))

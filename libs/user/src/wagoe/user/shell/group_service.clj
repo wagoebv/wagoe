@@ -732,7 +732,7 @@
 (defn- undone
   "`plan`'s diffs reversed: what undoing the change it describes does. None
    when `failed` is nil. None, with a warning and `failed` set, when they
-   cannot be read: the rows are already deleted, so the entry is still written."
+   cannot be read: the entry is still written."
   [svc plan failed]
   (when failed
     (try (mapv #(assoc % :added (:removed %) :removed (:added %)) (user-diffs svc plan))
@@ -741,53 +741,104 @@
            (log/warn e "Could not diff an expiry" {:group-id (get-in plan [:group :id])})
            nil))))
 
-(defn- expire-in!
-  "Remove what expired by `now`, auditing each as a leave or a removed role
-   with what it took from each user's effective rights. Reads ignored it from
-   the moment it expired, so that is the diff of adding it back, reversed
-   (BOU-911). In `in-transaction`, so a failed entry puts the rows back.
-   `failed` as `undone` takes it."
-  [{:keys [group-repository user-repository audit-repository registry membership] :as svc} now failed]
-  (let [{:keys [members assignments] :as removed} (ports/remove-expired group-repository now)
-        roles    (all-roles group-repository registry)
+(defn- expiry-plans
+  "For each row of `expired`, {:members :assignments}, the plan of adding it
+   back, as `join-plan` or `role-plan` gives it, with its :action and :row.
+   Reads ignored it from the moment it expired, so that is the diff of adding
+   it back, reversed (BOU-911). A soft-deleted user's membership held
+   nothing, so it has none. `user-of` reads a user by id."
+  [{:keys [group-repository] :as svc} user-of {:keys [members assignments]}]
+  (let [roles    (roles-of svc)
         plan     {:roles roles :roles-after roles}
-        ;; Each diff asks the membership hook: once per user for the job
-        svc      (cond-> svc membership (update :membership memoize))
         ;; Per group, once: several rows of one group expire together
         group-of (memoize #(or (ports/find-group group-repository %) {:id %}))
-        user-of  (memoize #(ports/find-user-by-id user-repository %))
         ;; With the group's roles that expired in this run: a member leaving
         ;; with them loses them, and their own entries no longer reach the member
         expired-roles (group-by (comp str :group-id) assignments)
         held     (memoize #(into (vec (ports/find-assignments group-repository %)) (get expired-roles (str %))))
-        members-of (memoize (partial reached svc))
-        expired  #(assoc (expiry-metadata %) :reason "expired")]
-    (doseq [{:keys [group-id user-id expires-at]} members
-            ;; A soft-deleted user held nothing through it
-            :let [user (user-of user-id)]
-            :when user
-            :let [{:keys [group grants] :as p} (join-plan plan (group-of group-id) user (held group-id))]]
-      (audit! audit-repository :group-leave group [user] grants
-              {:diffs (undone svc p failed) :metadata (expired expires-at)}))
-    (doseq [{:keys [group-id expires-at] :as a} assignments
-            :let [{:keys [group users grants] :as p} (role-plan plan (group-of group-id) (members-of group-id) a)]]
-      (audit! audit-repository :grant-remove group users grants
-              {:diffs (undone svc p failed) :metadata (expired expires-at)}))
-    (when (or (seq members) (seq assignments))
-      (log/info "Removed expired group access" {:members (count members) :assignments (count assignments)}))
-    removed))
+        members-of (memoize (partial reached svc))]
+    (-> []
+        (into (keep (fn [{:keys [group-id user-id] :as row}]
+                      (when-let [user (user-of user-id)]
+                        (assoc (join-plan plan (group-of group-id) user (held group-id)) :action :group-leave :row row))))
+              members)
+        (into (map (fn [{:keys [group-id] :as a}]
+                     (assoc (role-plan plan (group-of group-id) (members-of group-id) a) :action :grant-remove :row a)))
+              assignments))))
+
+(defn- audit-expiry!
+  "Audit `plan`'s row as removed by expiry, with `diffs`."
+  [audit-repository {:keys [action group users grants row]} diffs]
+  (audit! audit-repository action group users grants
+          {:diffs diffs :metadata (assoc (expiry-metadata (:expires-at row)) :reason "expired")}))
+
+(defn- expire-all!
+  "Every expiry in one transaction, for a repository without IExpiredAccess.
+   A failed diff read aborts a PostgreSQL transaction, failing the entries
+   after it, so then once more without diffs: otherwise every run would fail
+   the same way and nothing expire."
+  [svc user-of now]
+  (let [run    (fn [failed]
+                 (in-transaction svc
+                                 (fn [{:keys [group-repository audit-repository] :as svc}]
+                                   (let [removed (ports/remove-expired group-repository now)]
+                                     (doseq [p (expiry-plans svc user-of removed)]
+                                       (audit-expiry! audit-repository p (undone svc p failed)))
+                                     removed))))
+        failed (volatile! false)]
+    (try (run failed)
+         (catch Exception e
+           (if @failed (run nil) (throw e))))))
+
+(defn- expire-group!
+  "Remove `expired`, one group's rows, in one transaction, auditing each row
+   it deleted. The diffs are read before it, so no lock waits on them and a
+   failed read leaves only that entry without one (BOU-965). Returns what it
+   removed, as `remove-expired` gives it."
+  [svc user-of expired now]
+  ;; A failed read is only warned about here: nothing waits to run again
+  (let [plans (mapv #(assoc % :diffs (undone svc % (volatile! false))) (expiry-plans svc user-of expired))]
+    (in-transaction svc
+                    (fn [{:keys [group-repository audit-repository]}]
+                      (let [removed (ports/remove-expired-rows group-repository expired now)
+                            gone    (into #{} (map :id) (concat (:members removed) (:assignments removed)))]
+                        (doseq [{:keys [row diffs] :as p} plans
+                                :when (gone (:id row))]
+                          (audit-expiry! audit-repository p diffs))
+                        (update removed :members (partial mapv #(dissoc % :id))))))))
+
+(defn- expire-by-group!
+  "`expire-group!` for each group with something expired by `now`. Returns
+   what was removed, and each group's failure under :failed."
+  [{:keys [group-repository] :as svc} user-of now]
+  (let [{:keys [members assignments]} (ports/find-expired group-repository now)
+        by-group (merge-with merge
+                             (update-vals (group-by :group-id members) #(hash-map :members %))
+                             (update-vals (group-by :group-id assignments) #(hash-map :assignments %)))]
+    (reduce (fn [acc expired]
+              (try (merge-with into acc (expire-group! svc user-of expired now))
+                   (catch Exception e
+                     (update acc :failed conj e))))
+            {:members [] :assignments [] :failed []}
+            (vals by-group))))
 
 (defn- expire!
-  "`expire-in!` in one transaction. A failed diff read aborts a PostgreSQL
-   transaction, failing the entries after it, so then once more without
-   diffs: otherwise every run would fail the same way and nothing expire."
-  [svc now]
-  (let [failed (volatile! false)]
-    (try (in-transaction svc #(expire-in! % now failed))
-         (catch Exception e
-           (if @failed
-             (in-transaction svc #(expire-in! % now nil))
-             (throw e))))))
+  "Remove what expired by `now`, auditing each as a leave or a removed role
+   with what it took from each user's effective rights. A group at a time
+   when the repository has IExpiredAccess: once the others are removed, a
+   failed group's exception is thrown, any further ones suppressed on it."
+  [{:keys [membership user-repository] :as svc} now]
+  (let [;; Each diff asks the membership hook: once per user for the job; and the roles once
+        svc     (cond-> (with-roles svc) membership (update :membership memoize))
+        user-of (memoize #(ports/find-user-by-id user-repository %))
+        removed (if (:expired-access? svc) (expire-by-group! svc user-of now) (expire-all! svc user-of now))
+        {:keys [members assignments failed]} removed]
+    (when (or (seq members) (seq assignments))
+      (log/info "Removed expired group access" {:members (count members) :assignments (count assignments)}))
+    (when-let [[e & more] (seq failed)]
+      (doseq [m more] (.addSuppressed ^Throwable e m))
+      (throw e))
+    (dissoc removed :failed)))
 
 ;; =============================================================================
 ;; Service
@@ -1091,6 +1142,7 @@
                                       (with-registry-permissions settings registry) registry membership)
                   ;; Asked once: a repository without one takes the old path (Convention 5)
                   :expiry? (satisfies? ports/IAccessExpiry group-repository)
+                  :expired-access? (satisfies? ports/IExpiredAccess group-repository)
                   :all-assignments? (satisfies? ports/IAllAssignments group-repository)
                   :audit-actions? (satisfies? ports/IUserAuditActions audit-repository))
      explain (assoc :explain explain)
