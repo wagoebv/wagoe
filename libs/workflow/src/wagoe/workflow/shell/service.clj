@@ -322,6 +322,14 @@
                           {:type    :validation-error
                            :message "The workflow store does not implement ITransactionalWorkflowStore"}))))
 
+(defn- store-transaction
+  "The transaction open on `store`'s database. A store that names no
+   :datasource (a custom or wrapping one) gets the innermost, as before BOU-971."
+  [store]
+  (if-let [ds (:datasource store)]
+    (db/current-transaction ds)
+    (db/current-transaction)))
+
 (defn- auto-transitions!
   "Fire `definition`'s auto transitions on up to 100 instances in each source
    state, through `engine`, in the schema this thread's work runs in. Each in a
@@ -329,7 +337,7 @@
    transaction: the one open on the store's database, not another's."
   [engine workflow-id definition]
   (let [result (atom {:processed 0 :attempted 0 :failed 0})
-        tx     (db/current-transaction (:datasource (:store engine)))]
+        tx     (store-transaction (:store engine))]
     (doseq [t-def     (filter :auto? (:transitions definition))
             instance  (ports/list-instances (:store engine)
                                             {:workflow-id   workflow-id
