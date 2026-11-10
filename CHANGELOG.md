@@ -75,6 +75,8 @@ for what is public API, what is internal, and how deprecations are announced.
   audit entry rolls them back; a failed one for other profile fields only warns. Nothing to change.
 - **One group's failed expiry kept every group's expired access** (BOU-965). Each group expires in its own transaction
   now; a custom group repository needs `wagoe.user.ports/IExpiredAccess` for it.
+- **During a database outage the group expiry job waited out the connection timeout once per group** (BOU-969). A lost
+  connection ends it at once now. Nothing to change.
 - **A group grant whose audit failed kept the role it made** (BOU-966). It rolls back too, and the error names the
   action and group. Nothing to change.
 - **The stability page's opening line said Wagoe is at `1.0.1`** under a `1.1.1` table. It now points at the table,

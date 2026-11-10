@@ -880,17 +880,18 @@
 ;; =============================================================================
 
 (defn- refusing-audit
-  "`audit`, refusing each entry `refuse?` is true of."
-  [audit refuse?]
-  (reify
-    ports/IUserAuditRepository
-    (create-audit-log [_ entry]
-      (when (refuse? entry) (throw (ex-info "audit down" {:type :internal-error})))
-      (ports/create-audit-log audit entry))
-    (find-audit-logs [_ opts] (ports/find-audit-logs audit opts))
-    (find-audit-logs-by-user [_ id opts] (ports/find-audit-logs-by-user audit id opts))
-    ports/IUserAuditActions
-    (find-audit-logs-with-actions [_ actions opts] (ports/find-audit-logs-with-actions audit actions opts))))
+  "`audit`, refusing each entry `refuse?` is true of with `(error)`."
+  ([audit refuse?] (refusing-audit audit refuse? #(ex-info "audit down" {:type :internal-error})))
+  ([audit refuse? error]
+   (reify
+     ports/IUserAuditRepository
+     (create-audit-log [_ entry]
+       (when (refuse? entry) (throw (error)))
+       (ports/create-audit-log audit entry))
+     (find-audit-logs [_ opts] (ports/find-audit-logs audit opts))
+     (find-audit-logs-by-user [_ id opts] (ports/find-audit-logs-by-user audit id opts))
+     ports/IUserAuditActions
+     (find-audit-logs-with-actions [_ actions opts] (ports/find-audit-logs-with-actions audit actions opts)))))
 
 (defn- failing-audit
   "`audit`, refusing an entry once `@ok` more have been written; nil `@ok`
@@ -1057,3 +1058,31 @@
         (testing "the next run removes it"
           (is (= [(:id ada)] (map :user-id (:members (ports/expire-access! svc (Instant/now))))))
           (is (= [:group-leave] (map :action (ports/rights-changes svc ada 10)))))))))
+
+(deftest ^:integration a-lost-connection-ends-the-expiry-sweep
+  ;; BOU-969: each group after it would wait out the connection timeout; one group's own failure does not
+  (doseq [[what error lost?] [["pool timeout" #(java.sql.SQLTransientConnectionException. "Connection is not available") true]
+                              ["a unique key" #(java.sql.SQLException. "duplicate" "23505") false]]
+          at                 [:diff :audit]]
+    (with-service nil {:registry registry}
+      (fn [{:keys [svc audit user!]}]
+        (let [repo     (:group-repository svc)
+              past     (.minusSeconds (Instant/now) 60)
+              attempts (atom 0)
+              fail     (fn [& _] (swap! attempts inc) (throw (error)))
+              svc      (case at
+                         :diff  (assoc svc :resolve fail)
+                         :audit (assoc svc :audit-repository (refusing-audit audit (constantly true) fail)))
+              label    (str what " at the " (name at))]
+          (doseq [i (range 3)
+                  :let [g (ports/create-group svc {:name (str "G" i)})]]
+            (ports/insert-assignment repo {:group-id (:id g) :role :reports/viewer :scope {}})
+            (ports/insert-member-until repo (:id g) (:id (user! (str "u" i "@example.com"))) past))
+          (let [e (try (ports/expire-access! svc (Instant/now)) nil (catch Exception e e))]
+            (is (= (if lost? 1 3) @attempts) (str label ": groups tried"))
+            (cond
+              lost?       (do (is (db/connection-lost? e) label)
+                              (is (= 3 (count (:members (ports/find-expired repo (Instant/now))))) (str label ": nothing removed")))
+              ;; A failed diff is only warned about: every group expires
+              (= :diff at) (is (nil? e) label)
+              :else        (is (= 2 (count (.getSuppressed ^Throwable e))) label))))))))
