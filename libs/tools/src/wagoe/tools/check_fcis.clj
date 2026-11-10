@@ -173,12 +173,6 @@
    "java.lang.System" ["currentTimeMillis" "getProperty" "getenv"]
    "java.lang.ProcessHandle" ["current"]})
 
-(def ^:private default-static-class-aliases
-  "Java classes available without an explicit :import that still expose
-   forbidden runtime accessors in core namespaces."
-  {"System" "java.lang.System"
-   "ProcessHandle" "java.lang.ProcessHandle"})
-
 (def ^:private allowed-fq-violations
   "Temporary BOU-15 allowlist for known remaining runtime-dependent core calls.
    Each entry should be removed as the corresponding namespace is migrated."
@@ -255,8 +249,9 @@
    :allow-print and :allow-clock sets."
   []
   (let [f (io/file (System/getProperty "user.dir") ".wagoe" "check-fcis.edn")
-        empty-config {:allow-throw #{} :allow-mutable-state #{} :allow-require {}
-                      :allow-sql [] :allow-print #{} :allow-clock #{}}]
+        empty-config (merge (allowed-warnings {})
+                            {:allow-throw #{} :allow-mutable-state #{} :allow-require {}
+                             :allow-sql []})]
     (if (.exists f)
       (let [m (edn/read-string (slurp f))]
         (merge
@@ -361,14 +356,18 @@
         (for [[fq methods] clock-statics, n (class-names imports fq), m methods]
           (str n "/" m))))
 
+(defn- clock-constructor-names [imports]
+  (set (mapcat #(class-names imports %) clock-constructors)))
+
 (defn- clock-constructor
-  "`(C.)` or `(new C)` with no argument, for C in `clock-constructors`, as
-   written; nil otherwise."
-  [stripped imports {:keys [pos end]}]
-  (when end
-    (let [inner (str/replace (str/trim (subs stripped (inc pos) end)) #"\s+" " ")]
-      (some (fn [n] (#{(str n ".") (str "new " n)} inner))
-            (mapcat #(class-names imports %) clock-constructors)))))
+  "`(C.)` or `(new C)` with no argument, for C in `ctor-names`, as written;
+   nil otherwise."
+  [stripped ctor-names {:keys [head arg1 pos end]}]
+  (let [cls   (if (= "new" head) arg1 (when (str/ends-with? head ".") (subs head 0 (dec (count head)))))
+        label (if (= "new" head) (str "new " cls) head)]
+    (when (and end (ctor-names cls)
+               (= label (str/replace (str/trim (subs stripped (inc pos) end)) #"\s+" " ")))
+      label)))
 
 (defn- scan-impurity
   "Scan stripped content for (throw ...), mutable-state constructs and print
@@ -393,6 +392,7 @@
   (let [stripped  (parsing/strip-comments-and-strings content)
         calls     (parsing/call-forms stripped)
         clock     (clock-symbols imports)
+        ctors     (clock-constructor-names imports)
         throw-ok? (or (ns-meta-flag? ns-form :wagoe/allow-throw)
                       (contains? (or allow-throw #{}) ns-name))
         mut-ok?   (or (ns-meta-flag? ns-form :wagoe/allow-mutable-state)
@@ -420,7 +420,7 @@
          (assoc (finding targets :print c) :severity :warning)))
      (when-not (ns-meta-flag? ns-form :wagoe/allow-clock)
        (for [c calls
-             :let [ctor (clock-constructor stripped imports c)]
+             :let [ctor (clock-constructor stripped ctors c)]
              :when (and (or ctor (called? c clock)) (not (inside? comments c)))]
          (cond-> (assoc (finding clock :clock c) :severity :warning)
            ctor (assoc :req ctor)))))))
@@ -559,13 +559,9 @@
   "Resolve simple class names available in the file to their fully-qualified
    names for forbidden static accessor checks."
   [imports]
-  (merge default-static-class-aliases
-         (->> imports
-              (filter #(contains? forbidden-static-methods-by-class %))
-              (map (fn [class-name]
-                     [(last (str/split class-name #"\."))
-                      class-name]))
-              (into {}))))
+  (into {} (for [fq (keys forbidden-static-methods-by-class)
+                 n  (class-names imports fq) :when (not= n fq)]
+             [n fq])))
 
 (defn- scan-simple-static-calls
   "Scan stripped file content for forbidden runtime access via imported or
@@ -809,9 +805,8 @@
         ports-files (ports-source-paths)
         raw         (concat (mapcat #(check-file* % config) files)
                             (mapcat sql-port-findings ports-files))
-        stale       (for [[k req] (concat (for [{:keys [path]} (stale-sql-entries config raw)]
-                                                [:allow-sql path])
-                                              (stale-warning-entries config raw))]
+        stale       (for [[k req] (concat (map (fn [e] [:allow-sql (:path e)]) (stale-sql-entries config raw))
+                                          (stale-warning-entries config raw))]
                       {:file ".wagoe/check-fcis.edn" :key k :req req :kind :stale-allow})
         {warnings :warning violations :error}
         (group-by #(:severity % :error)
