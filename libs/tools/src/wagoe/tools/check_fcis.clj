@@ -348,12 +348,12 @@
 (defn- threaded
   "{:req :line} for each step of the threading form `c` that is a bare symbol
    in `targets`; `:req` is what `targets` returns for it."
-  [stripped targets {:keys [head pos end]}]
+  [stripped targets {:keys [head pos end pos-line]}]
   (when (and end (threading-heads head))
-    (let [steps (drop 2 (parsing/form-children stripped pos end))]
-      (for [{:keys [token] at :pos} (if (cond-threading-heads head) (take-nth 2 (rest steps)) steps)
+    (let [steps (drop 2 (parsing/form-children stripped pos end pos-line))]
+      (for [{:keys [token line]} (if (cond-threading-heads head) (take-nth 2 (rest steps)) steps)
             :let [req (targets token)] :when req]
-        {:req req :line (parsing/line-at stripped at)}))))
+        {:req req :line line}))))
 
 (defn- uses
   "{:req :line} for each place `c` calls a symbol in `targets`: `called`, or
@@ -415,21 +415,13 @@
                (= label (str/replace (str/trim (subs content (inc pos) end)) #"\s+" " ")))
       label)))
 
-(defn- imported-static-class-aliases
-  "Resolve simple class names available in the file to their fully-qualified
-   names for forbidden static accessor checks."
-  [imports]
-  (into {} (for [fq (keys forbidden-static-methods-by-class)
-                 n  (class-names imports fq) :when (not= n fq)]
-             [n fq])))
-
 (defn- static-targets
   "`{simple-name fq-name}` for the forbidden static calls a file importing
    `imports` can write without the package: `Instant/now`."
   [imports]
-  (into {} (for [[alias fq] (imported-static-class-aliases imports)
-                 m (forbidden-static-methods-by-class fq)]
-             [(str alias "/" m) (str fq "/" m)])))
+  (into {} (for [[fq ms] forbidden-static-methods-by-class
+                 n (class-names imports fq) :when (not= n fq), m ms]
+             [(str n "/" m) (str fq "/" m)])))
 
 (defn- static-call-warnings
   "{:req :line} for each forbidden static call in `c` that the line regex of
@@ -437,12 +429,14 @@
    UUID/randomUUID)`, `(-> x Instant/now)`. What the regex finds stays an
    error; these are warnings until 2.0, when the regex goes and they join it.
    Fully-qualified names need nothing here: scan-fq-calls finds them anywhere."
-  [stripped targets {:keys [head pos] :as c}]
-  (let [line (subs stripped pos (or (str/index-of stripped "\n" pos) (count stripped)))]
-    (if (and (targets head)
-             (re-find (re-pattern (str "^\\(\\s*" (java.util.regex.Pattern/quote head) "\\b")) line))
-      (threaded stripped targets c)
-      (uses stripped targets c))))
+  [stripped targets {:keys [head pos end] :as c}]
+  (if (and (targets head)
+           ;; What the regex sees: the head on the paren's line, no comma before it.
+           (-> (re-matcher #"\([ \t\x0B\f]*[^\s,]" stripped)
+               (.region (int pos) (int (or end (count stripped))))
+               (.lookingAt)))
+    (threaded stripped targets c)
+    (uses stripped targets c)))
 
 (defn- scan-impurity
   "Scan stripped content for (throw ...), mutable-state constructs and print
@@ -638,6 +632,14 @@
                (re-find req-pattern req)))
         allowed-fq-violations))
 
+(defn- imported-static-class-aliases
+  "Resolve simple class names available in the file to their fully-qualified
+   names for forbidden static accessor checks."
+  [imports]
+  (into {} (for [fq (keys forbidden-static-methods-by-class)
+                 n  (class-names imports fq) :when (not= n fq)]
+             [n fq])))
+
 (defn- scan-simple-static-calls
   "Scan stripped file content for forbidden runtime access via imported or
    implicitly available simple class names such as (Instant/now) or
@@ -821,8 +823,6 @@
                                         :kind :import})))
         fq-violations (->> (concat (scan-fq-calls file content)
                                    (scan-simple-static-calls file content imports))
-                           (remove (fn [{:keys [symbol]}]
-                                     (allowed-fq-violation? (str file) symbol)))
                            (map (fn [{:keys [line symbol]}]
                                   {:file (str file)
                                    :ns   ns-name
@@ -835,8 +835,9 @@
         sql-violations      (sql-require-findings
                              (finding-base file ns-name)
                              (remove #(forbidden-require? ns-name %) (map str requires)))]
-    (concat require-violations import-violations fq-violations
-            impurity-violations sql-violations)))
+    (->> (concat require-violations import-violations fq-violations
+                 impurity-violations sql-violations)
+         (remove #(and (= :fq-call (:kind %)) (allowed-fq-violation? (str file) (:req %)))))))
 
 (defn check-file
   "Check a single core/ .clj file for forbidden requires, imports,

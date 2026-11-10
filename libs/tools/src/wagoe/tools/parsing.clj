@@ -251,10 +251,14 @@
   "Characters Clojure allows inside a symbol, plus / for qualified symbols."
   (set "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789*+!-_'?<>=/.&%$#:"))
 
+(def ^:private ws?
+  "Whitespace between tokens; a comma is whitespace."
+  #{\space \tab \newline \return \,})
+
 (defn call-forms
   "Every `(`-opened form in `content`, as {:head :arg1 :arg2 :line :pos :end}:
    `:pos` and `:end` are the offsets of its parens, `:end` absent when the
-   form never closes.
+   form never closes, and `:pos-line` the line of `:pos`.
 
    `:head` is the first token after the paren, `:arg1` the second and `:arg2`
    the third — enough to see `(swap! …)`, `(apply swap! …)` and
@@ -292,8 +296,7 @@
             ;; violation is reported where the symbol is, not where the paren is.
             (let [skip-ws  (fn [j l]
                              (loop [j j l l]
-                               (if (and (< j n) (contains? #{\space \tab \newline \, \return}
-                                                           (.charAt ^String content j)))
+                               (if (and (< j n) (ws? (.charAt ^String content j)))
                                  (recur (inc j) (if (= \newline (.charAt ^String content j)) (inc l) l))
                                  [j l])))
                   read-tok (fn [j]
@@ -310,7 +313,7 @@
                 (let [idx (count acc)]
                   (recur (inc i) line
                          (conj! acc {:head head :arg1 (not-empty arg1) :arg2 (not-empty arg2)
-                                     :line h-line :pos i})
+                                     :line h-line :pos i :pos-line line})
                          (conj open idx)))
                 (recur (inc i) line acc (conj open nil))))
 
@@ -318,33 +321,30 @@
 
 (defn form-children
   "The direct children of the form whose `(` is at `pos` and `)` at `end` in
-   stripped `content`, head included, as {:token :pos}. `:token` is the text
-   of a bare token (`println`, `:println`, `'println`), nil for a nested or
-   reader-prefixed form such as `(f x)` or `#(f %)`."
-  [content pos end]
-  (let [ws?     #{\space \tab \newline \return \,}
-        open?   #{\( \[ \{}
+   stripped `content`, head included, as {:token :line}; `line` is the line of
+   `pos`. `:token` is the text of a bare token (`println`, `:println`,
+   `'println`), nil for a nested or reader-prefixed form such as `(f x)` or
+   `#(f %)`."
+  [content pos end line]
+  (let [open?   #{\( \[ \{}
         close?  #{\) \] \}}
         ch      #(.charAt ^String content %)
-        ;; Past the form opened at j.
-        skip    (fn [j] (loop [k (inc j), depth 1]
-                          (cond (or (>= k end) (zero? depth)) k
-                                (open? (ch k))  (recur (inc k) (inc depth))
-                                (close? (ch k)) (recur (inc k) (dec depth))
-                                :else           (recur (inc k) depth))))]
-    (loop [i (inc pos), acc []]
+        nl      #(if (= \newline (ch %1)) (inc %2) %2)
+        ;; [offset line] past the form opened at j.
+        skip    (fn [j l] (loop [k (inc j), l l, depth 1]
+                            (cond (or (>= k end) (zero? depth)) [k l]
+                                  (open? (ch k))  (recur (inc k) l (inc depth))
+                                  (close? (ch k)) (recur (inc k) l (dec depth))
+                                  :else           (recur (inc k) (nl k l) depth))))]
+    (loop [i (inc pos), l line, acc []]
       (cond
-        (>= i end)      acc
-        (or (ws? (ch i)) (close? (ch i))) (recur (inc i) acc)
-        (open? (ch i))  (recur (skip i) (conj acc {:token nil :pos i}))
+        (>= i end)                        acc
+        (or (ws? (ch i)) (close? (ch i))) (recur (inc i) (nl i l) acc)
+        (open? (ch i))                    (let [[k l2] (skip i l)]
+                                            (recur k l2 (conj acc {:token nil :line l})))
         :else
         (let [k (loop [k i] (if (and (< k end) (not (ws? (ch k))) (not (open? (ch k))) (not (close? (ch k))))
                               (recur (inc k)) k))]
           (if (and (< k end) (open? (ch k)))
-            (recur (skip k) (conj acc {:token nil :pos i}))
-            (recur k (conj acc {:token (subs content i k) :pos i}))))))))
-
-(defn line-at
-  "The 1-based line of offset `pos` in `content`."
-  [content pos]
-  (inc (count (filter #{\newline} (subs content 0 pos)))))
+            (let [[k2 l2] (skip k l)] (recur k2 l2 (conj acc {:token nil :line l})))
+            (recur k l (conj acc {:token (subs content i k) :line l}))))))))
