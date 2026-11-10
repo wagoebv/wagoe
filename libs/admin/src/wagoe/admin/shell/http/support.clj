@@ -556,9 +556,10 @@
 (defn isolated
   "`(f)`, or nil when it throws: logged, and the page shows the part as missing
    instead of failing. In a savepoint, so a failed query in a tenant request's
-   transaction does not abort the parts after it on PostgreSQL."
-  [part f]
-  (try (db/in-savepoint (db/current-transaction) f)
+   transaction on `db-ctx` (admin's database) does not abort the parts after
+   it on PostgreSQL."
+  [db-ctx part f]
+  (try (db/in-savepoint (db/current-transaction db-ctx) f)
        (catch Exception e
          (log/warn e "admin page part failed" {:part part})
          nil)))
@@ -1112,7 +1113,7 @@
                               :record        parent-rec
                               :entity-config (get entity-configs (:entity parent-ref))
                               :display       (assoc display :overview
-                                                    (isolated [(:entity parent-ref) :overview]
+                                                    (isolated (:db-ctx config) [(:entity parent-ref) :overview]
                                                               #(overview admin-service (:entity parent-ref)
                                                                          {:overview/fields (:fields ctx-cfg)} [parent-rec])))})))
 

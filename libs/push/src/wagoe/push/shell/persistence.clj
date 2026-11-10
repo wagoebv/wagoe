@@ -157,7 +157,7 @@
   (if-not (:callback-id event)
     (insert-event! db event)
     (try
-      (database/in-savepoint (database/current-transaction) #(insert-event! db event))
+      (database/in-savepoint (database/current-transaction db) #(insert-event! db event))
       (catch clojure.lang.ExceptionInfo e
         (if (database/unique-conflict? e) 0 (throw e))))))
 

@@ -6,6 +6,7 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest testing is use-fixtures]]
+            [wagoe.platform.database :as db]
             [wagoe.workflow.ports :as ports]
             [wagoe.workflow.shell.registry :as registry]
             [wagoe.workflow.shell.service :as service])
@@ -477,6 +478,18 @@
       (let [result (ports/process-auto-transitions! auto-svc :ghost-workflow)]
         (is (= 0 (:processed result)))
         (is (= 0 (:attempted result)))))))
+
+(deftest ^:unit a-store-without-a-datasource-savepoints-on-the-open-transaction
+  ;; BOU-971: a custom store names no database, so the innermost is its
+  (registry/register-workflow! auto-workflow-def)
+  (let [store (create-memory-store)
+        svc   (service/create-workflow-service store *registry* nil nil)
+        seen  (atom [])]
+    (ports/start-workflow! svc {:workflow-id :auto-workflow :entity-type :task :entity-id (UUID/randomUUID)})
+    (with-redefs [db/current-transaction (fn ([] ::open-tx) ([_] nil))
+                  db/in-savepoint        (fn [conn f] (swap! seen conj conn) (f))]
+      (is (= 1 (:processed (ports/process-auto-transitions! svc :auto-workflow)))))
+    (is (= [::open-tx] @seen))))
 
 ;; =============================================================================
 ;; What a guard sees (BOU-571)

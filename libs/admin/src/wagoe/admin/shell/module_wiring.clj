@@ -99,6 +99,9 @@
   ;; The module's contribution: web routes, mounted under :web-prefix
   (http/admin-routes admin-service schema-provider
                      (cond-> config
+                       ;; A page part's savepoint is on the service's database,
+                       ;; hand-written wiring included
+                       (:db-ctx admin-service) (assoc :db-ctx (:db-ctx admin-service))
                        workflows           (assoc :workflows workflows)
                        permission-registry (assoc :access (access-fn (:authorization-mode config)
                                                                      permission-registry rights)))
