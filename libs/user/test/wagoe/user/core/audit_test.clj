@@ -466,5 +466,6 @@
     (is (= [] (audit/account-audit-entries ctx before {:role nil :name "Bea"})))
     (is (= [:role-change :deactivate]
            (map :action (audit/account-audit-entries ctx before {:role :admin :active false}))))
+    (is (= [:activate] (map :action (audit/account-audit-entries ctx (assoc before :active false) {:active true}))))
     (is (nil? (audit/profile-audit-entry ctx before (assoc before :role :admin :updated-at "now")))
         "role alone is the account entry's, not the profile's")))

@@ -202,17 +202,16 @@
    kept: a :role-change when the role changes, an :activate or :deactivate when
    active does. A :user role is none. The rights timeline reads them (BOU-960)."
   [{:keys [actor-id actor-email ip-address user-agent]} before after]
-  (let [role    #(some-> (:role (user/normalize-role %)) keyword)
-        active? user/active?
-        after   (merge before after)
-        id      (:id before)
-        email   (:email before)]
+  (let [role  #(some-> (:role (user/normalize-role %)) keyword)
+        after (merge before after)
+        id    (:id before)
+        email (:email before)]
     (cond-> []
       (not= (role before) (role after))
       (conj (role-change-audit-entry actor-id actor-email id email (role before) (role after) ip-address user-agent))
 
-      (not= (active? before) (active? after))
-      (conj ((if (active? after) activate-user-audit-entry deactivate-user-audit-entry)
+      (not= (user/active? before) (user/active? after))
+      (conj ((if (user/active? after) activate-user-audit-entry deactivate-user-audit-entry)
              actor-id actor-email id email ip-address user-agent)))))
 
 (defn profile-audit-entry
