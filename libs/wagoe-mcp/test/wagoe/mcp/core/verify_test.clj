@@ -48,6 +48,14 @@
       (is (= :overridden (:status r-ovr)))
       (is (verify/passed? r-ovr)))))
 
+(deftest ^:unit fcis-warning-only-passes
+  (let [r (verify/build-report
+           {:fcis {:violations [{:file "a.clj" :ns "n.core" :req "println" :line 2
+                                 :kind :print :severity :warning}]}})]
+    (is (= :pass (:status r)))
+    (is (= {:errors 0 :warnings 1} (:counts r)))
+    (is (= :ok (get-in r [:steps :fcis])))))
+
 (deftest ^:unit hard-and-soft-mix-is-not-overridable
   ;; A soft FC/IS violation plus a hard kondo error: the run cannot be
   ;; overridden, because not every blocking issue is soft.
