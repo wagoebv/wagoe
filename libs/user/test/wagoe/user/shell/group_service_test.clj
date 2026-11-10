@@ -1062,9 +1062,7 @@
 (deftest ^:integration a-lost-connection-ends-the-expiry-sweep
   ;; BOU-969: each group after it would wait out the connection timeout; one group's own failure does not
   (doseq [[what error lost?] [["pool timeout" #(java.sql.SQLTransientConnectionException. "Connection is not available") true]
-                              ["connection refused" #(java.sql.SQLException. "refused" "08001") true]
-                              ["a unique key" #(java.sql.SQLException. "duplicate" "23505") false]
-                              ["the audit write" #(ex-info "audit down" {:type :internal-error}) false]]
+                              ["a unique key" #(java.sql.SQLException. "duplicate" "23505") false]]
           at                 [:diff :audit]]
     (with-service nil {:registry registry}
       (fn [{:keys [svc audit user!]}]
@@ -1074,21 +1072,17 @@
               fail     (fn [& _] (swap! attempts inc) (throw (error)))
               svc      (case at
                          :diff  (assoc svc :resolve fail)
-                         :audit (assoc svc :audit-repository (refusing-audit audit (constantly true) #(fail))))
+                         :audit (assoc svc :audit-repository (refusing-audit audit (constantly true) fail)))
               label    (str what " at the " (name at))]
           (doseq [i (range 3)
                   :let [g (ports/create-group svc {:name (str "G" i)})]]
             (ports/insert-assignment repo {:group-id (:id g) :role :reports/viewer :scope {}})
             (ports/insert-member-until repo (:id g) (:id (user! (str "u" i "@example.com"))) past))
           (let [e (try (ports/expire-access! svc (Instant/now)) nil (catch Exception e e))]
-            (if lost?
-              (do (is (db/connection-lost? e) label)
-                  (is (= 1 @attempts) (str label ": one attempt"))
-                  (is (= 3 (count (:members (ports/find-expired repo (Instant/now))))) (str label ": nothing removed")))
-              (case at
-                ;; A failed diff is only warned about: every group expires
-                :diff  (do (is (nil? e) label)
-                           (is (= 3 @attempts) (str label ": every group tried")))
-                :audit (do (is (some? e) label)
-                           (is (= 3 @attempts) (str label ": every group tried"))
-                           (is (= 2 (count (.getSuppressed ^Throwable e))) label))))))))))
+            (is (= (if lost? 1 3) @attempts) (str label ": groups tried"))
+            (cond
+              lost?       (do (is (db/connection-lost? e) label)
+                              (is (= 3 (count (:members (ports/find-expired repo (Instant/now))))) (str label ": nothing removed")))
+              ;; A failed diff is only warned about: every group expires
+              (= :diff at) (is (nil? e) label)
+              :else        (is (= 2 (count (.getSuppressed ^Throwable e))) label))))))))

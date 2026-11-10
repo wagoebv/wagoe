@@ -5,9 +5,7 @@
             [wagoe.platform.database :as db])
   (:import (java.sql SQLException SQLNonTransientConnectionException SQLTransientConnectionException)))
 
-(defn- sql
-  ([state] (SQLException. "x" ^String state))
-  ([state cause] (SQLException. "x" ^String state cause)))
+(defn- sql [state] (SQLException. "x" ^String state))
 
 (deftest ^:unit connection-lost?
   (testing "the database cannot be reached"
@@ -17,6 +15,7 @@
                       "MySQL communications link failure"  (sql "08S01")
                       "H2 connection broken"               (SQLNonTransientConnectionException. "x" "90067")
                       "H2 broken, redacted to a state"     (sql "90067")
+                      "PostgreSQL shutting down"           (sql "57P01")
                       "under an audit entry's ex-info"     (ex-info "Could not audit" {:type :internal-error}
                                                                     (ex-info "Database query failed" {:type :database-error}
                                                                              (sql "08001")))}]

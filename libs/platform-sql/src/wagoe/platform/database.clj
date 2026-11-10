@@ -195,16 +195,18 @@
 (defn connection-lost?
   "Whether `e`, or anything that caused it, says the database cannot be
    reached rather than that it refused a statement: SQLState class 08
-   (PostgreSQL, MySQL), H2's broken connection (90067, which redaction keeps
-   only as a state), or the JDBC connection exceptions HikariCP and H2 throw,
-   a pool timeout with no state among them (BOU-969)."
+   (PostgreSQL, MySQL), a PostgreSQL shutdown or start-up (57P01-03), H2's
+   broken or closed database (which redaction keeps only as a state), or the
+   JDBC connection exceptions HikariCP and H2 throw, a pool timeout with no
+   state among them (BOU-969)."
   [e]
   (boolean
    (some #(or (instance? java.sql.SQLTransientConnectionException %)
               (instance? java.sql.SQLNonTransientConnectionException %)
               (when (instance? java.sql.SQLException %)
                 (let [state (str (.getSQLState ^java.sql.SQLException %))]
-                  (or (str/starts-with? state "08") (= "90067" state)))))
+                  (or (str/starts-with? state "08")
+                      (contains? #{"57P01" "57P02" "57P03" "90067" "90098" "90121"} state)))))
          (take-while some? (iterate ex-cause e)))))
 
 (defn- rolled-back?
