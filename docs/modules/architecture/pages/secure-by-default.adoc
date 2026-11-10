@@ -118,7 +118,7 @@ row with no test says so.
 | A schema per tenant, on PostgreSQL only: other databases refuse to boot with tenancy on, H2 unless `:allow-h2? true`.
 | `:wagoe/tenant`
 | 1.0.0
-| {repo}test/wagoe/tenant_isolation_registry_test.clj[The tenancy registry]: every library that carries a tenant id names its test. Push is not scoped yet.
+| {repo}test/wagoe/tenant_isolation_registry_test.clj[The tenancy registry]: every library that carries a tenant id names its test.
 
 | Secrets outside config files
 | `#secret` and `#env` read secrets from the environment or a file.

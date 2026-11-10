@@ -37,14 +37,16 @@
 
 (defprotocol IDeviceTokenStore
   (register-device! [this user-id device-info]
-    "Store device token. device-info: {:token str :platform kw :app-id str}")
+    "Store device token. device-info: {:token str :platform kw :app-id str},
+     and :tenant-id, the tenant it was registered in, which sends filter on.")
   (unregister-device! [this user-id device-token]
     "Remove device token.")
   (get-user-devices [this user-id]
     "All active devices for user.")
   (get-devices-by-platform [this platform opts]
     "Active devices for platform, ordered by id. opts: {:limit n :after-id id}:
-     keyset paging, so deactivating a device mid-broadcast shifts no page.")
+     keyset paging, so deactivating a device mid-broadcast shifts no page.
+     With :tenant-id, only that tenant's devices.")
   (mark-token-invalid! [this device-token]
     "Flag token as invalid after provider rejection.")
   (cleanup-stale-tokens! [this max-age-days]

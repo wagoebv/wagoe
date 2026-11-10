@@ -26,6 +26,15 @@
         elapsed  (Duration/between used-at now)]
     (> (.toMillis elapsed) (.toMillis max-age))))
 
+(defn of-tenant
+  "Those of `devices` registered in `tenant-id`; all of them without one, a
+   send of no tenant (BOU-946)."
+  [tenant-id devices]
+  (if tenant-id
+    (let [t (str tenant-id)]
+      (filterv #(= t (some-> (:tenant-id %) str)) devices))
+    (vec devices)))
+
 (defn prepare-device-record
   "Pure: build device record from user-id and device-info. Caller supplies id and now."
   [user-id device-info id now]
@@ -36,6 +45,7 @@
    :app-id       (:app-id device-info)
    :device-name  (:device-name device-info)
    :os-version   (:os-version device-info)
+   :tenant-id    (:tenant-id device-info)
    :active?      true
    :created-at   now
    :last-used-at now})
