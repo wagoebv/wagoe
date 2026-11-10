@@ -192,6 +192,21 @@
   [e]
   (= {:type :conflict :constraint :unique} (select-keys (ex-data e) [:type :constraint])))
 
+(defn connection-lost?
+  "Whether `e`, or anything that caused it, says the database cannot be
+   reached rather than that it refused a statement: SQLState class 08
+   (PostgreSQL, MySQL), H2's broken connection (90067, which redaction keeps
+   only as a state), or the JDBC connection exceptions HikariCP and H2 throw,
+   a pool timeout with no state among them (BOU-969)."
+  [e]
+  (boolean
+   (some #(or (instance? java.sql.SQLTransientConnectionException %)
+              (instance? java.sql.SQLNonTransientConnectionException %)
+              (when (instance? java.sql.SQLException %)
+                (let [state (str (.getSQLState ^java.sql.SQLException %))]
+                  (or (str/starts-with? state "08") (= "90067" state)))))
+         (take-while some? (iterate ex-cause e)))))
+
 (defn- rolled-back?
   "Whether the engine rolled `e`'s statement back as a deadlock or
    serialization failure (SQLSTATE 40001, MySQL's 1213 among them; 40P01)."
