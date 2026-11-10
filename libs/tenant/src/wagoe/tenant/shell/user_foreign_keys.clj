@@ -139,17 +139,22 @@
 
 (defn add-clean-foreign-keys!
   "Boot: add each missing key whose table has no row pointing at no user, and
-   change no rows. Returns the keys left off, each naming why."
+   change no rows. Returns the keys left off, each naming why. A lost database
+   connection is thrown, with those left off before it as :left-off (BOU-970)."
   [ctx]
-  (into []
-        (keep (fn [{:keys [table column] :as reference}]
-                (try
-                  (if-let [found (not-empty (orphans ctx table column))]
-                    {:table table :column column :orphans found}
-                    (do (add-key! ctx reference) nil))
-                  (catch Exception e
-                    {:table table :column column :error (ex-message e)}))))
-        (missing-keys ctx)))
+  (reduce (fn [left-off {:keys [table column] :as reference}]
+            (try
+              (if-let [found (not-empty (orphans ctx table column))]
+                (conj left-off {:table table :column column :orphans found})
+                (do (add-key! ctx reference) left-off))
+              (catch Exception e
+                ;; Each key after it would wait out the timeout to fail the same way
+                (when (db/connection-lost? e)
+                  (throw (ex-info "Lost the database connection adding tenant→auth_users keys"
+                                  {:type :internal-error :left-off left-off} e)))
+                (conj left-off {:table table :column column :error (ex-message e)}))))
+          []
+          (missing-keys ctx)))
 
 (defn up
   "Migratus entry point."

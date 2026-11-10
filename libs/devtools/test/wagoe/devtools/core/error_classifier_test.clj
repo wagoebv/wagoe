@@ -32,6 +32,11 @@
     (is (= "WGE-303" (:code (classifier/classify (java.sql.SQLException. "refused" "08001")))))
     (is (= "WGE-304" (:code (classifier/classify (java.sql.SQLException. "duplicate" "23505"))))))
 
+  (testing "a lost connection as wagoe.platform.database/connection-lost? reads it (BOU-970)"
+    (is (= "WGE-303" (:code (classifier/classify (java.sql.SQLException. "terminating" "57P01")))))
+    (is (= "WGE-303" (:code (classifier/classify (java.sql.SQLException. "database is closed" "90098")))))
+    (is (= "WGE-303" (:code (classifier/classify (java.sql.SQLNonTransientConnectionException. "gone" "HY000"))))))
+
   (testing "ConnectException → WGE-303"
     (let [ex (java.net.ConnectException. "Connection refused")]
       (is (= "WGE-303" (:code (classifier/classify ex)))))))
@@ -124,7 +129,12 @@
     (is (= "WGE-303" (:code (classifier/classify
                              (ex-info "Database initialization failed"
                                       {:type :db/error}
-                                      (java.sql.SQLException. "connection refused")))))))
+                                      (java.sql.SQLException. "connection refused"))))))
+    (is (= "WGE-303" (:code (classifier/classify
+                             (ex-info "Database query failed"
+                                      {:type :database-error}
+                                      (java.sql.SQLException. "I/O error" "08006")))))
+        "a :database-error the connection caused (BOU-970)"))
 
   (testing "an untyped wrapper still falls through to the cause"
     (is (= "WGE-303" (:code (classifier/classify

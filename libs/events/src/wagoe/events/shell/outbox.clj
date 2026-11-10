@@ -133,6 +133,7 @@
       decoded
       (try
         (ports/publish! bus (:topic decoded) (:event decoded))
+        ;; The bus failed, not the database: a lost database throws from record-failure!, ending the pass
         (catch Exception e
           {:error {:type :events/publish-failed :message (ex-message e)}})))))
 

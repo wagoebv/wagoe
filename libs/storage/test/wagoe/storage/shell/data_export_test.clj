@@ -3,6 +3,7 @@
    and the local adapter."
   (:require [clojure.test :refer [deftest is testing]]
             [support.test-db :as test-db]
+            [wagoe.platform.database :as db]
             [wagoe.platform.ports.privacy :as privacy]
             [wagoe.storage.ports :as ports]
             [wagoe.storage.shell.adapters.local :as local]
@@ -116,3 +117,17 @@
                             [:keys :deleted])))
         (is (false? (ports/file-exists? storage other)))
         (is (= [stuck-k] (map :key (ports/find-uploads index {:user-id user-id} {}))))))))
+
+(deftest ^:unit a-lost-connection-ends-the-purge
+  ;; BOU-970: each item after it would wait out the connection timeout
+  (doseq [[what error lost?] [["pool timeout" #(java.sql.SQLTransientConnectionException. "Connection is not available") true]
+                              ["one item" #(ex-info "will not delete" {:type :internal-error}) false]]]
+    (let [tried (atom [])
+          e     (try (data-export/purge-in-pages! (constantly [1 2 3]) identity
+                                                  (fn [id] (swap! tried conj id) (when (= 2 id) (throw (error))))
+                                                  "uploads")
+                     nil
+                     (catch clojure.lang.ExceptionInfo e e))]
+      (is (= (if lost? [1 2] [1 2 3]) @tried) what)
+      (is (= {:keys (if lost? [] [2]) :deleted (if lost? 1 2)} (select-keys (ex-data e) [:keys :deleted])) what)
+      (is (= lost? (db/connection-lost? e)) what))))

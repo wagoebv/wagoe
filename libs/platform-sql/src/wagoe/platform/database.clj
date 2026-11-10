@@ -18,6 +18,7 @@
    nothing implements — the mistake ADR-037 removed."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
+            [wagoe.platform.core.database.connection-loss :as connection-loss]
             [wagoe.platform.core.database.migration-sql :as migration-sql]
             [wagoe.platform.ports.database :as db-ports]
             [wagoe.platform.shell.adapters.database.common.connection :as connection]
@@ -196,16 +197,6 @@
   [e]
   (= {:type :conflict :constraint :unique} (select-keys (ex-data e) [:type :constraint])))
 
-(defn- lost-itself?
-  "Whether `t` itself, not its causes, says the database cannot be reached."
-  [t]
-  (or (instance? java.sql.SQLTransientConnectionException t)
-      (instance? java.sql.SQLNonTransientConnectionException t)
-      (when (instance? java.sql.SQLException t)
-        (let [state (str (.getSQLState ^java.sql.SQLException t))]
-          (or (str/starts-with? state "08")
-              (contains? #{"57P01" "57P02" "57P03" "90067" "90098" "90121"} state))))))
-
 (defn connection-lost?
   "Whether `e`, or anything that caused it, says the database cannot be
    reached rather than that it refused a statement: SQLState class 08
@@ -215,17 +206,7 @@
    state among them (BOU-969). A failed rollback's ex-info from next.jdbc has
    no cause: it names the exceptions under :handling and :rollback."
   [e]
-  ;; A set compares throwables by identity, so a cyclic chain ends
-  (loop [todo (list e) seen #{}]
-    (if-let [t (first todo)]
-      (cond
-        (seen t)        (recur (rest todo) seen)
-        (lost-itself? t) true
-        :else           (recur (into (rest todo)
-                                     (filter #(instance? Throwable %))
-                                     [(ex-cause t) (:handling (ex-data t)) (:rollback (ex-data t))])
-                               (conj seen t)))
-      false)))
+  (connection-loss/connection-lost? e))
 
 (defn- rolled-back?
   "Whether the engine rolled `e`'s statement back as a deadlock or

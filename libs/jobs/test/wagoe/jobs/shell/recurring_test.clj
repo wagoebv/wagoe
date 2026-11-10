@@ -6,7 +6,8 @@
             [wagoe.jobs.ports :as ports]
             [wagoe.jobs.shell.adapters.in-memory :as mem]
             [wagoe.jobs.shell.recurring :as recurring]
-            [wagoe.jobs.shell.worker :as worker])
+            [wagoe.jobs.shell.worker :as worker]
+            [wagoe.platform.database :as db])
   (:import [java.time Instant]))
 
 (defn- at [s] (Instant/parse s))
@@ -191,3 +192,24 @@
     (ports/ack-job! queue :default "w" a)
     (is (some? (recurring/enqueue-once! queue idempotency :default (mk) "b"))
         "the refused key stayed claimed")))
+
+(deftest ^:unit a-lost-connection-ends-the-tick
+  ;; BOU-970: each schedule after it would wait out the connection timeout
+  (doseq [[what error lost?] [["pool timeout" #(java.sql.SQLTransientConnectionException. "Connection is not available") true]
+                              ["one schedule" #(ex-info "refused" {:type :internal-error}) false]]]
+    (let [b     (backend)
+          s     (recurring/create-scheduler b)
+          tried (atom [])
+          types [:a :b :c]]
+      (doseq [t types]
+        (recurring/schedule-recurring! s t "0 2 * * *")
+        (seed-tick! b t "2026-01-01T02:00:00Z"))
+      (with-redefs [recurring/fire! (fn [_ job-type & _]
+                                      (swap! tried conj job-type)
+                                      (if (= 1 (count @tried)) (throw (error)) :enqueued))]
+        (let [r (try (recurring/tick! s (at "2026-01-02T02:00:01Z")) (catch Exception e e))]
+          (if lost?
+            (do (is (db/connection-lost? r) what)
+                (is (= 1 (count @tried)) what))
+            (do (is (= 2 (count r)) what)
+                (is (= (set types) (set @tried)) what))))))))
