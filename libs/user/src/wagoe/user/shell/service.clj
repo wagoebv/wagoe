@@ -212,7 +212,9 @@
 
 (defn- audit-quietly!
   "Record `entry-fn`'s audit entry for `user-id`; a failed write warns and does
-   not undo the change."
+   not undo the change. Deliberate: only the audit trail reads these entries
+   back, not the rights timeline, whose entries roll their change back
+   (BOU-958)."
   [audit-repository entry-fn user-id email]
   (try
     (let [{:keys [actor-id actor-email ip-address user-agent]} (effective-audit-context {})]
