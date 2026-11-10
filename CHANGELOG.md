@@ -92,6 +92,8 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Deprecated
 
 - **`wagoe.jobs.shell.tenant-context/tenant-runner` and `:wagoe/job-tenant-runner`** (BOU-931). Use tenant's `:wagoe/in-tenant`.
+- **`println`, `pprint`, `tap>` and the other printers in a `core/` namespace** (BOU-957): `bb check:fcis` warns, and fails
+  from 2.0. Return the string, or print from the shell; `with-out-str` is fine.
 - **`wagoe.audience.ports/query-users-sql`** (BOU-875), removed in 2.0 (BOU-935). Implement `IUserQuery/query-user-ids`.
 
 ## [1.1.2] — 2026-11-07
