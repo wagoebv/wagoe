@@ -9,6 +9,7 @@
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
             [support.test-db :as test-db]
+            [wagoe.platform.database :as db]
             [wagoe.platform.core.authorization :as authz-core]
             [wagoe.platform.shell.authorization :as authorization]
             [wagoe.user.core.audit :as audit-core]
@@ -255,26 +256,6 @@
             "a group listed twice")
         (is (= :validation-error (:type (refusal #(ports/import-groups! svc [{:name "X" :colour "red"}] {})))))
         (is (empty? (ports/list-groups svc)) "nothing is written before every group is checked")))))
-
-(deftest ^:integration a-failed-audit-entry-rolls-the-import-back
-  (test-db/with-db "user_group_import_rollback"
-    (fn [ctx]
-      (persistence/initialize-user-schema! ctx)
-      (let [users  (persistence/create-user-repository ctx)
-            ada    (ports/create-user users {:email "ada@example.com" :name "Ada" :role :user :active true
-                                             :password-hash "x"})
-            broken (reify ports/IUserAuditRepository
-                     (create-audit-log [_ _] (throw (ex-info "audit down" {:type :internal-error})))
-                     (find-audit-logs [_ _] [])
-                     (find-audit-logs-by-user [_ _ _] [])
-                     ports/IUserAuditRetention
-                     (delete-audit-logs-before [_ _] 0))
-            repo   (group-persistence/create-group-repository ctx)
-            svc    (sut/create-group-service repo users broken (sut/prepare-settings nil))]
-        (is (= "audit down" (ex-message (try (ports/import-groups! svc [{:name "Finance" :members [(:id ada)]}] {})
-                                             nil
-                                             (catch clojure.lang.ExceptionInfo e e)))))
-        (is (empty? (ports/find-groups repo)))))))
 
 (deftest ^:integration concurrent-imports-of-a-new-group
   ;; One creates it; the other finds it or gets a :conflict, and a rerun works.
@@ -856,6 +837,20 @@
         (is (= [[:group-leave [{:permission :reports/read :scope {}}]]]
                (map (juxt :action :removed) (ports/rights-changes svc ada 10))))))))
 
+(deftest ^:integration an-expiry-whose-diff-fails-still-expires
+  ;; BOU-958: on PostgreSQL the failed read aborts the transaction, so it runs again without diffs
+  (with-service nil {:registry registry}
+    (fn [{:keys [svc user! ctx]}]
+      (let [repo (:group-repository svc)
+            ada  (user! "ada@example.com")
+            desk (ports/create-group svc {:name "Desk"})
+            svc  (assoc svc :resolve (fn [_ _] (db/execute-query! ctx {:select [:x] :from [:no_such_table]})))]
+        (ports/insert-assignment repo {:group-id (:id desk) :role :reports/viewer :scope {}})
+        (ports/insert-member-until repo (:id desk) (:id ada) (.minusSeconds (Instant/now) 60))
+        (is (= 1 (count (:members (ports/expire-access! svc (Instant/now))))))
+        (is (= [[:group-leave []]] (map (juxt :action :removed) (ports/rights-changes svc ada 10)))
+            "written without what it took")))))
+
 (deftest ^:integration a-role-edit-over-many-groups-hides-no-older-change
   ;; BOU-911: its entries, one per group, collapse into one change, so they do not fill the timeline
   (with-service nil {:registry registry}
@@ -873,3 +868,136 @@
         (doseq [svc [svc (assoc svc :audit-actions? false)]]
           (is (= [:role-edit :grant-add] (map :action (ports/rights-changes svc ada 10)))
               (str "audit-actions? " (:audit-actions? svc))))))))
+
+;; =============================================================================
+;; A failed audit entry rolls the change back (BOU-958)
+;; =============================================================================
+
+(defn- failing-audit
+  "`audit`, refusing an entry once `@ok` more have been written; nil `@ok`
+   refuses none."
+  [audit ok]
+  (reify
+    ports/IUserAuditRepository
+    (create-audit-log [_ entry]
+      (when-let [n @ok]
+        (when (zero? n) (throw (ex-info "audit down" {:type :internal-error})))
+        (swap! ok dec))
+      (ports/create-audit-log audit entry))
+    (find-audit-logs [_ opts] (ports/find-audit-logs audit opts))
+    (find-audit-logs-by-user [_ id opts] (ports/find-audit-logs-by-user audit id opts))
+    ports/IUserAuditActions
+    (find-audit-logs-with-actions [_ actions opts] (ports/find-audit-logs-with-actions audit actions opts))))
+
+(defn- members-of [svc g]
+  (set (map :email (:members (ports/get-group svc (:id g))))))
+
+(defn- roles-of-group [svc g]
+  (set (map :role (:roles (ports/get-group svc (:id g))))))
+
+(defn- join-ada [svc {:keys [g ada]}]
+  (ports/add-group-member svc (:id g) (:id ada)))
+
+(defn- join-ada-with-lead [svc state]
+  (join-ada svc state)
+  (ports/create-role svc {:name :sales/lead :permissions #{:reports/read}})
+  (ports/add-group-role svc (:id (:g state)) {:role :sales/lead}))
+
+(def ^:private both #{"ada@example.com" "bob@example.com"})
+
+(defn- bob-only? [svc {:keys [g]}]
+  (= #{"bob@example.com"} (members-of svc g)))
+
+(def ^:private audited-paths
+  "Each path writing an entry the rights timeline reads. Where a path writes
+   one entry per member, the second fails, so the first, already written, has
+   to be rolled back too."
+  [{:path   "add member"
+    :change join-ada
+    :same?  bob-only?
+    :action :group-join}
+   {:path   "add member until"
+    :change (fn [svc {:keys [g ada]}] (ports/add-group-member-until svc (:id g) (:id ada) (.plusSeconds (Instant/now) 3600)))
+    :same?  bob-only?
+    :action :group-join}
+   {:path   "new group of one"
+    :change (fn [svc {:keys [ada]}]
+              (ports/create-grant-group svc {:name "Ada reads"} (:id ada) {:role :orders/viewer :scope {}} nil))
+    :same?  (fn [svc _] (not-any? (comp #{"Ada reads"} :name) (ports/list-groups svc)))
+    :action :group-join}
+   {:path   "remove member"
+    :setup  join-ada
+    :change (fn [svc {:keys [g ada]}] (ports/remove-group-member svc (:id g) (:id ada)))
+    :same?  (fn [svc {:keys [g]}] (= both (members-of svc g)))
+    :action :group-leave}
+   {:path    "delete group"
+    :setup   join-ada
+    :change  (fn [svc {:keys [g]}] (ports/delete-group svc (:id g)))
+    :fail-at 1
+    :same?   (fn [svc {:keys [g]}] (= both (members-of svc g)))
+    :action  :group-leave}
+   {:path    "grant role"
+    :setup   join-ada
+    :change  (fn [svc {:keys [g]}] (ports/add-group-role svc (:id g) {:role :reports/viewer}))
+    :fail-at 1
+    :same?   (fn [svc {:keys [g]}] (= #{:orders/viewer} (roles-of-group svc g)))
+    :action  :grant-add}
+   {:path    "revoke role"
+    :setup   join-ada
+    :change  (fn [svc {:keys [g]}]
+               (ports/remove-group-role svc (:id g) (:id (first (:roles (ports/get-group svc (:id g)))))))
+    :fail-at 1
+    :same?   (fn [svc {:keys [g]}] (= #{:orders/viewer} (roles-of-group svc g)))
+    :action  :grant-remove}
+   {:path    "managed role change"
+    :setup   join-ada-with-lead
+    :change  (fn [svc _] (ports/update-role svc {:name :sales/lead :permissions #{:orders/write}}))
+    :fail-at 1
+    :same?   (fn [svc _] (= #{:reports/read} (some #(when (= :sales/lead (:name %)) (:permissions %))
+                                                   (ports/list-roles svc))))
+    :action  :role-edit}
+   {:path    "managed role delete"
+    :setup   join-ada-with-lead
+    :change  (fn [svc _] (ports/delete-role svc :sales/lead))
+    :fail-at 1
+    :same?   (fn [svc _] (some (comp #{:sales/lead} :name) (ports/list-roles svc)))
+    :action  :role-edit}
+   {:path    "import"
+    :change  (fn [svc {:keys [ada bob]}]
+               (ports/import-groups! svc [{:name "Imported" :members [(:id ada) (:id bob)]}] {}))
+    :fail-at 1
+    :same?   (fn [svc _] (not-any? (comp #{"Imported"} :name) (ports/list-groups svc)))
+    :action  :group-join}
+   {:path   "expiry"
+    :setup  (fn [svc {:keys [g ada]}]
+              (ports/insert-member-until (:group-repository svc) (:id g) (:id ada) (.minusSeconds (Instant/now) 60)))
+    :change (fn [svc _] (ports/expire-access! svc (Instant/now)))
+    :same?  (fn [_ {:keys [ctx ada]}]
+              (= 1 (:n (jdbc/execute-one! (:datasource ctx)
+                                          ["SELECT COUNT(*) AS n FROM user_group_members WHERE user_id = ?" (str (:id ada))]
+                                          {:builder-fn rs/as-unqualified-lower-maps}))))
+    :action :group-leave}])
+
+(deftest ^:integration a-failed-audit-entry-rolls-the-change-back
+  (doseq [{:keys [path setup change same? action fail-at]} audited-paths]
+    (with-service nil {:registry registry}
+      (fn [{:keys [svc audit user! ctx]}]
+        (let [ok      (atom nil)
+              svc     (assoc svc :audit-repository (failing-audit audit ok))
+              ada     (user! "ada@example.com")
+              bob     (user! "bob@example.com")
+              g       (ports/create-group svc {:name "Ops"})
+              state   {:g g :ada ada :bob bob :ctx ctx}
+              entries #(:total-count (ports/find-audit-logs audit {:limit 1}))]
+          (ports/add-group-member svc (:id g) (:id bob))
+          (ports/add-group-role svc (:id g) {:role :orders/viewer})
+          (when setup (setup svc state))
+          (let [before (entries)]
+            (reset! ok (or fail-at 0))
+            (is (= "audit down" (ex-message (try (change svc state) nil (catch Exception e e)))) path)
+            (reset! ok nil)
+            (is (same? svc state) (str path ": the rights are unchanged"))
+            (is (= before (entries)) (str path ": none of its entries is left"))
+            (change svc state)
+            (is (some #{action} (map :action (ports/rights-changes svc ada 50)))
+                (str path ": done, it is on the timeline"))))))))
