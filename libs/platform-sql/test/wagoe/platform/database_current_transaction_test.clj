@@ -2,18 +2,11 @@
   "`current-transaction` with transactions on two databases nested (BOU-971)."
   (:require [clojure.test :refer [deftest is testing]]
             [wagoe.platform.database :as db]
-            [wagoe.platform.shell.adapters.database.common.core :as common]
-            [wagoe.platform.shell.adapters.database.h2.core :as h2])
-  (:import (java.io Closeable)
-           (java.util UUID)))
+            [wagoe.platform.shell.adapters.database.factory :as factory])
+  (:import (java.util UUID)))
 
 (defn- h2-ctx []
-  (let [adapter (h2/new-adapter)]
-    {:adapter    adapter
-     :datasource (common/create-connection-pool
-                  adapter {:adapter           :h2
-                           :database-path     (str "mem:current-tx-" (UUID/randomUUID))
-                           :connection-params {:DB_CLOSE_DELAY "-1"}})}))
+  (factory/db-context (factory/h2-config (str "mem:current-tx-" (UUID/randomUUID) ";DB_CLOSE_DELAY=-1"))))
 
 (defn- notes [ctx]
   (set (map :k (db/execute-query! ctx {:select [:k] :from [:notes]}))))
@@ -50,4 +43,4 @@
       (is (= #{"kept"} (notes first-db)))
       (is (= #{"other"} (notes other)))
       (finally
-        (doseq [c [first-db other]] (.close ^Closeable (:datasource c)))))))
+        (run! factory/close-db-context! [first-db other])))))

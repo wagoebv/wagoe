@@ -84,11 +84,12 @@
            groups (admin-ui/dashboard-groups entities entity-configs user)
            ;; Counted only for a tile the dashboard shows
            shown (into [] (comp (mapcat :items) (keep :entity) (filter (set entities)) (distinct)) groups)
-           stats (zipmap shown (in-parallel (partial entity-stats admin-service (:db-ctx config) entity-configs) shown))]
+           db-ctx (:db-ctx config)
+           stats (zipmap shown (in-parallel (partial entity-stats admin-service db-ctx entity-configs) shown))]
        (support/html-response request
                               (admin-ui/admin-layout
                                (admin-ui/dashboard groups stats
-                                                   {:activity       (recent-activity user-service (:db-ctx config) groups)
+                                                   {:activity       (recent-activity user-service db-ctx groups)
                                                     :entity-configs entity-configs
                                                     :extra-cards    (:dashboard-extra-cards config)
                                                     :display        (support/display-options config request)

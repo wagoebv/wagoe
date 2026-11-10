@@ -369,7 +369,7 @@
     ;; request's: hooks and jobs ride on the one the store writes on.
     (transition-on this (store-for store tx)
                    (or (db/tx-connection tx)
-                       (some-> (:datasource store) db/connectable-for db/tx-connection))
+                       (db/current-transaction (:datasource store)))
                    request))
 
   (current-state [_ instance-id]
