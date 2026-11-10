@@ -61,6 +61,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A rights change whose audit entry failed was kept, and missing from the rights timeline** (BOU-958). It rolls back
+  now. Nothing to change.
 - **The stability page's opening line said Wagoe is at `1.0.1`** under a `1.1.1` table. It now points at the table,
   the one version claim `check:versions` gates. Nothing to change.
 - **A successful storage upload or URL lookup went out unencoded** (BOU-930). Upgrade if you serve `wagoe-storage` routes.

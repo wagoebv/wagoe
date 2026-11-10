@@ -142,12 +142,12 @@
   "Record `action` for each of `members`, or, for a change to Everyone, once,
    its target the Everyone group: it reaches every user (BOU-862). `opts`: `:diffs`, as `user-diffs`
    gives them, add what the change did to each member's effective rights; for
-   Everyone, counted per permission; `:metadata` adds to each entry's. A failed write warns and does not undo the
-   change, as for the user service's other entries, unless `:strict?`: then it
-   throws, rolling back the transaction it is in."
+   Everyone, counted per permission; `:metadata` adds to each entry's. Called
+   in the change's transaction: a failed write throws and rolls the change
+   back, since the rights timeline reads these entries back (BOU-958)."
   ([audit-repository action group members grants]
    (audit! audit-repository action group members grants {}))
-  ([audit-repository action group members grants {:keys [diffs strict? metadata]}]
+  ([audit-repository action group members grants {:keys [diffs metadata]}]
    (let [ctx       (user-service/effective-audit-context {})
          everyone? (group-core/everyone? (:id group))
          ;; Everyone's entry is filed under the group, where every user's rights timeline reads it
@@ -159,10 +159,14 @@
                        {(str group-core/everyone-id) (group-core/permission-counts diffs)})
                      (into {} (keep (fn [d] (when-let [id (get-in d [:user :id])] [(str id) d]))) diffs))]
      (doseq [entry (audit-core/group-audit-entries action ctx group members grants effective)]
-       (try (ports/create-audit-log audit-repository (update entry :metadata merge metadata))
-            (catch Exception e
-              (when strict? (throw e))
-              (log/warn e "Failed to write a group audit entry" {:action action :group-id (:id group)})))))))
+       (ports/create-audit-log audit-repository (update entry :metadata merge metadata))))))
+
+(defn- in-transaction
+  "Call `(f svc)` with `svc`'s group repository in one transaction. A database
+   audit repository writes on the transaction's connection, so a failed entry
+   rolls the change back."
+  [svc f]
+  (ports/in-transaction (:group-repository svc) #(f (assoc svc :group-repository %))))
 
 (defn- checked-grant
   "`grant` as stored, its scope {} when it has none. Throws :validation-error
@@ -522,7 +526,7 @@
 (defn- import-group!
   "Upsert `spec` through `repo`, auditing each user whose rights change in
    the order the single changes would: leaving, roles removed, roles added,
-   joining. Audit failures throw, so the import rolls back."
+   joining. A failed audit entry throws, so the import rolls back."
   [repo registry audit-repository existing {:keys [members roles grants] :as spec} replace?]
   (when (and existing (or (seq members) (contains? spec :description)))
     (not-everyone! (:id existing)))
@@ -550,11 +554,11 @@
         (when-not (ports/insert-member repo (:id group) (:id user))
           (throw (ex-info "The group changed during the import; run it again"
                           {:type :conflict :group (:name group)}))))
-      (when (seq leave) (audit! audit-repository :group-leave group leave (grants-of held) {:strict? true}))
-      (when (seq remove) (audit! audit-repository :grant-remove group stay (grants-of remove) {:strict? true}))
-      (when (seq added) (audit! audit-repository :grant-add group stay (grants-of added) {:strict? true}))
+      (when (seq leave) (audit! audit-repository :group-leave group leave (grants-of held)))
+      (when (seq remove) (audit! audit-repository :grant-remove group stay (grants-of remove)))
+      (when (seq added) (audit! audit-repository :grant-add group stay (grants-of added)))
       (when (seq join) (audit! audit-repository :group-join group join
-                               (grants-of (ports/find-assignments repo (:id group))) {:strict? true}))
+                               (grants-of (ports/find-assignments repo (:id group)))))
       {:group         group
        :created?      (nil? existing)
        :joined        (mapv :id join)
@@ -683,17 +687,19 @@
 
 (defn- add-member!
   "Add the user to the group, until `expires-at` unless nil, auditing the join."
-  [{:keys [group-repository audit-repository] :as svc} group-id user-id expires-at]
+  [{:keys [audit-repository] :as svc} group-id user-id expires-at]
   (let [{:keys [group focal grants expires-at] :as plan}
         (change-plan svc {:op :add-member :group-id group-id :user-id user-id :expires-at expires-at})
-        diffs (user-diffs svc plan)
-        added (if expires-at
-                (ports/insert-member-until group-repository group-id (:id focal) expires-at)
-                (ports/insert-member group-repository group-id (:id focal)))]
-    (when added
-      (audit! audit-repository :group-join group [focal] grants
-              {:diffs diffs :metadata (expiry-metadata expires-at)}))
-    added))
+        diffs (user-diffs svc plan)]
+    (in-transaction svc
+                    (fn [{repo :group-repository}]
+                      (let [added (if expires-at
+                                    (ports/insert-member-until repo group-id (:id focal) expires-at)
+                                    (ports/insert-member repo group-id (:id focal)))]
+                        (when added
+                          (audit! audit-repository :group-join group [focal] grants
+                                  {:diffs diffs :metadata (expiry-metadata expires-at)}))
+                        added)))))
 
 (defn- offer
   "`option` with the preview of `change`, or with :refused, the refusal's
@@ -731,11 +737,11 @@
          (log/warn e "Could not diff an expiry" {:group-id (get-in plan [:group :id])})
          nil)))
 
-(defn- expire!
+(defn- expire-in!
   "Remove what expired by `now`, auditing each as a leave or a removed role
    with what it took from each user's effective rights. Reads ignored it from
    the moment it expired, so that is the diff of adding it back, reversed
-   (BOU-911)."
+   (BOU-911). In `in-transaction`, so a failed entry puts the rows back."
   [{:keys [group-repository user-repository audit-repository registry membership] :as svc} now]
   (let [{:keys [members assignments] :as removed} (ports/remove-expired group-repository now)
         roles    (all-roles group-repository registry)
@@ -764,6 +770,9 @@
     (when (or (seq members) (seq assignments))
       (log/info "Removed expired group access" {:members (count members) :assignments (count assignments)}))
     removed))
+
+(defn- expire! [svc now]
+  (in-transaction svc #(expire-in! % now)))
 
 ;; =============================================================================
 ;; Service
@@ -922,11 +931,13 @@
   (delete-group [this group-id]
     (let [{:keys [group users] :as plan} (change-plan this {:op :delete-group :group-id group-id})]
       (if group
-        (let [diffs   (user-diffs this plan)
-              removed (ports/remove-group group-repository group-id)]
-          (when (and removed (seq users))
-            (audit! audit-repository :group-leave group users (:grants plan) {:diffs diffs}))
-          removed)
+        (let [diffs (user-diffs this plan)]
+          (in-transaction this
+                          (fn [{repo :group-repository}]
+                            (let [removed (ports/remove-group repo group-id)]
+                              (when (and removed (seq users))
+                                (audit! audit-repository :group-leave group users (:grants plan) {:diffs diffs}))
+                              removed))))
         false)))
 
   (add-group-member [this group-id user-id]
@@ -934,12 +945,14 @@
 
   (remove-group-member [this group-id user-id]
     (let [{:keys [group focal grants] :as plan} (change-plan this {:op :remove-member :group-id group-id :user-id user-id})
-          diffs   (user-diffs this plan)
-          removed (ports/remove-member group-repository group-id user-id)]
-      ;; A soft-deleted user holds nothing, so leaving changes nothing to audit.
-      (when (and removed focal)
-        (audit! audit-repository :group-leave group [focal] grants {:diffs diffs}))
-      removed))
+          diffs (user-diffs this plan)]
+      (in-transaction this
+                      (fn [{repo :group-repository}]
+                        (let [removed (ports/remove-member repo group-id user-id)]
+                          ;; A soft-deleted user holds nothing, so leaving changes nothing to audit.
+                          (when (and removed focal)
+                            (audit! audit-repository :group-leave group [focal] grants {:diffs diffs}))
+                          removed)))))
 
   (list-roles [_]
     (->> (all-roles group-repository registry)
@@ -956,34 +969,44 @@
           (change-plan this {:op :update-role :role (:name data) :description (:description data)
                              :permissions (:permissions data)})
           diffs (user-diffs this plan)]
-      (ports/modify-role group-repository data)
-      (audit-role-change! audit-repository (:name data) holders (:permissions before) (:permissions data) diffs)
+      (in-transaction this
+                      (fn [{repo :group-repository}]
+                        (ports/modify-role repo data)
+                        (audit-role-change! audit-repository (:name data) holders (:permissions before) (:permissions data)
+                                            diffs)))
       (assoc before :description (:description data) :permissions (:permissions data))))
 
   (delete-role [this role-name]
     (if (find-role group-repository role-name)
-      (let [{role :role :keys [holders] :as plan} (change-plan this {:op :delete-role :role role-name})]
-        (audit-role-change! audit-repository role-name holders (:permissions role) #{} (user-diffs this plan))
-        (ports/remove-role group-repository role-name))
+      (let [{role :role :keys [holders] :as plan} (change-plan this {:op :delete-role :role role-name})
+            diffs (user-diffs this plan)]
+        (in-transaction this
+                        (fn [{repo :group-repository}]
+                          (audit-role-change! audit-repository role-name holders (:permissions role) #{} diffs)
+                          (ports/remove-role repo role-name))))
       false))
 
   (add-group-role [this group-id assignment]
     (let [{:keys [group users assignment grants] :as plan}
           (change-plan this {:op :add-role :group-id group-id :assignment assignment})
-          diffs  (user-diffs this plan)
-          stored (ports/insert-assignment group-repository assignment)]
-      (audit! audit-repository :grant-add group users grants
-              {:diffs diffs :metadata (expiry-metadata (:expires-at assignment))})
-      stored))
+          diffs (user-diffs this plan)]
+      (in-transaction this
+                      (fn [{repo :group-repository}]
+                        (let [stored (ports/insert-assignment repo assignment)]
+                          (audit! audit-repository :grant-add group users grants
+                                  {:diffs diffs :metadata (expiry-metadata (:expires-at assignment))})
+                          stored)))))
 
   (remove-group-role [this group-id assignment-id]
     (let [{:keys [group users assignment grants] :as plan}
           (change-plan this {:op :remove-role :group-id group-id :assignment-id assignment-id})
-          diffs   (user-diffs this plan)
-          removed (boolean (and assignment (ports/remove-assignment group-repository group-id (:id assignment))))]
-      (when removed
-        (audit! audit-repository :grant-remove group users grants {:diffs diffs}))
-      removed))
+          diffs (user-diffs this plan)]
+      (in-transaction this
+                      (fn [{repo :group-repository}]
+                        (let [removed (boolean (and assignment (ports/remove-assignment repo group-id (:id assignment))))]
+                          (when removed
+                            (audit! audit-repository :grant-remove group users grants {:diffs diffs}))
+                          removed)))))
 
   (add-group-grant [this group-id grant]
     (existing-group group-repository group-id)

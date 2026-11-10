@@ -531,6 +531,12 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
   change to Everyone writes one entry, its target the Everyone group, which
   every rights timeline reads (BOU-862). A role edit's entries share a
   `:change-id`, so the rights timeline shows it once (BOU-864).
+- These entries are written in the change's transaction (`IUserGroupRepository/in-transaction`): a failed
+  entry rolls the change back, so the rights timeline misses none (BOU-958). A database audit repository
+  joins it, writing on the transaction's connection; one on another store does not, so an entry written before
+  the failure stays. The user service's entries (create, update, deactivate, login, sessions) are not
+  transactional: only the audit trail reads them. Most warn on failure; `update-user-profile`'s throws, after the
+  update committed.
 - Tables `user_groups`, `user_group_members`, `user_roles`, `user_group_roles`, and
   `user_group_grants` (kept, marked, until 2.0). Keys cascade from `auth_users`
   and `user_groups`; the repository deletes explicitly too, for SQLite connections
