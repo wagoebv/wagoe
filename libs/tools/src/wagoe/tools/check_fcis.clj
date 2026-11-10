@@ -201,12 +201,6 @@
     "ref" "ref-set" "alter" "commute" "dosync"
     "alter-var-root" "agent" "send" "send-off" "add-watch"})
 
-(def ^:private higher-order-heads
-  "Forms that take a function as their first argument, so `(apply swap! …)`
-   mutates just as surely as `(swap! …)` does. Matched on the argument as well
-   as the head."
-  #{"apply" "partial"})
-
 (defn- require-keys!
   "Throws when an allowlist entry lacks one of `ks`."
   [label entries ks]
@@ -277,6 +271,15 @@
 
 (defn- core-names [& names]
   (into #{} (mapcat (juxt identity #(str "clojure.core/" %))) names))
+
+(def ^:private higher-order-heads
+  "Forms that take a function as their first argument, so `(apply swap! …)`
+   mutates just as surely as `(swap! …)` does, and `(run! println xs)` prints.
+   Matched on the argument as well as the head."
+  (core-names "apply" "partial" "comp" "juxt" "run!" "map" "mapv" "mapcat"
+              "map-indexed" "pmap" "keep" "keep-indexed" "filter" "filterv"
+              "remove" "some" "every?" "reduce" "reduce-kv" "sort-by" "group-by"
+              "iterate" "repeatedly"))
 
 (def ^:private out-symbols
   "Calls that write to *out*, bare or `clojure.core/`-qualified."

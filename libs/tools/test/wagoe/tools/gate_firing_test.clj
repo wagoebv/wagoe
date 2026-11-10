@@ -283,6 +283,22 @@
           (is (not-any? #(#{7 8} (:line %)) found))))
       (finally (delete-tree! root)))))
 
+(deftest ^:unit fcis-printer-or-clock-passed-as-a-function-warns-test
+  (let [root (temp-dir "fcis-hof" 1)]
+    (try
+      (let [file (spit-file! root "libs/demo/src/wagoe/demo/core/hof.clj"
+                             (str "(ns wagoe.demo.core.hof)\n"
+                                  "(defn a [xs] (run! println xs))\n"
+                                  "(defn b [xs] (doall (map prn xs)))\n"
+                                  "(defn c [xs] [(mapv print xs) (keep clojure.core/println xs)])\n"
+                                  "(defn d [xs] (sort-by rand xs))\n"
+                                  "(defn e [xs] (map inc xs))\n"))]
+        (is (= #{["println" 2 :print] ["prn" 3 :print] ["print" 4 :print]
+                 ["clojure.core/println" 4 :print] ["rand" 5 :clock]}
+               (set (map (juxt :req :line :kind)
+                         (check-fcis/check-file file {:allow-throw #{} :allow-mutable-state #{}}))))))
+      (finally (delete-tree! root)))))
+
 (deftest ^:unit fcis-clock-accessors-stay-errors-test
   (let [root (temp-dir "fcis-clock-err" 1)]
     (try
