@@ -4,6 +4,7 @@
    request, and the migration from grants and the :viewer role keeps
    everyone's reach."
   (:require [clojure.set :as set]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [malli.core :as m]
             [next.jdbc :as jdbc]
@@ -952,6 +953,13 @@
     :fail-at 1
     :same?   (fn [svc {:keys [g]}] (= #{:orders/viewer} (roles-of-group svc g)))
     :action  :grant-add}
+   {:path    "legacy grant"
+    :setup   join-ada
+    :change  (fn [svc {:keys [g]}] (ports/add-group-grant svc (:id g) {:permission :reports/write}))
+    :fail-at 1
+    :same?   (fn [svc {:keys [g]}] (and (= #{:orders/viewer} (roles-of-group svc g))
+                                        (not-any? (comp #{:reports/write} :name) (ports/list-roles svc))))
+    :action  :grant-add}
    {:path    "revoke role"
     :setup   join-ada
     :change  (fn [svc {:keys [g]}]
@@ -1013,7 +1021,12 @@
           (when setup (setup svc state))
           (let [before (entries)]
             (reset! ok (or fail-at 0))
-            (is (= "audit down" (ex-message (try (change svc state) nil (catch Exception e e)))) path)
+            (let [e (try (change svc state) nil (catch Exception e e))]
+              (is (= "audit down" (ex-message (ex-cause e))) path)
+              (testing "the failure names the action and the group"
+                (is (= :internal-error (:type (ex-data e))) path)
+                (is (str/includes? (ex-message e) (name (:action (ex-data e)))) path)
+                (is (str/includes? (ex-message e) (str (:group-id (ex-data e)))) path)))
             (reset! ok nil)
             (is (same? svc state) (str path ": the rights are unchanged"))
             (is (= before (entries)) (str path ": none of its entries is left"))

@@ -269,6 +269,10 @@
   (in-transaction [this f]))
   ;; Calls (f repo), every read and write on repo in one transaction: committed
   ;; when f returns, rolled back when it throws. Returns what f returns.
+  ;; The group service writes its audit entries inside f. An audit repository
+  ;; joins the transaction only through the one wagoe.platform.database binds
+  ;; on the calling thread; on another store, or on a thread without that
+  ;; binding, it does not (BOU-966).
 
 (defprotocol IAllAssignments
   (find-all-assignments [this]))

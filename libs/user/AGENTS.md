@@ -534,9 +534,11 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
   every rights timeline reads (BOU-862). A role edit's entries share a
   `:change-id`, so the rights timeline shows it once (BOU-864).
 - These entries are written in the change's transaction (`IUserGroupRepository/in-transaction`): a failed
-  entry rolls the change back, so the rights timeline misses none (BOU-958). A database audit repository
-  joins it, writing on the transaction's connection; one on another store does not, so an entry written before
-  the failure stays. An expiry without `IExpiredAccess` whose diff cannot be read runs again without diffs, since on PostgreSQL
+  entry rolls the change back, so the rights timeline misses none (BOU-958). The audit repository joins it
+  only through `wagoe.platform.database`'s transaction bound on the calling thread; that is the contract
+  (BOU-966). One on another store, or writing on a thread without that binding, does not join, so an entry written
+  before the failure stays. A failed entry throws `:internal-error` naming the action and group, its cause kept. An
+  expiry without `IExpiredAccess` whose diff cannot be read runs again without diffs, since on PostgreSQL
   the failed read aborted the transaction. The user service's entries (create, update, deactivate, login, sessions) are not
   transactional: only the audit trail reads them. Most warn on failure; `update-user-profile`'s throws, after the
   update committed.

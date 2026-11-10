@@ -159,12 +159,16 @@
                        {(str group-core/everyone-id) (group-core/permission-counts diffs)})
                      (into {} (keep (fn [d] (when-let [id (get-in d [:user :id])] [(str id) d]))) diffs))]
      (doseq [entry (audit-core/group-audit-entries action ctx group members grants effective)]
-       (ports/create-audit-log audit-repository (update entry :metadata merge metadata))))))
+       (try (ports/create-audit-log audit-repository (update entry :metadata merge metadata))
+            (catch Exception e
+              (throw (ex-info (str "Could not audit " (name action) " of group " (:id group))
+                              {:type :internal-error :action action :group-id (:id group)}
+                              e))))))))
 
 (defn- in-transaction
-  "Call `(f svc)` with `svc`'s group repository in one transaction. A database
-   audit repository writes on the transaction's connection, so a failed entry
-   rolls the change back."
+  "Call `(f svc)` with `svc`'s group repository in one transaction. The audit
+   repository joins it only through the transaction `wagoe.platform.database`
+   binds on this thread, so `f` writes its entries here (BOU-966)."
   [svc f]
   (ports/in-transaction (:group-repository svc) #(f (assoc svc :group-repository %))))
 
@@ -1060,9 +1064,12 @@
   (add-group-grant [this group-id grant]
     (existing-group group-repository group-id)
     (let [{:keys [permission scope]} (checked-grant settings registry grant nil)]
-      (legacy-role! group-repository registry permission)
-      (let [a (ports/add-group-role this group-id {:role permission :scope scope})]
-        (assoc a :permission permission))))
+      ;; The role it makes goes with the grant when its audit fails
+      (in-transaction this
+                      (fn [svc]
+                        (legacy-role! (:group-repository svc) registry permission)
+                        (assoc (ports/add-group-role svc group-id {:role permission :scope scope})
+                               :permission permission)))))
 
   (remove-group-grant [this group-id grant-id]
     (ports/remove-group-role this group-id grant-id))
