@@ -5,7 +5,7 @@
 
 == Status
 
-Accepted (BOU-955, BOU-956). Succeeds xref:ADR-021-fcis-boundary-rules.adoc[ADR-021]:
+Accepted (BOU-955, BOU-956). Amends xref:ADR-021-fcis-boundary-rules.adoc[ADR-021]:
 its gate stands, its criterion changes.
 
 == Context
@@ -35,17 +35,15 @@ how existing writes are classified.
 
 === What follows
 
-* Core does nothing its outcome depends on: no reads, no writes, no clock, no
-  mutable state. Unchanged.
 * Every write to the application's own store stays in the shell. Core returns
   the entry as data and the shell writes it.
-* Core still may not log in 1.2. Not because logging is I/O, but because there
-  is no observation channel yet that returns nil, never throws, and is bound by
-  the shell. That channel, `wagoe.core.observe`, comes when there is a reason
-  to build it.
+* Core still may not log in 1.2: there is no observation channel yet that
+  returns nil, never throws, and is bound by the shell. `wagoe.core.observe`
+  would be that channel.
 
-`bb check:fcis` does not change with this ADR. Its allowlist of requires already
-refuses `clojure.tools.logging`.
+`bb check:fcis` keeps refusing a logging require in core, and warns on
+`print`, `println`, `prn`, `pr`, `printf` and `tap>` there outside
+`with-out-str`; that warning is an error in 2.0 (BOU-957).
 
 === Why not wider now
 
@@ -58,8 +56,8 @@ the stability page gains no surface.
 
 * *Allow `clojure.tools.logging` in core.* Its calls reach a global backend
   that the classpath picks, not the shell, and nothing promises they return
-  nil or never throw. It would be the first I/O require on the allowlist, and
-  taking it off again is a 2.0 change.
+  nil or never throw. It would be the first require on the allowlist that
+  exists to do I/O, and taking it off again is a 2.0 change.
 * *Mark observational writes in the port: metadata, or a separate protocol
   kind.* It classifies a write by what reads it today, which is the property
   that changed under the audit log. And it puts a promise in a stable port that

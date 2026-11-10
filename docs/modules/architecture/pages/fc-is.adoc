@@ -17,8 +17,7 @@ libs/{library}/src/wagoe/{library}/
 
 === Functional Core (`core/`)
 
-Core does nothing its outcome depends on.
-The line is whether the outcome depends on an effect, not whether it touches the outside world.
+Core's result depends on its arguments alone, and core writes nothing the application can read back.
 
 * No reads and no writes: not the database, not a file, not a cache
 * No clock and no randomness (`Instant/now`, `UUID/randomUUID`)
@@ -30,8 +29,8 @@ Logs, metrics and traces are, by construction.
 A write to the application's own store never is, even an append-only table nothing reads today: a reader added later must not turn existing core code into a violation.
 So core returns an audit entry or an event as data, and the shell writes it.
 
-Core does not log either, with `log/info` or `println`.
-Not because logging is I/O, but because there is no observation channel yet that returns nil, never throws, and is bound by the shell.
+Core does not log yet: there is no observation channel that returns nil, never throws, and is bound by the shell.
+`bb check:fcis` refuses a logging require in core, and warns on `print`, `println`, `prn`, `pr`, `printf` and `tap>` outside `with-out-str`; from 2.0 that warning is an error.
 
 [source,clojure]
 ----
@@ -119,8 +118,7 @@ Core functions are plain Clojure functions. Testing them requires no database, n
 === Predictable behaviour
 
 When you see a function in `core/`, its result depends on its arguments and nothing else.
-It reads no store, no clock and no state, and writes nothing the application can read back.
-Logging is kept out for now as well, so it will not reach Datadog either.
+It will not reach a database, a clock or Datadog.
 
 === Safe refactoring
 
@@ -132,7 +130,7 @@ not touching any business logic.
 
 [source,bash]
 ----
-# FC/IS gate: core requires (an allowlist), throws, mutable state, non-determinism, SQL in core and ports
+# FC/IS gate: core requires (an allowlist), throws, mutable state, non-determinism, SQL in core and ports; warns on printing
 bb check:fcis
 ----
 

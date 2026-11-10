@@ -223,7 +223,7 @@ with automated checking via `bb check:fcis`.
 * Automated enforcement in pre-commit hooks and CI
 * Clear violation detection with actionable error messages
 
-Succeeded by ADR-043, which keeps the gate and changes the criterion.
+Amended by ADR-043, which keeps the gate and changes the criterion.
 
 ==== ADR-022: Error Handling Conventions [Accepted]
 ADR-022-error-handling-conventions.adoc
