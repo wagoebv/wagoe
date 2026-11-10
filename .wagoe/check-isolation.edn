@@ -87,6 +87,11 @@
          when an :error-reporter is passed, which needs observability loaded.
          Declaring it would put the Sentry and OpenTelemetry SDKs under every
          realtime user (BOU-848). Documented at the call site in service.clj."}
+  {:lib "realtime"  :namespace "wagoe.platform.database"
+   :why "BY DESIGN. Optional companion: role and broadcast messages read the tenant
+         the platform binds on the sending thread, which exists only when
+         platform-sql is loaded. Declaring it would put JDBC under every realtime
+         user (BOU-947). Documented at the call site in service.clj."}
 
   {:lib "devtools"  :namespace "wagoe.admin.ports"
    :why "BY DESIGN. Optional companion: (explain-entity) in project_repl.clj reads the

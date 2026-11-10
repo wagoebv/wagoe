@@ -14,6 +14,7 @@
    there for that — it is assigned by the publisher, so it is the same across
    redeliveries, unlike the stream entry id."
   (:require [wagoe.events.core.event :as event]
+            [wagoe.platform.database :as db]
             [wagoe.events.ports :as ports]
             [wagoe.observability.errors.ports :as errors]
             [wagoe.platform.transit :as transit]
@@ -249,6 +250,8 @@
             id       (str (random-uuid))
             ;; The poller thread holds the previous handler's error context (BOU-848).
             reporter (:error-reporter this)
+            ;; Subscribed inside a tenant, it sees that tenant's events only (BOU-947)
+            handler  (event/for-tenant db/*tenant-id* handler)
             scoped   (fn [event] (errors/with-clean-context reporter #(handler event)))]
         (ensure-group! pool stream group)
         ;; One Redis consumer per topic, fanning out to every local handler.

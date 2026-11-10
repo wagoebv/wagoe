@@ -12,6 +12,7 @@
    fails silently against Redis. Matching the weaker guarantee is what makes
    the adapters interchangeable."
   (:require [wagoe.events.core.event :as event]
+            [wagoe.platform.database :as db]
             [wagoe.events.ports :as ports]
             [wagoe.observability.errors.ports :as errors]
             [clojure.tools.logging :as log])
@@ -55,7 +56,8 @@
     (if-let [problem (event/topic-problem topic)]
       {:error {:type :events/invalid :message problem}}
       (let [id (str (random-uuid))]
-        (swap! state assoc-in [:subscriptions id] {:topic' (keyword topic) :handler handler})
+        ;; Subscribed inside a tenant, it sees that tenant's events only (BOU-947)
+        (swap! state assoc-in [:subscriptions id] {:topic' (keyword topic) :handler (event/for-tenant db/*tenant-id* handler)})
         id)))
 
   (unsubscribe! [_ subscription]

@@ -102,4 +102,13 @@
   [tenant-id event]
   (let [event-tenant (:tenant-id event)]
     (or (nil? event-tenant)
-        (= (str tenant-id) event-tenant))))
+        (= (str tenant-id) (str event-tenant)))))
+
+(defn for-tenant
+  "`handler`, called only with events `tenant-id` may see; `handler` itself
+   when `tenant-id` is nil, a subscriber of no tenant (BOU-947)."
+  [tenant-id handler]
+  (if (nil? tenant-id)
+    handler
+    (let [t (str tenant-id)]
+      (fn [event] (when (matches-tenant? t event) (handler event))))))

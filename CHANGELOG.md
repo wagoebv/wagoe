@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **Events and realtime role and broadcast messages reached every tenant** (BOU-947). They keep to the sender's tenant
+  now; a subscriber registered outside any tenant still gets every tenant's events.
 - **A tenant's admin reached other tenants' users in the admin, and their search documents and audiences** (BOU-954).
   Add `:scope {:tenant-id :tenant-id}` to your `admin/users.edn`; search writes and audiences now take a platform admin.
 - **A tenant's admin could act on another tenant's users, and make a platform admin** (BOU-953). The user module's routes
