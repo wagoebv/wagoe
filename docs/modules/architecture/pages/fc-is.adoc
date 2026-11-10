@@ -30,7 +30,7 @@ A write to the application's own store never is, even an append-only table nothi
 So core returns an audit entry or an event as data, and the shell writes it.
 
 Core does not log yet: there is no observation channel that returns nil, never throws, and is bound by the shell.
-`bb check:fcis` refuses a logging require in core, and warns on `print`, `println`, `prn`, `pr`, `printf` and `tap>` outside `with-out-str`; from 2.0 that warning is an error.
+`bb check:fcis` refuses a logging require in core, and warns on printing outside `with-out-str` and on `tap>` anywhere; from 2.0 that warning is an error.
 
 [source,clojure]
 ----

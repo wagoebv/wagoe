@@ -42,8 +42,8 @@ how existing writes are classified.
   would be that channel.
 
 `bb check:fcis` keeps refusing a logging require in core, and warns on
-`print`, `println`, `prn`, `pr`, `printf` and `tap>` there outside
-`with-out-str`; that warning is an error in 2.0 (BOU-957).
+printing in core outside `with-out-str`, and on `tap>` anywhere; that
+warning is an error in 2.0 (BOU-957).
 
 === Why not wider now
 
