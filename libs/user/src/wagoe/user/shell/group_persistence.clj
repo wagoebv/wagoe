@@ -92,8 +92,24 @@
    have removed one meanwhile."
   [ctx table rows now]
   (filterv #(pos? (db/execute-update! ctx {:delete-from table
-                                           :where       [:and [:= :id (:id %)] [:<= :expires_at now]]}))
+                                           :where       [:and [:= :id (id-str (:id %))] [:<= :expires_at now]]}))
            rows))
+
+(defn- expired-rows [ctx now]
+  (let [expired [:<= :expires_at now]]
+    {:members     (mapv (fn [row] (with-expiry {:id       (tc/string->uuid (:id row))
+                                                :group-id (tc/string->uuid (:group-id row))
+                                                :user-id  (tc/string->uuid (:user-id row))}
+                                    row))
+                        (db/execute-query! ctx {:select [:id :group_id :user_id :expires_at]
+                                                :from   [:user_group_members]
+                                                :where  expired}))
+     :assignments (mapv db->assignment (db/execute-query! ctx {:select [:*] :from [:user_group_roles]
+                                                               :where  expired}))}))
+
+(defn- remove-expired-rows! [ctx {:keys [members assignments]} now]
+  {:members     (delete-expired! ctx :user_group_members members now)
+   :assignments (delete-expired! ctx :user_group_roles assignments now)})
 
 (defn- unique-violation?
   "Whether `e` is the :conflict the execution layer makes of a unique key."
@@ -178,7 +194,7 @@
   (find-members [_ group-id]
     (mapv (fn [row] (with-expiry {:id (tc/string->uuid (:id row)) :email (:email row) :name (:name row)
                                   :active? (protocols/db->boolean (:adapter ctx) (:active row))}
-                                 row))
+                      row))
           (db/execute-query! ctx {:select   [:a.id :a.email :u.name :a.active :m.expires_at]
                                   :from     [[(current :user_group_members) :m]]
                                   :join     [[:auth_users :a] [:= :a.id :m.user_id]]
@@ -370,20 +386,15 @@
     (insert-member! ctx group-id user-id expires-at))
 
   (remove-expired [_ now]
-    (let [expired [:<= :expires_at now]]
-      {:members     (mapv (fn [row] (with-expiry {:group-id (tc/string->uuid (:group-id row))
-                                                  :user-id  (tc/string->uuid (:user-id row))}
-                                      row))
-                          (delete-expired! ctx :user_group_members
-                                           (db/execute-query! ctx {:select [:id :group_id :user_id :expires_at]
-                                                                   :from   [:user_group_members]
-                                                                   :where  expired})
-                                           now))
-       :assignments (mapv db->assignment
-                          (delete-expired! ctx :user_group_roles
-                                           (db/execute-query! ctx {:select [:*] :from [:user_group_roles]
-                                                                   :where  expired})
-                                           now))})))
+    (-> (remove-expired-rows! ctx (expired-rows ctx now) now)
+        (update :members (partial mapv #(dissoc % :id)))))
+
+  ports/IExpiredAccess
+  (find-expired [_ now]
+    (expired-rows ctx now))
+
+  (remove-expired-rows [_ expired now]
+    (remove-expired-rows! ctx expired now)))
 
 (defn create-group-repository [ctx]
   (->DatabaseUserGroupRepository ctx))

@@ -518,6 +518,8 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
   row out, so enforcement, explain, previews and the wizard stop counting it at once. The recurring job
   `:wagoe.user/expire-access` (every 15 minutes, on `:wagoe/jobs`; `:wagoe/jobs :recurring` overrides it) deletes it
   through `IAccessExpiry/remove-expired` and audits a `:group-leave` or `:grant-remove` with `:reason "expired"`.
+  With `IExpiredAccess` it goes a group at a time (BOU-965): the diffs are read first, then the group's rows are
+  deleted and audited in its own transaction. A group that fails is thrown once the others are removed.
   Reads go through `current`, the one place the expiry filter lives. `IAllAssignments` (repository),
   `IUserAuditActions` (audit repository) and `IRightsTimeline` (group service) make the access overview and the
   rights timeline one query each (BOU-865); without them, the old query per role or action.
@@ -532,9 +534,11 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
   every rights timeline reads (BOU-862). A role edit's entries share a
   `:change-id`, so the rights timeline shows it once (BOU-864).
 - These entries are written in the change's transaction (`IUserGroupRepository/in-transaction`): a failed
-  entry rolls the change back, so the rights timeline misses none (BOU-958). A database audit repository
-  joins it, writing on the transaction's connection; one on another store does not, so an entry written before
-  the failure stays. An expiry whose diff cannot be read runs again without diffs, since on PostgreSQL
+  entry rolls the change back, so the rights timeline misses none (BOU-958). The audit repository joins it
+  only through `wagoe.platform.database`'s transaction bound on the calling thread; that is the contract
+  (BOU-966). One on another store, or writing on a thread without that binding, does not join, so an entry written
+  before the failure stays. A failed entry throws `:internal-error` naming the action and group, its cause kept. An
+  expiry without `IExpiredAccess` whose diff cannot be read runs again without diffs, since on PostgreSQL
   the failed read aborted the transaction. The user service's entries (create, update, deactivate, login, sessions) are not
   transactional: only the audit trail reads them. Most warn on failure; `update-user-profile`'s throws, after the
   update committed.

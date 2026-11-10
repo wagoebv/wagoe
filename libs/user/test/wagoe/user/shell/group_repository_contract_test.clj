@@ -254,6 +254,14 @@
             (ports/remove-member repo (:id finance) (:id ada))
             (ports/insert-member-until repo (:id finance) (:id ada) past))
 
+          (testing "find-expired reads what has expired; remove-expired-rows deletes only what still has"
+            (let [expired (ports/find-expired repo (Instant/now))]
+              (is (= [[(:id finance) (:id ada) past]] (map (juxt :group-id :user-id :expires-at) (:members expired))))
+              (is (= [(:id lapsed)] (map :id (:assignments expired))))
+              (is (= expired (ports/find-expired repo (Instant/now))) "deleting nothing")
+              (is (= {:members [] :assignments []} (ports/remove-expired-rows repo expired (.minusSeconds past 1)))
+                  "not yet expired then")))
+
           (testing "remove-expired deletes only what has expired, and says what"
             (let [{:keys [members assignments]} (ports/remove-expired repo (Instant/now))]
               (is (= [{:group-id (:id finance) :user-id (:id ada) :expires-at past}] members))
