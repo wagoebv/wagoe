@@ -140,11 +140,6 @@
    (or (tx-connection db)
        (execution/transaction-on (if (map? db) (:datasource db) db)))))
 
-(def open-transaction?
-  "Whether `conn` is the connection of a transaction open on this thread, on
-   any database: the outer one's too, with another nested inside (BOU-972)."
-  execution/open-transaction?)
-
 (def ^:dynamic *tenant-id*
   "The tenant whose schema this thread's work runs in, or nil. The tenant
    module binds it around a tenant request and a tenant job, so code deeper in
@@ -155,6 +150,11 @@
   "The schema the transaction open on this thread is bound to, or nil. The
    tenant module binds it with the transaction, so a store can check its
    tables are there without asking the database for its search_path."
+  nil)
+
+(def ^:dynamic *tenant-transaction*
+  "The connection of the transaction `*tenant-schema*` is bound to, or nil.
+   Not the innermost: another database's may be nested inside it (BOU-972)."
   nil)
 
 (defn connectable-for

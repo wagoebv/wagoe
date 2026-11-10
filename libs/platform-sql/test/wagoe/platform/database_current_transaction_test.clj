@@ -1,6 +1,5 @@
 (ns wagoe.platform.database-current-transaction-test
-  "`current-transaction` and `open-transaction?` with transactions on two
-   databases nested (BOU-971, BOU-972)."
+  "`current-transaction` with transactions on two databases nested (BOU-971)."
   (:require [clojure.test :refer [deftest is testing]]
             [wagoe.platform.database :as db]
             [wagoe.platform.shell.adapters.database.factory :as factory])
@@ -43,25 +42,5 @@
               (note! first-db "kept")))))
       (is (= #{"kept"} (notes first-db)))
       (is (= #{"other"} (notes other)))
-      (finally
-        (run! factory/close-db-context! [first-db other])))))
-
-(deftest ^:integration open-transaction-knows-each-nested-transaction
-  (let [first-db (h2-ctx)
-        other    (h2-ctx)]
-    (try
-      (db/with-transaction [tx first-db]
-        (db/with-transaction [inner other]
-          (testing "the outer database's, and the inner's"
-            (is (db/open-transaction? (db/tx-connection tx)))
-            (is (db/open-transaction? (db/tx-connection inner))))
-          (testing "a connection this thread opened no transaction on"
-            (with-open [^java.sql.Connection own (.getConnection ^javax.sql.DataSource (:datasource first-db))]
-              (.setAutoCommit own false)
-              (is (not (db/open-transaction? own)))))
-          (is (not (db/open-transaction? nil)))))
-      (testing "once committed, no longer"
-        (let [conn (db/with-transaction [tx first-db] (db/tx-connection tx))]
-          (is (not (db/open-transaction? conn)))))
       (finally
         (run! factory/close-db-context! [first-db other])))))

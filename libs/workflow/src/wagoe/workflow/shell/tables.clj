@@ -47,11 +47,10 @@
         schema db/*tenant-schema*
         tenant db/*tenant-id*]
     (cond
-      ;; The tenant's transaction, bound to `schema`, is one this thread
-      ;; opened, though another database's may be nested inside it; a caller's
-      ;; own transaction on another connection is on public's search_path.
+      ;; The tenant's transaction is the one bound to `schema`; a caller's own
+      ;; transaction on another connection is on public's search_path.
       (and (or schema tenant)
-           (not (and schema (db/open-transaction? conn))))
+           (not (and conn schema (identical? conn db/*tenant-transaction*))))
       (throw (refusal (str "Tenant " (or tenant schema) " work is not running on its tenant's"
                            " transaction, and workflow will not use the shared tables")
                       {:tenant-id (some-> tenant str) :schema schema}))
