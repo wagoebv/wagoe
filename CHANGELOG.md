@@ -73,6 +73,10 @@ for what is public API, what is internal, and how deprecations are announced.
   now. Nothing to change.
 - **A user's role and active changes were missing from the rights timeline** (BOU-960). They show there now, and a failed
   audit entry rolls them back; a failed one for other profile fields only warns. Nothing to change.
+- **One group's failed expiry kept every group's expired access** (BOU-965). Each group expires in its own transaction
+  now; a custom group repository needs `wagoe.user.ports/IExpiredAccess` for it.
+- **A group grant whose audit failed kept the role it made** (BOU-966). It rolls back too, and the error names the
+  action and group. Nothing to change.
 - **The stability page's opening line said Wagoe is at `1.0.1`** under a `1.1.1` table. It now points at the table,
   the one version claim `check:versions` gates. Nothing to change.
 - **A successful storage upload or URL lookup went out unencoded** (BOU-930). Upgrade if you serve `wagoe-storage` routes.

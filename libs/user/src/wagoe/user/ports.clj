@@ -271,6 +271,10 @@
   (in-transaction [this f]))
   ;; Calls (f repo), every read and write on repo in one transaction: committed
   ;; when f returns, rolled back when it throws. Returns what f returns.
+  ;; The group service writes its audit entries inside f. An audit repository
+  ;; joins the transaction only through the one wagoe.platform.database binds
+  ;; on the calling thread; on another store, or on a thread without that
+  ;; binding, it does not (BOU-966).
 
 (defprotocol IAllAssignments
   (find-all-assignments [this]))
@@ -288,6 +292,16 @@
   (remove-expired [this now]))
   ;; Deletes what expired at or before `now`. Returns what it deleted:
   ;; {:members [{:group-id :user-id :expires-at}] :assignments [assignment]}.
+
+(defprotocol IExpiredAccess
+  "Expiry a group at a time, so a group that fails leaves the others (BOU-965)."
+  (find-expired [this now])
+  ;; What remove-expired would delete at `now`, deleting nothing. Each member
+  ;; carries its row's :id.
+
+  (remove-expired-rows [this expired now]))
+  ;; Deletes the rows of `expired`, as find-expired gives them, that are still
+  ;; expired at `now`. Returns those it deleted, in find-expired's shape.
 
 ;; =============================================================================
 ;; Service
@@ -582,6 +596,8 @@
   ;; Removes the memberships and assignments that expired at or before `now`,
   ;; auditing each as a leave or a removed role. They gave nothing already:
   ;; every read leaves them out. Returns IAccessExpiry/remove-expired's result.
+  ;; With IExpiredAccess, each group in its own transaction: one that fails is
+  ;; thrown after the others are removed.
 
 ;; =============================================================================
 ;; Sign-in hooks
