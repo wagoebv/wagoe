@@ -329,13 +329,17 @@
   (update-user-profile [this user-entity])
   ;; Takes an entity with :id; required keys it leaves out keep their stored
   ;; values. Returns it without :password-hash. A changed :role or a
-  ;; deactivation revokes the user's sessions (BOU-191, BOU-665).
+  ;; deactivation revokes the user's sessions (BOU-191, BOU-665). A role or
+  ;; active change is audited in its transaction, for the rights timeline: a
+  ;; failed audit write rolls it back and throws. Other fields are audited
+  ;; best-effort: a failed write warns and the update stands (BOU-960).
   ;; Throws :conflict for removing your own or the last admin's rights.
   ;; Throws :user-not-found, :validation-error, :business-rule-violation.
 
   (deactivate-user [this user-id])
   ;; Sets :active false and ends the user's sessions; the user stays listed
-  ;; and can be reactivated (BOU-681). Returns boolean. Throws :conflict for
+  ;; and can be reactivated (BOU-681). Audited in its transaction, as a role
+  ;; change is (BOU-960). Returns boolean. Throws :conflict for
   ;; your own or the last admin's account.
 
   (permanently-delete-user [this user-id])

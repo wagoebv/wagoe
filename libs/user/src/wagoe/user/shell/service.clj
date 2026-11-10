@@ -190,16 +190,24 @@
   "Run `write!`, the change `after` to user `user-id`: refused by the admin
    guard, and ending the user's sessions when it changes their access. A
    change to role or active reads the user under the admin lock, so the guard
-   sees a concurrent promotion (BOU-685). Returns {:result <what write!
+   sees a concurrent promotion (BOU-685), and audits what changed in that
+   transaction: the rights timeline reads those entries, so a failed one
+   throws and rolls the change back (BOU-960). Returns {:result <what write!
    returned>}, with :before, the user read under the lock, when it locked."
-  [user-repository session-repository user-id after write!]
+  [{:keys [user-repository session-repository audit-repository]} user-id after write!]
   (if-not (touches-access? after)
     {:result (write!)}
     (let [{:keys [before result] :as out}
           (locked-write! user-repository
                          #(let [before (.find-user-by-id user-repository user-id)]
                             [(when (and before (user-core/removes-admin? before after)) [before])
-                             (fn [] {:before before :result (write!)})]))]
+                             (fn []
+                               (let [result (write!)]
+                                 (when (and result before)
+                                   (doseq [entry (audit-core/account-audit-entries (effective-audit-context {})
+                                                                                   before after)]
+                                     (.create-audit-log audit-repository entry)))
+                                 {:before before :result result}))]))]
       (when (and result before (ends-sessions? before after))
         (.invalidate-all-user-sessions session-repository user-id))
       out)))
@@ -214,7 +222,7 @@
   "Record `entry-fn`'s audit entry for `user-id`; a failed write warns and does
    not undo the change. Deliberate: only the audit trail reads these entries
    back, not the rights timeline, whose entries roll their change back
-   (BOU-958)."
+   (BOU-958, BOU-960)."
   [audit-repository entry-fn user-id email]
   (try
     (let [{:keys [actor-id actor-email ip-address user-agent]} (effective-audit-context {})]
@@ -652,28 +660,24 @@
                prepared-user (user-core/prepare-user-for-update input current-time)
                ;; 3. Persist using impure shell persistence layer
                {:keys [before result]}
-               (change-access! user-repository session-repository (:id input) input
+               (change-access! this (:id input) input
                                #(.update-user user-repository prepared-user))
                ;; The row the guard judged, when it locked.
                old-user (or before old-user)
                ;; A partial update returns the whole user, as the port promises.
                after (some->> result (merge old-user))]
 
-           ;; 4. Create audit log entry
+           ;; 4. Audit the other fields. Only the audit trail reads them, so a
+           ;;    failed write warns; role and active were audited with the write.
            (when (and after old-user)
-             (let [{:keys [actor-id actor-email ip-address user-agent]}
-                   (effective-audit-context {:default-actor-id (:id after)
-                                             :default-actor-email (:email after)})
-                   audit-entry (audit-core/update-user-audit-entry
-                                actor-id
-                                actor-email
-                                (:id after)      ; target-user-id
-                                (:email after)   ; target-user-email
-                                old-user         ; old user data
-                                result           ; new user data
-                                ip-address
-                                user-agent)]
-               (.create-audit-log audit-repository audit-entry)))
+             (try
+               (let [{:keys [actor-id actor-email ip-address user-agent]}
+                     (effective-audit-context {:default-actor-id (:id after)
+                                               :default-actor-email (:email after)})]
+                 (some->> (audit-core/profile-audit-entry actor-id actor-email old-user after ip-address user-agent)
+                          (.create-audit-log audit-repository)))
+               (catch Exception e
+                 (warn-audit-failed e))))
 
            ;; Remove sensitive data before returning.
            (some-> after (dissoc :password-hash)))))
@@ -685,18 +689,15 @@
      {:user-id user-id}
      (fn [{:keys [params]}]
        (let [user-id (:user-id params)
-             ;; Get user details before deactivation for audit trail
              user (.find-user-by-id user-repository user-id)
              ;; :active only, never :deleted-at: a deactivated user stays
              ;; listed and can be reactivated (BOU-681). Only that column is
              ;; written, so a concurrent password or MFA change is not undone.
              after  {:id user-id :active false}
              result (when user
-                      (:result (change-access! user-repository session-repository user-id after
+                      (:result (change-access! this user-id after
                                                #(.update-user user-repository
                                                               (user-core/prepare-user-for-update after (current-timestamp))))))]
-         (when result
-           (audit-quietly! audit-repository audit-core/deactivate-user-audit-entry user-id (:email user)))
          (boolean result)))
      (observability this)))
 

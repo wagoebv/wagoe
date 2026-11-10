@@ -605,6 +605,9 @@
  :user.timeline/empty "Geen wijzigingen vastgelegd."
  :user.timeline/no-diff "Niet vastgelegd"
  :user.timeline/everyone {:one "Iedereen: de rechten van {count} gebruiker gewijzigd" :many "Iedereen: de rechten van {count} gebruikers gewijzigd"}
+ :user.timeline/no-role "geen"
+ :user.timeline/activated "Kan weer inloggen"
+ :user.timeline/deactivated "Kan niet meer inloggen"
  :user/tab-sessions "Sessies"
  :admin/tab-details "Gegevens"
 

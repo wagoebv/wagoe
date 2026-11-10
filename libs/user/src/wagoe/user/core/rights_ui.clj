@@ -731,9 +731,17 @@
 
 (defn- change-effect
   "What a timeline entry did to the user's rights: each right gained and lost,
-   or, for a change to Everyone, how many users it changed."
-  [{:keys [added removed permissions affected-count]} scope-info]
+   for a change to Everyone how many users it changed, or the user's own role
+   or sign-in."
+  [{:keys [action user-role added removed permissions affected-count]} scope-info]
   (cond
+    (= :role-change action)
+    (let [role #(if (str/blank? %) [:t :user.timeline/no-role] [:code %])]
+      (list (role (:old user-role)) " → " (role (:new user-role))))
+
+    (= :activate action)   [:t :user.timeline/activated]
+    (= :deactivate action) [:t :user.timeline/deactivated]
+
     (seq permissions)
     (list [:t :user.timeline/everyone {:count (or affected-count 0)} (or affected-count 0)]
           [:ul.timeline-counts
