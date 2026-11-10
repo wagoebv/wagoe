@@ -223,6 +223,8 @@ with automated checking via `bb check:fcis`.
 * Automated enforcement in pre-commit hooks and CI
 * Clear violation detection with actionable error messages
 
+Amended by ADR-043, which keeps the gate and changes the criterion.
+
 ==== ADR-022: Error Handling Conventions [Accepted]
 ADR-022-error-handling-conventions.adoc
 
@@ -449,3 +451,10 @@ ADR-042-other-stores.adoc
 An app module picks its store in `shell/persistence.clj` behind a domain-shaped
 port. Framework libraries run on SQL; a non-SQL one is a separate adapter per
 library. No generic store port above SQL and Datomic.
+
+==== ADR-043: The FC/IS Boundary Follows the Read Path [Accepted]
+ADR-043-observational-effects.adoc
+
+An effect is observational when the application has no read path to its sink:
+logs, metrics, traces. Writes to the app's own store never are, so they stay
+shell. Core still does not log in 1.2, for want of an observation channel.

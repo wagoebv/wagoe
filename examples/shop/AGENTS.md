@@ -89,7 +89,7 @@ bb repl
 ```
 src/shop/
 ├── core/    # Pure functions ONLY — business logic, calculations, transformations
-│             # No I/O, no logging, no exceptions, no side effects
+│             # No reads, writes, clock or state; no logging yet; no exceptions
 └── shell/   # All side effects — HTTP handlers, DB access, external calls, services
 ```
 
@@ -107,6 +107,7 @@ Every module MUST define `ports.clj`.
 - core/ may require only pure libraries (clojure.string/set/walk/edn, malli, hiccup, cheshire, buddy.core) and its own core/schema/ports — an allowlist, so anything else is refused by default
 - core/ and ports know no SQL: neither requires honey.sql, next.jdbc or wagoe.platform.database, and no port signature or docstring types a value as a HoneySQL map or a next.jdbc datasource or transaction — an opaque store handle (tx, conn) may pass through untyped (exceptions: :allow-sql in .wagoe/check-fcis.edn, each with a :why)
 - core/ must not throw — return typed error values ({:error {:type ... :message ...}}); the shell translates them into HTTP responses (escape hatch: ^:wagoe/allow-throw ns metadata or .wagoe/check-fcis.edn)
+- core/ reads no store or clock and writes no store: a write to the app's own store, append-only too, stays in the shell, and core returns the entry as data. No logging yet: core has no observation channel (bb check:fcis warns on print and tap>) — see https://wagoe.org/docs/architecture/fc-is.html
 - core/ must not hold mutable state (defonce/atom/swap!/reset!) — definition registries and process state live in the shell (wagoe.<lib>.shell.registry)
 - cross-module calls go through service ports
 - web/HTTP layers never require *.shell.persistence directly
