@@ -14,7 +14,7 @@
      :error — kondo error, FC/IS (WGE-806) or convention (WGE-807) violation,
               or a failing test. Blocks (`:status :fail`) unless soft and
               overridden.
-     :warning — kondo warning; never blocks.
+     :warning — kondo warning or FC/IS print call; never blocks.
 
    FC/IS (WGE-806) and convention (WGE-807) issues are *soft* guardrails: an
    audited `{:allow true}` override turns a would-be `:fail` into `:overridden`
@@ -43,18 +43,19 @@
      :message  message}))
 
 (defn- fcis->issues
-  "check-fcis/check-file violations → verify issues (all WGE-806, :error)."
+  "check-fcis/check-file violations → verify issues (all WGE-806). Severity
+   is the finding's own, :error when it has none."
   [violations]
-  (for [{:keys [file ns req kind line]} violations]
+  (for [{:keys [file ns req kind line severity]} violations]
     {:step     :fcis
-     :severity :error
+     :severity (or severity :error)
      :code     fcis-code
      :file     file
      :line     line
      :ns       ns
      :kind     kind
      :message  (format "Core namespace %s must not %s %s"
-                       ns (name (or kind :use)) req)}))
+                       ns (name (get {:print :call} kind (or kind :use))) req)}))
 
 (defn- tests->issues
   "A failing-tests step → one issue per failure. `failures` is a seq of
@@ -103,6 +104,7 @@
                          :message e})
          test-status  (:status tests)
          kondo-issues (kondo->issues (:findings kondo))
+         fcis-issues  (fcis->issues (:violations fcis))
          test-issues  (when (= :failed test-status)
                         (tests->issues (:failures tests)))
          incomplete   (when (= :error test-status)
@@ -117,7 +119,7 @@
                           :message (:error fcis)}])
          issues       (vec (concat gen-issues
                                    kondo-issues
-                                   (fcis->issues (:violations fcis))
+                                   fcis-issues
                                    test-issues
                                    incomplete
                                    fcis-broken))
@@ -147,9 +149,9 @@
                            kondo    (assoc :kondo (if (some #(= :error (:severity %)) kondo-issues)
                                                     :error :ok))
                            fcis     (assoc :fcis (cond
-                                                     (:error fcis)             :error
-                                                     (seq (:violations fcis))  :error
-                                                     :else                     :ok))
+                                                   (:error fcis)             :error
+                                                   (some #(= :error (:severity %)) fcis-issues) :error
+                                                   :else                     :ok))
                            tests    (assoc :tests (or test-status :unknown)))}
        (and (= :fail status) soft?) (assoc :overridable? true)))))
 
