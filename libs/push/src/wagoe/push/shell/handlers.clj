@@ -1,5 +1,7 @@
 (ns wagoe.push.shell.handlers
   (:require [clojure.string :as str]
+            [wagoe.core.http.access :as access]
+            [wagoe.push.core.device :as device]
             [wagoe.push.ports :as ports]
             [wagoe.push.schema :as schema]
             [wagoe.push.shell.service :as service]
@@ -52,10 +54,15 @@
 (defn register-device-handler
   [{:keys [device-store]} request]
   (let [user-id        (get-in request [:user :id])
+        reach          (access/tenant-reach request)
         [body invalid] (request-body request decode-device-info device-info-explainer)]
-    (if invalid
-      (invalid-body invalid)
-      (let [device   (ports/register-device! device-store user-id body)
+    (cond
+      invalid      (invalid-body invalid)
+      (nil? reach) (error-response 403 "forbidden" "Tenant membership required")
+      :else
+      ;; The device is the tenant's the request runs in, never one the body names (BOU-946)
+      (let [device   (ports/register-device! device-store user-id
+                                             (assoc body :tenant-id (:tenant-id reach)))
             location (device-location request device)]
         (cond-> (-> (resp/response device)
                     (resp/status 201)
@@ -68,14 +75,24 @@
     (filter #(and (= token (:token %)) (or (nil? app-id) (= app-id (:app-id %))))
             (ports/get-user-devices store user-id))))
 
+(defn- in-reach
+  "Those of `devices` `reach` (`access/tenant-reach`) admits: one tenant's, or every one (BOU-946)."
+  [reach devices]
+  (cond
+    (nil? reach)                 []
+    (:tenant-id reach)           (device/of-tenant (:tenant-id reach) devices)
+    (contains? reach :tenant-id) (filterv (comp nil? :tenant-id) devices)
+    :else                        (vec devices)))
+
 (defn get-device-handler
   [{:keys [device-store]} request]
   (let [app-id  (get-in request [:query-params "app-id"])
         ;; A repeated ?app-id= arrives as a vector, which SQL cannot compare to.
-        devices (user-devices-with-token device-store
-                                         (get-in request [:user :id])
-                                         (get-in request [:path-params :token])
-                                         (when (string? app-id) (not-empty app-id)))]
+        devices (in-reach (access/tenant-reach request)
+                          (user-devices-with-token device-store
+                                                   (get-in request [:user :id])
+                                                   (get-in request [:path-params :token])
+                                                   (when (string? app-id) (not-empty app-id))))]
     (case (count devices)
       0 (error-response 404 "not-found" "Device not found")
       1 (resp/response (first devices))
@@ -85,13 +102,15 @@
   [{:keys [device-store]} request]
   (let [user-id (get-in request [:user :id])
         token   (get-in request [:path-params :token])]
-    (ports/unregister-device! device-store user-id token)
+    ;; Another tenant's registration of the token is not this request's to remove
+    (when (seq (in-reach (access/tenant-reach request) (user-devices-with-token device-store user-id token nil)))
+      (ports/unregister-device! device-store user-id token))
     {:status 204 :headers {} :body nil}))
 
 (defn list-devices-handler
   [{:keys [device-store]} request]
   (let [user-id (get-in request [:user :id])
-        devices (ports/get-user-devices device-store user-id)]
+        devices (in-reach (access/tenant-reach request) (ports/get-user-devices device-store user-id))]
     (resp/response {:devices devices})))
 
 (defn analytics-callback-handler
@@ -126,9 +145,11 @@
 
 (defn push-stats-handler
   [{:keys [analytics-store]} request]
-  (let [notif-id (keyword (get-in request [:path-params :notification-id]))
-        stats    (ports/get-push-stats analytics-store notif-id {})]
-    (resp/response (analytics/calculate-rates stats))))
+  (let [notif-id (keyword (get-in request [:path-params :notification-id]))]
+    ;; One tenant's counts for a caller bound to one (BOU-946)
+    (if-let [reach (access/tenant-reach request)]
+      (resp/response (analytics/calculate-rates (ports/get-push-stats analytics-store notif-id reach)))
+      (error-response 403 "forbidden" "Tenant membership required"))))
 
 (defn api-routes
   "Every route but the callback requires a signed-in user, which the platform

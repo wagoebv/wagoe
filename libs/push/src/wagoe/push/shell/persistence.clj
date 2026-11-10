@@ -39,6 +39,7 @@
   (when row
     (-> row
         (update :id tc/string->uuid)
+        (update :tenant-id tc/string->uuid)
         (update :platform keyword)
         ;; SQLite reads 0 back, which `boolean` calls true
         (assoc :active? (tc/int->boolean (:active row)))
@@ -55,11 +56,12 @@
              :app-id       (:app-id record)
              :device-name  (:device-name record)
              :os-version   (:os-version record)
+             :tenant-id    (tc/string->uuid (:tenant-id record))
              :active       true
              :created-at   (->instant (:created-at record))
              :last-used-at (->instant (:last-used-at record))}]
     (if (= :inserted (database/upsert! db :push-device-tokens row [:token :app-id]
-                                       {:update-columns [:user-id :active :last-used-at :device-name :os-version]}))
+                                       {:update-columns [:user-id :tenant-id :active :last-used-at :device-name :os-version]}))
       (:id row)
       (-> (database/execute-one! db (-> (h/select :id)
                                         (h/from :push-device-tokens)
@@ -87,12 +89,14 @@
          (mapv row->device)))
 
   (get-devices-by-platform [_ platform opts]
-    (let [{:keys [limit after-id] :or {limit 100}} opts]
+    (let [{:keys [limit after-id tenant-id] :or {limit 100}} opts]
       (->> (database/execute-query! db
                                     (-> (h/select :*)
                                         (h/from :push-device-tokens)
                                         (h/where [:= :platform (name platform)]
                                                  [:= :active true]
+                                                 ;; A broadcast in a tenant reaches its devices only (BOU-946)
+                                                 (when tenant-id [:= :tenant-id tenant-id])
                                                  (when after-id [:> :id after-id]))
                                         (h/order-by :id)
                                         (h/limit (min limit 1000))))
@@ -138,6 +142,11 @@
                                             :provider-message-id (:provider-message-id event)
                                             :callback-id         (:callback-id event)
                                             :error-message       (get-in event [:error :message])
+                                            ;; A callback names no tenant: its device's (BOU-946)
+                                            :tenant-id           (if (contains? event :tenant-id)
+                                                                   (tc/string->uuid (:tenant-id event))
+                                                                   {:select [:tenant-id] :from [:push-device-tokens]
+                                                                    :where  [:= :token (:device-token event)] :limit 1})
                                             :timestamp           (or (->instant (:timestamp event)) (Instant/now))}]))))
 
 (defn- record-callback!
@@ -164,11 +173,14 @@
   (record-open! [_ event]
     (record-callback! db (assoc event :event-type :opened)))
 
-  (get-push-stats [_ notification-id _opts]
+  (get-push-stats [_ notification-id opts]
     (let [rows   (database/execute-query! db
                                           (-> (h/select :event-type [[:count :*] :cnt])
                                               (h/from :push-analytics-events)
-                                              (h/where [:= :notification-id (name notification-id)])
+                                              (h/where [:= :notification-id (name notification-id)]
+                                                       ;; One tenant's counts, nil for no tenant's (BOU-946)
+                                                       (when (contains? opts :tenant-id)
+                                                         [:= :tenant-id (tc/string->uuid (:tenant-id opts))]))
                                               (h/group-by :event-type)))
           counts (reduce (fn [m {:keys [event-type cnt]}]
                            (assoc m (keyword event-type) cnt))

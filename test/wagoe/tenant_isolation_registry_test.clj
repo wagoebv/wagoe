@@ -52,7 +52,9 @@
                     :tests     {"libs/storage/test/wagoe/storage/shell/http_handlers_test.clj"
                                 ["a-file-is-reached-only-by-its-owner-its-tenant-or-an-admin"
                                  "an-upload-cannot-replace-another-users-file"]}}
-   "push"          {:scoped-by "tenant_id columns, never written or read" :gaps ["BOU-946"]}
+   "push"          {:scoped-by "a device records the request's tenant; a send or broadcast reaches the sender's tenant's devices"
+                    :tests     {"libs/push/test/wagoe/push/shell/tenant_scope_test.clj"
+                                ["a-tenants-send-reaches-only-its-devices"]}}
    "events"        {:scoped-by "an event takes the bound tenant; a subscriber in a tenant gets only its tenant's and system events"
                     :tests     {"libs/events/test/wagoe/events/shell/tenant_scope_test.clj"
                                 ["a-subscriber-in-a-tenant-sees-only-that-tenants-events"

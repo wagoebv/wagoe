@@ -4,6 +4,7 @@
             [wagoe.push.core.delivery :as delivery]
             [wagoe.jobs.core.job :as job]
             [wagoe.jobs.ports :as job-ports]
+            [wagoe.platform.database :as db]
             [clojure.tools.logging :as log])
   (:import [javax.crypto Mac]
            [javax.crypto.spec SecretKeySpec]
@@ -162,6 +163,12 @@
                   (random-uuid)
                   (java.time.Instant/now)))
 
+(defn- sender-tenant
+  "The tenant a send is kept to: the one bound on this thread, else `opts`'
+   `:tenant-id`; the job that delivers it runs without the binding (BOU-946)."
+  [opts]
+  (some-> (or db/*tenant-id* (:tenant-id opts)) str))
+
 (defrecord PushService [device-store analytics-store
                         fcm-provider apns-provider
                         job-queue queue-name callback-secret]
@@ -172,6 +179,7 @@
                         {:notification-id notification-id
                          :data            data
                          :user-id         (:user-id opts)
+                         :tenant-id       (sender-tenant opts)
                          :locale          (:locale opts)})]
       (log/infof "Push: enqueueing %s for user %s" notification-id (:user-id opts))
       (job-ports/enqueue-job! job-queue queue-name job)
@@ -182,6 +190,7 @@
                         {:notification-id notification-id
                          :data            data
                          :user-id         (:user-id opts)
+                         :tenant-id       (sender-tenant opts)
                          :locale          (:locale opts)})]
       (log/infof "Push: scheduling %s for %s" notification-id scheduled-at)
       ;; `schedule-job!`, not `enqueue-job!` with a `:scheduled-at` key: the
@@ -196,6 +205,7 @@
                          :data            data
                          :platform        (:platform opts)
                          :app-id          (:app-id opts)
+                         :tenant-id       (sender-tenant opts)
                          :locale          (:locale opts)})]
       (log/infof "Push: enqueueing broadcast %s" notification-id)
       (job-ports/enqueue-job! job-queue queue-name job)
