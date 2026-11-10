@@ -312,6 +312,46 @@
                          (check-fcis/check-file file {:allow-throw #{} :allow-mutable-state #{}}))))))
       (finally (delete-tree! root)))))
 
+(deftest ^:unit fcis-a-threading-step-is-a-call-test
+  (let [root (temp-dir "fcis-thread" 1)]
+    (try
+      (let [file (spit-file! root "libs/demo/src/wagoe/demo/core/thread.clj"
+                             (str "(ns wagoe.demo.core.thread)\n"
+                                  "(defn a [x] [(-> x println) (->> x prn) (doto x print)])\n"
+                                  "(defn b [x d?] [(some-> x\n  inc\n  println) (cond-> x d? tap>)])\n"
+                                  "(defn c [x] [(-> x #(inc %) shuffle) (doto x (println))])\n"
+                                  "(defn d [x] [(-> x :println) (-> x 'println) (cond-> x println inc)])\n"
+                                  "(defn e [print] (let [println identity] (map inc print)))\n"
+                                  "(defn f [x] (with-out-str (-> x println)))\n"))]
+        (is (= #{["println" 2 :print] ["prn" 2 :print] ["print" 2 :print]
+                 ["println" 5 :print] ["tap>" 5 :print]
+                 ["shuffle" 6 :clock] ["println" 6 :print]}
+               (set (map (juxt :req :line :kind)
+                         (check-fcis/check-file file {:allow-throw #{} :allow-mutable-state #{}}))))
+            "a keyword, a quoted symbol, a cond-> test, a local named like a printer and captured output are not calls"))
+      (finally (delete-tree! root)))))
+
+(deftest ^:unit fcis-static-calls-the-line-regex-missed-warn-test
+  (let [root (temp-dir "fcis-static" 1)]
+    (try
+      (let [file (spit-file! root "libs/demo/src/wagoe/demo/core/static.clj"
+                             (str "(ns wagoe.demo.core.static\n  (:import [java.time Instant] [java.util UUID]))\n"
+                                  "(defn a [] (Instant/now))\n"
+                                  "(defn b [] (\n  Instant/now))\n"
+                                  "(defn c [] [(repeatedly 3 UUID/randomUUID) (apply System/getenv [])])\n"
+                                  "(defn d [] (\n  java.time.Instant/now))\n"
+                                  "(comment (\n  Instant/now))\n"
+                                  "(defn e [x] [(-> x Instant/now) :Instant/now 'Instant/now])\n"))]
+        (is (= #{["java.time.Instant/now" 3 :error]
+                 ["java.time.Instant/now" 5 :warning]
+                 ["java.util.UUID/randomUUID" 6 :warning] ["java.lang.System/getenv" 6 :warning]
+                 ["java.time.Instant/now" 8 :error]
+                 ["java.time.Instant/now" 11 :warning]}
+               (set (map (juxt :req :line #(:severity % :error))
+                         (check-fcis/check-file file {:allow-throw #{} :allow-mutable-state #{}}))))
+            "what the line regex caught stays an error, once; what it missed warns until 2.0"))
+      (finally (delete-tree! root)))))
+
 ;; =============================================================================
 ;; check:placeholder-tests
 ;; =============================================================================

@@ -140,4 +140,9 @@
  {:ticket "BOU-963"
   :since  "Unreleased"
   :note   "Clock and random reads in a core/ namespace: (java.util.Date.), (java.util.Random.), System/nanoTime, Math/random, Calendar/getInstance, rand, rand-int, rand-nth, shuffle, random-sample, random-uuid and the java.time now calls not already refused. Also the 1-arity wagoe.core.interceptor-context/record-start-time and record-end-time. bb check:fcis warns until 2.0, then fails."
-  :manual "Read the clock or the random value in the shell and pass it to core; record-start-time and record-end-time take (System/nanoTime) as a second argument. A rewrite cannot tell where the value should come from."}]
+  :manual "Read the clock or the random value in the shell and pass it to core; record-start-time and record-end-time take (System/nanoTime) as a second argument. A rewrite cannot tell where the value should come from."}
+
+ {:ticket "BOU-968"
+  :since  "Unreleased"
+  :note   "A printer or clock read as a step of ->, ->>, some->, cond-> or doto, and a refused static call (Instant/now, UUID/randomUUID, System/currentTimeMillis …) split across lines from its paren or handed to apply, map or the like, in a core/ namespace. bb check:fcis warns until 2.0, then fails."
+  :manual "Move the call to the shell and pass the value in, as for the direct call. A rewrite cannot tell where the value should come from."}]

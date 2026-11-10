@@ -315,3 +315,36 @@
                 (recur (inc i) line acc (conj open nil))))
 
             :else (recur (inc i) line acc open)))))))
+
+(defn form-children
+  "The direct children of the form whose `(` is at `pos` and `)` at `end` in
+   stripped `content`, head included, as {:token :pos}. `:token` is the text
+   of a bare token (`println`, `:println`, `'println`), nil for a nested or
+   reader-prefixed form such as `(f x)` or `#(f %)`."
+  [content pos end]
+  (let [ws?     #{\space \tab \newline \return \,}
+        open?   #{\( \[ \{}
+        close?  #{\) \] \}}
+        ch      #(.charAt ^String content %)
+        ;; Past the form opened at j.
+        skip    (fn [j] (loop [k (inc j), depth 1]
+                          (cond (or (>= k end) (zero? depth)) k
+                                (open? (ch k))  (recur (inc k) (inc depth))
+                                (close? (ch k)) (recur (inc k) (dec depth))
+                                :else           (recur (inc k) depth))))]
+    (loop [i (inc pos), acc []]
+      (cond
+        (>= i end)      acc
+        (or (ws? (ch i)) (close? (ch i))) (recur (inc i) acc)
+        (open? (ch i))  (recur (skip i) (conj acc {:token nil :pos i}))
+        :else
+        (let [k (loop [k i] (if (and (< k end) (not (ws? (ch k))) (not (open? (ch k))) (not (close? (ch k))))
+                              (recur (inc k)) k))]
+          (if (and (< k end) (open? (ch k)))
+            (recur (skip k) (conj acc {:token nil :pos i}))
+            (recur k (conj acc {:token (subs content i k) :pos i}))))))))
+
+(defn line-at
+  "The 1-based line of offset `pos` in `content`."
+  [content pos]
+  (inc (count (filter #{\newline} (subs content 0 pos)))))
