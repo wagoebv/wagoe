@@ -94,7 +94,7 @@
     (is (= :admin (:role (user-ports/get-user-by-id users (:id u)))))
     (is (zero? (live-sessions sys u)) "a role change ends the user's sessions (BOU-191)")
     (let [entry (first (user-ports/get-audit-logs-for-user users (:id u) {}))]
-      (is (= :update (:action entry)))
+      (is (= :role-change (:action entry)))
       (is (= (:id boss) (:actor-id entry)) "the admin is the actor"))))
 
 (deftest ^:integration deactivating-ends-sessions

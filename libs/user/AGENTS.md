@@ -539,9 +539,11 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
   (BOU-966). One on another store, or writing on a thread without that binding, does not join, so an entry written
   before the failure stays. A failed entry throws `:internal-error` naming the action and group, its cause kept. An
   expiry without `IExpiredAccess` whose diff cannot be read runs again without diffs, since on PostgreSQL
-  the failed read aborted the transaction. The user service's entries (create, update, deactivate, login, sessions) are not
-  transactional: only the audit trail reads them. Most warn on failure; `update-user-profile`'s throws, after the
-  update committed.
+  the failed read aborted the transaction. A user's role and active state are rights too: `update-user-profile` and
+  `deactivate-user` write `:role-change`, `:activate` and `:deactivate` in the update's transaction, under the admin
+  lock, and the rights timeline reads them (BOU-960); a role change from before then was an `:update` and is not
+  there. The user service's other entries (create, profile fields, delete, login, sessions) are not transactional:
+  only the audit trail reads them, and a failed write warns.
 - Tables `user_groups`, `user_group_members`, `user_roles`, `user_group_roles`, and
   `user_group_grants` (kept, marked, until 2.0). Keys cascade from `auth_users`
   and `user_groups`; the repository deletes explicitly too, for SQLite connections

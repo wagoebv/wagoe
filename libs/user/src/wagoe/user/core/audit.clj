@@ -12,7 +12,8 @@
    - Returns data that shell layer will persist
    - Business rules for what gets audited and how"
   (:require [clojure.edn :as edn]
-            [wagoe.user.core.group :as group]))
+            [wagoe.user.core.group :as group]
+            [wagoe.user.core.user :as user]))
 
 ;; =============================================================================
 ;; Pure Audit Entry Creation Functions
@@ -191,10 +192,36 @@
    :actor-email actor-email
    :target-user-id target-user-id
    :target-user-email target-user-email
-   :changes {:role {:old (name old-role) :new (name new-role)}}
+   :changes {:role {:old (some-> old-role name) :new (some-> new-role name)}}
    :ip-address ip-address
    :user-agent user-agent
    :result :success})
+
+(defn account-audit-entries
+  "The entries for user `before` changed by `after`, a key `after` leaves out
+   kept: a :role-change when the role changes, an :activate or :deactivate when
+   active does. A :user role is none. The rights timeline reads them (BOU-960)."
+  [{:keys [actor-id actor-email ip-address user-agent]} before after]
+  (let [role  #(some-> (:role (user/normalize-role %)) keyword)
+        after (merge before after)
+        id    (:id before)
+        email (:email before)]
+    (cond-> []
+      (not= (role before) (role after))
+      (conj (role-change-audit-entry actor-id actor-email id email (role before) (role after) ip-address user-agent))
+
+      (not= (user/active? before) (user/active? after))
+      (conj ((if (user/active? after) activate-user-audit-entry deactivate-user-audit-entry)
+             actor-id actor-email id email ip-address user-agent)))))
+
+(defn profile-audit-entry
+  "The :update entry for user `before` changed to `after`, leaving out what
+   `account-audit-entries` records; nil when nothing else changed."
+  [{:keys [actor-id actor-email ip-address user-agent]} before after]
+  (let [entry (update-user-audit-entry actor-id actor-email (:id after) (:email after) before
+                                       (dissoc after :role :active :updated-at) ip-address user-agent)]
+    (when (seq (get-in entry [:changes :fields]))
+      entry)))
 
 (defn bulk-action-audit-entry
   "Create audit log entry for bulk operations.
@@ -417,7 +444,7 @@
 
 (def rights-actions
   "The actions a change to a user's rights is audited as."
-  [:group-join :group-leave :grant-add :grant-remove])
+  [:group-join :group-leave :grant-add :grant-remove :role-change :activate :deactivate])
 
 (defn- stored-right
   "A right as `effective-record` stored it, read back: the scope a map, or
@@ -454,7 +481,8 @@
    :removed}, the rights the change gave and took (BOU-852). A role edit is
    one `:role-edit` naming the `:role` (BOU-864). A change to Everyone has
    :permissions and :affected-count instead; an entry from before BOU-852
-   none of these."
+   none of these. A :role-change of the user's own role has :user-role,
+   {:old :new} (BOU-960)."
   [entries n]
   (for [{:keys [created-at actor-email action metadata changes]}
         (take n (one-per-change (sort-by :created-at #(compare %2 %1) entries)))
@@ -469,4 +497,5 @@
      :added          (mapv stored-right added)
      :removed        (mapv stored-right removed)
      :permissions    (mapv #(update % :permission group/parse-name) permissions)
-     :affected-count affected-count}))
+     :affected-count affected-count
+     :user-role      (when (= :role-change action) (:role changes))}))

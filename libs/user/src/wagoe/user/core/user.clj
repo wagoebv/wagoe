@@ -188,9 +188,14 @@
   [user-entity current-time]
   (assoc user-entity :updated-at current-time))
 
+(defn active?
+  "Whether `user` is active: an unset :active counts as active."
+  [user]
+  (not (false? (:active user))))
+
 (defn- active-admin? [user]
   (and (= :admin (keyword (:role user)))
-       (not (false? (:active user)))
+       (active? user)
        (nil? (:deleted-at user))))
 
 (defn removes-admin?
@@ -204,7 +209,7 @@
 (defn deactivates?
   "Whether `after` deactivates the active user `before`."
   [before after]
-  (and (not (false? (:active before)))
+  (and (active? before)
        (contains? after :active)
        (false? (:active after))))
 

@@ -661,9 +661,11 @@
         failing #_{:clj-kondo/ignore [:missing-protocol-method]}
                 (reify ports/IUserAuditRepository
                   (create-audit-log [_ _] (throw (ex-info "audit table gone" {}))))
-        service (sut/->UserService (->UserRepoStub (atom {user-id {:id user-id :email "a@b.nl" :role :user :active true}}))
+        service (sut/->UserService (->UserRepoStub (atom {user-id {:id user-id :email "a@b.nl" :name "Ada" :role :user :active true
+                                                                          :created-at (Instant/now)}}))
                                    (->SessionRepoStub nil) failing {} nil)]
     (log-test/with-log
-      (is (true? (ports/deactivate-user service user-id)) "the change stands")
+      ;; A rights change throws instead: the rights timeline reads it (BOU-960)
+      (is (= "Bea" (:name (ports/update-user-profile service {:id user-id :name "Bea"}))) "the change stands")
       (is (some #(and (= :warn (:level %)) (= "audit table gone" (ex-message (:throwable %))))
                 (log-test/the-log))))))

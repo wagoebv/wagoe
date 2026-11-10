@@ -71,6 +71,8 @@ for what is public API, what is internal, and how deprecations are announced.
   now; move that call to the shell.
 - **A rights change whose audit entry failed was kept, and missing from the rights timeline** (BOU-958). It rolls back
   now. Nothing to change.
+- **A user's role and active changes were missing from the rights timeline** (BOU-960). They show there now, and a failed
+  audit entry rolls them back; a failed one for other profile fields only warns. Nothing to change.
 - **One group's failed expiry kept every group's expired access** (BOU-965). Each group expires in its own transaction
   now; a custom group repository needs `wagoe.user.ports/IExpiredAccess` for it.
 - **A group grant whose audit failed kept the role it made** (BOU-966). It rolls back too, and the error names the

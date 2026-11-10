@@ -606,6 +606,9 @@
  :user.timeline/empty "No changes recorded."
  :user.timeline/no-diff "Not recorded"
  :user.timeline/everyone {:one "Everyone: the rights of {count} user changed" :many "Everyone: the rights of {count} users changed"}
+ :user.timeline/no-role "none"
+ :user.timeline/activated "Can sign in again"
+ :user.timeline/deactivated "Can no longer sign in"
  :user/tab-sessions "Sessions"
  :admin/tab-details "Details"
 
