@@ -10,6 +10,7 @@
   (:require [clojure.tools.logging :as log]
             [ring.core.protocols :as ring-protocols]
             [wagoe.platform.core.privacy :as privacy]
+            [wagoe.platform.database :as db]
             [wagoe.platform.ports.privacy :as ports])
   (:import [java.io OutputStream]
            [java.nio.charset StandardCharsets]
@@ -126,7 +127,8 @@
 
 (defn run-retention!
   "Run each policy in `plan` against `policies` at `now`. One failing policy
-   does not stop the rest. Returns {:deleted {id n} :failed {id message}}."
+   does not stop the rest, unless it lost the database connection (BOU-970).
+   Returns {:deleted {id n} :failed {id message}}."
   [plan policies ^Instant now]
   (reduce-kv
    (fn [acc id retain]
@@ -137,7 +139,9 @@
            (assoc-in acc [:deleted id] n))
          (catch Exception e
            (log/error e "Retention policy failed" {:policy id :cutoff cutoff})
-           (assoc-in acc [:failed id] (ex-message e))))))
+           ;; Each policy after it would wait out the timeout to fail the same way
+           (cond-> (assoc-in acc [:failed id] (ex-message e))
+             (db/connection-lost? e) reduced)))))
    {:deleted {} :failed {}}
    plan))
 

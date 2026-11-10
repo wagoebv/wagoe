@@ -62,9 +62,10 @@
                          (catch Exception e
                            ;; Every item after it would wait out the timeout to fail the same way
                            (when (db/connection-lost? e)
-                             (throw (ex-info (str "Lost the database connection; " (+ n deleted) " " noun " deleted")
-                                             {:type :internal-error :keys (vec (sort failed)) :deleted (+ n deleted)}
-                                             e)))
+                             (let [done (+ n deleted)]
+                               (throw (ex-info (str "Lost the database connection; " done " " noun " deleted")
+                                               {:type :internal-error :keys (vec (sort failed)) :deleted done}
+                                               e))))
                            (update acc :failed conj (id-of item)))))
                   {:deleted 0 :failed failed}
                   batch)

@@ -62,6 +62,17 @@
     (is (= {:deleted {:b 2} :failed {:a "locked"}} (:result result)))
     (is (= 1 (count @calls)))))
 
+(deftest ^:unit a-lost-connection-ends-the-retention-run
+  ;; BOU-970: each policy after it would wait out the connection timeout
+  (let [calls  (atom [])
+        lost   (reify ports/IRetentionPolicy
+                 (purge-before! [_ _] (throw (java.sql.SQLTransientConnectionException. "Connection is not available"))))
+        result (sut/run-retention! (sorted-map :a (Period/ofDays 1) :b (Period/ofDays 1))
+                                   {:a lost :b (policy calls 2)}
+                                   (Instant/now))]
+    (is (= {:deleted {} :failed {:a "Connection is not available"}} result))
+    (is (empty? @calls))))
+
 (deftest ^:unit the-retention-component-is-a-job-handler-map
   (let [calls (atom [])
         handlers (ig/init-key :wagoe/retention {:policies    {:p {:retain "P30D"}}

@@ -81,6 +81,8 @@ for what is public API, what is internal, and how deprecations are announced.
   connection ends it at once now. Nothing to change.
 - **Retention purges, boot's tenant keys, recurring ticks and session setup waited out an outage per item** (BOU-970).
   A lost connection ends each at once now. Nothing to change.
+- **Devtools read a lost connection wrapped as `:database-error`, or a PostgreSQL shutdown, as WGE-304** (BOU-970).
+  It reads WGE-303 now. Nothing to change.
 - **A group grant whose audit failed kept the role it made** (BOU-966). It rolls back too, and the error names the
   action and group. Nothing to change.
 - **The stability page's opening line said Wagoe is at `1.0.1`** under a `1.1.1` table. It now points at the table,

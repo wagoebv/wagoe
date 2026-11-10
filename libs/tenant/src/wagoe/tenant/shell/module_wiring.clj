@@ -43,11 +43,13 @@
    before auth_users existed (BOU-612). Boot changes no rows and never fails on
    them: a key that needs cleanup first is logged and left to `migrate up`."
   [ctx]
-  (try
-    (doseq [left-off (user-foreign-keys/add-clean-foreign-keys! ctx)]
-      (log/warn "Boot left a tenant→auth_users key off; run `bb migrate up`" left-off))
-    (catch Exception e
-      (log/error e "Adding tenant→auth_users keys failed on startup"))))
+  (let [warn! #(log/warn "Boot left a tenant→auth_users key off; run `bb migrate up`" %)]
+    (try
+      (run! warn! (user-foreign-keys/add-clean-foreign-keys! ctx))
+      (catch Exception e
+        ;; A lost connection carries those it left off before it (BOU-970)
+        (run! warn! (:left-off (ex-data e)))
+        (log/error e "Adding tenant→auth_users keys failed on startup")))))
 
 ;; A tenant schema migrates the modules the context's `:enabled-libraries`
 ;; names, which the system config sets on `:wagoe/db-context`.
