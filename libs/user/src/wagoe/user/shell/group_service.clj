@@ -795,7 +795,7 @@
         failed (volatile! false)]
     (try (run failed)
          (catch Exception e
-           (if @failed (run nil) (throw e))))))
+           (if (and @failed (not (db/connection-lost? e))) (run nil) (throw e))))))
 
 (defn- expire-group!
   "Remove `expired`, one group's rows, in one transaction, auditing each row

@@ -192,22 +192,36 @@
   [e]
   (= {:type :conflict :constraint :unique} (select-keys (ex-data e) [:type :constraint])))
 
+(defn- lost-itself?
+  "Whether `t` itself, not its causes, says the database cannot be reached."
+  [t]
+  (or (instance? java.sql.SQLTransientConnectionException t)
+      (instance? java.sql.SQLNonTransientConnectionException t)
+      (when (instance? java.sql.SQLException t)
+        (let [state (str (.getSQLState ^java.sql.SQLException t))]
+          (or (str/starts-with? state "08")
+              (contains? #{"57P01" "57P02" "57P03" "90067" "90098" "90121"} state))))))
+
 (defn connection-lost?
   "Whether `e`, or anything that caused it, says the database cannot be
    reached rather than that it refused a statement: SQLState class 08
    (PostgreSQL, MySQL), a PostgreSQL shutdown or start-up (57P01-03), H2's
    broken or closed database (which redaction keeps only as a state), or the
    JDBC connection exceptions HikariCP and H2 throw, a pool timeout with no
-   state among them (BOU-969)."
+   state among them (BOU-969). A failed rollback's ex-info from next.jdbc has
+   no cause: it names the exceptions under :handling and :rollback."
   [e]
-  (boolean
-   (some #(or (instance? java.sql.SQLTransientConnectionException %)
-              (instance? java.sql.SQLNonTransientConnectionException %)
-              (when (instance? java.sql.SQLException %)
-                (let [state (str (.getSQLState ^java.sql.SQLException %))]
-                  (or (str/starts-with? state "08")
-                      (contains? #{"57P01" "57P02" "57P03" "90067" "90098" "90121"} state)))))
-         (take-while some? (iterate ex-cause e)))))
+  ;; A set compares throwables by identity, so a cyclic chain ends
+  (loop [todo (list e) seen #{}]
+    (if-let [t (first todo)]
+      (cond
+        (seen t)        (recur (rest todo) seen)
+        (lost-itself? t) true
+        :else           (recur (into (rest todo)
+                                     (filter #(instance? Throwable %))
+                                     [(ex-cause t) (:handling (ex-data t)) (:rollback (ex-data t))])
+                               (conj seen t)))
+      false)))
 
 (defn- rolled-back?
   "Whether the engine rolled `e`'s statement back as a deadlock or

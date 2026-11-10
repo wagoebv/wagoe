@@ -18,8 +18,14 @@
                       "PostgreSQL shutting down"           (sql "57P01")
                       "under an audit entry's ex-info"     (ex-info "Could not audit" {:type :internal-error}
                                                                     (ex-info "Database query failed" {:type :database-error}
-                                                                             (sql "08001")))}]
+                                                                             (sql "08001")))
+                      "next.jdbc's failed rollback"        (ex-info "Rollback failed handling \"x\""
+                                                                    {:rollback (sql "08003") :handling (sql "08006")})}]
       (is (db/connection-lost? e) what)))
+  (testing "a cyclic cause chain ends"
+    (let [a (Exception. "a") b (Exception. "b" a)]
+      (.initCause a b)
+      (is (not (db/connection-lost? a)))))
   (testing "the database refused one statement"
     (doseq [[what e] {"a unique key"            (sql "23505")
                       "a deadlock"              (sql "40001")
