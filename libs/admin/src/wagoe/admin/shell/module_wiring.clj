@@ -102,6 +102,9 @@
                        ;; A page part's savepoint is on the service's database,
                        ;; hand-written wiring included
                        (:db-ctx admin-service) (assoc :db-ctx (:db-ctx admin-service))
+                       ;; and the audit panel's on the user service's (BOU-972)
+                       (get-in user-service [:audit-repository :ctx])
+                       (assoc :user-db-ctx (get-in user-service [:audit-repository :ctx]))
                        workflows           (assoc :workflows workflows)
                        permission-registry (assoc :access (access-fn (:authorization-mode config)
                                                                      permission-registry rights)))

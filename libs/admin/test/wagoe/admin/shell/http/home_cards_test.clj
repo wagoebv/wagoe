@@ -10,6 +10,8 @@
             [wagoe.admin.ports :as admin-ports]
             [wagoe.admin.shell.http.handlers.list :as list-handlers]
             [wagoe.platform.core.http.nav :as nav]
+            [wagoe.platform.database :as db]
+            [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.shell.http.interceptors :as interceptors]
             [wagoe.platform.shell.http.pages :as pages]
             [wagoe.platform.shell.system.wiring :as wiring]
@@ -47,11 +49,11 @@
                   (is (= :admin (:role user :admin)) (str "counted " e " for a non-admin"))
                   (if count-of (count-of e) 7))
         service #_{:clj-kondo/ignore [:missing-protocol-method]}
-                (reify
-                  admin-ports/IAdminService
-                  (count-entities [_ e _] (counted e))
-                  admin-ports/IListOverview
-                  (list-overview [_ e _ _] (when overview (overview e))))
+        (reify
+          admin-ports/IAdminService
+          (count-entities [_ e _] (counted e))
+          admin-ports/IListOverview
+          (list-overview [_ e _ _] (when overview (overview e))))
         handler (list-handlers/admin-home-handler service schema (or admin-config {}) user-service)]
     ;; Through the pipeline every route runs, which binds what is mounted,
     ;; inside the navigation the platform binds.
@@ -139,14 +141,14 @@
 
 (deftest ^:unit recent-activity-is-the-platform-admins
   (let [usvc #_{:clj-kondo/ignore [:missing-protocol-method]}
-             (reify user-ports/IUserService
-               (list-audit-logs [_ opts]
-                 (is (= 10 (:limit opts)))
-                 {:audit-logs [{:action :login :result :success :actor-email "ann@example.com"
-                                :target-user-email "bob@example.com"
-                                :created-at (java.time.Instant/now)}
-                               {:action :login :result :failure :actor-email "eve@example.com"
-                                :created-at (java.time.Instant/now)}]}))]
+        (reify user-ports/IUserService
+          (list-audit-logs [_ opts]
+            (is (= 10 (:limit opts)))
+            {:audit-logs [{:action :login :result :success :actor-email "ann@example.com"
+                           :target-user-email "bob@example.com"
+                           :created-at (java.time.Instant/now)}
+                          {:action :login :result :failure :actor-email "eve@example.com"
+                           :created-at (java.time.Instant/now)}]}))]
     (testing "a platform admin: the last entries, and a link to the trail"
       (let [body (home nil nil [] {:user-service usvc})]
         (is (str/includes? body "dashboard-activity"))
@@ -160,8 +162,55 @@
       (is (not (str/includes? (home off nil [] {:user-service usvc}) "dashboard-activity"))))
     (testing "a failing audit query: the panel says so, the page renders"
       (let [failing #_{:clj-kondo/ignore [:missing-protocol-method]}
-                    (reify user-ports/IUserService
-                      (list-audit-logs [_ _] (throw (ex-info "db down" {}))))
+            (reify user-ports/IUserService
+              (list-audit-logs [_ _] (throw (ex-info "db down" {}))))
             body    (home nil nil [:orders] {:user-service failing})]
         (is (str/includes? body "dashboard-activity-failed"))
         (is (str/includes? body "class=\"entity-card-count\">entity-card-count<"))))))
+
+;; =============================================================================
+;; Two databases, transactions nested (BOU-972)
+;; =============================================================================
+
+(defn- h2-ctx []
+  (let [ctx (factory/db-context (factory/h2-config (str "mem:admin-home-" (random-uuid) ";DB_CLOSE_DELAY=-1")))]
+    (db/execute-ddl! ctx "CREATE TABLE notes (k VARCHAR(64) PRIMARY KEY)")
+    ctx))
+
+(defn- with-two-dbs [f]
+  (let [admin-db (h2-ctx) other (h2-ctx)]
+    (try (f admin-db other)
+         (finally (run! factory/close-db-context! [admin-db other])))))
+
+(deftest ^:integration counts-share-no-connection-across-threads
+  (with-two-dbs
+    (fn [admin-db other]
+      (let [threads  (atom #{})
+            dash     #(home nil nil [:a :b :c :d :e]
+                            {:admin-config %
+                             :count-of     (fn [_] (swap! threads conj (Thread/currentThread)) 1)})
+            on-this? #(do (reset! threads #{}) (dash %) (= #{(Thread/currentThread)} @threads))]
+        (testing "a transaction on admin's database, another's nested inside: one by one"
+          (is (db/with-transaction [_ admin-db]
+                (db/with-transaction [_ other]
+                  (on-this? {:db-ctx admin-db})))))
+        (testing "only another database's transaction: in parallel"
+          (is (not (db/with-transaction [_ other] (on-this? {:db-ctx admin-db}))))
+          (is (not (on-this? {:db-ctx admin-db})) "and outside any"))
+        (testing "admin's database unknown: one by one"
+          (is (on-this? {})))))))
+
+(deftest ^:integration a-failed-audit-query-rolls-back-on-the-user-services-database
+  (with-two-dbs
+    (fn [admin-db user-db]
+      (let [usvc (reify user-ports/IUserService
+                   (list-audit-logs [_ _]
+                     (db/execute-update! user-db {:insert-into :notes :values [{:k "half-done"}]})
+                     (throw (ex-info "audit query failed" {:type :internal-error}))))
+            body (db/with-transaction [_ user-db]
+                   (db/with-transaction [_ admin-db]
+                     (home nil nil [] {:user-service usvc
+                                       :admin-config {:db-ctx admin-db :user-db-ctx user-db}})))]
+        (is (str/includes? body "dashboard-activity-failed"))
+        (is (empty? (db/execute-query! user-db {:select [:k] :from [:notes]}))
+            "its write undone by a savepoint on its own database")))))

@@ -93,6 +93,11 @@
   [executor]
   (some (fn [[_ conn :as t]] (when (identical? conn executor) t)) *open-transactions*))
 
+(defn open-transaction?
+  "Whether `conn` is the connection of a transaction open on this thread."
+  [conn]
+  (some? (open-transaction conn)))
+
 (defn- opened-on
   "The datasource `executor`'s transaction took its connection from, or
    `executor` when it is no transaction this thread opened."

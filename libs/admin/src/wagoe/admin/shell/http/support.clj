@@ -556,8 +556,8 @@
 (defn isolated
   "`(f)`, or nil when it throws: logged, and the page shows the part as missing
    instead of failing. In a savepoint, so a failed query in a tenant request's
-   transaction on `db-ctx` (admin's database) does not abort the parts after
-   it on PostgreSQL."
+   transaction on `db-ctx`, the database `f` queries, does not abort the parts
+   after it on PostgreSQL."
   [db-ctx part f]
   (try (db/in-savepoint (db/current-transaction db-ctx) f)
        (catch Exception e

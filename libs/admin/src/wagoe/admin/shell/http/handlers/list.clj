@@ -36,10 +36,11 @@
 
 (defn- in-parallel
   "`(f x)` for each of `xs`, a few at a time, or one by one when a transaction
-   is open on this thread (a tenant request's): its connection may not be
-   shared by threads."
-  [f xs]
-  (if (db/current-transaction)
+   is open on this thread on `db-ctx`'s database (a tenant request's): the
+   futures would share its connection. Without `db-ctx` the database is not
+   known, so always one by one."
+  [db-ctx f xs]
+  (if (or (nil? db-ctx) (db/current-transaction db-ctx))
     (mapv f xs)
     (into [] (mapcat #(mapv deref (mapv (fn [x] (future (f x))) %)))
           (partition-all parallel-counts xs))))
@@ -85,11 +86,11 @@
            ;; Counted only for a tile the dashboard shows
            shown (into [] (comp (mapcat :items) (keep :entity) (filter (set entities)) (distinct)) groups)
            db-ctx (:db-ctx config)
-           stats (zipmap shown (in-parallel (partial entity-stats admin-service db-ctx entity-configs) shown))]
+           stats (zipmap shown (in-parallel db-ctx (partial entity-stats admin-service db-ctx entity-configs) shown))]
        (support/html-response request
                               (admin-ui/admin-layout
                                (admin-ui/dashboard groups stats
-                                                   {:activity       (recent-activity user-service db-ctx groups)
+                                                   {:activity       (recent-activity user-service (or (:user-db-ctx config) db-ctx) groups)
                                                     :entity-configs entity-configs
                                                     :extra-cards    (:dashboard-extra-cards config)
                                                     :display        (support/display-options config request)
