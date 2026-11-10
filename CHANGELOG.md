@@ -77,6 +77,8 @@ for what is public API, what is internal, and how deprecations are announced.
   audit entry rolls them back; a failed one for other profile fields only warns. Nothing to change.
 - **One group's failed expiry kept every group's expired access** (BOU-965). Each group expires in its own transaction
   now; a custom group repository needs `wagoe.user.ports/IExpiredAccess` for it.
+- **During a database outage the group expiry job waited out the connection timeout once per group** (BOU-969). A lost
+  connection ends it at once now. Nothing to change.
 - **A group grant whose audit failed kept the role it made** (BOU-966). It rolls back too, and the error names the
   action and group. Nothing to change.
 - **The stability page's opening line said Wagoe is at `1.0.1`** under a `1.1.1` table. It now points at the table,
@@ -112,6 +114,8 @@ for what is public API, what is internal, and how deprecations are announced.
   from 2.0. Return the string, or print from the shell; `with-out-str` is fine.
 - **`(java.util.Date.)`, `System/nanoTime`, `rand`, `random-uuid` and other clock or random reads in `core/`** (BOU-963):
   `bb check:fcis` warns, and fails from 2.0. Read them in the shell and pass the value in.
+- **`(-> x println)`, `(->> xs shuffle)`, and `Instant/now` or `UUID/randomUUID` split from their paren or passed as a function**
+  (BOU-968): `bb check:fcis` warns, and fails from 2.0. Same fix as the call they stand for.
 - **The 1-arity `wagoe.core.interceptor-context/record-start-time` and `record-end-time`** (BOU-963): they read the clock.
   Pass `(System/nanoTime)` as the second argument.
 - **`wagoe.audience.ports/query-users-sql`** (BOU-875), removed in 2.0 (BOU-935). Implement `IUserQuery/query-user-ids`.

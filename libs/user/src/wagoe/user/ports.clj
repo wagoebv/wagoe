@@ -597,7 +597,8 @@
   ;; auditing each as a leave or a removed role. They gave nothing already:
   ;; every read leaves them out. Returns IAccessExpiry/remove-expired's result.
   ;; With IExpiredAccess, each group in its own transaction: one that fails is
-  ;; thrown after the others are removed.
+  ;; thrown after the others are removed; a lost database connection stops
+  ;; it at once.
 
 ;; =============================================================================
 ;; Sign-in hooks

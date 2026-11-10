@@ -9,6 +9,7 @@
             [wagoe.config :as config]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.scope :as scope]
+            [wagoe.platform.database :as db]
             [wagoe.platform.ports.authorization :as authz]
             [wagoe.user.core.audit :as audit-core]
             [wagoe.user.core.grant :as grant-core]
@@ -741,6 +742,8 @@
   (when failed
     (try (mapv #(assoc % :added (:removed %) :removed (:added %)) (user-diffs svc plan))
          (catch Exception e
+           ;; An outage would fail every read after it, each after the timeout
+           (when (db/connection-lost? e) (throw e))
            (vreset! failed true)
            (log/warn e "Could not diff an expiry" {:group-id (get-in plan [:group :id])})
            nil))))
@@ -792,7 +795,7 @@
         failed (volatile! false)]
     (try (run failed)
          (catch Exception e
-           (if @failed (run nil) (throw e))))))
+           (if (and @failed (not (db/connection-lost? e))) (run nil) (throw e))))))
 
 (defn- expire-group!
   "Remove `expired`, one group's rows, in one transaction, auditing each row
@@ -813,7 +816,9 @@
 
 (defn- expire-by-group!
   "`expire-group!` for each group with something expired by `now`. Returns
-   what was removed, and each group's failure under :failed."
+   what was removed, and each group's failure under :failed. A lost database
+   connection ends it: each group after it would wait out the timeout to fail
+   the same way (BOU-969)."
   [{:keys [group-repository] :as svc} user-of now]
   (let [{:keys [members assignments]} (ports/find-expired group-repository now)
         by-group (merge-with merge
@@ -822,7 +827,8 @@
     (reduce (fn [acc expired]
               (try (merge-with into acc (expire-group! svc user-of expired now))
                    (catch Exception e
-                     (update acc :failed conj e))))
+                     (cond-> (update acc :failed conj e)
+                       (db/connection-lost? e) reduced))))
             {:members [] :assignments [] :failed []}
             (vals by-group))))
 

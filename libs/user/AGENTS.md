@@ -519,7 +519,8 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
   `:wagoe.user/expire-access` (every 15 minutes, on `:wagoe/jobs`; `:wagoe/jobs :recurring` overrides it) deletes it
   through `IAccessExpiry/remove-expired` and audits a `:group-leave` or `:grant-remove` with `:reason "expired"`.
   With `IExpiredAccess` it goes a group at a time (BOU-965): the diffs are read first, then the group's rows are
-  deleted and audited in its own transaction. A group that fails is thrown once the others are removed.
+  deleted and audited in its own transaction. A group that fails is thrown once the others are removed; a lost
+  database connection (`wagoe.platform.database/connection-lost?`) ends the run at once (BOU-969).
   Reads go through `current`, the one place the expiry filter lives. `IAllAssignments` (repository),
   `IUserAuditActions` (audit repository) and `IRightsTimeline` (group service) make the access overview and the
   rights timeline one query each (BOU-865); without them, the old query per role or action.

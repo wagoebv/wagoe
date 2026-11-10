@@ -334,6 +334,54 @@
       (and (heads head) arg1 (targets arg1))
       (and (heads head) (repeatedly-heads head) arg2 (targets arg2))))
 
+(def ^:private threading-heads
+  "Forms that call a bare symbol in a step: `(-> x println)` is
+   `(println x)`. Listed rather than treating any reference as a use: a text
+   scan cannot tell a local that shadows `print` from the real one, and a
+   threading step is a call whatever the symbol means."
+  (core-names "->" "->>" "some->" "some->>" "cond->" "cond->>" "doto"))
+
+(def ^:private cond-threading-heads
+  "Threading forms with a test before each step."
+  (core-names "cond->" "cond->>"))
+
+(def ^:private thread-first-heads
+  "Threading forms that put the value first in a step, so `(-> x (doto prn))`
+   is `(doto x prn)`."
+  (core-names "->" "some->" "cond->" "doto"))
+
+(defn- thread-steps
+  "`{pos [{:token :line}]}`: the steps of each threading form in `calls`,
+   without the tests of `cond->`. `marked` keeps a mark for each literal
+   (strip-comments-and-strings), so `(-> \"s\" println)` keeps its value. A
+   threading form that is a step of `->` or the like takes its value from it."
+  [marked calls]
+  (let [kids  (into {} (for [{:keys [head pos end pos-line]} calls
+                             :when (and end (threading-heads head))]
+                         [pos (parsing/form-children marked pos end pos-line)]))
+        steps (fn [[{head :token} :as ch] n]
+                (let [s (drop n ch)]
+                  (if (cond-threading-heads head) (take-nth 2 (rest s)) s)))
+        inner (set (for [[_ [{head :token} :as ch]] kids :when (thread-first-heads head)
+                         {p :pos} (steps ch 2) :when p]
+                     p))]
+    (into {} (for [[pos ch] kids] [pos (steps ch (if (inner pos) 1 2))]))))
+
+(defn- threaded
+  "{:req :line} for each step of `c` in `steps` (thread-steps) that is a bare
+   symbol in `targets`; `:req` is what `targets` returns for it."
+  [steps targets {:keys [pos]}]
+  (for [{:keys [token line]} (get steps pos)
+        :let [req (targets token)] :when req]
+    {:req req :line line}))
+
+(defn- uses
+  "{:req :line} for each place `c` calls a symbol in `targets`: `called`, or
+   a threading step. The print and clock warnings read these."
+  [steps targets c]
+  (concat (when-let [req (called c targets higher-order-heads)] [{:req req :line (:line c)}])
+          (threaded steps targets c)))
+
 ;; Clock and randomness: the shell reads them and passes the value in. The
 ;; accessors in forbidden-static-methods-by-class (Instant/now,
 ;; UUID/randomUUID, System/currentTimeMillis) were errors already and stay so;
@@ -387,6 +435,36 @@
                (= label (str/replace (str/trim (subs content (inc pos) end)) #"\s+" " ")))
       label)))
 
+(defn- imported-static-class-aliases
+  "Resolve simple class names available in the file to their fully-qualified
+   names for forbidden static accessor checks."
+  [imports]
+  (into {} (for [fq (keys forbidden-static-methods-by-class)
+                 n  (class-names imports fq) :when (not= n fq)]
+             [n fq])))
+
+(defn- static-targets
+  "`{simple-name fq-name}` for the forbidden static calls a file importing
+   `imports` can write without the package: `Instant/now`."
+  [imports]
+  (into {} (for [[n fq] (imported-static-class-aliases imports)
+                 m (forbidden-static-methods-by-class fq)]
+             [(str n "/" m) (str fq "/" m)])))
+
+(defn- static-call-warnings
+  "{:req :line} for each forbidden static call in `c` that the line regex of
+   scan-simple-static-calls misses: `(\\n Instant/now)`, `(repeatedly 3
+   UUID/randomUUID)`, `(-> x Instant/now)`. What the regex finds stays an
+   error; these are warnings until 2.0, when the regex goes and they join it.
+   Fully-qualified names need nothing here: scan-fq-calls finds them anywhere."
+  [stripped steps targets {:keys [head pos end] :as c}]
+  (when-not (and (targets head)
+                 ;; What the regex sees: the head on the paren's line, no comma before it.
+                 (-> (re-matcher #"\([ \t\x0B\f]*[^\s,]" stripped)
+                     (.region (int pos) (int (or end (count stripped))))
+                     (.lookingAt)))
+    (uses steps targets c)))
+
 (defn- scan-impurity
   "Scan stripped content for (throw ...), mutable-state constructs and print
    calls. A namespace is exempt from the throw ban via ^:wagoe/allow-throw
@@ -399,7 +477,9 @@
    output is captured and returned, which is pure, so those do not count;
    `tap>` is not captured by it. Nothing inside a `(comment …)` block runs.
 
-   Clock and randomness reads are `:clock` warnings on the same terms.
+   Clock and randomness reads are `:clock` warnings on the same terms, and so
+   is a forbidden static call only this scan finds (static-call-warnings).
+   Both, and print, also count as a step of `->`, `doto` and the like.
    ^:wagoe/allow-print and ^:wagoe/allow-clock exempt a namespace from each;
    their config entries are applied in check-file, so stale ones can be found.
 
@@ -407,8 +487,11 @@
    same call as `(throw …)`, and the regex version scanned one line at a time
    and saw neither it nor `(apply swap! …)` (BOU-301)."
   [file content ns-form ns-name imports {:keys [allow-throw allow-mutable-state]}]
-  (let [calls     (parsing/call-forms (parsing/strip-comments-and-strings content))
+  (let [stripped  (parsing/strip-comments-and-strings content)
+        calls     (parsing/call-forms stripped)
+        steps     (thread-steps (parsing/strip-comments-and-strings content \_) calls)
         clock     (clock-symbols imports)
+        statics   (static-targets imports)
         ctors     (clock-constructor-names imports)
         throw-ok? (or (ns-meta-flag? ns-form :wagoe/allow-throw)
                       (contains? (or allow-throw #{}) ns-name))
@@ -420,27 +503,32 @@
         inside?   (fn [rs {:keys [pos]}] (some (fn [[s e]] (< s pos e)) rs))
         comments  (ranges #{"comment" "clojure.core/comment"})
         captured  (concat comments (ranges #{"with-out-str" "clojure.core/with-out-str"}))
-        finding   (fn [req kind c]
-                    {:file (str file) :ns ns-name :line (:line c) :kind kind :req req})]
+        finding   (fn [req kind line]
+                    {:file (str file) :ns ns-name :line line :kind kind :req req})
+        warning   (fn [kind {:keys [req line]}]
+                    (assoc (finding req kind line) :severity :warning))]
     (concat
      (when-not throw-ok?
        (for [c calls :let [req (called c #{"throw"} error-heads)] :when req]
-         (finding req :throw c)))
+         (finding req :throw (:line c))))
      (when-not mut-ok?
        (for [c calls :let [req (called c mutable-state-symbols error-heads)] :when req]
-         (finding req :mutable-state c)))
+         (finding req :mutable-state (:line c))))
      (when-not (ns-meta-flag? ns-form :wagoe/allow-print)
        (for [[targets skip] [[(into out-symbols (pprint-symbols ns-form)) captured]
                              [tap-symbols comments]]
-             c calls
-             :let [req (called c targets higher-order-heads)]
-             :when (and req (not (inside? skip c)))]
-         (assoc (finding req :print c) :severity :warning)))
+             c calls :when (not (inside? skip c))
+             u (uses steps targets c)]
+         (warning :print u)))
      (when-not (ns-meta-flag? ns-form :wagoe/allow-clock)
-       (for [c calls
-             :let [req (or (clock-constructor content ctors c) (called c clock higher-order-heads))]
-             :when (and req (not (inside? comments c)))]
-         (assoc (finding req :clock c) :severity :warning))))))
+       (for [c calls :when (not (inside? comments c))
+             u (concat (when-let [ctor (clock-constructor content ctors c)]
+                         [{:req ctor :line (:line c)}])
+                       (uses steps clock c))]
+         (warning :clock u)))
+     (for [c calls :when (not (inside? comments c))
+           u (static-call-warnings stripped steps statics c)]
+       (warning :fq-call u)))))
 
 (defn- forbidden-require?
   "Whether the core namespace `ns-name` may not require `req`.
@@ -571,14 +659,6 @@
           (and (re-find file-pattern file)
                (re-find req-pattern req)))
         allowed-fq-violations))
-
-(defn- imported-static-class-aliases
-  "Resolve simple class names available in the file to their fully-qualified
-   names for forbidden static accessor checks."
-  [imports]
-  (into {} (for [fq (keys forbidden-static-methods-by-class)
-                 n  (class-names imports fq) :when (not= n fq)]
-             [n fq])))
 
 (defn- scan-simple-static-calls
   "Scan stripped file content for forbidden runtime access via imported or
@@ -763,8 +843,6 @@
                                         :kind :import})))
         fq-violations (->> (concat (scan-fq-calls file content)
                                    (scan-simple-static-calls file content imports))
-                           (remove (fn [{:keys [symbol]}]
-                                     (allowed-fq-violation? (str file) symbol)))
                            (map (fn [{:keys [line symbol]}]
                                   {:file (str file)
                                    :ns   ns-name
@@ -777,8 +855,9 @@
         sql-violations      (sql-require-findings
                              (finding-base file ns-name)
                              (remove #(forbidden-require? ns-name %) (map str requires)))]
-    (concat require-violations import-violations fq-violations
-            impurity-violations sql-violations)))
+    (->> (concat require-violations import-violations fq-violations
+                 impurity-violations sql-violations)
+         (remove #(and (= :fq-call (:kind %)) (allowed-fq-violation? (str file) (:req %)))))))
 
 (defn check-file
   "Check a single core/ .clj file for forbidden requires, imports,
@@ -806,7 +885,9 @@
      (str "    " key " entry " (ansi/red req) " exempts nothing — remove it")
      (str "    namespace " ns " "
           (case kind
-            :fq-call       (str "calls " (ansi/red req))
+            :fq-call       (if (= :warning severity)
+                             (str "calls " (ansi/yellow req) " — an error from 2.0")
+                             (str "calls " (ansi/red req)))
             :throw         (str "uses " (ansi/red "(throw ...)") " — core must return typed error values")
             :mutable-state (str "uses mutable state " (ansi/red req) " — registries/state belong in the shell")
             :print         (str "calls " (ansi/yellow req) " — printing is I/O; an error from 2.0")
