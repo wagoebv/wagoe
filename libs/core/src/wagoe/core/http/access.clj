@@ -76,7 +76,6 @@
       (platform-admin? user) {}
       :else                  {:tenant-id (:tenant-id user)})))
 
-
 (defn admin-reach
   "`tenant-reach` for an admin by role, who is one only where they are a tenant
    admin: a member of the resolved tenant who administers another gets none."
@@ -85,9 +84,11 @@
     (tenant-reach request)))
 
 (defn require-platform-admin
-  "Ring middleware: a platform admin, or 403."
-  [handler]
+  "Ring middleware: a platform admin, or 403. `fresh-id` makes the
+   correlation id for a caller who sent none; the shell supplies it, so core
+   reads no randomness."
+  [handler fresh-id]
   (fn [request]
     (if (platform-admin? (:user request))
       (handler request)
-      (forbidden-response "Platform admin required" request (correlation-id request (str (random-uuid)))))))
+      (forbidden-response "Platform admin required" request (correlation-id request (fresh-id))))))
