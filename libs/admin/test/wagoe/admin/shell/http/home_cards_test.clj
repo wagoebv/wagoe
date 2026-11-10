@@ -203,7 +203,8 @@
 (deftest ^:integration a-failed-audit-query-rolls-back-on-the-user-services-database
   (with-two-dbs
     (fn [admin-db user-db]
-      (let [usvc (reify user-ports/IUserService
+      (let [usvc #_{:clj-kondo/ignore [:missing-protocol-method]}
+                 (reify user-ports/IUserService
                    (list-audit-logs [_ _]
                      (db/execute-update! user-db {:insert-into :notes :values [{:k "half-done"}]})
                      (throw (ex-info "audit query failed" {:type :internal-error}))))
