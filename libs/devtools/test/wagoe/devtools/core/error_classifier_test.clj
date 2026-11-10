@@ -133,8 +133,8 @@
     (is (= "WGE-303" (:code (classifier/classify
                              (ex-info "Database query failed"
                                       {:type :database-error}
-                                      (java.sql.SQLException. "I/O error" "08006"))))))
-    "a :database-error the connection caused (BOU-970)")
+                                      (java.sql.SQLException. "I/O error" "08006")))))
+        "a :database-error the connection caused (BOU-970)"))
 
   (testing "an untyped wrapper still falls through to the cause"
     (is (= "WGE-303" (:code (classifier/classify

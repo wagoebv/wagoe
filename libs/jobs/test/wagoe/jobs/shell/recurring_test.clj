@@ -118,8 +118,8 @@
 (deftest ^:unit a-failed-enqueue-releases-its-key
   (let [{:keys [idempotency]} (backend)
         broken #_{:clj-kondo/ignore [:missing-protocol-method]}
-        (reify ports/IJobQueue
-          (enqueue-job! [_ _ _] (throw (ex-info "down" {:type :internal-error}))))
+               (reify ports/IJobQueue
+                 (enqueue-job! [_ _ _] (throw (ex-info "down" {:type :internal-error}))))
         j      {:id (random-uuid) :job-type :send-receipt}]
     (is (thrown? clojure.lang.ExceptionInfo
                  (recurring/enqueue-once! broken idempotency :default j "order-42")))
@@ -159,8 +159,8 @@
 (deftest ^:unit a-failing-registry-does-not-stop-the-tick
   (let [b        (backend)
         registry #_{:clj-kondo/ignore [:missing-protocol-method]}
-        (reify ports/IJobRegistry
-          (list-handlers [_] (throw (ex-info "down" {:type :internal-error}))))
+                 (reify ports/IJobRegistry
+                   (list-handlers [_] (throw (ex-info "down" {:type :internal-error}))))
         s        (recurring/create-scheduler (assoc b :registry registry))]
     (recurring/schedule-recurring! s :nightly-report "0 2 * * *")
     (seed-tick! b :nightly-report "2026-01-01T02:00:00Z")

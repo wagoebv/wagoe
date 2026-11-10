@@ -55,12 +55,12 @@
   [ctx table column]
   (if (postgresql? ctx)
     (when-let [{conname :name valid :valid} (db/execute-one!
-                                             ctx [(str "SELECT c.conname AS name, c.convalidated AS valid"
-                                                       " FROM pg_constraint c JOIN pg_attribute a"
-                                                       " ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)"
-                                                       " WHERE c.contype = 'f' AND c.confrelid = to_regclass('auth_users')"
-                                                       " AND c.conrelid = to_regclass(?) AND a.attname = ?")
-                                                  table column])]
+                                     ctx [(str "SELECT c.conname AS name, c.convalidated AS valid"
+                                               " FROM pg_constraint c JOIN pg_attribute a"
+                                               " ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)"
+                                               " WHERE c.contype = 'f' AND c.confrelid = to_regclass('auth_users')"
+                                               " AND c.conrelid = to_regclass(?) AND a.attname = ?")
+                                          table column])]
       {:name conname :valid? valid})
     (when-let [n (foreign-key-name ctx table column)]
       {:name n :valid? true})))

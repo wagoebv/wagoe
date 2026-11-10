@@ -53,26 +53,27 @@
    first, so it would fail every run before anything newer was reached."
   [fetch-page id-of purge-one! noun]
   (loop [n 0 failed #{}]
-    (let [page   (fetch-page page-size)
-          batch  (remove (comp failed id-of) page)
-          {n' :n :keys [failed]}
-          (reduce (fn [acc item]
+    (let [page    (fetch-page page-size)
+          batch   (remove (comp failed id-of) page)
+          {:keys [deleted failed]}
+          (reduce (fn [{:keys [deleted failed] :as acc} item]
                     (try (purge-one! item)
-                         (update acc :n inc)
+                         (update acc :deleted inc)
                          (catch Exception e
                            ;; Every item after it would wait out the timeout to fail the same way
                            (when (db/connection-lost? e)
-                             (throw (ex-info (str "Lost the database connection; " (:n acc) " " noun " deleted")
-                                             {:type :internal-error :keys (vec (sort (:failed acc))) :deleted (:n acc)}
+                             (throw (ex-info (str "Lost the database connection; " (+ n deleted) " " noun " deleted")
+                                             {:type :internal-error :keys (vec (sort failed)) :deleted (+ n deleted)}
                                              e)))
                            (update acc :failed conj (id-of item)))))
-                  {:n n :failed failed}
-                  batch)]
+                  {:deleted 0 :failed failed}
+                  batch)
+          n       (+ n deleted)]
       (cond
-        (and (= page-size (count page)) (> n' n)) (recur n' failed)
-        (seq failed) (throw (ex-info (str "Could not delete " (count failed) " " noun "; " n' " deleted")
-                                     {:type :internal-error :keys (vec (sort failed)) :deleted n'}))
-        :else        n'))))
+        (and (= page-size (count page)) (pos? deleted)) (recur n failed)
+        (seq failed) (throw (ex-info (str "Could not delete " (count failed) " " noun "; " n " deleted")
+                                     {:type :internal-error :keys (vec (sort failed)) :deleted n}))
+        :else        n))))
 
 (defrecord UploadRetention [upload-index storage]
   privacy/IRetentionPolicy
