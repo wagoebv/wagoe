@@ -537,7 +537,8 @@ The user module's own routes say `:public`, `:signed-in` or `:self`, so
   the failure stays. An expiry whose diff cannot be read runs again without diffs, since on PostgreSQL
   the failed read aborted the transaction. A user's role and active state are rights too: `update-user-profile` and
   `deactivate-user` write `:role-change`, `:activate` and `:deactivate` in the update's transaction, under the admin
-  lock, and the rights timeline reads them (BOU-960). The user service's other entries (create, profile fields, delete,
+  lock, and the rights timeline reads them (BOU-960); a role change from before then was an `:update` and is not
+  there. The user service's other entries (create, profile fields, delete,
   login, sessions) are not transactional: only the audit trail reads them, and a failed write warns.
 - Tables `user_groups`, `user_group_members`, `user_roles`, `user_group_roles`, and
   `user_group_grants` (kept, marked, until 2.0). Keys cascade from `auth_users`

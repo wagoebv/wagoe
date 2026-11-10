@@ -12,7 +12,8 @@
    - Returns data that shell layer will persist
    - Business rules for what gets audited and how"
   (:require [clojure.edn :as edn]
-            [wagoe.user.core.group :as group]))
+            [wagoe.user.core.group :as group]
+            [wagoe.user.core.user :as user]))
 
 ;; =============================================================================
 ;; Pure Audit Entry Creation Functions
@@ -201,8 +202,8 @@
    kept: a :role-change when the role changes, an :activate or :deactivate when
    active does. A :user role is none. The rights timeline reads them (BOU-960)."
   [{:keys [actor-id actor-email ip-address user-agent]} before after]
-  (let [role    #(let [r (some-> (:role %) keyword)] (when-not (= :user r) r))
-        active? #(not (false? (:active %)))
+  (let [role    #(some-> (:role (user/normalize-role %)) keyword)
+        active? user/active?
         after   (merge before after)
         id      (:id before)
         email   (:email before)]
@@ -217,7 +218,7 @@
 (defn profile-audit-entry
   "The :update entry for user `before` changed to `after`, leaving out what
    `account-audit-entries` records; nil when nothing else changed."
-  [actor-id actor-email before after ip-address user-agent]
+  [{:keys [actor-id actor-email ip-address user-agent]} before after]
   (let [entry (update-user-audit-entry actor-id actor-email (:id after) (:email after) before
                                        (dissoc after :role :active :updated-at) ip-address user-agent)]
     (when (seq (get-in entry [:changes :fields]))
