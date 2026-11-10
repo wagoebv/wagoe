@@ -265,10 +265,31 @@
 ;; function reached through a local binding or a var indirection is not.
 ;; Use an escape hatch for the rare false positive.
 
-(def ^:private print-symbols
-  "Calls that write to *out* or the tap, bare or `clojure.core/`-qualified."
-  (into #{} (mapcat (juxt identity #(str "clojure.core/" %)))
-        ["print" "println" "prn" "pr" "printf" "tap>"]))
+(defn- core-names [& names]
+  (into #{} (mapcat (juxt identity #(str "clojure.core/" %))) names))
+
+(def ^:private out-symbols
+  "Calls that write to *out*, bare or `clojure.core/`-qualified."
+  (core-names "print" "println" "prn" "pr" "printf" "newline"))
+
+(def ^:private tap-symbols (core-names "tap>"))
+
+(defn- pprint-symbols
+  "`pprint` and `print-table` as `ns-form` can name them: qualified, through
+   an :as alias, or referred. clojure.pprint is allowed in core for formatting
+   to a string, but these two write to *out*."
+  [ns-form]
+  (let [names ["pprint" "print-table"]
+        specs (->> ns-form
+                   (filter #(and (sequential? %) (= :require (first %))))
+                   (mapcat rest)
+                   (filter #(and (vector? %) (= 'clojure.pprint (first %))))
+                   (map #(into {} (map vec (partition 2 (rest %))))))]
+    (set (concat (for [n names] (str "clojure.pprint/" n))
+                 (for [{a :as} specs :when a, n names] (str a "/" n))
+                 (for [{r :refer} specs :when (sequential? r)
+                       n names :when (some #{(symbol n)} r)]
+                   n)))))
 
 (defn- called?
   "`(sym …)` directly, or `sym` handed to apply/partial, for `sym` in `targets`."
@@ -285,7 +306,8 @@
 
    Print is a warning in 1.x and an error in 2.0: the gate runs in generated
    projects too, and a minor must not fail them. Inside `with-out-str` the
-   output is captured and returned, which is pure, so those do not count.
+   output is captured and returned, which is pure, so those do not count;
+   `tap>` is not captured by it. Nothing inside a `(comment …)` block runs.
 
    Reads operator position rather than matching lines: `(\\n throw …)` is the
    same call as `(throw …)`, and the regex version scanned one line at a time
@@ -296,9 +318,12 @@
                       (contains? (or allow-throw #{}) ns-name))
         mut-ok?   (or (ns-meta-flag? ns-form :wagoe/allow-mutable-state)
                       (contains? (or allow-mutable-state #{}) ns-name))
-        captured  (for [c calls :when (#{"with-out-str" "clojure.core/with-out-str"} (:head c))]
-                    [(:pos c) (:end c Long/MAX_VALUE)])
-        captured? (fn [pos] (some (fn [[s e]] (< s pos e)) captured))
+        ranges    (fn [heads]
+                    (for [c calls :when (heads (:head c))]
+                      [(:pos c) (:end c Long/MAX_VALUE)]))
+        inside?   (fn [rs {:keys [pos]}] (some (fn [[s e]] (< s pos e)) rs))
+        comments  (ranges #{"comment" "clojure.core/comment"})
+        captured  (concat comments (ranges #{"with-out-str" "clojure.core/with-out-str"}))
         finding   (fn [targets kind c]
                     {:file (str file) :ns ns-name :line (:line c) :kind kind
                      :req  (if (targets (:head c)) (:head c) (:arg1 c))})]
@@ -309,8 +334,10 @@
      (when-not mut-ok?
        (for [c calls :when (called? c mutable-state-symbols)]
          (finding mutable-state-symbols :mutable-state c)))
-     (for [c calls :when (and (called? c print-symbols) (not (captured? (:pos c))))]
-       (assoc (finding print-symbols :print c) :severity :warning)))))
+     (for [[targets skip] [[(into out-symbols (pprint-symbols ns-form)) captured]
+                           [tap-symbols comments]]
+           c calls :when (and (called? c targets) (not (inside? skip c)))]
+       (assoc (finding targets :print c) :severity :warning)))))
 
 (defn- forbidden-require?
   "Whether the core namespace `ns-name` may not require `req`.

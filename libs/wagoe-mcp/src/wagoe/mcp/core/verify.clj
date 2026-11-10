@@ -55,7 +55,7 @@
      :ns       ns
      :kind     kind
      :message  (format "Core namespace %s must not %s %s"
-                       ns (name (or kind :use)) req)}))
+                       ns (name (get {:print :call} kind (or kind :use))) req)}))
 
 (defn- tests->issues
   "A failing-tests step → one issue per failure. `failures` is a seq of
@@ -104,6 +104,7 @@
                          :message e})
          test-status  (:status tests)
          kondo-issues (kondo->issues (:findings kondo))
+         fcis-issues  (fcis->issues (:violations fcis))
          test-issues  (when (= :failed test-status)
                         (tests->issues (:failures tests)))
          incomplete   (when (= :error test-status)
@@ -118,7 +119,7 @@
                           :message (:error fcis)}])
          issues       (vec (concat gen-issues
                                    kondo-issues
-                                   (fcis->issues (:violations fcis))
+                                   fcis-issues
                                    test-issues
                                    incomplete
                                    fcis-broken))
@@ -148,10 +149,9 @@
                            kondo    (assoc :kondo (if (some #(= :error (:severity %)) kondo-issues)
                                                     :error :ok))
                            fcis     (assoc :fcis (cond
-                                                     (:error fcis)             :error
-                                                     (some #(= :error (:severity % :error))
-                                                           (:violations fcis)) :error
-                                                     :else                     :ok))
+                                                   (:error fcis)             :error
+                                                   (some #(= :error (:severity %)) fcis-issues) :error
+                                                   :else                     :ok))
                            tests    (assoc :tests (or test-status :unknown)))}
        (and (= :fail status) soft?) (assoc :overridable? true)))))
 

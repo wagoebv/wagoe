@@ -134,5 +134,5 @@
 
  {:ticket "BOU-957"
   :since  "Unreleased"
-  :note   "print, println, prn, pr, printf and tap> in a core/ namespace. bb check:fcis warns until 2.0, then fails."
+  :note   "print, println, prn, pr, printf, newline, pprint and tap> in a core/ namespace. bb check:fcis warns until 2.0, then fails."
   :manual "Return the text from core and print it in the shell, or wrap the call in with-out-str. A rewrite cannot tell where the output should go."}]

@@ -229,16 +229,26 @@
                                    "(defn a [x] (println x) x)\n"
                                    "(defn b [x]\n  (tap> x)\n  (apply prn [x]))\n"
                                    "(defn c [x] (with-out-str (print x)))\n"
-                                   "(defn d [x] (str (with-out-str (pr x)) (clojure.core/printf x)))\n"))
+                                   "(defn d [x] (str (with-out-str (pr x)) (clojure.core/printf x)))\n"
+                                   "(defn e [x] (with-out-str (tap> x)))\n"
+                                   "(comment (println 1) (tap> 2))\n"))
+            pp    (spit-file! root "libs/demo/src/wagoe/demo/core/pretty.clj"
+                              (str "(ns wagoe.demo.core.pretty (:require [clojure.pprint :as pp]))\n"
+                                   "(defn a [x] (pp/pprint x))\n"
+                                   "(defn b [x] (with-out-str (pp/pprint x)))\n"))
             found (check-fcis/check-file file {:allow-throw #{} :allow-mutable-state #{}})]
         (testing "println, tap> and apply prn warn, with file and line"
-          (is (= #{["println" 2] ["tap>" 4] ["prn" 5] ["clojure.core/printf" 7]}
+          (is (= #{["println" 2] ["tap>" 4] ["prn" 5] ["clojure.core/printf" 7] ["tap>" 8]}
                  (set (map (juxt :req :line) found))))
           (is (every? #(and (= :warning (:severity %)) (= :print (:kind %))
                             (= (str file) (:file %)))
                       found)))
-        (testing "print inside with-out-str is captured, so pure"
-          (is (not-any? #(#{"print" "pr"} (:req %)) found))))
+        (testing "print inside with-out-str is captured, so pure; a comment block never runs"
+          (is (not-any? #(#{"print" "pr"} (:req %)) found)))
+        (testing "pprint through its alias warns, unless captured"
+          (is (= [["pp/pprint" 2]]
+                 (map (juxt :req :line)
+                      (check-fcis/check-file pp {:allow-throw #{} :allow-mutable-state #{}}))))))
       (finally (delete-tree! root)))))
 
 ;; =============================================================================
