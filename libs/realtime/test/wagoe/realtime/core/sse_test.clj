@@ -18,6 +18,18 @@
     (is (nil? (sse/user-identity nil)))
     (is (nil? (sse/user-identity {:id "nope"})))))
 
+(deftest ^:unit ^:security connection-tenant-is-one-the-user-may-be-in
+  (let [a (random-uuid) b (random-uuid)]
+    (is (= a (sse/connection-tenant {:user {:tenant-id a} :tenant {:id a}})))
+    (is (= a (sse/connection-tenant {:user {:tenant-id a}})))
+    (is (= a (sse/connection-tenant {:user {:tenant-id (str a)} :tenant {:id a}}))
+        "a string id names the same tenant")
+    (is (= a (sse/connection-tenant {:user {:tenant-id a} :tenant {:id b}}))
+        "another tenant named in a header does not become the stream's")
+    (is (= b (sse/connection-tenant {:user {:tenant-id a} :tenant {:id b} :tenant-membership {:role "member"}})))
+    (is (= b (sse/connection-tenant {:user {:role :admin} :tenant {:id b}})) "a platform admin")
+    (is (nil? (sse/connection-tenant {:user {:role :member} :tenant {:id b}})))))
+
 (deftest ^:unit subscription-decision
   (let [decide #(sse/subscription-decision % (fn [t] (not= "secret" t)) 2)]
     (is (= {:ok ["a" "b"]} (decide ["a" "b" "a"])))

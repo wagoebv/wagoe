@@ -5,7 +5,8 @@
 
 == Status
 
-Accepted
+Accepted. Amended by xref:ADR-043-observational-effects.adoc[ADR-043], which keeps
+the gate and changes the criterion.
 
 == Context
 

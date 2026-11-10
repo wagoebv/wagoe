@@ -32,10 +32,14 @@ WebSocket-based real-time communication with JWT authentication, message routing
 
 | Type | Target | Example |
 |------|--------|---------|
-| `:broadcast` | All connections | System announcement |
+| `:broadcast` | All connections, of the sender's tenant when it has one | System announcement |
 | `:user` | Specific user-id | Direct message |
-| `:role` | Users with specific role | Admin notification |
+| `:role` | Users with specific role, of the sender's tenant when it has one | Admin notification |
 | `:connection` | Specific connection-id | Job progress update |
+
+The sender's tenant is the message's `:tenant-id`, else the tenant bound on the
+sending thread; a connection's is the identity's `:tenant-id`, which a WebSocket
+gets only when the `IJWTVerifier` returns it (BOU-947).
 
 ## Connection Lifecycle
 

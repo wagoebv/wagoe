@@ -53,8 +53,13 @@
                                 ["a-file-is-reached-only-by-its-owner-its-tenant-or-an-admin"
                                  "an-upload-cannot-replace-another-users-file"]}}
    "push"          {:scoped-by "tenant_id columns, never written or read" :gaps ["BOU-946"]}
-   "events"        {:scoped-by "events carry :tenant-id; subscribers do not filter" :gaps ["BOU-947"]}
-   "realtime"      {:scoped-by "no tenant concept; topics need the app's :authorize-topic" :gaps ["BOU-947"]}
+   "events"        {:scoped-by "an event takes the bound tenant; a subscriber in a tenant gets only its tenant's and system events"
+                    :tests     {"libs/events/test/wagoe/events/shell/tenant_scope_test.clj"
+                                ["a-subscriber-in-a-tenant-sees-only-that-tenants-events"
+                                 "an-event-built-in-a-tenant-carries-it"]}}
+   "realtime"      {:scoped-by "role and broadcast messages reach only the sender's tenant; topics need the app's :authorize-topic"
+                    :tests     {"libs/realtime/test/wagoe/realtime/shell/tenant_scope_test.clj"
+                                ["role-and-broadcast-stay-in-the-senders-tenant"]}}
    "config"        {:carries "reads a default tenant id from config"}
    "core"          {:scoped-by "in-tenant-scope? and tenant-admin?, the predicates route guards call"
                     :tests     {"libs/core/test/wagoe/core/http/access_test.clj"

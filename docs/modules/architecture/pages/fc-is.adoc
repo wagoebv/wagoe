@@ -17,10 +17,20 @@ libs/{library}/src/wagoe/{library}/
 
 === Functional Core (`core/`)
 
-* Pure functions only — given the same input, always the same output
-* No I/O of any kind (no `println`, no `log/info`, no `jdbc/execute!`)
+Core's result depends on its arguments alone, and core writes nothing the application can read back.
+
+* No reads and no writes: not the database, not a file, not a cache
+* No clock and no randomness (`Instant/now`, `UUID/randomUUID`)
+* No mutable state
 * No exception throwing (return error maps instead)
-* No `java.util.Date/new`, `UUID/randomUUID`, or any other non-deterministic calls
+
+An effect is _observational_ when the application has no read path to its sink.
+Logs, metrics and traces are, by construction.
+A write to the application's own store never is, even an append-only table nothing reads today: a reader added later must not turn existing core code into a violation.
+So core returns an audit entry or an event as data, and the shell writes it.
+
+Core does not log yet: there is no observation channel that returns nil, never throws, and is bound by the shell.
+`bb check:fcis` refuses a logging require in core, and warns on printing outside `with-out-str` and on `tap>` anywhere; from 2.0 that warning is an error.
 
 [source,clojure]
 ----
@@ -29,9 +39,9 @@ libs/{library}/src/wagoe/{library}/
   (when (re-matches #".+@.+\..+" email)
     email))
 
-;; ❌ WRONG — side effect in core/
+;; ❌ WRONG — core/ has no observation channel to log through
 (defn validate-email [email]
-  (log/info "Validating" email)  ; side effect!
+  (log/info "Validating" email)
   (when (re-matches #".+@.+\..+" email) email))
 ----
 
@@ -107,8 +117,8 @@ Core functions are plain Clojure functions. Testing them requires no database, n
 
 === Predictable behaviour
 
-When you see a function in `core/`, you know it has no surprises.
-It will not log to Datadog, write to disk, or call an external API.
+When you see a function in `core/`, its result depends on its arguments and nothing else.
+It will not reach a database, a clock or Datadog.
 
 === Safe refactoring
 
@@ -120,7 +130,7 @@ not touching any business logic.
 
 [source,bash]
 ----
-# FC/IS gate: core requires (an allowlist), throws, mutable state, non-determinism, SQL in core and ports
+# FC/IS gate: core requires (an allowlist), throws, mutable state, non-determinism, SQL in core and ports; warns on printing
 bb check:fcis
 ----
 

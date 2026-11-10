@@ -65,6 +65,7 @@ shape.
       {:user-id     (java.util.UUID/fromString (:sub claims))
        :email       (:email claims)
        :roles       #{(keyword (:role claims))}
+       :tenant-id   (:tenant-id claims)   ; scopes role and broadcast messages
        :permissions #{}
        :exp         (:exp claims)
        :iat         (:iat claims)})))

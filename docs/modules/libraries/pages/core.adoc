@@ -94,7 +94,7 @@ The interceptor system supports enter/leave/error phases, used by both HTTP and 
 
 == Important conventions
 
-* *All functions must be pure* — no I/O, no logging, no side effects
+* *All functions must be pure* — no reads, writes, clock or state; no logging yet either (see xref:architecture:fc-is.adoc[FC/IS])
 * This library has *no ports.clj or shell/* — it's entirely functional core
 * Only dependencies: `org.clojure/clojure` and `metosin/malli`
 * All other Wagoe libraries depend on core

@@ -42,12 +42,28 @@
     message
     (assoc message :timestamp (current-timestamp))))
 
+(defn- bound-tenant
+  "The platform's per-request tenant, when platform-sql is loaded; realtime does
+   not depend on it. Resolved per call: a cached miss would outlive a later load."
+  []
+  (some-> (resolve 'wagoe.platform.database/*tenant-id*) deref))
+
+(defn- to-sender-tenant
+  "`envelope` kept to the sender's tenant: the tenant bound on this thread, else
+   the message's `:tenant-id`, so a message a tenant's request forwards cannot name
+   another. Without either it reaches every tenant (BOU-947)."
+  [envelope]
+  (if-let [t (or (bound-tenant) (get-in envelope [:message :tenant-id]))]
+    (assoc envelope :tenant-id (str t))
+    envelope))
+
 (defn- register-connection!
   "Register `ws-connection` for an already authenticated user; returns its id."
-  [connection-registry connection-id {:keys [user-id roles email]} ws-connection]
+  [connection-registry connection-id {:keys [user-id roles email tenant-id]} ws-connection]
   (let [now (current-timestamp)]
     (ports/register connection-registry connection-id
-                    (conn/create-connection user-id roles {:email email :connected-at now}
+                    (conn/create-connection user-id roles (cond-> {:email email :connected-at now}
+                                                            tenant-id (assoc :tenant-id (str tenant-id)))
                                             connection-id now)
                     ws-connection)
     (log/info "Realtime connection established"
@@ -85,7 +101,8 @@
                            :message "WebSocket connection requires 'token' query parameter"})))
 
         ;; 2. Verify JWT token via the injected verifier, then register
-        (register-connection! connection-registry (java.util.UUID/randomUUID)
+        ;; Its socket's own id, so delivery can find the connection behind a socket (BOU-947)
+        (register-connection! connection-registry (or (ports/connection-id ws-connection) (java.util.UUID/randomUUID))
                               (ports/verify-jwt jwt-verifier token) ws-connection))
       (catch clojure.lang.ExceptionInfo e
         ;; Re-throw with proper logging
@@ -130,10 +147,10 @@
     (ports/publish bus (bus/user-envelope user-id (stamp message))))
 
   (send-to-role [_this role message]
-    (ports/publish bus (bus/role-envelope role (stamp message))))
+    (ports/publish bus (to-sender-tenant (bus/role-envelope role (stamp message)))))
 
   (broadcast [_this message]
-    (ports/publish bus (bus/broadcast-envelope (stamp message))))
+    (ports/publish bus (to-sender-tenant (bus/broadcast-envelope (stamp message)))))
 
   (send-to-connection [_this connection-id message]
     (let [n (ports/publish bus (bus/connection-envelope connection-id (stamp message)))]
