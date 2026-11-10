@@ -49,11 +49,11 @@
                   (is (= :admin (:role user :admin)) (str "counted " e " for a non-admin"))
                   (if count-of (count-of e) 7))
         service #_{:clj-kondo/ignore [:missing-protocol-method]}
-        (reify
-          admin-ports/IAdminService
-          (count-entities [_ e _] (counted e))
-          admin-ports/IListOverview
-          (list-overview [_ e _ _] (when overview (overview e))))
+                (reify
+                  admin-ports/IAdminService
+                  (count-entities [_ e _] (counted e))
+                  admin-ports/IListOverview
+                  (list-overview [_ e _ _] (when overview (overview e))))
         handler (list-handlers/admin-home-handler service schema (or admin-config {}) user-service)]
     ;; Through the pipeline every route runs, which binds what is mounted,
     ;; inside the navigation the platform binds.
@@ -141,14 +141,14 @@
 
 (deftest ^:unit recent-activity-is-the-platform-admins
   (let [usvc #_{:clj-kondo/ignore [:missing-protocol-method]}
-        (reify user-ports/IUserService
-          (list-audit-logs [_ opts]
-            (is (= 10 (:limit opts)))
-            {:audit-logs [{:action :login :result :success :actor-email "ann@example.com"
-                           :target-user-email "bob@example.com"
-                           :created-at (java.time.Instant/now)}
-                          {:action :login :result :failure :actor-email "eve@example.com"
-                           :created-at (java.time.Instant/now)}]}))]
+             (reify user-ports/IUserService
+               (list-audit-logs [_ opts]
+                 (is (= 10 (:limit opts)))
+                 {:audit-logs [{:action :login :result :success :actor-email "ann@example.com"
+                                :target-user-email "bob@example.com"
+                                :created-at (java.time.Instant/now)}
+                               {:action :login :result :failure :actor-email "eve@example.com"
+                                :created-at (java.time.Instant/now)}]}))]
     (testing "a platform admin: the last entries, and a link to the trail"
       (let [body (home nil nil [] {:user-service usvc})]
         (is (str/includes? body "dashboard-activity"))
@@ -162,8 +162,8 @@
       (is (not (str/includes? (home off nil [] {:user-service usvc}) "dashboard-activity"))))
     (testing "a failing audit query: the panel says so, the page renders"
       (let [failing #_{:clj-kondo/ignore [:missing-protocol-method]}
-            (reify user-ports/IUserService
-              (list-audit-logs [_ _] (throw (ex-info "db down" {}))))
+                    (reify user-ports/IUserService
+                      (list-audit-logs [_ _] (throw (ex-info "db down" {}))))
             body    (home nil nil [:orders] {:user-service failing})]
         (is (str/includes? body "dashboard-activity-failed"))
         (is (str/includes? body "class=\"entity-card-count\">entity-card-count<"))))))
