@@ -6,17 +6,17 @@
             [clojure.string :as str]
             [clojure.edn :as edn]))
 
-(defn create-session [] {:entries [] :started-at (java.util.Date.) :stopped-at nil})
+(defn create-session [now] {:entries [] :started-at now :stopped-at nil})
 
-(defn add-entry [session request response duration-ms]
+(defn add-entry [session request response duration-ms now]
   (let [idx (count (:entries session))]
     (update session :entries conj
             {:idx idx :request request :response response
-             :duration-ms duration-ms :timestamp (java.util.Date.)})))
+             :duration-ms duration-ms :timestamp now})))
 
 (defn get-entry [session idx] (get (:entries session) idx))
 
-(defn stop-session [session] (assoc session :stopped-at (java.util.Date.)))
+(defn stop-session [session now] (assoc session :stopped-at now))
 
 (defn entry-count [session] (count (:entries session)))
 

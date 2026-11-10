@@ -395,7 +395,7 @@
   (let [mw (vec middleware)]
     (if (empty? mw)
       routes
-      (mapv (fn [[path data]] [path (update data :middleware (fnil into []) (conj mw access/require-platform-admin))]) routes))))
+      (mapv (fn [[path data]] [path (update data :middleware (fnil into []) (conj mw [access/require-platform-admin #(str (random-uuid))]))]) routes))))
 
 (defn audience-web-routes
   "Reitit route data for the audience web pages. Mounted under /web.

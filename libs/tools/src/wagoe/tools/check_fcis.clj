@@ -307,6 +307,50 @@
   (or (targets head)
       (and (higher-order-heads head) arg1 (targets arg1))))
 
+;; Clock and randomness: the shell reads them and passes the value in. The
+;; accessors in forbidden-static-methods-by-class (Instant/now,
+;; UUID/randomUUID, System/currentTimeMillis) were errors already and stay so;
+;; these are warnings in 1.x, like print.
+
+(def ^:private clock-fns
+  (core-names "rand" "rand-int" "rand-nth" "shuffle" "random-sample" "random-uuid"))
+
+(def ^:private clock-statics
+  {"java.lang.System"     ["nanoTime"]
+   "java.lang.Math"       ["random"]
+   "java.time.LocalTime"  ["now"]
+   "java.time.OffsetTime" ["now"]
+   "java.time.Year"       ["now"]
+   "java.time.YearMonth"  ["now"]
+   "java.time.MonthDay"   ["now"]
+   "java.time.Clock"      ["systemUTC" "systemDefaultZone"]})
+
+(def ^:private clock-constructors
+  "Classes whose no-argument constructor reads the clock."
+  #{"java.util.Date"})
+
+(defn- class-names
+  "The names `fq` goes by in a file importing `imports`: itself, and its
+   simple name when imported or in java.lang."
+  [imports fq]
+  (cond-> #{fq}
+    (or (some #{fq} imports) (re-find #"^java\.lang\.[A-Z]" fq))
+    (conj (last (str/split fq #"\.")))))
+
+(defn- clock-symbols [imports]
+  (into clock-fns
+        (for [[fq methods] clock-statics, n (class-names imports fq), m methods]
+          (str n "/" m))))
+
+(defn- clock-constructor
+  "`(C.)` or `(new C)` with no argument, for C in `clock-constructors`, as
+   written; nil otherwise."
+  [stripped imports {:keys [pos end]}]
+  (when end
+    (let [inner (str/replace (str/trim (subs stripped (inc pos) end)) #"\s+" " ")]
+      (some (fn [n] (#{(str n ".") (str "new " n)} inner))
+            (mapcat #(class-names imports %) clock-constructors)))))
+
 (defn- scan-impurity
   "Scan stripped content for (throw ...), mutable-state constructs and print
    calls. A namespace is exempt from the throw ban via ^:wagoe/allow-throw
@@ -319,11 +363,15 @@
    output is captured and returned, which is pure, so those do not count;
    `tap>` is not captured by it. Nothing inside a `(comment …)` block runs.
 
+   Clock and randomness reads are `:clock` warnings on the same terms.
+
    Reads operator position rather than matching lines: `(\\n throw …)` is the
    same call as `(throw …)`, and the regex version scanned one line at a time
    and saw neither it nor `(apply swap! …)` (BOU-301)."
-  [file content ns-form ns-name {:keys [allow-throw allow-mutable-state]}]
-  (let [calls     (parsing/call-forms (parsing/strip-comments-and-strings content))
+  [file content ns-form ns-name imports {:keys [allow-throw allow-mutable-state]}]
+  (let [stripped  (parsing/strip-comments-and-strings content)
+        calls     (parsing/call-forms stripped)
+        clock     (clock-symbols imports)
         throw-ok? (or (ns-meta-flag? ns-form :wagoe/allow-throw)
                       (contains? (or allow-throw #{}) ns-name))
         mut-ok?   (or (ns-meta-flag? ns-form :wagoe/allow-mutable-state)
@@ -347,7 +395,12 @@
      (for [[targets skip] [[(into out-symbols (pprint-symbols ns-form)) captured]
                            [tap-symbols comments]]
            c calls :when (and (called? c targets) (not (inside? skip c)))]
-       (assoc (finding targets :print c) :severity :warning)))))
+       (assoc (finding targets :print c) :severity :warning))
+     (for [c calls
+           :let [ctor (clock-constructor stripped imports c)]
+           :when (and (or ctor (called? c clock)) (not (inside? comments c)))]
+       (cond-> (assoc (finding clock :clock c) :severity :warning)
+         ctor (assoc :req ctor))))))
 
 (defn- forbidden-require?
   "Whether the core namespace `ns-name` may not require `req`.
@@ -669,7 +722,7 @@
                                    :req  symbol
                                    :line line
                                    :kind :fq-call})))
-        impurity-violations (scan-impurity file content ns-form ns-name config)
+        impurity-violations (scan-impurity file content ns-form ns-name imports config)
         ;; Only what purity lets through: next.jdbc is I/O and stays a
         ;; :require, so :allow-sql cannot exempt it.
         sql-violations      (sql-require-findings
@@ -707,6 +760,7 @@
             :throw         (str "uses " (ansi/red "(throw ...)") " — core must return typed error values")
             :mutable-state (str "uses mutable state " (ansi/red req) " — registries/state belong in the shell")
             :print         (str "calls " (ansi/yellow req) " — printing is I/O; an error from 2.0")
+            :clock         (str "calls " (ansi/yellow req) " — take the time or random value as an argument; an error from 2.0")
             :import        (str "imports " (ansi/red req))
             :require       (str "requires " (ansi/red req))
             :sql-require   (str "requires " (ansi/red req) " — core/ and ports know no SQL")

@@ -310,11 +310,11 @@
   [["/search/documents"
     {:post {:handler    (fn [req] (handle-index-document engine req))
             :parameters {:body IndexDocumentBody}
-            :middleware [access/require-platform-admin]
+            :middleware [[access/require-platform-admin #(str (random-uuid))]]
             :summary    "Index a search document"}}]
    ["/search/documents/:entity-type/:entity-id"
     {:delete {:handler    (fn [req] (handle-remove-document engine req))
-              :middleware [access/require-platform-admin]
+              :middleware [[access/require-platform-admin #(str (random-uuid))]]
               :summary    "Remove a search document"}}]
    ;; After /search/documents: reitit matches literal segments before
    ;; parameters, but declaring the specific ones first says so to a reader.
