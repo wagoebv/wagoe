@@ -14,48 +14,52 @@
 (defn strip-comments-and-strings
   "Replace character literals, whole string literals (delimiters included)
    and comments with spaces, preserving line structure, so scanners only
-   ever match executable code."
-  [content]
-  ;; One pass with lexer state, not three sequential regexes. The regexes ran
-  ;; the character-literal pass first — deliberate, so the `(` in `\(` never
-  ;; opened a form (BOU-301) — but that pass also ate the `\"` *inside* string
-  ;; literals, broke the quote pairing, and the string pass then blanked real
-  ;; code until the next stray quote. On prometheus_test.clj that swallowed an
-  ;; `(is ...)` whole, which is how a form-level scan (BOU-365) found it: only
-  ;; a lexer knows whether a backslash sits in code or in a string.
-  (let [n  (count content)
-        sb (StringBuilder. n)
-        named #"^(?:newline|space|tab|formfeed|backspace|return|u[0-9a-fA-F]{4}|o[0-7]{1,3}|.)"]
-    (loop [i 0, state :code]
-      (if (>= i n)
-        (str sb)
-        (let [c (.charAt ^String content i)]
-          (case state
-            :code
-            (cond
-              (= c \\) (let [lit (re-find named (subs content (inc i)))
-                             len (inc (count (or lit "")))]
-                         (dotimes [_ len] (.append sb \space))
-                         (recur (+ i len) :code))
-              ;; The delimiters go too: `(is (some? "lit"))` must strip to
-              ;; `(is (some?        ))` so the whitespace-argument patterns in
-              ;; check_tests keep matching — keeping the quotes silently turned
-              ;; two of them off (BOU-365 review).
-              (= c \") (do (.append sb \space) (recur (inc i) :string))
-              (= c \;) (do (.append sb \space) (recur (inc i) :comment))
-              :else    (do (.append sb c) (recur (inc i) :code)))
+   ever match executable code. With `mark`, a string or character literal
+   keeps `mark` in place of its first character, so it still counts as a
+   token."
+  ([content] (strip-comments-and-strings content \space))
+  ([content mark]
+   ;; One pass with lexer state, not three sequential regexes. The regexes ran
+   ;; the character-literal pass first — deliberate, so the `(` in `\(` never
+   ;; opened a form (BOU-301) — but that pass also ate the `\"` *inside* string
+   ;; literals, broke the quote pairing, and the string pass then blanked real
+   ;; code until the next stray quote. On prometheus_test.clj that swallowed an
+   ;; `(is ...)` whole, which is how a form-level scan (BOU-365) found it: only
+   ;; a lexer knows whether a backslash sits in code or in a string.
+   (let [n  (count content)
+         sb (StringBuilder. n)
+         named #"^(?:newline|space|tab|formfeed|backspace|return|u[0-9a-fA-F]{4}|o[0-7]{1,3}|.)"]
+     (loop [i 0, state :code]
+       (if (>= i n)
+         (str sb)
+         (let [c (.charAt ^String content i)]
+           (case state
+             :code
+             (cond
+               (= c \\) (let [lit (re-find named (subs content (inc i)))
+                              len (inc (count (or lit "")))]
+                          (.append sb mark)
+                          (dotimes [_ (dec len)] (.append sb \space))
+                          (recur (+ i len) :code))
+               ;; The delimiters go too: `(is (some? "lit"))` must strip to
+               ;; `(is (some?        ))` so the whitespace-argument patterns in
+               ;; check_tests keep matching — keeping the quotes silently turned
+               ;; two of them off (BOU-365 review).
+               (= c \") (do (.append sb mark) (recur (inc i) :string))
+               (= c \;) (do (.append sb \space) (recur (inc i) :comment))
+               :else    (do (.append sb c) (recur (inc i) :code)))
 
-            :string
-            (cond
-              (= c \\) (do (.append sb "  ") (recur (+ i 2) :string))
-              (= c \") (do (.append sb \space) (recur (inc i) :code))
-              (= c \newline) (do (.append sb c) (recur (inc i) :string))
-              :else    (do (.append sb \space) (recur (inc i) :string)))
+             :string
+             (cond
+               (= c \\) (do (.append sb "  ") (recur (+ i 2) :string))
+               (= c \") (do (.append sb \space) (recur (inc i) :code))
+               (= c \newline) (do (.append sb c) (recur (inc i) :string))
+               :else    (do (.append sb \space) (recur (inc i) :string)))
 
-            :comment
-            (if (= c \newline)
-              (do (.append sb c) (recur (inc i) :code))
-              (do (.append sb \space) (recur (inc i) :comment)))))))))
+             :comment
+             (if (= c \newline)
+               (do (.append sb c) (recur (inc i) :code))
+               (do (.append sb \space) (recur (inc i) :comment))))))))))
 
 ;; ---------------------------------------------------------------------------
 ;; String literal extraction
@@ -251,10 +255,14 @@
   "Characters Clojure allows inside a symbol, plus / for qualified symbols."
   (set "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789*+!-_'?<>=/.&%$#:"))
 
+(def ^:private ws?
+  "Whitespace between tokens; a comma is whitespace."
+  #{\space \tab \newline \return \,})
+
 (defn call-forms
   "Every `(`-opened form in `content`, as {:head :arg1 :arg2 :line :pos :end}:
    `:pos` and `:end` are the offsets of its parens, `:end` absent when the
-   form never closes.
+   form never closes, and `:pos-line` the line of `:pos`.
 
    `:head` is the first token after the paren, `:arg1` the second and `:arg2`
    the third — enough to see `(swap! …)`, `(apply swap! …)` and
@@ -292,8 +300,7 @@
             ;; violation is reported where the symbol is, not where the paren is.
             (let [skip-ws  (fn [j l]
                              (loop [j j l l]
-                               (if (and (< j n) (contains? #{\space \tab \newline \, \return}
-                                                           (.charAt ^String content j)))
+                               (if (and (< j n) (ws? (.charAt ^String content j)))
                                  (recur (inc j) (if (= \newline (.charAt ^String content j)) (inc l) l))
                                  [j l])))
                   read-tok (fn [j]
@@ -310,8 +317,38 @@
                 (let [idx (count acc)]
                   (recur (inc i) line
                          (conj! acc {:head head :arg1 (not-empty arg1) :arg2 (not-empty arg2)
-                                     :line h-line :pos i})
+                                     :line h-line :pos i :pos-line line})
                          (conj open idx)))
                 (recur (inc i) line acc (conj open nil))))
 
             :else (recur (inc i) line acc open)))))))
+
+(defn form-children
+  "The direct children of the form whose `(` is at `pos` and `)` at `end` in
+   stripped `content`, head included, as {:token :line}; `line` is the line of
+   `pos`. `:token` is the text of a bare token (`println`, `:println`,
+   `'println`), nil for a nested or reader-prefixed form such as `(f x)` or
+   `#(f %)`, which carries the offset of its own bracket as `:pos`."
+  [content pos end line]
+  (let [open?   #{\( \[ \{}
+        close?  #{\) \] \}}
+        ch      #(.charAt ^String content %)
+        nl      #(if (= \newline (ch %1)) (inc %2) %2)
+        ;; [offset line] past the form opened at j.
+        skip    (fn [j l] (loop [k (inc j), l l, depth 1]
+                            (cond (or (>= k end) (zero? depth)) [k l]
+                                  (open? (ch k))  (recur (inc k) l (inc depth))
+                                  (close? (ch k)) (recur (inc k) l (dec depth))
+                                  :else           (recur (inc k) (nl k l) depth))))]
+    (loop [i (inc pos), l line, acc []]
+      (cond
+        (>= i end)                        acc
+        (or (ws? (ch i)) (close? (ch i))) (recur (inc i) (nl i l) acc)
+        (open? (ch i))                    (let [[k l2] (skip i l)]
+                                            (recur k l2 (conj acc {:token nil :line l :pos i})))
+        :else
+        (let [k (loop [k i] (if (and (< k end) (not (ws? (ch k))) (not (open? (ch k))) (not (close? (ch k))))
+                              (recur (inc k)) k))]
+          (if (and (< k end) (open? (ch k)))
+            (let [[k2 l2] (skip k l)] (recur k2 l2 (conj acc {:token nil :line l :pos k})))
+            (recur k l (conj acc {:token (subs content i k) :line l}))))))))

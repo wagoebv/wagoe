@@ -110,6 +110,8 @@ for what is public API, what is internal, and how deprecations are announced.
   from 2.0. Return the string, or print from the shell; `with-out-str` is fine.
 - **`(java.util.Date.)`, `System/nanoTime`, `rand`, `random-uuid` and other clock or random reads in `core/`** (BOU-963):
   `bb check:fcis` warns, and fails from 2.0. Read them in the shell and pass the value in.
+- **`(-> x println)`, `(->> xs shuffle)`, and `Instant/now` or `UUID/randomUUID` split from their paren or passed as a function**
+  (BOU-968): `bb check:fcis` warns, and fails from 2.0. Same fix as the call they stand for.
 - **The 1-arity `wagoe.core.interceptor-context/record-start-time` and `record-end-time`** (BOU-963): they read the clock.
   Pass `(System/nanoTime)` as the second argument.
 - **`wagoe.audience.ports/query-users-sql`** (BOU-875), removed in 2.0 (BOU-935). Implement `IUserQuery/query-user-ids`.
