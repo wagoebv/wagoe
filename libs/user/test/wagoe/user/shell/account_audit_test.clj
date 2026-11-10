@@ -28,13 +28,13 @@
       (let [users (persistence/create-user-repository ctx)
             audit (persistence/create-audit-repository ctx {:default-limit 50 :max-limit 100})
             down? (atom false)
-            svc   (user-service/create-user-service users (persistence/create-session-repository ctx)
-                                                    (failing-audit audit down?) {} nil)
+            sessions (persistence/create-session-repository ctx)
+            svc   (user-service/create-user-service users sessions (failing-audit audit down?) {} nil)
             groups (group-service/create-group-service (group-persistence/create-group-repository ctx)
                                                        users audit (group-service/prepare-settings nil) {})
             user! #(ports/create-user users {:email % :name "Member" :role :user :active true
                                              :password-hash "x"})]
-        (f {:svc svc :groups groups :users users :down? down? :user! user!})))))
+        (f {:svc svc :groups groups :users users :sessions sessions :audit audit :down? down? :user! user!})))))
 
 (deftest ^:integration a-failed-rights-audit-rolls-the-change-back
   (with-services
@@ -70,3 +70,25 @@
         (let [changes (ports/rights-changes groups ada 10)]
           (is (= [:deactivate :role-change] (map :action changes)))
           (is (= {:old nil :new "admin"} (:user-role (second changes)))))))))
+
+(deftest ^:integration a-failed-deactivation-audit-still-ends-the-sessions
+  ;; A store whose admin lock did not roll back must not leave the user signed in
+  (with-services
+    (fn [{:keys [svc sessions down? user!]}]
+      (let [ada (user! "ada@example.com")]
+        (ports/create-session sessions {:user-id       (:id ada)
+                                        :session-token (str "token-" (random-uuid))
+                                        :expires-at    (.plusSeconds (java.time.Instant/now) 3600)})
+        (reset! down? true)
+        (is (thrown-with-msg? Exception #"audit down" (with-silent-logging (ports/deactivate-user svc (:id ada)))))
+        (is (empty? (ports/find-sessions-by-user sessions (:id ada))))))))
+
+(deftest ^:integration without-a-bound-actor-the-system-changed-the-role
+  ;; Not the user: a promotion must not read as their own
+  (with-services
+    (fn [{:keys [svc audit user!]}]
+      (let [ada (user! "ada@example.com")]
+        (ports/update-user-profile svc {:id (:id ada) :role :admin :name "Ada"})
+        (is (= #{[nil "system"]}
+               (set (map (juxt :actor-id :actor-email)
+                         (ports/find-audit-logs-by-user audit (:id ada) {:limit 10})))))))))

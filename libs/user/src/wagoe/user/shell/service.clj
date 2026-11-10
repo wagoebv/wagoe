@@ -199,22 +199,30 @@
    sees a concurrent promotion (BOU-685), and audits what changed in that
    transaction: the rights timeline reads those entries, so a failed one
    throws and rolls the change back (BOU-960); `ctx` is their audit context.
-   Returns {:result <what write! returned>}, with :before, the user read under
-   the lock, when it locked."
+   The sessions end when the audit write fails too: a store that did not roll
+   back must not leave the user signed in. Returns {:result <what write!
+   returned>}, with :before, the user read under the lock, when it locked."
   [{:keys [user-repository session-repository audit-repository]} ctx user-id after write!]
   (if-not (touches-access? after)
     {:result (write!)}
-    (let [{:keys [before result] :as out}
-          (locked-write! user-repository
-                         #(let [before (.find-user-by-id user-repository user-id)]
-                            [(when (and before (user-core/removes-admin? before after)) [before])
-                             (fn []
-                               (let [result (write!)]
-                                 (when (and result before)
-                                   (audit-account! audit-repository ctx before after))
-                                 {:before before :result result}))]))]
-      (when (and result before (ends-sessions? before after))
-        (.invalidate-all-user-sessions session-repository user-id))
+    (let [written       (volatile! nil)
+          end-sessions! (fn [{:keys [before result]}]
+                          (when (and result before (ends-sessions? before after))
+                            (.invalidate-all-user-sessions session-repository user-id)))
+          out           (try
+                          (locked-write! user-repository
+                                         #(let [before (.find-user-by-id user-repository user-id)]
+                                            [(when (and before (user-core/removes-admin? before after)) [before])
+                                             (fn []
+                                               (let [out {:before before :result (write!)}]
+                                                 (vreset! written out)
+                                                 (when (and (:result out) before)
+                                                   (audit-account! audit-repository ctx before after))
+                                                 out))]))
+                          (catch Exception e
+                            (some-> @written end-sessions!)
+                            (throw e)))]
+      (end-sessions! out)
       out)))
 
 (defn- warn-audit-failed
@@ -635,8 +643,9 @@
        (let [input (user-core/normalize-role (:user-entity params))
              ;; Get old user data for audit trail (before update)
              old-user (.find-user-by-id user-repository (:id input))
-             audit-ctx (effective-audit-context {:default-actor-id    (:id input)
-                                                 :default-actor-email (:email old-user)})
+             ;; Without a bound actor, "system": not the user, or a
+             ;; promotion would read as their own.
+             audit-ctx (effective-audit-context {})
              _ (check-admin-change! user-repository old-user input)
              ;; A partial update is validated with the stored values of the
              ;; required keys, but writes only its own: a stale role written

@@ -75,7 +75,9 @@
   (with-admins-locked [this f]))
   ;; Calls (f) in one transaction that first locks the admins' rows, so
   ;; a last-admin guard and the write it allows cannot interleave with another
-  ;; (BOU-673). Returns what f returns.
+  ;; (BOU-673). Returns what f returns. Must roll back what f wrote when f
+  ;; throws: a failed audit entry of a role or active change relies on it
+  ;; (BOU-960).
 
 (defprotocol IUserSessionRepository
   "Session persistence. A session is active when it has not expired and has no
