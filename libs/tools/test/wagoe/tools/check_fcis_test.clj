@@ -191,7 +191,10 @@
 
   (testing "partial"
     (let [vs (check-src "(ns ex.core)\n(def r nil)\n(def f (partial reset! r))\n")]
-      (is (some #(= :mutable-state (:kind %)) vs)))))
+      (is (some #(= :mutable-state (:kind %)) vs))))
+
+  (testing "but a callback named send handed to run! is not, in 1.x"
+    (is (empty? (check-src "(ns ex.core)\n(defn notify [send msgs] (run! send msgs))\n")))))
 
 (deftest ^:unit a-require-nobody-thought-of-is-a-violation
   ;; The denylist had eleven entries. These are the libraries the ticket named:

@@ -32,7 +32,7 @@ So core returns an audit entry or an event as data, and the shell writes it.
 Core does not log yet: there is no observation channel that returns nil, never throws, and is bound by the shell.
 `bb check:fcis` refuses a logging require in core, and warns on printing outside `with-out-str` and on `tap>` anywhere; from 2.0 that warning is an error.
 
-For the clock it refuses `Instant/now`, `UUID/randomUUID` and `System/currentTimeMillis`, and warns on the other clock and random reads: `(java.util.Date.)`, `System/nanoTime`, `Math/random`, `rand`, `rand-int`, `rand-nth`, `shuffle`, `random-uuid`.
+For the clock it refuses `Instant/now`, `UUID/randomUUID` and `System/currentTimeMillis`, and warns on the other clock and random reads: `(java.util.Date.)`, `(java.util.Random.)`, `System/nanoTime`, `Math/random`, `Calendar/getInstance`, `rand`, `rand-int`, `rand-nth`, `shuffle`, `random-uuid`.
 That warning too is an error from 2.0. The shell reads the value and passes it in.
 A namespace that must keep either is exempted with `^:wagoe/allow-print` or `^:wagoe/allow-clock` metadata, or an `:allow-print` or `:allow-clock` entry in `.wagoe/check-fcis.edn` with an `:ns` and a `:why`; an entry that exempts nothing fails the gate.
 

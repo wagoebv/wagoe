@@ -252,12 +252,13 @@
   (set "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789*+!-_'?<>=/.&%$#:"))
 
 (defn call-forms
-  "Every `(`-opened form in `content`, as {:head :arg1 :line :pos :end}:
+  "Every `(`-opened form in `content`, as {:head :arg1 :arg2 :line :pos :end}:
    `:pos` and `:end` are the offsets of its parens, `:end` absent when the
    form never closes.
 
-   `:head` is the first token after the paren and `:arg1` the second — enough
-   to see both `(swap! …)` and `(apply swap! …)`.
+   `:head` is the first token after the paren, `:arg1` the second and `:arg2`
+   the third — enough to see `(swap! …)`, `(apply swap! …)` and
+   `(repeatedly n rand)`.
 
    Exists because matching `#\"\\(\\s*swap!\"` per line is enforcement that
    depends on formatting: a newline between the paren and the symbol defeats
@@ -303,11 +304,13 @@
                   [h-start h-line]   (skip-ws (inc i) line)
                   [head h-end]       (read-tok h-start)
                   [a-start _]        (skip-ws h-end h-line)
-                  [arg1 _]           (read-tok a-start)]
+                  [arg1 a-end]       (read-tok a-start)
+                  [arg2 _]           (if (seq arg1) (read-tok (first (skip-ws a-end h-line))) [""])]
               (if (seq head)
                 (let [idx (count acc)]
                   (recur (inc i) line
-                         (conj! acc {:head head :arg1 (not-empty arg1) :line h-line :pos i})
+                         (conj! acc {:head head :arg1 (not-empty arg1) :arg2 (not-empty arg2)
+                                     :line h-line :pos i})
                          (conj open idx)))
                 (recur (inc i) line acc (conj open nil))))
 

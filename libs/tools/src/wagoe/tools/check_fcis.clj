@@ -283,10 +283,16 @@
 (defn- core-names [& names]
   (into #{} (mapcat (juxt identity #(str "clojure.core/" %))) names))
 
+(def ^:private error-heads
+  "Forms whose function argument the throw and mutable-state errors read, so
+   `(apply swap! …)` mutates just as surely as `(swap! …)` does. Kept to these
+   two in 1.x: an injected callback named `send` or `alter` handed to `run!`
+   passed before, and a minor must not fail it."
+  #{"apply" "partial"})
+
 (def ^:private higher-order-heads
-  "Forms that take a function as their first argument, so `(apply swap! …)`
-   mutates just as surely as `(swap! …)` does, and `(run! println xs)` prints.
-   Matched on the argument as well as the head."
+  "Forms that take a function as their first argument, read by the print and
+   clock warnings: `(run! println xs)` prints."
   (core-names "apply" "partial" "comp" "juxt" "run!" "map" "mapv" "mapcat"
               "map-indexed" "pmap" "keep" "keep-indexed" "filter" "filterv"
               "remove" "some" "every?" "reduce" "reduce-kv" "sort-by" "group-by"
@@ -315,11 +321,18 @@
                        n names :when (some #{(symbol n)} r)]
                    n)))))
 
-(defn- called?
-  "`(sym …)` directly, or `sym` handed to apply/partial, for `sym` in `targets`."
-  [{:keys [head arg1]} targets]
+(def ^:private repeatedly-heads
+  "`(repeatedly n f)` takes its function second."
+  (core-names "repeatedly"))
+
+(defn- called
+  "The `sym` in `targets` that `c` calls: `(sym …)` directly, `sym` handed to
+   one of `heads` (apply, map, run! …), or `(repeatedly n sym)` when
+   repeatedly is one of them."
+  [{:keys [head arg1 arg2]} targets heads]
   (or (targets head)
-      (and (higher-order-heads head) arg1 (targets arg1))))
+      (and (heads head) arg1 (targets arg1))
+      (and (heads head) (repeatedly-heads head) arg2 (targets arg2))))
 
 ;; Clock and randomness: the shell reads them and passes the value in. The
 ;; accessors in forbidden-static-methods-by-class (Instant/now,
@@ -332,16 +345,20 @@
 (def ^:private clock-statics
   {"java.lang.System"     ["nanoTime"]
    "java.lang.Math"       ["random"]
+   "java.lang.StrictMath" ["random"]
    "java.time.LocalTime"  ["now"]
    "java.time.OffsetTime" ["now"]
    "java.time.Year"       ["now"]
    "java.time.YearMonth"  ["now"]
    "java.time.MonthDay"   ["now"]
-   "java.time.Clock"      ["systemUTC" "systemDefaultZone"]})
+   "java.time.Clock"      ["systemUTC" "systemDefaultZone" "system"]
+   "java.util.Calendar"   ["getInstance"]
+   "java.util.concurrent.ThreadLocalRandom" ["current"]})
 
 (def ^:private clock-constructors
-  "Classes whose no-argument constructor reads the clock."
-  #{"java.util.Date"})
+  "Classes whose no-argument constructor reads the clock or a random seed."
+  #{"java.util.Date" "java.util.GregorianCalendar" "java.util.Random"
+    "java.security.SecureRandom"})
 
 (defn- class-names
   "The names `fq` goes by in a file importing `imports`: itself, and its
@@ -361,12 +378,13 @@
 
 (defn- clock-constructor
   "`(C.)` or `(new C)` with no argument, for C in `ctor-names`, as written;
-   nil otherwise."
-  [stripped ctor-names {:keys [head arg1 pos end]}]
+   nil otherwise. Read from the unstripped `content`, whose offsets match the
+   stripped text's, so `(Date. \"1995\")` keeps its argument."
+  [content ctor-names {:keys [head arg1 pos end]}]
   (let [cls   (if (= "new" head) arg1 (when (str/ends-with? head ".") (subs head 0 (dec (count head)))))
         label (if (= "new" head) (str "new " cls) head)]
     (when (and end (ctor-names cls)
-               (= label (str/replace (str/trim (subs stripped (inc pos) end)) #"\s+" " ")))
+               (= label (str/replace (str/trim (subs content (inc pos) end)) #"\s+" " ")))
       label)))
 
 (defn- scan-impurity
@@ -389,8 +407,7 @@
    same call as `(throw …)`, and the regex version scanned one line at a time
    and saw neither it nor `(apply swap! …)` (BOU-301)."
   [file content ns-form ns-name imports {:keys [allow-throw allow-mutable-state]}]
-  (let [stripped  (parsing/strip-comments-and-strings content)
-        calls     (parsing/call-forms stripped)
+  (let [calls     (parsing/call-forms (parsing/strip-comments-and-strings content))
         clock     (clock-symbols imports)
         ctors     (clock-constructor-names imports)
         throw-ok? (or (ns-meta-flag? ns-form :wagoe/allow-throw)
@@ -403,27 +420,27 @@
         inside?   (fn [rs {:keys [pos]}] (some (fn [[s e]] (< s pos e)) rs))
         comments  (ranges #{"comment" "clojure.core/comment"})
         captured  (concat comments (ranges #{"with-out-str" "clojure.core/with-out-str"}))
-        finding   (fn [targets kind c]
-                    {:file (str file) :ns ns-name :line (:line c) :kind kind
-                     :req  (if (targets (:head c)) (:head c) (:arg1 c))})]
+        finding   (fn [req kind c]
+                    {:file (str file) :ns ns-name :line (:line c) :kind kind :req req})]
     (concat
      (when-not throw-ok?
-       (for [c calls :when (called? c #{"throw"})]
-         (finding #{"throw"} :throw c)))
+       (for [c calls :let [req (called c #{"throw"} error-heads)] :when req]
+         (finding req :throw c)))
      (when-not mut-ok?
-       (for [c calls :when (called? c mutable-state-symbols)]
-         (finding mutable-state-symbols :mutable-state c)))
+       (for [c calls :let [req (called c mutable-state-symbols error-heads)] :when req]
+         (finding req :mutable-state c)))
      (when-not (ns-meta-flag? ns-form :wagoe/allow-print)
        (for [[targets skip] [[(into out-symbols (pprint-symbols ns-form)) captured]
                              [tap-symbols comments]]
-             c calls :when (and (called? c targets) (not (inside? skip c)))]
-         (assoc (finding targets :print c) :severity :warning)))
+             c calls
+             :let [req (called c targets higher-order-heads)]
+             :when (and req (not (inside? skip c)))]
+         (assoc (finding req :print c) :severity :warning)))
      (when-not (ns-meta-flag? ns-form :wagoe/allow-clock)
        (for [c calls
-             :let [ctor (clock-constructor stripped ctors c)]
-             :when (and (or ctor (called? c clock)) (not (inside? comments c)))]
-         (cond-> (assoc (finding clock :clock c) :severity :warning)
-           ctor (assoc :req ctor)))))))
+             :let [req (or (clock-constructor content ctors c) (called c clock higher-order-heads))]
+             :when (and req (not (inside? comments c)))]
+         (assoc (finding req :clock c) :severity :warning))))))
 
 (defn- forbidden-require?
   "Whether the core namespace `ns-name` may not require `req`.
@@ -766,7 +783,8 @@
 (defn check-file
   "Check a single core/ .clj file for forbidden requires, imports,
    fully-qualified forbidden calls, bare I/O calls, (throw ...) calls, mutable
-   state in the body, and SQL requires; print and tap> calls as warnings.
+   state in the body, and SQL requires; print, tap> and clock or random reads
+   as warnings.
    Returns a seq of violation maps {:file :ns :req :kind [:line :severity]},
    :severity :error when absent, or empty seq
    if clean. Public so callers (e.g. the wagoe-mcp verify loop) can check an
