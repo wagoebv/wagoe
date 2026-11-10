@@ -296,6 +296,38 @@
          {:file (str file) :ns ns-name :req label
           :line (:line c) :kind :mutable-state})))))
 
+(def ^:private print-symbols
+  "Calls that write to *out* or the tap. A warning in 1.x, an error in 2.0:
+   the gate runs in generated projects too, and a minor must not fail them."
+  #{"print" "println" "prn" "pr" "printf" "tap>"})
+
+(defn- form-end
+  "Offset of the paren closing the form opened at `pos` in stripped `content`."
+  [^String content pos]
+  (loop [i (inc pos) depth 1]
+    (cond
+      (>= i (count content)) i
+      (= \( (.charAt content i)) (recur (inc i) (inc depth))
+      (= \) (.charAt content i)) (if (= 1 depth) i (recur (inc i) (dec depth)))
+      :else (recur (inc i) depth))))
+
+(defn- scan-print
+  "Print and tap> calls in a core body, as warnings. Inside `with-out-str` the
+   output is captured and returned, which is pure, so those do not count."
+  [file content ns-name]
+  (let [stripped (parsing/strip-comments-and-strings content)
+        calls    (parsing/call-forms stripped)
+        sym      #(some-> % (str/replace #"^clojure\.core/" ""))
+        captured (for [c calls :when (= "with-out-str" (sym (:head c)))]
+                   [(:pos c) (form-end stripped (:pos c))])
+        inside?  (fn [pos] (some (fn [[s e]] (< s pos e)) captured))]
+    (for [{:keys [head arg1 pos line]} calls
+          :let  [label (or (print-symbols (sym head))
+                           (and (higher-order-heads head) (print-symbols (sym arg1))))]
+          :when (and label (not (inside? pos)))]
+      {:file (str file) :ns ns-name :req label :line line
+       :kind :print :severity :warning})))
+
 (defn- forbidden-require?
   "Whether the core namespace `ns-name` may not require `req`.
 
@@ -617,18 +649,19 @@
                                    :line line
                                    :kind :fq-call})))
         impurity-violations (scan-impurity file content ns-form ns-name config)
+        print-warnings      (scan-print file content ns-name)
         ;; Only what purity lets through: next.jdbc is I/O and stays a
         ;; :require, so :allow-sql cannot exempt it.
         sql-violations      (sql-require-findings
                              (finding-base file ns-name)
                              (remove #(forbidden-require? ns-name %) (map str requires)))]
     (concat require-violations import-violations fq-violations
-            impurity-violations sql-violations)))
+            impurity-violations print-warnings sql-violations)))
 
 (defn check-file
   "Check a single core/ .clj file for forbidden requires, imports,
    fully-qualified forbidden calls, bare I/O calls, (throw ...) calls, mutable
-   state in the body, and SQL requires.
+   state in the body, and SQL requires; print and tap> calls as warnings.
    Returns a seq of violation maps {:file :ns :req :kind [:line]}, or empty seq
    if clean. Public so callers (e.g. the wagoe-mcp verify loop) can check an
    arbitrary core file outside the monorepo's `core-source-paths` discovery.
@@ -652,6 +685,7 @@
             :fq-call       (str "calls " (ansi/red req))
             :throw         (str "uses " (ansi/red "(throw ...)") " — core must return typed error values")
             :mutable-state (str "uses mutable state " (ansi/red req) " — registries/state belong in the shell")
+            :print         (str "calls " (ansi/yellow req) " — printing is I/O; an error from 2.0")
             :import        (str "imports " (ansi/red req))
             :require       (str "requires " (ansi/red req))
             :sql-require   (str "requires " (ansi/red req) " — core/ and ports know no SQL")

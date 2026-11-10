@@ -43,11 +43,12 @@
      :message  message}))
 
 (defn- fcis->issues
-  "check-fcis/check-file violations → verify issues (all WGE-806, :error)."
+  "check-fcis/check-file violations → verify issues (all WGE-806). Severity
+   is the finding's own, :error when it has none."
   [violations]
-  (for [{:keys [file ns req kind line]} violations]
+  (for [{:keys [file ns req kind line severity]} violations]
     {:step     :fcis
-     :severity :error
+     :severity (or severity :error)
      :code     fcis-code
      :file     file
      :line     line

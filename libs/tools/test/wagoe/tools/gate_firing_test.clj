@@ -221,6 +221,25 @@
                                                       :allow-mutable-state #{}}))))))
       (finally (delete-tree! root)))))
 
+(deftest ^:unit fcis-print-warns-test
+  (let [root (temp-dir "fcis-print" 1)]
+    (try
+      (let [file  (spit-file! root "libs/demo/src/wagoe/demo/core/noisy.clj"
+                              (str "(ns wagoe.demo.core.noisy)\n"
+                                   "(defn a [x] (println x) x)\n"
+                                   "(defn b [x]\n  (tap> x)\n  (apply prn [x]))\n"
+                                   "(defn c [x] (with-out-str (print x)))\n"))
+            found (check-fcis/check-file file {:allow-throw #{} :allow-mutable-state #{}})]
+        (testing "println, tap> and apply prn warn, with file and line"
+          (is (= #{["println" 2] ["tap>" 4] ["prn" 5]}
+                 (set (map (juxt :req :line) found))))
+          (is (every? #(and (= :warning (:severity %)) (= :print (:kind %))
+                            (= (str file) (:file %)))
+                      found)))
+        (testing "print inside with-out-str is captured, so pure"
+          (is (not-any? #(= "print" (:req %)) found))))
+      (finally (delete-tree! root)))))
+
 ;; =============================================================================
 ;; check:placeholder-tests
 ;; =============================================================================

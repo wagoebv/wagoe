@@ -130,4 +130,9 @@
  {:ticket "BOU-875"
   :since  "Unreleased"
   :note   "wagoe.audience.ports/query-users-sql. The service calls IUserQuery/query-user-ids when the user data source implements it; the old method works until 2.0."
-  :manual "Implement IUserQuery/query-user-ids on a custom IUserDataSource: it receives the filter maps, not a SQL clause, so a rewrite cannot translate the body."}]
+  :manual "Implement IUserQuery/query-user-ids on a custom IUserDataSource: it receives the filter maps, not a SQL clause, so a rewrite cannot translate the body."}
+
+ {:ticket "BOU-957"
+  :since  "Unreleased"
+  :note   "print, println, prn, pr, printf and tap> in a core/ namespace. bb check:fcis warns until 2.0, then fails."
+  :manual "Return the text from core and print it in the shell, or wrap the call in with-out-str. A rewrite cannot tell where the output should go."}]

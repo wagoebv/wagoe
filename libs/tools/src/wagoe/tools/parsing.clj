@@ -252,7 +252,8 @@
   (set "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789*+!-_'?<>=/.&%$#:"))
 
 (defn call-forms
-  "Every `(`-opened form in `content`, as {:head :arg1 :line}.
+  "Every `(`-opened form in `content`, as {:head :arg1 :line :pos}, `:pos`
+   being the offset of the paren.
 
    `:head` is the first token after the paren and `:arg1` the second — enough
    to see both `(swap! …)` and `(apply swap! …)`.
@@ -296,7 +297,7 @@
                   [arg1 _]           (read-tok a-start)]
               (recur (inc i) line
                      (if (seq head)
-                       (conj! acc {:head head :arg1 (not-empty arg1) :line h-line})
+                       (conj! acc {:head head :arg1 (not-empty arg1) :line h-line :pos i})
                        acc)))
 
             :else (recur (inc i) line acc)))))))
