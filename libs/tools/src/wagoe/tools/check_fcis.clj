@@ -55,11 +55,21 @@
    ;; The framework's own pure styling helpers, usable from a downstream app.
    #"^wagoe\.ui-style$"])
 
-(def ^:private own-code-shapes
-  "The shapes of a namespace that holds pure code: a core namespace, the
-   schemas it validates against, the ports describing its boundaries, and the
-   error-code catalogue."
-  #"(\.core($|\.)|\.schema($|\.)|\.ports($|\.)|\.error-codes$)")
+(def ^:private pure-layers
+  "The segments naming a layer that holds pure code: core, the schemas it
+   validates against, the ports describing its boundaries, and the error-code
+   catalogue."
+  #{"core" "schema" "ports" "error-codes"})
+
+(defn- pure-layer?
+  "Whether the first layer segment of `req` after its root is a pure one.
+   `wagoe.x.shell.core` ends in `.core` but lives in the shell; a `shell`
+   further down, as in `wagoe.shared.ui.core.shell`, is inside core."
+  [req]
+  (let [layer (->> (rest (str/split req #"\."))
+                   (filter (conj pure-layers "shell"))
+                   first)]
+    (boolean (pure-layers layer))))
 
 (defn- own-pure-namespace?
   "Whether `req` is pure code belonging to this project or to the framework.
@@ -77,7 +87,7 @@
    something; \"ends in .core\" anchors to nothing."
   [ns-name req]
   (let [root (first (str/split (str ns-name) #"\."))]
-    (and (re-find own-code-shapes req)
+    (and (pure-layer? req)
          (or (str/starts-with? req (str root "."))
              (= req root)
              (str/starts-with? req "wagoe.")))))
@@ -163,12 +173,6 @@
    "java.lang.System" ["currentTimeMillis" "getProperty" "getenv"]
    "java.lang.ProcessHandle" ["current"]})
 
-(def ^:private default-static-class-aliases
-  "Java classes available without an explicit :import that still expose
-   forbidden runtime accessors in core namespaces."
-  {"System" "java.lang.System"
-   "ProcessHandle" "java.lang.ProcessHandle"})
-
 (def ^:private allowed-fq-violations
   "Temporary BOU-15 allowlist for known remaining runtime-dependent core calls.
    Each entry should be removed as the corresponding namespace is migrated."
@@ -190,12 +194,6 @@
     "volatile!" "vreset!" "vswap!"
     "ref" "ref-set" "alter" "commute" "dosync"
     "alter-var-root" "agent" "send" "send-off" "add-watch"})
-
-(def ^:private higher-order-heads
-  "Forms that take a function as their first argument, so `(apply swap! …)`
-   mutates just as surely as `(swap! …)` does. Matched on the argument as well
-   as the head."
-  #{"apply" "partial"})
 
 (defn- require-keys!
   "Throws when an allowlist entry lacks one of `ks`."
@@ -231,24 +229,41 @@
     (require-keys! ":allow-sql" entries [:path :why])
     entries))
 
+(def ^:private warning-allow-keys
+  "The config key that exempts a namespace from each warning kind."
+  {:print :allow-print, :clock :allow-clock})
+
+(defn allowed-warnings
+  "The `:allow-print` and `:allow-clock` entries, checked: each needs an `:ns`
+   and a `:why`. Returns `{key #{ns-name}}`."
+  [m]
+  (into {} (for [k (vals warning-allow-keys)
+                 :let [entries (get m k)]]
+             (do (require-keys! (str k) entries [:ns :why])
+                 [k (set (map (comp str :ns) entries))]))))
+
 (defn read-config
   "Read the optional .wagoe/check-fcis.edn allowlist. Returns a map with
    :allow-throw and :allow-mutable-state sets (namespace-name string members),
-   :allow-require ({ns #{require}}) and :allow-sql ([{:path :why}])."
+   :allow-require ({ns #{require}}), :allow-sql ([{:path :why}]) and
+   :allow-print and :allow-clock sets."
   []
   (let [f (io/file (System/getProperty "user.dir") ".wagoe" "check-fcis.edn")
-        empty-config {:allow-throw #{} :allow-mutable-state #{} :allow-require {}
-                      :allow-sql []}]
+        empty-config (merge (allowed-warnings {})
+                            {:allow-throw #{} :allow-mutable-state #{} :allow-require {}
+                             :allow-sql []})]
     (if (.exists f)
       (let [m (edn/read-string (slurp f))]
-        {:allow-throw         (set (map str (:allow-throw m)))
-         :allow-mutable-state (set (map str (:allow-mutable-state m)))
-         ;; Deliberately outside any try: a malformed allowlist used to be
-         ;; swallowed and read as "no exemptions", which turns a typo into a
-         ;; gate that reports violations nobody can silence — or, with the
-         ;; inverted require list, one that passes for the wrong reason.
-         :allow-require       (allowed-requires m)
-         :allow-sql           (allowed-sql m)})
+        (merge
+         (allowed-warnings m)
+         {:allow-throw         (set (map str (:allow-throw m)))
+          :allow-mutable-state (set (map str (:allow-mutable-state m)))
+          ;; Deliberately outside any try: a malformed allowlist used to be
+          ;; swallowed and read as "no exemptions", which turns a typo into a
+          ;; gate that reports violations nobody can silence — or, with the
+          ;; inverted require list, one that passes for the wrong reason.
+          :allow-require       (allowed-requires m)
+          :allow-sql           (allowed-sql m)}))
       empty-config)))
 
 (defn- ns-meta-flag?
@@ -267,6 +282,21 @@
 
 (defn- core-names [& names]
   (into #{} (mapcat (juxt identity #(str "clojure.core/" %))) names))
+
+(def ^:private error-heads
+  "Forms whose function argument the throw and mutable-state errors read, so
+   `(apply swap! …)` mutates just as surely as `(swap! …)` does. Kept to these
+   two in 1.x: an injected callback named `send` or `alter` handed to `run!`
+   passed before, and a minor must not fail it."
+  #{"apply" "partial"})
+
+(def ^:private higher-order-heads
+  "Forms that take a function as their first argument, read by the print and
+   clock warnings: `(run! println xs)` prints."
+  (core-names "apply" "partial" "comp" "juxt" "run!" "map" "mapv" "mapcat"
+              "map-indexed" "pmap" "keep" "keep-indexed" "filter" "filterv"
+              "remove" "some" "every?" "reduce" "reduce-kv" "sort-by" "group-by"
+              "iterate" "repeatedly"))
 
 (def ^:private out-symbols
   "Calls that write to *out*, bare or `clojure.core/`-qualified."
@@ -291,11 +321,71 @@
                        n names :when (some #{(symbol n)} r)]
                    n)))))
 
-(defn- called?
-  "`(sym …)` directly, or `sym` handed to apply/partial, for `sym` in `targets`."
-  [{:keys [head arg1]} targets]
+(def ^:private repeatedly-heads
+  "`(repeatedly n f)` takes its function second."
+  (core-names "repeatedly"))
+
+(defn- called
+  "The `sym` in `targets` that `c` calls: `(sym …)` directly, `sym` handed to
+   one of `heads` (apply, map, run! …), or `(repeatedly n sym)` when
+   repeatedly is one of them."
+  [{:keys [head arg1 arg2]} targets heads]
   (or (targets head)
-      (and (higher-order-heads head) arg1 (targets arg1))))
+      (and (heads head) arg1 (targets arg1))
+      (and (heads head) (repeatedly-heads head) arg2 (targets arg2))))
+
+;; Clock and randomness: the shell reads them and passes the value in. The
+;; accessors in forbidden-static-methods-by-class (Instant/now,
+;; UUID/randomUUID, System/currentTimeMillis) were errors already and stay so;
+;; these are warnings in 1.x, like print.
+
+(def ^:private clock-fns
+  (core-names "rand" "rand-int" "rand-nth" "shuffle" "random-sample" "random-uuid"))
+
+(def ^:private clock-statics
+  {"java.lang.System"     ["nanoTime"]
+   "java.lang.Math"       ["random"]
+   "java.lang.StrictMath" ["random"]
+   "java.time.LocalTime"  ["now"]
+   "java.time.OffsetTime" ["now"]
+   "java.time.Year"       ["now"]
+   "java.time.YearMonth"  ["now"]
+   "java.time.MonthDay"   ["now"]
+   "java.time.Clock"      ["systemUTC" "systemDefaultZone" "system"]
+   "java.util.Calendar"   ["getInstance"]
+   "java.util.concurrent.ThreadLocalRandom" ["current"]})
+
+(def ^:private clock-constructors
+  "Classes whose no-argument constructor reads the clock or a random seed."
+  #{"java.util.Date" "java.util.GregorianCalendar" "java.util.Random"
+    "java.security.SecureRandom"})
+
+(defn- class-names
+  "The names `fq` goes by in a file importing `imports`: itself, and its
+   simple name when imported or in java.lang."
+  [imports fq]
+  (cond-> #{fq}
+    (or (some #{fq} imports) (re-find #"^java\.lang\.[A-Z]" fq))
+    (conj (last (str/split fq #"\.")))))
+
+(defn- clock-symbols [imports]
+  (into clock-fns
+        (for [[fq methods] clock-statics, n (class-names imports fq), m methods]
+          (str n "/" m))))
+
+(defn- clock-constructor-names [imports]
+  (set (mapcat #(class-names imports %) clock-constructors)))
+
+(defn- clock-constructor
+  "`(C.)` or `(new C)` with no argument, for C in `ctor-names`, as written;
+   nil otherwise. Read from the unstripped `content`, whose offsets match the
+   stripped text's, so `(Date. \"1995\")` keeps its argument."
+  [content ctor-names {:keys [head arg1 pos end]}]
+  (let [cls   (if (= "new" head) arg1 (when (str/ends-with? head ".") (subs head 0 (dec (count head)))))
+        label (if (= "new" head) (str "new " cls) head)]
+    (when (and end (ctor-names cls)
+               (= label (str/replace (str/trim (subs content (inc pos) end)) #"\s+" " ")))
+      label)))
 
 (defn- scan-impurity
   "Scan stripped content for (throw ...), mutable-state constructs and print
@@ -309,11 +399,17 @@
    output is captured and returned, which is pure, so those do not count;
    `tap>` is not captured by it. Nothing inside a `(comment …)` block runs.
 
+   Clock and randomness reads are `:clock` warnings on the same terms.
+   ^:wagoe/allow-print and ^:wagoe/allow-clock exempt a namespace from each;
+   their config entries are applied in check-file, so stale ones can be found.
+
    Reads operator position rather than matching lines: `(\\n throw …)` is the
    same call as `(throw …)`, and the regex version scanned one line at a time
    and saw neither it nor `(apply swap! …)` (BOU-301)."
-  [file content ns-form ns-name {:keys [allow-throw allow-mutable-state]}]
+  [file content ns-form ns-name imports {:keys [allow-throw allow-mutable-state]}]
   (let [calls     (parsing/call-forms (parsing/strip-comments-and-strings content))
+        clock     (clock-symbols imports)
+        ctors     (clock-constructor-names imports)
         throw-ok? (or (ns-meta-flag? ns-form :wagoe/allow-throw)
                       (contains? (or allow-throw #{}) ns-name))
         mut-ok?   (or (ns-meta-flag? ns-form :wagoe/allow-mutable-state)
@@ -324,20 +420,27 @@
         inside?   (fn [rs {:keys [pos]}] (some (fn [[s e]] (< s pos e)) rs))
         comments  (ranges #{"comment" "clojure.core/comment"})
         captured  (concat comments (ranges #{"with-out-str" "clojure.core/with-out-str"}))
-        finding   (fn [targets kind c]
-                    {:file (str file) :ns ns-name :line (:line c) :kind kind
-                     :req  (if (targets (:head c)) (:head c) (:arg1 c))})]
+        finding   (fn [req kind c]
+                    {:file (str file) :ns ns-name :line (:line c) :kind kind :req req})]
     (concat
      (when-not throw-ok?
-       (for [c calls :when (called? c #{"throw"})]
-         (finding #{"throw"} :throw c)))
+       (for [c calls :let [req (called c #{"throw"} error-heads)] :when req]
+         (finding req :throw c)))
      (when-not mut-ok?
-       (for [c calls :when (called? c mutable-state-symbols)]
-         (finding mutable-state-symbols :mutable-state c)))
-     (for [[targets skip] [[(into out-symbols (pprint-symbols ns-form)) captured]
-                           [tap-symbols comments]]
-           c calls :when (and (called? c targets) (not (inside? skip c)))]
-       (assoc (finding targets :print c) :severity :warning)))))
+       (for [c calls :let [req (called c mutable-state-symbols error-heads)] :when req]
+         (finding req :mutable-state c)))
+     (when-not (ns-meta-flag? ns-form :wagoe/allow-print)
+       (for [[targets skip] [[(into out-symbols (pprint-symbols ns-form)) captured]
+                             [tap-symbols comments]]
+             c calls
+             :let [req (called c targets higher-order-heads)]
+             :when (and req (not (inside? skip c)))]
+         (assoc (finding req :print c) :severity :warning)))
+     (when-not (ns-meta-flag? ns-form :wagoe/allow-clock)
+       (for [c calls
+             :let [req (or (clock-constructor content ctors c) (called c clock higher-order-heads))]
+             :when (and req (not (inside? comments c)))]
+         (assoc (finding req :clock c) :severity :warning))))))
 
 (defn- forbidden-require?
   "Whether the core namespace `ns-name` may not require `req`.
@@ -473,13 +576,9 @@
   "Resolve simple class names available in the file to their fully-qualified
    names for forbidden static accessor checks."
   [imports]
-  (merge default-static-class-aliases
-         (->> imports
-              (filter #(contains? forbidden-static-methods-by-class %))
-              (map (fn [class-name]
-                     [(last (str/split class-name #"\."))
-                      class-name]))
-              (into {}))))
+  (into {} (for [fq (keys forbidden-static-methods-by-class)
+                 n  (class-names imports fq) :when (not= n fq)]
+             [n fq])))
 
 (defn- scan-simple-static-calls
   "Scan stripped file content for forbidden runtime access via imported or
@@ -623,9 +722,22 @@
   (remove (fn [entry] (some #(covers? entry %) findings))
           (:allow-sql config)))
 
+(defn stale-warning-entries
+  "`[key ns-name]` for each `:allow-print` or `:allow-clock` entry whose
+   namespace has no such warning in `findings`."
+  [config findings]
+  (let [seen (set (map (juxt :kind :ns) findings))]
+    (for [[kind k] warning-allow-keys, ns-name (get config k)
+          :when (not (seen [kind ns-name]))]
+      [k ns-name])))
+
+(defn- allowed? [config finding]
+  (or (sql-allowed? config finding)
+      (contains? (get config (warning-allow-keys (:kind finding))) (:ns finding))))
+
 (defn- check-file*
-  "check-file before the :allow-sql allowlist, which -main also needs to find
-   stale entries."
+  "check-file before the :allow-sql, :allow-print and :allow-clock
+   allowlists, which -main also needs to find stale entries."
   [file config]
   (let [content  (slurp file)
         ns-form  (parsing/read-ns-form file)
@@ -659,7 +771,7 @@
                                    :req  symbol
                                    :line line
                                    :kind :fq-call})))
-        impurity-violations (scan-impurity file content ns-form ns-name config)
+        impurity-violations (scan-impurity file content ns-form ns-name imports config)
         ;; Only what purity lets through: next.jdbc is I/O and stays a
         ;; :require, so :allow-sql cannot exempt it.
         sql-violations      (sql-require-findings
@@ -671,7 +783,8 @@
 (defn check-file
   "Check a single core/ .clj file for forbidden requires, imports,
    fully-qualified forbidden calls, bare I/O calls, (throw ...) calls, mutable
-   state in the body, and SQL requires; print and tap> calls as warnings.
+   state in the body, and SQL requires; print, tap> and clock or random reads
+   as warnings.
    Returns a seq of violation maps {:file :ns :req :kind [:line :severity]},
    :severity :error when absent, or empty seq
    if clean. Public so callers (e.g. the wagoe-mcp verify loop) can check an
@@ -679,24 +792,25 @@
    The 1-arity reads the .wagoe/check-fcis.edn allowlist itself."
   ([file] (check-file file (read-config)))
   ([file config]
-   (remove #(sql-allowed? config %) (check-file* file config))))
+   (remove #(allowed? config %) (check-file* file config))))
 
 ;; ---------------------------------------------------------------------------
 ;; Entry point
 ;; ---------------------------------------------------------------------------
 
-(defn- print-finding [{:keys [file ns req kind line severity]}]
+(defn- print-finding [{:keys [file ns req kind line severity key]}]
   (println (str (if (= :warning severity) "  WARNING: " "  VIOLATION: ")
                 file (when line (str ":" line))))
   (println
-   (if (= :stale-allow-sql kind)
-     (str "    :allow-sql entry " (ansi/red req) " exempts nothing — remove it")
+   (if (= :stale-allow kind)
+     (str "    " key " entry " (ansi/red req) " exempts nothing — remove it")
      (str "    namespace " ns " "
           (case kind
             :fq-call       (str "calls " (ansi/red req))
             :throw         (str "uses " (ansi/red "(throw ...)") " — core must return typed error values")
             :mutable-state (str "uses mutable state " (ansi/red req) " — registries/state belong in the shell")
             :print         (str "calls " (ansi/yellow req) " — printing is I/O; an error from 2.0")
+            :clock         (str "calls " (ansi/yellow req) " — take the time or random value as an argument; an error from 2.0")
             :import        (str "imports " (ansi/red req))
             :require       (str "requires " (ansi/red req))
             :sql-require   (str "requires " (ansi/red req) " — core/ and ports know no SQL")
@@ -709,11 +823,12 @@
         ports-files (ports-source-paths)
         raw         (concat (mapcat #(check-file* % config) files)
                             (mapcat sql-port-findings ports-files))
-        stale       (for [{:keys [path]} (stale-sql-entries config raw)]
-                      {:file ".wagoe/check-fcis.edn" :req path :kind :stale-allow-sql})
+        stale       (for [[k req] (concat (map (fn [e] [:allow-sql (:path e)]) (stale-sql-entries config raw))
+                                          (stale-warning-entries config raw))]
+                      {:file ".wagoe/check-fcis.edn" :key k :req req :kind :stale-allow})
         {warnings :warning violations :error}
         (group-by #(:severity % :error)
-                  (concat (remove #(sql-allowed? config %) raw) stale))]
+                  (concat (remove #(allowed? config %) raw) stale))]
     (when (seq warnings)
       (println (ansi/yellow "FC/IS warnings:"))
       (run! print-finding warnings)
@@ -725,7 +840,7 @@
         (run! print-finding violations)
         (println)
         (println (str (count violations) " violation(s) found. Core namespaces must not import shell, I/O, logging, or DB code, throw, or hold mutable state; core and ports know no SQL."))
-        (println (ansi/dim "Escape hatch: ^:wagoe/allow-throw / ^:wagoe/allow-mutable-state ns metadata, or .wagoe/check-fcis.edn allowlist."))
+        (println (ansi/dim "Escape hatch: ^:wagoe/allow-throw / ^:wagoe/allow-mutable-state / ^:wagoe/allow-print / ^:wagoe/allow-clock ns metadata, or .wagoe/check-fcis.edn allowlist."))
         (System/exit 1))
       (do
         (println (ansi/green "FC/IS check passed.")

@@ -20,6 +20,9 @@
 ;; :allow-sql exempts a file, or a directory when the path ends in /, from
 ;; "core/ and ports know no SQL". Keyed by path because platform-sql owns
 ;; wagoe.platform.* namespaces. An entry that exempts nothing fails the gate.
+;;
+;; :allow-print and :allow-clock exempt a namespace from the print and the
+;; clock/random warnings: {:ns … :why …}. A stale entry fails here too.
 {:allow-throw         []
  :allow-mutable-state []
  :allow-require

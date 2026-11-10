@@ -215,6 +215,13 @@
             (is (seq violations)
                 "core requiring shell.persistence is the canonical FC/IS violation")))
 
+        (testing "a shell namespace named core is reported too"
+          (let [f (spit-file! root "libs/demo/src/wagoe/demo/core/sneaky.clj"
+                              "(ns wagoe.demo.core.sneaky\n  (:require [wagoe.x.shell.core :as x]))\n")]
+            (is (= [[:require "wagoe.x.shell.core"]]
+                   (map (juxt :kind :req)
+                        (check-fcis/check-file f {:allow-throw #{} :allow-mutable-state #{}}))))))
+
         (testing "a pure core namespace is not reported"
           (let [clean (first (filter #(= "clean.clj" (.getName ^java.io.File %)) found))]
             (is (empty? (check-fcis/check-file clean {:allow-throw #{}
@@ -249,6 +256,60 @@
           (is (= [["pp/pprint" 2]]
                  (map (juxt :req :line)
                       (check-fcis/check-file pp {:allow-throw #{} :allow-mutable-state #{}}))))))
+      (finally (delete-tree! root)))))
+
+(deftest ^:unit fcis-clock-warns-test
+  (let [root (temp-dir "fcis-clock" 1)]
+    (try
+      (let [file  (spit-file! root "libs/demo/src/wagoe/demo/core/clock.clj"
+                              (str "(ns wagoe.demo.core.clock\n  (:import [java.util Date]))\n"
+                                   "(defn a [] [(java.util.Date.) (new Date) (Date.)])\n"
+                                   "(defn b [] [(System/nanoTime) (Math/random) (java.time.LocalTime/now)])\n"
+                                   "(defn c [xs] [(rand) (rand-int 3) (rand-nth xs) (shuffle xs)])\n"
+                                   "(defn d [] (random-uuid))\n"
+                                   "(defn e [ms] [(Date. ms) (java.util.Date. 0) (Date. \"1995\")])\n"
+                                   "(comment (rand))\n"
+                                   "(defn f [n] [(repeatedly n random-uuid) (java.util.Random.) (java.util.Random. 42)])\n"))
+            found (check-fcis/check-file file {:allow-throw #{} :allow-mutable-state #{}})]
+        (testing "each clock or random read warns, with file and line"
+          (is (= #{["java.util.Date." 3] ["new Date" 3] ["Date." 3]
+                   ["System/nanoTime" 4] ["Math/random" 4] ["java.time.LocalTime/now" 4]
+                   ["rand" 5] ["rand-int" 5] ["rand-nth" 5] ["shuffle" 5]
+                   ["random-uuid" 6] ["random-uuid" 9] ["java.util.Random." 9]}
+                 (set (map (juxt :req :line) found))))
+          (is (every? #(and (= :warning (:severity %)) (= :clock (:kind %))
+                            (= (str file) (:file %)))
+                      found)))
+        (testing "a Date built from a value or a string, or inside a comment block, is not a clock read"
+          (is (not-any? #(#{7 8} (:line %)) found))))
+      (finally (delete-tree! root)))))
+
+(deftest ^:unit fcis-printer-or-clock-passed-as-a-function-warns-test
+  (let [root (temp-dir "fcis-hof" 1)]
+    (try
+      (let [file (spit-file! root "libs/demo/src/wagoe/demo/core/hof.clj"
+                             (str "(ns wagoe.demo.core.hof)\n"
+                                  "(defn a [xs] (run! println xs))\n"
+                                  "(defn b [xs] (doall (map prn xs)))\n"
+                                  "(defn c [xs] [(mapv print xs) (keep clojure.core/println xs)])\n"
+                                  "(defn d [xs] (sort-by rand xs))\n"
+                                  "(defn e [xs] (map inc xs))\n"))]
+        (is (= #{["println" 2 :print] ["prn" 3 :print] ["print" 4 :print]
+                 ["clojure.core/println" 4 :print] ["rand" 5 :clock]}
+               (set (map (juxt :req :line :kind)
+                         (check-fcis/check-file file {:allow-throw #{} :allow-mutable-state #{}}))))))
+      (finally (delete-tree! root)))))
+
+(deftest ^:unit fcis-clock-accessors-stay-errors-test
+  (let [root (temp-dir "fcis-clock-err" 1)]
+    (try
+      (let [file (spit-file! root "libs/demo/src/wagoe/demo/core/now.clj"
+                             (str "(ns wagoe.demo.core.now\n  (:import [java.time Instant] [java.util UUID]))\n"
+                                  "(defn a [] [(Instant/now) (UUID/randomUUID) (System/currentTimeMillis)])\n"))]
+        (is (= #{["java.time.Instant/now" :error] ["java.util.UUID/randomUUID" :error]
+                 ["java.lang.System/currentTimeMillis" :error]}
+               (set (map (juxt :req #(:severity % :error))
+                         (check-fcis/check-file file {:allow-throw #{} :allow-mutable-state #{}}))))))
       (finally (delete-tree! root)))))
 
 ;; =============================================================================

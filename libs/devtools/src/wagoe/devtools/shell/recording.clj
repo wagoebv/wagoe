@@ -37,13 +37,13 @@
   @pre-recording-handler)
 
 (defn start-recording! []
-  (reset! session-atom (core/create-session))
+  (reset! session-atom (core/create-session (java.util.Date.)))
   (println "Recording started. Requests will be captured.")
   nil)
 
 (defn stop-recording! []
   (when @session-atom
-    (swap! session-atom core/stop-session)
+    (swap! session-atom core/stop-session (java.util.Date.))
     (let [cnt (core/entry-count @session-atom)]
       (println (format "Recording stopped. %d request(s) captured." cnt))))
   nil)
@@ -106,7 +106,8 @@
                    req-data
                    (-> (select-keys response [:status :headers])
                        (assoc :body resp-body-data))
-                   (long duration))))
+                   (long duration)
+                   (java.util.Date.))))
         response))))
 
 (defn- json-content-type?

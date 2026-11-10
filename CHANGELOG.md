@@ -54,6 +54,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`^:wagoe/allow-print` and `^:wagoe/allow-clock`, or `:allow-print`/`:allow-clock` in `.wagoe/check-fcis.edn`** (BOU-961):
+  exempt a core namespace from those `bb check:fcis` warnings. An entry needs an `:ns` and a `:why`.
 - **`wagoe.core.http.errors` and `wagoe.core.http.access`**: the error body and access checks, without cheshire (BOU-930).
   The `wagoe.platform.core.http` namespaces delegate to them; nothing to change.
 - **`com.wagoe/wagoe-platform-sql`**: platform's database, migration, lease and transit namespaces, same names (BOU-871).
@@ -65,6 +67,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb check:fcis` let core require a shell namespace named `…shell.core`, `.schema` or `.ports`** (BOU-964). It fails
+  now; move that call to the shell.
 - **A rights change whose audit entry failed was kept, and missing from the rights timeline** (BOU-958). It rolls back
   now. Nothing to change.
 - **A user's role and active changes were missing from the rights timeline** (BOU-960). They show there now, and a failed
@@ -100,6 +104,10 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`wagoe.jobs.shell.tenant-context/tenant-runner` and `:wagoe/job-tenant-runner`** (BOU-931). Use tenant's `:wagoe/in-tenant`.
 - **`println`, `pprint`, `tap>` and the other printers in a `core/` namespace** (BOU-957): `bb check:fcis` warns, and fails
   from 2.0. Return the string, or print from the shell; `with-out-str` is fine.
+- **`(java.util.Date.)`, `System/nanoTime`, `rand`, `random-uuid` and other clock or random reads in `core/`** (BOU-963):
+  `bb check:fcis` warns, and fails from 2.0. Read them in the shell and pass the value in.
+- **The 1-arity `wagoe.core.interceptor-context/record-start-time` and `record-end-time`** (BOU-963): they read the clock.
+  Pass `(System/nanoTime)` as the second argument.
 - **`wagoe.audience.ports/query-users-sql`** (BOU-875), removed in 2.0 (BOU-935). Implement `IUserQuery/query-user-ids`.
 
 ## [1.1.2] — 2026-11-07
