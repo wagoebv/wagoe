@@ -215,6 +215,13 @@
             (is (seq violations)
                 "core requiring shell.persistence is the canonical FC/IS violation")))
 
+        (testing "a shell namespace named core is reported too"
+          (let [f (spit-file! root "libs/demo/src/wagoe/demo/core/sneaky.clj"
+                              "(ns wagoe.demo.core.sneaky\n  (:require [wagoe.x.shell.core :as x]))\n")]
+            (is (= [[:require "wagoe.x.shell.core"]]
+                   (map (juxt :kind :req)
+                        (check-fcis/check-file f {:allow-throw #{} :allow-mutable-state #{}}))))))
+
         (testing "a pure core namespace is not reported"
           (let [clean (first (filter #(= "clean.clj" (.getName ^java.io.File %)) found))]
             (is (empty? (check-fcis/check-file clean {:allow-throw #{}

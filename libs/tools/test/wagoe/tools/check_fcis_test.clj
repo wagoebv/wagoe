@@ -284,6 +284,15 @@
     (is (some #(= :require (:kind %))
               (check-src "(ns shop.product.core.p\n  (:require [shop.product.shell.service :as s]))\n")))))
 
+(deftest ^:unit a-shell-namespace-named-core-schema-or-ports-is-refused
+  (doseq [req ["wagoe.x.shell.core" "wagoe.x.shell.schema" "wagoe.x.shell.ports"
+               "shop.product.shell.core.helpers"]]
+    (testing req
+      (is (some #(and (= :require (:kind %)) (= req (:req %)))
+                (check-src (str "(ns shop.product.core.p\n  (:require [" req " :as s]))\n"))))))
+  (testing "a namespace called shell inside core is still core"
+    (is (empty? (check-src "(ns shop.product.core.p\n  (:require [wagoe.shared.ui.core.shell :as s]))\n")))))
+
 (deftest ^:unit a-character-literal-paren-does-not-open-a-form
   ;; `\( ` contains a real `(`, and the scanner reads the token after every
   ;; paren — so a map from delimiters to functions was reported as a call to

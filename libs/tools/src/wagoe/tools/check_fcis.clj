@@ -55,11 +55,21 @@
    ;; The framework's own pure styling helpers, usable from a downstream app.
    #"^wagoe\.ui-style$"])
 
-(def ^:private own-code-shapes
-  "The shapes of a namespace that holds pure code: a core namespace, the
-   schemas it validates against, the ports describing its boundaries, and the
-   error-code catalogue."
-  #"(\.core($|\.)|\.schema($|\.)|\.ports($|\.)|\.error-codes$)")
+(def ^:private pure-layers
+  "The segments naming a layer that holds pure code: core, the schemas it
+   validates against, the ports describing its boundaries, and the error-code
+   catalogue."
+  #{"core" "schema" "ports" "error-codes"})
+
+(defn- pure-layer?
+  "Whether the first layer segment of `req` after its root is a pure one.
+   `wagoe.x.shell.core` ends in `.core` but lives in the shell; a `shell`
+   further down, as in `wagoe.shared.ui.core.shell`, is inside core."
+  [req]
+  (let [layer (->> (rest (str/split req #"\."))
+                   (filter (conj pure-layers "shell"))
+                   first)]
+    (boolean (pure-layers layer))))
 
 (defn- own-pure-namespace?
   "Whether `req` is pure code belonging to this project or to the framework.
@@ -77,7 +87,7 @@
    something; \"ends in .core\" anchors to nothing."
   [ns-name req]
   (let [root (first (str/split (str ns-name) #"\."))]
-    (and (re-find own-code-shapes req)
+    (and (pure-layer? req)
          (or (str/starts-with? req (str root "."))
              (= req root)
              (str/starts-with? req "wagoe.")))))

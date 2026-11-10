@@ -65,6 +65,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`bb check:fcis` let core require a shell namespace named `…shell.core`, `.schema` or `.ports`** (BOU-964). It fails
+  now; move that call to the shell.
 - **A rights change whose audit entry failed was kept, and missing from the rights timeline** (BOU-958). It rolls back
   now. Nothing to change.
 - **The stability page's opening line said Wagoe is at `1.0.1`** under a `1.1.1` table. It now points at the table,
