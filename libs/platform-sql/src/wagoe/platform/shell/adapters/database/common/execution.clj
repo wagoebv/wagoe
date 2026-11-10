@@ -67,15 +67,45 @@
    JDBC connection instead of borrowing a new one from the pool."
   nil)
 
-(defn current-datasource
-  "Return the active JDBC executor for the current call.
+(def ^:dynamic ^:private *open-transactions*
+  "[datasource connection tx-state] of each transaction open on this thread,
+   innermost first, so a call on one database never runs in another's
+   (BOU-967). tx-state is nil for `execute-batch!`'s."
+  ())
 
-   Prefer a transaction-bound connection when present so transaction-scoped
-   settings like PostgreSQL `search_path` remain in effect for all downstream
-   queries."
+(defn transaction-on
+  "The connection of the transaction open on this thread on `datasource`,
+   else nil: a component holding another database's datasource must not
+   write into it."
+  [datasource]
+  (some (fn [[ds conn]] (when (identical? ds datasource) conn)) *open-transactions*))
+
+(defn current-datasource
+  "What a call on `ctx` runs on: the transaction open on this thread on its
+   datasource, so settings like PostgreSQL's `search_path` stay in effect,
+   else its datasource."
   [ctx]
-  (or *transaction-datasource*
-      (:datasource ctx)))
+  (let [ds (:datasource ctx)]
+    (or (transaction-on ds) ds)))
+
+(defn- open-transaction
+  "The `*open-transactions*` entry whose connection is `executor`, else nil."
+  [executor]
+  (some (fn [[_ conn :as t]] (when (identical? conn executor) t)) *open-transactions*))
+
+(defn- opened-on
+  "The datasource `executor`'s transaction took its connection from, or
+   `executor` when it is no transaction this thread opened."
+  [executor]
+  (or (first (open-transaction executor)) executor))
+
+(defn- opening
+  "`*open-transactions*` once a transaction on `executor` holds `tx-conn`: as
+   it is when `executor` joins one already open."
+  [executor tx-conn tx-state]
+  (if (identical? executor tx-conn)
+    *open-transactions*
+    (conj *open-transactions* [executor tx-conn tx-state])))
 
 ;; =============================================================================
 ;; Query Execution
@@ -177,20 +207,6 @@
                (not referenced?) (merge (select-keys v [:field :fields])))
              e)))
 
-(def ^:dynamic ^:private *outside-datasource*
-  "The datasource the outermost transaction took its connection from. A key's
-   columns are read there on PostgreSQL, which refuses every statement in a
-   transaction a refused write aborted."
-  nil)
-
-(defn transaction-on
-  "The connection of the transaction bound on this thread when it was opened
-   on `datasource`, else nil: a component holding another database's
-   datasource must not write into it."
-  [datasource]
-  (when (and *transaction-datasource* (identical? datasource *outside-datasource*))
-    *transaction-datasource*))
-
 (def ^:private key-columns-cache
   "Per database, key columns by [table key], so a refusal looks them up once.
    Weak on the datasource, so a closed pool's entries go with it."
@@ -257,17 +273,17 @@
              (not (str/starts-with? (str (:detail reported)) "Key (")))
       (try
         (let [adapter (:adapter ctx)
-              db      (or *outside-datasource* (current-datasource ctx))
-              ds      (if (= :postgresql (protocols/engine adapter)) db (current-datasource ctx))
+              exec    (current-datasource ctx)
+              db      (opened-on exec)
               table   (if schema (keyword schema table) table)]
           (constraint/with-columns
             v
             (cached-key-columns
              db [table index]
-             #(if (and *transaction-datasource* (instance? DataSource ds))
-                (with-open [conn (borrow ds)]
+             #(if (and (= :postgresql (protocols/engine adapter)) (not (identical? db exec)))
+                (with-open [conn (borrow db)]
                   (protocols/key-columns adapter conn table index))
-                (protocols/key-columns adapter ds table index)))))
+                (protocols/key-columns adapter exec table index)))))
         (catch Exception e
           (log/debug "Could not read the columns of a key" {:key key-name :error (ex-message e)})
           v)
@@ -467,7 +483,8 @@
                          {:insert-into :users :values [{:name \"Jane\"}]}])"
   [ctx query-maps]
   (validate-context ctx)
-  (let [operation-details {:adapter (protocols/dialect (:adapter ctx))
+  (let [executor (current-datasource ctx)
+        operation-details {:adapter (protocols/dialect (:adapter ctx))
                            :operation-type "batch"
                            :query-count (count query-maps)}]
 
@@ -479,9 +496,9 @@
                 :query-count (count query-maps)})
 
     (try
-      (jdbc/with-transaction [tx-conn (current-datasource ctx)]
+      (jdbc/with-transaction [tx-conn executor]
         (binding [*transaction-datasource* tx-conn
-                  *outside-datasource*     (or *outside-datasource* (current-datasource ctx))]
+                  *open-transactions*      (opening executor tx-conn nil)]
           (let [tx-ctx (assoc ctx :datasource tx-conn)
                 start-time (System/currentTimeMillis)
                 results (mapv (fn [query-map]
@@ -512,8 +529,9 @@
 ;; =============================================================================
 
 (def ^:dynamic ^:private *tx-state*
-  "The outermost `with-transaction*` on this thread's {:hooks [..] :memo {..}}:
-   what it calls once it commits, and what was remembered while it was open."
+  "The {:hooks [..] :memo {..}} of the transaction the innermost
+   `with-transaction*` on this thread runs in: what it calls once it commits,
+   and what was remembered while it was open."
   nil)
 
 (defn after-commit!
@@ -581,14 +599,17 @@
     ;; A nested call joins the outer transaction, so only the outermost runs
     ;; the after-commit hooks, and commits. Any next.jdbc transaction opened
     ;; inside, execute-batch! included, joins too: next.jdbc would commit it
-    ;; early on the shared connection.
-    (let [outermost? (nil? *tx-state*)
-          state      (or *tx-state* (atom {:hooks [] :memo {}}))
+    ;; early on the shared connection. One on another database is its own, and
+    ;; so are its hooks (BOU-967).
+    (let [executor   (current-datasource ctx)
+          joined     (get (open-transaction executor) 2)
+          outermost? (nil? joined)
+          state      (or joined (atom {:hooks [] :memo {}}))
           result
           (binding [*tx-state* state]
-            (jdbc/with-transaction [tx-conn (current-datasource ctx)]
+            (jdbc/with-transaction [tx-conn executor]
               (binding [*transaction-datasource* tx-conn
-                        *outside-datasource*     (or *outside-datasource* (current-datasource ctx))
+                        *open-transactions*      (opening executor tx-conn state)
                         jdbc-tx/*nested-tx*      :ignore]
                 (try
                   (let [tx-ctx (assoc ctx :datasource tx-conn)

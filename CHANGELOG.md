@@ -67,6 +67,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A repository on a second database wrote into the first's open transaction** (BOU-967). Each database's writes stay
+  in its own transaction now. Nothing to change.
 - **`bb check:fcis` let core require a shell namespace named `…shell.core`, `.schema` or `.ports`** (BOU-964). It fails
   now; move that call to the shell.
 - **A rights change whose audit entry failed was kept, and missing from the rights timeline** (BOU-958). It rolls back
