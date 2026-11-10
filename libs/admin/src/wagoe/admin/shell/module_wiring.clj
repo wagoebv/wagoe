@@ -95,10 +95,11 @@
                                                              authorization/admin-permission?))})))
 
 (defmethod ig/init-key :wagoe/admin-routes
-  [_ {:keys [admin-service schema-provider user-service config workflows permission-registry rights]}]
+  [_ {:keys [admin-service schema-provider user-service config workflows permission-registry rights db-ctx]}]
   ;; The module's contribution: web routes, mounted under :web-prefix
   (http/admin-routes admin-service schema-provider
                      (cond-> config
+                       db-ctx              (assoc :db-ctx db-ctx)
                        workflows           (assoc :workflows workflows)
                        permission-registry (assoc :access (access-fn (:authorization-mode config)
                                                                      permission-registry rights)))
@@ -252,6 +253,8 @@
                                      workflows? (assoc :workflows (ig/ref :wagoe/workflow-admin)))
       :wagoe/admin-routes          (cond-> {:admin-service   (ig/ref :wagoe/admin-service)
                                             :schema-provider (ig/ref :wagoe/admin-schema-provider)
+                                            ;; A page part's savepoint is on its transaction
+                                            :db-ctx          (ig/ref :wagoe/db-context)
                                             :user-service    (ig/ref :wagoe/user-service)
                                             :config          routes-config}
                                      workflows? (assoc :workflows (ig/ref :wagoe/workflow-admin))

@@ -66,14 +66,15 @@
   "Call `(f tenant)` for every active tenant, in one transaction on its schema
    with `db/*tenant-id*` bound, as a tenant request runs. A tenant whose run
    throws is logged and counted, and the rest still run. Refused inside a
-   transaction: each tenant's would join it and leave its search_path behind.
+   transaction on `db-ctx`'s database: each tenant's would join it and leave
+   its search_path behind. Another database's is no concern of it.
 
    Returns {:processed n :failed n :results [<f's result per tenant that ran>]}."
   [tenant-service schema-provider db-ctx f]
-  (when (db/current-transaction)
+  (when (db/current-transaction db-ctx)
     (throw (ex-info "for-each-tenant cannot run inside a transaction"
                     {:type    :configuration-error
-                     :message "Call it outside any transaction; each tenant gets its own"})))
+                     :message "Call it outside any transaction on its database; each tenant gets its own"})))
   (each-schema schema-provider db-ctx (active-tenants tenant-service) :schema-name
                (fn [tenant] (binding [db/*tenant-id* (:id tenant)] (f tenant)))))
 

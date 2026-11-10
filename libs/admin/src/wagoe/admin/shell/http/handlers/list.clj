@@ -46,19 +46,19 @@
 
 (defn- entity-stats
   "{:count n :summary [..]} for `entity`, each part nil when its query fails."
-  [admin-service entity-configs entity]
-  {:count   (support/isolated [entity :count] #(ports/count-entities admin-service entity {}))
+  [admin-service db-ctx entity-configs entity]
+  {:count   (support/isolated db-ctx [entity :count] #(ports/count-entities admin-service entity {}))
    :summary (when (and (seq (:summary (get entity-configs entity)))
                        (satisfies? ports/IListOverview admin-service))
-              (:summary (support/isolated [entity :summary] #(ports/list-overview admin-service entity {:overview/summary-only? true} []))))})
+              (:summary (support/isolated db-ctx [entity :summary] #(ports/list-overview admin-service entity {:overview/summary-only? true} []))))})
 
 (defn- recent-activity
   "The last audit entries, when `groups` (the user's sidebar) has the audit
    trail: it is there only when mounted and the user may open it."
-  [user-service groups]
+  [user-service db-ctx groups]
   (when-let [trail (and user-service
                         (some #(when (= user-ui/audit-url (:href %)) %) (mapcat :items groups)))]
-    (if-let [result (support/isolated :activity #(user-ports/list-audit-logs user-service
+    (if-let [result (support/isolated db-ctx :activity #(user-ports/list-audit-logs user-service
                                                                      {:limit 10 :sort-by :created-at
                                                                       :sort-direction :desc :count? false}))]
       {:href (:href trail) :entries (:audit-logs result)}
@@ -84,11 +84,11 @@
            groups (admin-ui/dashboard-groups entities entity-configs user)
            ;; Counted only for a tile the dashboard shows
            shown (into [] (comp (mapcat :items) (keep :entity) (filter (set entities)) (distinct)) groups)
-           stats (zipmap shown (in-parallel (partial entity-stats admin-service entity-configs) shown))]
+           stats (zipmap shown (in-parallel (partial entity-stats admin-service (:db-ctx config) entity-configs) shown))]
        (support/html-response request
                               (admin-ui/admin-layout
                                (admin-ui/dashboard groups stats
-                                                   {:activity       (recent-activity user-service groups)
+                                                   {:activity       (recent-activity user-service (:db-ctx config) groups)
                                                     :entity-configs entity-configs
                                                     :extra-cards    (:dashboard-extra-cards config)
                                                     :display        (support/display-options config request)

@@ -79,7 +79,7 @@
     ;; A savepoint: in a tenant request's transaction a refused insert would
     ;; abort it on PostgreSQL, and the caller reads the winner's job next.
     (try
-      (db/in-savepoint (db/current-transaction)
+      (db/in-savepoint (db/current-transaction ctx)
                        #(db/execute-update! ctx {:insert-into :storage_export_jobs :values [(job->row job)]}))
       job
       (catch clojure.lang.ExceptionInfo e

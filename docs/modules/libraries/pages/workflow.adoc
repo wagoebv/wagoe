@@ -262,7 +262,7 @@ Pass an open transaction on the workflow store's datasource: a next.jdbc connect
 
 A datasource is refused, since it would autocommit. A nil transaction writes on the platform transaction open on this thread on the store's datasource, when there is one, else on the store's own connection.
 Hooks run before the caller commits; side-effect jobs join the transaction only on the database job queue.
-Code inside a platform `with-transaction` without a handle on it can pass `(wagoe.platform.database/current-transaction)`.
+Code inside a platform `with-transaction` without a handle on it can pass `(wagoe.platform.database/current-transaction ctx)`, the one open on `ctx`'s database.
 Scaffolded entities do: a create and its workflow instance are written in one transaction.
 
 == Tenancy
