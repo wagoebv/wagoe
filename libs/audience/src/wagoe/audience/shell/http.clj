@@ -383,6 +383,11 @@
 ;; Route definitions
 ;; =============================================================================
 
+(defn- require-platform-admin
+  "access/require-platform-admin with this shell's correlation ids."
+  [handler]
+  (access/require-platform-admin handler #(str (random-uuid))))
+
 (defn- guarded
   "Attach `middleware` to every route in `routes`, and a platform-admin check:
    segments span every tenant's users (BOU-954).
@@ -395,7 +400,7 @@
   (let [mw (vec middleware)]
     (if (empty? mw)
       routes
-      (mapv (fn [[path data]] [path (update data :middleware (fnil into []) (conj mw [access/require-platform-admin #(str (random-uuid))]))]) routes))))
+      (mapv (fn [[path data]] [path (update data :middleware (fnil into []) (conj mw require-platform-admin))]) routes))))
 
 (defn audience-web-routes
   "Reitit route data for the audience web pages. Mounted under /web.

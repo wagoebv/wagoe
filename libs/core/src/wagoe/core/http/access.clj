@@ -86,7 +86,7 @@
 (defn require-platform-admin
   "Ring middleware: a platform admin, or 403. `fresh-id` makes the
    correlation id for a caller who sent none; the shell supplies it, so core
-   reads no randomness. In route data: `[require-platform-admin fresh-id]`."
+   reads no randomness."
   [handler fresh-id]
   (fn [request]
     (if (platform-admin? (:user request))

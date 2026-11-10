@@ -301,6 +301,11 @@
 ;; Route definitions
 ;; =============================================================================
 
+(defn- require-platform-admin
+  "access/require-platform-admin with this shell's correlation ids."
+  [handler]
+  (access/require-platform-admin handler #(str (random-uuid))))
+
 (defn search-routes
   "Reitit route data for the search API. Mounted under /api/v1.
 
@@ -310,11 +315,11 @@
   [["/search/documents"
     {:post {:handler    (fn [req] (handle-index-document engine req))
             :parameters {:body IndexDocumentBody}
-            :middleware [[access/require-platform-admin #(str (random-uuid))]]
+            :middleware [require-platform-admin]
             :summary    "Index a search document"}}]
    ["/search/documents/:entity-type/:entity-id"
     {:delete {:handler    (fn [req] (handle-remove-document engine req))
-              :middleware [[access/require-platform-admin #(str (random-uuid))]]
+              :middleware [require-platform-admin]
               :summary    "Remove a search document"}}]
    ;; After /search/documents: reitit matches literal segments before
    ;; parameters, but declaring the specific ones first says so to a reader.
