@@ -345,22 +345,42 @@
   "Threading forms with a test before each step."
   (core-names "cond->" "cond->>"))
 
+(def ^:private thread-first-heads
+  "Threading forms that put the value first in a step, so `(-> x (doto prn))`
+   is `(doto x prn)`."
+  (core-names "->" "some->" "cond->" "doto"))
+
+(defn- thread-steps
+  "`{pos [{:token :line}]}`: the steps of each threading form in `calls`,
+   without the tests of `cond->`. `marked` keeps a mark for each literal
+   (strip-comments-and-strings), so `(-> \"s\" println)` keeps its value. A
+   threading form that is a step of `->` or the like takes its value from it."
+  [marked calls]
+  (let [kids  (into {} (for [{:keys [head pos end pos-line]} calls
+                             :when (and end (threading-heads head))]
+                         [pos (parsing/form-children marked pos end pos-line)]))
+        steps (fn [[{head :token} :as ch] n]
+                (let [s (drop n ch)]
+                  (if (cond-threading-heads head) (take-nth 2 (rest s)) s)))
+        inner (set (for [[_ [{head :token} :as ch]] kids :when (thread-first-heads head)
+                         {p :pos} (steps ch 2) :when p]
+                     p))]
+    (into {} (for [[pos ch] kids] [pos (steps ch (if (inner pos) 1 2))]))))
+
 (defn- threaded
-  "{:req :line} for each step of the threading form `c` that is a bare symbol
-   in `targets`; `:req` is what `targets` returns for it."
-  [stripped targets {:keys [head pos end pos-line]}]
-  (when (and end (threading-heads head))
-    (let [steps (drop 2 (parsing/form-children stripped pos end pos-line))]
-      (for [{:keys [token line]} (if (cond-threading-heads head) (take-nth 2 (rest steps)) steps)
-            :let [req (targets token)] :when req]
-        {:req req :line line}))))
+  "{:req :line} for each step of `c` in `steps` (thread-steps) that is a bare
+   symbol in `targets`; `:req` is what `targets` returns for it."
+  [steps targets {:keys [pos]}]
+  (for [{:keys [token line]} (get steps pos)
+        :let [req (targets token)] :when req]
+    {:req req :line line}))
 
 (defn- uses
   "{:req :line} for each place `c` calls a symbol in `targets`: `called`, or
    a threading step. The print and clock warnings read these."
-  [stripped targets c]
+  [steps targets c]
   (concat (when-let [req (called c targets higher-order-heads)] [{:req req :line (:line c)}])
-          (threaded stripped targets c)))
+          (threaded steps targets c)))
 
 ;; Clock and randomness: the shell reads them and passes the value in. The
 ;; accessors in forbidden-static-methods-by-class (Instant/now,
@@ -415,12 +435,20 @@
                (= label (str/replace (str/trim (subs content (inc pos) end)) #"\s+" " ")))
       label)))
 
+(defn- imported-static-class-aliases
+  "Resolve simple class names available in the file to their fully-qualified
+   names for forbidden static accessor checks."
+  [imports]
+  (into {} (for [fq (keys forbidden-static-methods-by-class)
+                 n  (class-names imports fq) :when (not= n fq)]
+             [n fq])))
+
 (defn- static-targets
   "`{simple-name fq-name}` for the forbidden static calls a file importing
    `imports` can write without the package: `Instant/now`."
   [imports]
-  (into {} (for [[fq ms] forbidden-static-methods-by-class
-                 n (class-names imports fq) :when (not= n fq), m ms]
+  (into {} (for [[n fq] (imported-static-class-aliases imports)
+                 m (forbidden-static-methods-by-class fq)]
              [(str n "/" m) (str fq "/" m)])))
 
 (defn- static-call-warnings
@@ -429,14 +457,13 @@
    UUID/randomUUID)`, `(-> x Instant/now)`. What the regex finds stays an
    error; these are warnings until 2.0, when the regex goes and they join it.
    Fully-qualified names need nothing here: scan-fq-calls finds them anywhere."
-  [stripped targets {:keys [head pos end] :as c}]
-  (if (and (targets head)
-           ;; What the regex sees: the head on the paren's line, no comma before it.
-           (-> (re-matcher #"\([ \t\x0B\f]*[^\s,]" stripped)
-               (.region (int pos) (int (or end (count stripped))))
-               (.lookingAt)))
-    (threaded stripped targets c)
-    (uses stripped targets c)))
+  [stripped steps targets {:keys [head pos end] :as c}]
+  (when-not (and (targets head)
+                 ;; What the regex sees: the head on the paren's line, no comma before it.
+                 (-> (re-matcher #"\([ \t\x0B\f]*[^\s,]" stripped)
+                     (.region (int pos) (int (or end (count stripped))))
+                     (.lookingAt)))
+    (uses steps targets c)))
 
 (defn- scan-impurity
   "Scan stripped content for (throw ...), mutable-state constructs and print
@@ -462,6 +489,7 @@
   [file content ns-form ns-name imports {:keys [allow-throw allow-mutable-state]}]
   (let [stripped  (parsing/strip-comments-and-strings content)
         calls     (parsing/call-forms stripped)
+        steps     (thread-steps (parsing/strip-comments-and-strings content \_) calls)
         clock     (clock-symbols imports)
         statics   (static-targets imports)
         ctors     (clock-constructor-names imports)
@@ -490,16 +518,16 @@
        (for [[targets skip] [[(into out-symbols (pprint-symbols ns-form)) captured]
                              [tap-symbols comments]]
              c calls :when (not (inside? skip c))
-             u (uses stripped targets c)]
+             u (uses steps targets c)]
          (warning :print u)))
      (when-not (ns-meta-flag? ns-form :wagoe/allow-clock)
        (for [c calls :when (not (inside? comments c))
              u (concat (when-let [ctor (clock-constructor content ctors c)]
                          [{:req ctor :line (:line c)}])
-                       (uses stripped clock c))]
+                       (uses steps clock c))]
          (warning :clock u)))
      (for [c calls :when (not (inside? comments c))
-           u (static-call-warnings stripped statics c)]
+           u (static-call-warnings stripped steps statics c)]
        (warning :fq-call u)))))
 
 (defn- forbidden-require?
@@ -631,14 +659,6 @@
           (and (re-find file-pattern file)
                (re-find req-pattern req)))
         allowed-fq-violations))
-
-(defn- imported-static-class-aliases
-  "Resolve simple class names available in the file to their fully-qualified
-   names for forbidden static accessor checks."
-  [imports]
-  (into {} (for [fq (keys forbidden-static-methods-by-class)
-                 n  (class-names imports fq) :when (not= n fq)]
-             [n fq])))
 
 (defn- scan-simple-static-calls
   "Scan stripped file content for forbidden runtime access via imported or

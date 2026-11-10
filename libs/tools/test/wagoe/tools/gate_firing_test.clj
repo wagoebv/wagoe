@@ -322,10 +322,14 @@
                                   "(defn c [x] [(-> x #(inc %) shuffle) (doto x (println))])\n"
                                   "(defn d [x] [(-> x :println) (-> x 'println) (cond-> x println inc)])\n"
                                   "(defn e [print] (let [println identity] (map inc print)))\n"
-                                  "(defn f [x] (with-out-str (-> x println)))\n"))]
+                                  "(defn f [x] (with-out-str (-> x println)))\n"
+                                  "(defn g [x] [(-> \"s\" println) (->> \\a shuffle) (cond-> \"s\" x prn)])\n"
+                                  "(defn h [x] [(-> x (doto print) inc) (-> x (cond-> x tap>))])\n"))]
         (is (= #{["println" 2 :print] ["prn" 2 :print] ["print" 2 :print]
                  ["println" 5 :print] ["tap>" 5 :print]
-                 ["shuffle" 6 :clock] ["println" 6 :print]}
+                 ["shuffle" 6 :clock] ["println" 6 :print]
+                 ["println" 10 :print] ["shuffle" 10 :clock] ["prn" 10 :print]
+                 ["print" 11 :print] ["tap>" 11 :print]}
                (set (map (juxt :req :line :kind)
                          (check-fcis/check-file file {:allow-throw #{} :allow-mutable-state #{}}))))
             "a keyword, a quoted symbol, a cond-> test, a local named like a printer and captured output are not calls"))
