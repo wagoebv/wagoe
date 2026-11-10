@@ -174,8 +174,8 @@ the store's datasource, else on the store's own connection.
                                     :entity-id   (:id order)}))
 ```
 
-- `wagoe.platform.database/current-transaction` is the connection a platform
-  `with-transaction` holds on this thread, for code that has no handle on it.
+- `(wagoe.platform.database/current-transaction ctx)` is the connection a platform
+  `with-transaction` holds on this thread on `ctx`'s database, for code that has no handle on it.
   Scaffolded workflow adapters use it, so a create and its instance are atomic.
 - A datasource is refused with `:validation-error`: it would autocommit.
 - Hooks run before the caller commits. Side-effect jobs join `tx` only on a

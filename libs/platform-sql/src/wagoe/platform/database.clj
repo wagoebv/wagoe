@@ -119,12 +119,6 @@
    on this thread; with none open, each time."
   execution/remembered-in-transaction)
 
-(defn current-transaction
-  "The connection of the transaction `with-transaction` holds open on this
-   thread, or nil. For a port that takes a caller's transaction explicitly."
-  []
-  execution/*transaction-datasource*)
-
 (defn tx-connection
   "The connection behind `tx` when it is an open transaction: a next.jdbc
    connection, or a platform transaction context. nil for anything else, a
@@ -135,6 +129,16 @@
     (when (and (instance? java.sql.Connection conn)
                (not (.getAutoCommit ^java.sql.Connection conn)))
       conn)))
+
+(defn current-transaction
+  "The connection of the transaction open on this thread on `db`'s database
+   (a context or a datasource), `db` itself when it is one, else nil: never
+   another database's (BOU-971). For a port that takes a caller's transaction.
+   The 0-arity answers the innermost on any database; deprecated, removed in 2.0."
+  ([] execution/*transaction-datasource*)
+  ([db]
+   (or (tx-connection db)
+       (execution/transaction-on (if (map? db) (:datasource db) db)))))
 
 (def ^:dynamic *tenant-id*
   "The tenant whose schema this thread's work runs in, or nil. The tenant

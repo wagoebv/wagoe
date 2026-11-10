@@ -66,12 +66,16 @@
       (is (= 1 (:failed result)))
       (is (= 100 (count (:results result)))))))
 
-(deftest ^:unit for-each-tenant-refuses-an-open-transaction
-  (with-redefs [db/current-transaction (constantly ::open-tx)]
+(deftest ^:unit for-each-tenant-refuses-an-open-transaction-on-its-database
+  ;; Open on :ds only
+  (with-redefs [db/current-transaction (fn [ctx] (when (= :ds (:datasource ctx)) ::open-tx))]
     (is (= :configuration-error
            (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
                                         (sut/for-each-tenant (tenant-service 1 (atom [])) (fake-provider [])
-                                                             {:datasource :ds} (fn [_] :ok))))))))))
+                                                             {:datasource :ds} (fn [_] :ok))))))))
+    (testing "another database's is no concern of it (BOU-971)"
+      (is (= 1 (:processed (sut/for-each-tenant (tenant-service 1 (atom [])) (fake-provider [])
+                                                {:datasource :other} (fn [_] :ok))))))))
 
 (deftest ^:unit in-tenant-runs-f-in-that-tenants-schema
   (let [schemas  (atom [])

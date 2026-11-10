@@ -145,4 +145,9 @@
  {:ticket "BOU-968"
   :since  "Unreleased"
   :note   "A printer or clock read as a step of ->, ->>, some->, cond-> or doto, and a refused static call (Instant/now, UUID/randomUUID, System/currentTimeMillis …) split across lines from its paren or handed to apply, map or the like, in a core/ namespace. bb check:fcis warns until 2.0, then fails."
-  :manual "Move the call to the shell and pass the value in, as for the direct call. A rewrite cannot tell where the value should come from."}]
+  :manual "Move the call to the shell and pass the value in, as for the direct call. A rewrite cannot tell where the value should come from."}
+
+ {:ticket "BOU-971"
+  :since  "Unreleased"
+  :note   "The 0-arity wagoe.platform.database/current-transaction: it answers the innermost transaction on any database."
+  :manual "Pass the context or datasource the code writes through: (current-transaction ctx). A rewrite cannot tell which that is."}]

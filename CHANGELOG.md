@@ -69,6 +69,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **A repository on a second database wrote into the first's open transaction** (BOU-967). Each database's writes stay
   in its own transaction now. Nothing to change.
+- **Admin, storage, push and workflow took a savepoint on another database's transaction** when two were nested, and
+  `for-each-tenant` refused to run in one (BOU-971). They look at their own database's now. Nothing to change.
 - **`bb check:fcis` let core require a shell namespace named `…shell.core`, `.schema` or `.ports`** (BOU-964). It fails
   now; move that call to the shell.
 - **A rights change whose audit entry failed was kept, and missing from the rights timeline** (BOU-958). It rolls back
@@ -122,6 +124,8 @@ for what is public API, what is internal, and how deprecations are announced.
   (BOU-968): `bb check:fcis` warns, and fails from 2.0. Same fix as the call they stand for.
 - **The 1-arity `wagoe.core.interceptor-context/record-start-time` and `record-end-time`** (BOU-963): they read the clock.
   Pass `(System/nanoTime)` as the second argument.
+- **The 0-arity `wagoe.platform.database/current-transaction`** (BOU-971): it answers any database's transaction.
+  Pass the context or datasource you write through.
 - **`wagoe.audience.ports/query-users-sql`** (BOU-875), removed in 2.0 (BOU-935). Implement `IUserQuery/query-user-ids`.
 
 ## [1.1.2] — 2026-11-07
