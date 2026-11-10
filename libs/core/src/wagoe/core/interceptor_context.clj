@@ -259,20 +259,23 @@
   (assoc-in context [:timing timing-key] value))
 
 (defn record-start-time
-  "Records operation start time in nanoseconds."
-  [context]
-  (update-timing context :start (System/nanoTime)))
+  "Records `nanos`, the shell's `(System/nanoTime)`, as the start time.
+   The 1-arity reads the clock in core; deprecated, removed in 2.0."
+  ([context] (record-start-time context (System/nanoTime)))
+  ([context nanos]
+   (update-timing context :start nanos)))
 
 (defn record-end-time
-  "Records operation end time and calculates duration."
-  [context]
-  (let [end-time (System/nanoTime)
-        start-time (get-timing context :start)
-        duration-ms (when start-time
-                      (/ (- end-time start-time) 1e6))]
-    (-> context
-        (update-timing :end end-time)
-        (cond-> duration-ms (update-timing :duration-ms duration-ms)))))
+  "Records `nanos`, the shell's `(System/nanoTime)`, as the end time, and the
+   duration. The 1-arity reads the clock in core; deprecated, removed in 2.0."
+  ([context] (record-end-time context (System/nanoTime)))
+  ([context nanos]
+   (let [start-time  (get-timing context :start)
+         duration-ms (when start-time
+                       (/ (- nanos start-time) 1e6))]
+     (-> context
+         (update-timing :end nanos)
+         (cond-> duration-ms (update-timing :duration-ms duration-ms))))))
 
 (defn add-effect-error
   "Adds an effect execution error to the context."
