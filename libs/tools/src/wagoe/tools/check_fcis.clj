@@ -235,24 +235,40 @@
     (require-keys! ":allow-sql" entries [:path :why])
     entries))
 
+(def ^:private warning-allow-keys
+  "The config key that exempts a namespace from each warning kind."
+  {:print :allow-print, :clock :allow-clock})
+
+(defn allowed-warnings
+  "The `:allow-print` and `:allow-clock` entries, checked: each needs an `:ns`
+   and a `:why`. Returns `{key #{ns-name}}`."
+  [m]
+  (into {} (for [k (vals warning-allow-keys)
+                 :let [entries (get m k)]]
+             (do (require-keys! (str k) entries [:ns :why])
+                 [k (set (map (comp str :ns) entries))]))))
+
 (defn read-config
   "Read the optional .wagoe/check-fcis.edn allowlist. Returns a map with
    :allow-throw and :allow-mutable-state sets (namespace-name string members),
-   :allow-require ({ns #{require}}) and :allow-sql ([{:path :why}])."
+   :allow-require ({ns #{require}}), :allow-sql ([{:path :why}]) and
+   :allow-print and :allow-clock sets."
   []
   (let [f (io/file (System/getProperty "user.dir") ".wagoe" "check-fcis.edn")
         empty-config {:allow-throw #{} :allow-mutable-state #{} :allow-require {}
-                      :allow-sql []}]
+                      :allow-sql [] :allow-print #{} :allow-clock #{}}]
     (if (.exists f)
       (let [m (edn/read-string (slurp f))]
-        {:allow-throw         (set (map str (:allow-throw m)))
-         :allow-mutable-state (set (map str (:allow-mutable-state m)))
-         ;; Deliberately outside any try: a malformed allowlist used to be
-         ;; swallowed and read as "no exemptions", which turns a typo into a
-         ;; gate that reports violations nobody can silence — or, with the
-         ;; inverted require list, one that passes for the wrong reason.
-         :allow-require       (allowed-requires m)
-         :allow-sql           (allowed-sql m)})
+        (merge
+         (allowed-warnings m)
+         {:allow-throw         (set (map str (:allow-throw m)))
+          :allow-mutable-state (set (map str (:allow-mutable-state m)))
+          ;; Deliberately outside any try: a malformed allowlist used to be
+          ;; swallowed and read as "no exemptions", which turns a typo into a
+          ;; gate that reports violations nobody can silence — or, with the
+          ;; inverted require list, one that passes for the wrong reason.
+          :allow-require       (allowed-requires m)
+          :allow-sql           (allowed-sql m)}))
       empty-config)))
 
 (defn- ns-meta-flag?
@@ -367,6 +383,8 @@
    `tap>` is not captured by it. Nothing inside a `(comment …)` block runs.
 
    Clock and randomness reads are `:clock` warnings on the same terms.
+   ^:wagoe/allow-print and ^:wagoe/allow-clock exempt a namespace from each;
+   their config entries are applied in check-file, so stale ones can be found.
 
    Reads operator position rather than matching lines: `(\\n throw …)` is the
    same call as `(throw …)`, and the regex version scanned one line at a time
@@ -395,15 +413,17 @@
      (when-not mut-ok?
        (for [c calls :when (called? c mutable-state-symbols)]
          (finding mutable-state-symbols :mutable-state c)))
-     (for [[targets skip] [[(into out-symbols (pprint-symbols ns-form)) captured]
-                           [tap-symbols comments]]
-           c calls :when (and (called? c targets) (not (inside? skip c)))]
-       (assoc (finding targets :print c) :severity :warning))
-     (for [c calls
-           :let [ctor (clock-constructor stripped imports c)]
-           :when (and (or ctor (called? c clock)) (not (inside? comments c)))]
-       (cond-> (assoc (finding clock :clock c) :severity :warning)
-         ctor (assoc :req ctor))))))
+     (when-not (ns-meta-flag? ns-form :wagoe/allow-print)
+       (for [[targets skip] [[(into out-symbols (pprint-symbols ns-form)) captured]
+                             [tap-symbols comments]]
+             c calls :when (and (called? c targets) (not (inside? skip c)))]
+         (assoc (finding targets :print c) :severity :warning)))
+     (when-not (ns-meta-flag? ns-form :wagoe/allow-clock)
+       (for [c calls
+             :let [ctor (clock-constructor stripped imports c)]
+             :when (and (or ctor (called? c clock)) (not (inside? comments c)))]
+         (cond-> (assoc (finding clock :clock c) :severity :warning)
+           ctor (assoc :req ctor)))))))
 
 (defn- forbidden-require?
   "Whether the core namespace `ns-name` may not require `req`.
@@ -689,9 +709,22 @@
   (remove (fn [entry] (some #(covers? entry %) findings))
           (:allow-sql config)))
 
+(defn stale-warning-entries
+  "`[key ns-name]` for each `:allow-print` or `:allow-clock` entry whose
+   namespace has no such warning in `findings`."
+  [config findings]
+  (let [seen (set (map (juxt :kind :ns) findings))]
+    (for [[kind k] warning-allow-keys, ns-name (get config k)
+          :when (not (seen [kind ns-name]))]
+      [k ns-name])))
+
+(defn- allowed? [config finding]
+  (or (sql-allowed? config finding)
+      (contains? (get config (warning-allow-keys (:kind finding))) (:ns finding))))
+
 (defn- check-file*
-  "check-file before the :allow-sql allowlist, which -main also needs to find
-   stale entries."
+  "check-file before the :allow-sql, :allow-print and :allow-clock
+   allowlists, which -main also needs to find stale entries."
   [file config]
   (let [content  (slurp file)
         ns-form  (parsing/read-ns-form file)
@@ -745,18 +778,18 @@
    The 1-arity reads the .wagoe/check-fcis.edn allowlist itself."
   ([file] (check-file file (read-config)))
   ([file config]
-   (remove #(sql-allowed? config %) (check-file* file config))))
+   (remove #(allowed? config %) (check-file* file config))))
 
 ;; ---------------------------------------------------------------------------
 ;; Entry point
 ;; ---------------------------------------------------------------------------
 
-(defn- print-finding [{:keys [file ns req kind line severity]}]
+(defn- print-finding [{:keys [file ns req kind line severity key]}]
   (println (str (if (= :warning severity) "  WARNING: " "  VIOLATION: ")
                 file (when line (str ":" line))))
   (println
-   (if (= :stale-allow-sql kind)
-     (str "    :allow-sql entry " (ansi/red req) " exempts nothing — remove it")
+   (if (= :stale-allow kind)
+     (str "    " key " entry " (ansi/red req) " exempts nothing — remove it")
      (str "    namespace " ns " "
           (case kind
             :fq-call       (str "calls " (ansi/red req))
@@ -776,11 +809,13 @@
         ports-files (ports-source-paths)
         raw         (concat (mapcat #(check-file* % config) files)
                             (mapcat sql-port-findings ports-files))
-        stale       (for [{:keys [path]} (stale-sql-entries config raw)]
-                      {:file ".wagoe/check-fcis.edn" :req path :kind :stale-allow-sql})
+        stale       (for [[k req] (concat (for [{:keys [path]} (stale-sql-entries config raw)]
+                                                [:allow-sql path])
+                                              (stale-warning-entries config raw))]
+                      {:file ".wagoe/check-fcis.edn" :key k :req req :kind :stale-allow})
         {warnings :warning violations :error}
         (group-by #(:severity % :error)
-                  (concat (remove #(sql-allowed? config %) raw) stale))]
+                  (concat (remove #(allowed? config %) raw) stale))]
     (when (seq warnings)
       (println (ansi/yellow "FC/IS warnings:"))
       (run! print-finding warnings)
@@ -792,7 +827,7 @@
         (run! print-finding violations)
         (println)
         (println (str (count violations) " violation(s) found. Core namespaces must not import shell, I/O, logging, or DB code, throw, or hold mutable state; core and ports know no SQL."))
-        (println (ansi/dim "Escape hatch: ^:wagoe/allow-throw / ^:wagoe/allow-mutable-state ns metadata, or .wagoe/check-fcis.edn allowlist."))
+        (println (ansi/dim "Escape hatch: ^:wagoe/allow-throw / ^:wagoe/allow-mutable-state / ^:wagoe/allow-print / ^:wagoe/allow-clock ns metadata, or .wagoe/check-fcis.edn allowlist."))
         (System/exit 1))
       (do
         (println (ansi/green "FC/IS check passed.")

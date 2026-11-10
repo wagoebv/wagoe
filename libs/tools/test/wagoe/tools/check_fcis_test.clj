@@ -389,3 +389,33 @@
   (let [config {:allow-sql [{:path "libs/a/" :why "x"} {:path "libs/b/ports.clj" :why "y"}]}
         found  [{:path "libs/a/src/a/core/q.clj"}]]
     (is (= ["libs/b/ports.clj"] (map :path (fcis/stale-sql-entries config found))))))
+
+;; ===========================================================================
+;; The print and clock warnings can be exempted, as throw and mutable state can
+;; ===========================================================================
+
+(deftest ^:unit allow-print-and-allow-clock-metadata-exempt
+  (let [src "(defn f [x] (println x) (rand))\n"]
+    (is (= #{:print :clock} (set (map :kind (check-src (str "(ns ex.core)\n" src))))))
+    (is (= [:clock] (map :kind (check-src (str "(ns ^:wagoe/allow-print ex.core)\n" src)))))
+    (is (= [:print] (map :kind (check-src (str "(ns ^:wagoe/allow-clock ex.core)\n" src)))))))
+
+(deftest ^:unit allow-print-and-allow-clock-config-exempt-by-ns
+  (let [src "(ns ex.core)\n(defn f [x] (println x) (rand))\n"]
+    (is (= [:clock] (map :kind (check-src src {:allow-print #{"ex.core"}}))))
+    (is (= [:print] (map :kind (check-src src {:allow-clock #{"ex.core"}}))))
+    (is (= 2 (count (check-src src {:allow-print #{"other.core"}}))))))
+
+(deftest ^:unit an-allow-print-or-allow-clock-entry-needs-a-why
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"no :why"
+                        (fcis/allowed-warnings {:allow-print [{:ns 'ex.core}]})))
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"no :ns"
+                        (fcis/allowed-warnings {:allow-clock [{:why "reasons"}]})))
+  (is (= {:allow-print #{"ex.core"} :allow-clock #{}}
+         (fcis/allowed-warnings {:allow-print [{:ns 'ex.core :why "a CLI renderer"}]}))))
+
+(deftest ^:unit an-allow-print-or-allow-clock-entry-that-exempts-nothing-is-stale
+  (let [config {:allow-print #{"a.core" "b.core"} :allow-clock #{"a.core"}}
+        found  [{:kind :print :ns "a.core"} {:kind :print :ns "c.core"}]]
+    (is (= #{[:allow-print "b.core"] [:allow-clock "a.core"]}
+           (set (fcis/stale-warning-entries config found))))))

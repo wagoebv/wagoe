@@ -34,6 +34,7 @@ Core does not log yet: there is no observation channel that returns nil, never t
 
 For the clock it refuses `Instant/now`, `UUID/randomUUID` and `System/currentTimeMillis`, and warns on the other clock and random reads: `(java.util.Date.)`, `System/nanoTime`, `Math/random`, `rand`, `rand-int`, `rand-nth`, `shuffle`, `random-uuid`.
 That warning too is an error from 2.0. The shell reads the value and passes it in.
+A namespace that must keep either is exempted with `^:wagoe/allow-print` or `^:wagoe/allow-clock` metadata, or an `:allow-print` or `:allow-clock` entry in `.wagoe/check-fcis.edn` with an `:ns` and a `:why`; an entry that exempts nothing fails the gate.
 
 [source,clojure]
 ----

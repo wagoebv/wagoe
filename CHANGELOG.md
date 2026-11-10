@@ -54,6 +54,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`^:wagoe/allow-print` and `^:wagoe/allow-clock`, or `:allow-print`/`:allow-clock` in `.wagoe/check-fcis.edn`** (BOU-961):
+  exempt a core namespace from those `bb check:fcis` warnings. An entry needs an `:ns` and a `:why`.
 - **`wagoe.core.http.errors` and `wagoe.core.http.access`**: the error body and access checks, without cheshire (BOU-930).
   The `wagoe.platform.core.http` namespaces delegate to them; nothing to change.
 - **`com.wagoe/wagoe-platform-sql`**: platform's database, migration, lease and transit namespaces, same names (BOU-871).

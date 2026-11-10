@@ -55,7 +55,7 @@
      :ns       ns
      :kind     kind
      :message  (format "Core namespace %s must not %s %s"
-                       ns (name (get {:print :call} kind (or kind :use))) req)}))
+                       ns (name (get {:print :call :clock :call} kind (or kind :use))) req)}))
 
 (defn- tests->issues
   "A failing-tests step → one issue per failure. `failures` is a seq of
