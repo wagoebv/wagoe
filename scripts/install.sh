@@ -233,6 +233,30 @@ retry_fetch() {
   return 1
 }
 
+# Third-party installers are pinned to a release and checked against the hash
+# recorded here (BOU-938). Moving a version means updating its hash too.
+CLOJURE_VERSION="1.12.6.1673"
+CLOJURE_INSTALL_SHA256="5ae63b082ed33bf4c29bf1a8317c5c15249d1bc753676b2f5177fb3804ad6f77"
+BB_VERSION="1.13.229"
+BB_INSTALL_SHA256="85b4e836f50d64b0b1d28ae626865aef42ab9c7e488e177aa96ed5841bb52bc9"
+# The static Linux tarballs that installer fetches with --static.
+BB_LINUX_AMD64_SHA256="64fb984991c6e68f44e8a9391176a9bb411f9b9ae9959a6bca5307c75a7414da"
+BB_LINUX_AARCH64_SHA256="d85a95210efe6d8fd3b534f3d594948e3f30fa1c5864044773105ad3e2d79096"
+
+verify_sha256() {
+  # file, expected hash. Removes the file unless it matches. A hash command
+  # that fails must reach fail, not end the script silently under set -e.
+  local actual=""
+  if command -v sha256sum &>/dev/null; then
+    actual="$(sha256sum "$1" | cut -d' ' -f1)" || actual=""
+  elif command -v shasum &>/dev/null; then
+    actual="$(shasum -a 256 "$1" | cut -d' ' -f1)" || actual=""
+  fi
+  [[ "$actual" == "$2" ]] && return 0
+  rm -f "$1"
+  fail "$1 does not match its pinned SHA-256 (expected $2, got ${actual:-none: no sha256sum or shasum}). Not running it."
+}
+
 # ── Clojure CLI ───────────────────────────────────────────────
 if command -v clojure &>/dev/null; then
   ok "Clojure CLI already installed"
@@ -242,8 +266,10 @@ else
     brew install clojure 2>/dev/null || fail "Failed to install Clojure via brew"
   else
     retry_fetch "Clojure CLI download" \
-      curl -fsSL -O https://github.com/clojure/brew-install/releases/latest/download/linux-install.sh \
+      curl -fsSL -O "https://github.com/clojure/brew-install/releases/download/$CLOJURE_VERSION/linux-install.sh" \
       || fail "Could not download the Clojure CLI installer after 3 attempts."
+    # It checks the tarball it fetches against its own pinned hash.
+    verify_sha256 linux-install.sh "$CLOJURE_INSTALL_SHA256"
     chmod +x linux-install.sh
     # `|| fail` is load-bearing. This was `as_root ./… && rm …`, and `set -e`
     # exempts the failure of any command in an && list except the last, so a
@@ -264,11 +290,18 @@ else
     brew install borkdude/brew/babashka 2>/dev/null || fail "Failed to install Babashka via brew"
   else
     retry_fetch "Babashka download" \
-      curl -fsSL -O https://raw.githubusercontent.com/babashka/babashka/master/install \
+      curl -fsSL -O "https://raw.githubusercontent.com/babashka/babashka/v$BB_VERSION/install" \
       || fail "Could not download the Babashka installer after 3 attempts."
+    verify_sha256 install "$BB_INSTALL_SHA256"
     chmod +x install
     # Same && / set -e trap as the Clojure CLI step above — see the note there.
-    as_root ./install || fail "Failed to install Babashka"
+    # --static fixes which tarball it fetches, so its hash can be pinned.
+    case "$(uname -m)" in
+      aarch64|arm64) bb_sha="$BB_LINUX_AARCH64_SHA256" ;;
+      *)             bb_sha="$BB_LINUX_AMD64_SHA256" ;;
+    esac
+    as_root ./install --version "$BB_VERSION" --static --checksum "$bb_sha" \
+      || fail "Failed to install Babashka"
     rm -f install
   fi
   ok "Babashka installed"
@@ -289,6 +322,7 @@ USER_BIN="$HOME/.local/bin"
 # shebang, so fetching it into a user directory needs no root and no classpath
 # resolution at all (BOU-476).
 BBIN_VERSION="v0.2.5"
+BBIN_SHA256="ef3436fff67850423dec28333d69a67f5be0da075e2ac93c39fcf278d69b625b"
 
 install_bbin() {
   mkdir -p "$USER_BIN"
@@ -296,6 +330,7 @@ install_bbin() {
     curl -fsSL -o "$USER_BIN/bbin" \
     "https://raw.githubusercontent.com/babashka/bbin/$BBIN_VERSION/bbin" \
     || fail "Could not download bbin $BBIN_VERSION after 3 attempts."
+  verify_sha256 "$USER_BIN/bbin" "$BBIN_SHA256"
   chmod +x "$USER_BIN/bbin"
 }
 

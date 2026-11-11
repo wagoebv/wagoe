@@ -9,13 +9,15 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is]]))
 
-(defn- install-sdkman-fn
-  "The install_sdkman function's source, cut out of scripts/install.sh so the
-   test runs the real code rather than a copy."
-  []
+(defn- install-sh-fn
+  "Function `fname`'s source, cut out of scripts/install.sh so the test runs
+   the real code rather than a copy."
+  [fname]
   (let [src (slurp "scripts/install.sh")]
-    (or (re-find #"(?ms)^install_sdkman\(\) \{\n.*?^\}\n" src)
-        (throw (ex-info "install_sdkman not found in scripts/install.sh" {})))))
+    (or (re-find (re-pattern (str "(?ms)^" fname "\\(\\) \\{\\n.*?^\\}\\n")) src)
+        (throw (ex-info (str fname " not found in scripts/install.sh") {})))))
+
+(defn- install-sdkman-fn [] (install-sh-fn "install_sdkman"))
 
 (def ^:private fake-curl
   ;; Prints a script for the piped `bash`, the way get.sdkman.io does. The
@@ -66,3 +68,23 @@ fi
         (is (fs/exists? (fs/path home ".sdkman" "candidates" "mine"))
             "a directory this run did not create is left alone"))
       (finally (fs/delete-tree home)))))
+
+(defn- verify
+  "verify_sha256 run as the installer runs it: strict mode, with its fail."
+  [file expected]
+  (let [fail (re-find #"(?m)^fail\(\) .*\n" (slurp "scripts/install.sh"))]
+    (process/shell {:out :string :err :string :continue true}
+                   "bash" "-c" (str "set -euo pipefail\nRED= RESET=\n" fail (install-sh-fn "verify_sha256")
+                                    "verify_sha256 \"$1\" \"$2\"")
+                   "_" (str file) expected)))
+
+(deftest ^:unit ^:security a-download-that-does-not-match-its-pin-is-removed
+  ;; BOU-938: a pinned installer that does not match its hash is never run.
+  (let [file (fs/create-temp-file)
+        ;; sha256 of "hello\n"
+        good "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"]
+    (spit (str file) "hello\n")
+    (is (zero? (:exit (verify file good))))
+    (is (fs/exists? file))
+    (is (= 1 (:exit (verify file (apply str (repeat 64 "0"))))))
+    (is (not (fs/exists? file)) "a mismatch removes the file")))
