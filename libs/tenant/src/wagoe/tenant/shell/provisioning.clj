@@ -6,7 +6,7 @@
    
    Key Responsibilities:
    - Create PostgreSQL schema for tenant
-   - Copy table structures from public schema
+   - Run the tenant-scoped migrations into it
    - Initialize tenant-specific data
    - Validate schema creation success
    
@@ -18,7 +18,7 @@
    - Only works with PostgreSQL (other databases ignored)
    - Schema names must be valid PostgreSQL identifiers
    - Provisioning is idempotent (safe to call multiple times)
-   - Does not copy data from public schema (only structure)"
+   - Copies no data from public"
   (:require [next.jdbc.transaction :as jdbc-tx]
             [wagoe.platform.database :as db]
             [wagoe.platform.ports.database :as protocols]
@@ -26,7 +26,6 @@
             [wagoe.tenant.ports :as ports]
             [wagoe.tenant.schema :as tenant-schema]
             [wagoe.tenant.shell.tenant-migrations :as tenant-migrations]
-            [clojure.string :as str]
             [clojure.tools.logging :as log]))
 
 ;; =============================================================================
@@ -45,76 +44,6 @@
                     {:type :validation-error
                      :field :schema-name
                      :schema-name schema-name}))))
-
-;; =============================================================================
-;; Schema Structure Introspection
-;; =============================================================================
-
-(defn- get-table-ddl
-  "Get CREATE TABLE DDL for a table by introspecting its structure.
-   
-   Args:
-     ctx: Database context
-     table-name: Name of table to introspect (string)
-     target-schema: Target schema name (default: public)
-   
-   Returns:
-     String DDL statement to recreate the table"
-  [ctx table-name target-schema]
-  (let [columns (db/get-table-info ctx table-name)
-        column-defs (map (fn [col]
-                           (let [col-name (:name col)
-                                 col-type (:type col)
-                                 not-null (if (:not-null col) " NOT NULL" "")
-                                 pk (if (:primary-key col) " PRIMARY KEY" "")
-                                 default (if-let [d (:default col)]
-                                           (str " DEFAULT " d)
-                                           "")]
-                             (str col-name " " col-type not-null pk default)))
-                         columns)
-        columns-str (str/join ",\n  " column-defs)]
-    (str "CREATE TABLE IF NOT EXISTS " target-schema "." table-name " (\n  "
-         columns-str
-         "\n)")))
-
-(def ^:private tenant-scoped-tables
-  "Public tables whose structure belongs in tenant schemas.
-
-   Shared platform/auth tables must stay in `public` and must never be
-   provisioned into `tenant_<slug>` schemas."
-  #{"contractors"
-    "contracts"
-    "assignments"
-    "timesheets"
-    "invoices"
-    "compliance_snapshots"
-    "compliance_changes"
-    "vbar_assessments"
-    "import_batches"})
-
-(defn- get-public-tables
-  "Get list of all tables in public schema.
-   
-   Args:
-     ctx: Database context
-   
-   Returns:
-     Vector of table names (strings)"
-  [ctx]
-  (let [query "SELECT table_name 
-               FROM information_schema.tables 
-               WHERE table_schema = 'public' 
-                 AND table_type = 'BASE TABLE'
-                 AND table_name NOT IN ('flyway_schema_history', 'migratus_migrations')
-               ORDER BY table_name"]
-    (->> (db/execute-query! ctx [query])
-         (map :table-name)
-         (filter tenant-scoped-tables)
-         vec)))
-
-;; =============================================================================
-;; Schema Provisioning Operations
-;; =============================================================================
 
 (defn- schema-exists?
   "Check if PostgreSQL schema exists.
@@ -192,30 +121,10 @@
     (db/execute-ddl! ctx (str "CREATE SCHEMA " schema-name)))
   (log/debug "Schema verified" {:schema schema-name :exists? true}))
 
-(defn- copy-table-structure!
-  "Copy table structure from public schema to tenant schema.
-   
-   Args:
-     ctx: Database context
-     table-name: Table name to copy (string)
-     target-schema: Target schema name (string)
-   
-   Returns:
-     nil
-   
-   Throws:
-     Exception if table creation fails"
-  [ctx table-name target-schema]
-  (assert-safe-schema-name! target-schema)
-  (log/debug "Copying table structure" {:table table-name :target-schema target-schema})
-  (let [ddl (get-table-ddl ctx table-name target-schema)]
-    (db/execute-ddl! ctx ddl)))
-
 (defn- populate-tenant-schema!
   "Build a freshly created tenant schema by running the tenant-scoped migration
    set into it, so new tenants converge on the same migration path used to keep
-   existing tenants up to date. Replaces copying table structure from public,
-   which only ever copied whole tables and never picked up column/index deltas."
+   existing tenants up to date."
   [ctx schema-name]
   (assert-safe-schema-name! schema-name)
   (tenant-migrations/migrate-tenant! ctx schema-name))
@@ -267,14 +176,13 @@
 (defn provision-tenant!
   "Provision tenant database schema.
    
-   This creates a PostgreSQL schema for the tenant and copies the
-   table structure from the public schema. It is idempotent and safe
-   to call multiple times.
+   This creates a PostgreSQL schema for the tenant and runs the tenant-scoped
+   migrations into it. It is idempotent and safe to call multiple times.
    
    Steps:
    1. Check if tenant already has schema
    2. Create schema if it doesn't exist
-   3. Copy table structures from public schema
+   3. Run the tenant-scoped migrations into it
    4. Validate provisioning success
    
    Args:
@@ -397,39 +305,23 @@
   [ctx]
   (if (schemas? ctx)
     (let [query ["SELECT schema_name FROM information_schema.schemata
-                  WHERE schema_name LIKE 'tenant_%'
+                  WHERE schema_name LIKE 'tenant\\_%'
                   ORDER BY schema_name"]]
       (->> (db/execute-query! ctx query)
            (mapv :schema-name)))
     []))
 
 (defn sync-tenant-schemas!
-  "Backfill every existing tenant_<slug> schema with all tenant-scoped tables.
+  "Run pending tenant-scoped migrations in every existing tenant_<slug> schema,
+   the same set `provision-tenant!` builds a new one from (BOU-941). Boot does
+   this too; call it to re-run after a failure. No-op on non-PostgreSQL.
 
-   `provision-tenant!` only copies the tenant-scoped tables into a schema at
-   creation time and returns early when the schema already exists. So when
-   `tenant-scoped-tables` gains entries in a release, previously-provisioned
-   tenants do NOT get the new tables, and any job or repository using them under
-   the tenant search_path fails with a missing relation. This is the
-   upgrade/sync path: run it on deploy after extending `tenant-scoped-tables`.
-
-   For each existing tenant schema it re-copies the public table structures.
-   `get-table-ddl` emits `CREATE TABLE IF NOT EXISTS`, so existing tables are
-   left untouched and only missing ones are created — fully idempotent. No-op
-   (and empty result) on non-PostgreSQL databases.
-
-   Returns {:schemas-synced [schema-name ...] :tables [table-name ...]}."
+   Returns {:schemas-synced [schema-name ...] :errors {schema-name message}}."
   [ctx]
-  (if (schemas? ctx)
-    (let [schemas (list-tenant-schemas ctx)
-          tables  (get-public-tables ctx)]
-      (doseq [schema schemas]
-        (log/info "Syncing tenant schema tables"
-                  {:schema schema :table-count (count tables)})
-        (doseq [table tables]
-          (copy-table-structure! ctx table schema)))
-      {:schemas-synced schemas :tables tables})
-    {:schemas-synced [] :tables []}))
+  (if-let [schemas (seq (list-tenant-schemas ctx))]
+    (let [{:keys [schemas-migrated errors]} (tenant-migrations/migrate-all-tenants! ctx schemas)]
+      {:schemas-synced schemas-migrated :errors errors})
+    {:schemas-synced [] :errors {}}))
 
 (defn deprovision-tenant!
   "Deprovision tenant database schema.

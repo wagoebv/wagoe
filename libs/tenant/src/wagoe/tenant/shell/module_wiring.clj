@@ -12,7 +12,6 @@
             [wagoe.tenant.shell.provisioning :as provisioning]
             [wagoe.tenant.shell.service :as tenant-service]
             [wagoe.tenant.shell.tenant-iteration :as tenant-iteration]
-            [wagoe.tenant.shell.tenant-migrations :as tenant-migrations]
             [wagoe.tenant.shell.user-foreign-keys :as user-foreign-keys]
             [clojure.tools.logging :as log]
             [integrant.core :as ig]))
@@ -22,17 +21,13 @@
 ;; =============================================================================
 
 (defn- fan-out-tenant-migrations!
-  "Apply pending tenant-scoped migrations to every existing tenant schema on
-   startup, so a deploy that ships a new tenant migration reaches all tenants —
-   not just newly provisioned ones. No-op on non-PostgreSQL (list-tenant-schemas
-   returns []). Never blocks startup: per-tenant failures are collected/logged."
+  "`sync-tenant-schemas!` on startup, so a new tenant migration reaches existing
+   tenants. Never blocks startup: failures are logged."
   [ctx]
   (try
-    (let [schemas (provisioning/list-tenant-schemas ctx)]
-      (when (seq schemas)
-        (let [{:keys [errors]} (tenant-migrations/migrate-all-tenants! ctx schemas)]
-          (when (seq errors)
-            (log/error "Some tenant schemas failed to migrate on startup" {:errors errors})))))
+    (let [{:keys [errors]} (provisioning/sync-tenant-schemas! ctx)]
+      (when (seq errors)
+        (log/error "Some tenant schemas failed to migrate on startup" {:errors errors})))
     (catch Exception e
       ;; Never block application startup on tenant migration fan-out; surface
       ;; the failure so it can be alerted on and re-run.
