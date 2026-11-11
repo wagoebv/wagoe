@@ -211,6 +211,23 @@
         (is (= #{"gone@example.com" "here@example.com"}
                (set (map :email (:users (ports/find-users repo {:include-deleted? true}))))))))))
 
+(deftest ^:integration find-users-matches-a-role-whole
+  ;; BOU-924: it was LOWER(role) LIKE '%x%', so :user missed a user stored as
+  ;; "viewer", which db->role reads as no role, as it does "user".
+  (with-user-db
+    (fn [ctx]
+      (let [repo   (sut/create-user-repository ctx)
+            add!   #(ports/create-user repo {:email (str % "@example.com") :name % :role %2
+                                             :active true :password-hash "x"})
+            emails #(set (map :email (:users (ports/find-users repo {:filter-role %}))))]
+        (add! "admin" :admin)
+        (add! "user" nil)
+        (db-core/execute-update! ctx {:update :users :set {:role "viewer"}
+                                      :where [:= :id (str (:id (add! "viewer" nil)))]})
+        (is (= #{"admin@example.com"} (emails :admin) (emails "Admin")))
+        (is (= #{"user@example.com" "viewer@example.com"} (emails :user))
+            "anything but admin reads as no role")))))
+
 (deftest ^:integration the-audit-trail-ignores-a-sort-it-does-not-offer
   (with-user-db
     (fn [ctx]

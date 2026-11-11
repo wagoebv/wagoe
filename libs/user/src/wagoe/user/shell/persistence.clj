@@ -20,6 +20,7 @@
    - Shell handles all I/O and external systems
    - Clean boundary between functional and imperative code"
   (:require [wagoe.core.utils.type-conversion :as type-conversion]
+            [wagoe.core.utils.text :as text]
             [wagoe.platform.database :as db]
             [next.jdbc.transaction :as jdbc-tx]
             [wagoe.platform.ports.database :as protocols]
@@ -531,30 +532,17 @@
   (find-users [_ options]
     (log/debug "Finding users" {:options options})
     (let [;; Build filters with kebab-case (query builder handles all conversions)
-          ;; Note: Some filters apply to auth_users (active, deleted_at, email)
-          ;; and some to users table (role, tenant_id)
-
-          ;; Build separate filters for auth_users and users tables
           auth-filters (cond-> {}
                          (contains? options :filter-active) (assoc :active (:filter-active options)))
 
-          profile-filters (cond-> {}
-                            (:filter-role options) (assoc :role (:filter-role options)))
-
-          ;; Build WHERE clauses for each table
           auth-where (when (seq auth-filters)
                        (db/build-where-clause ctx auth-filters))
-          profile-where (when (seq profile-filters)
-                          (db/build-where-clause ctx profile-filters))
 
-          ;; Combine WHERE clauses with table aliases
+          ;; Qualify the columns with the auth_users alias
           where-parts (cond-> []
                         auth-where (conj (clojure.walk/postwalk
                                           #(if (keyword? %) (keyword "a" (name %)) %)
-                                          auth-where))
-                        profile-where (conj (clojure.walk/postwalk
-                                             #(if (keyword? %) (keyword "u" (name %)) %)
-                                             profile-where)))
+                                          auth-where)))
 
           ;; Handle email LIKE separately (on auth_users table)
           contains    #(protocols/like (:adapter ctx) %1 :contains %2)
@@ -567,6 +555,12 @@
                         ;; matched whole, not as the contains a string gets (BOU-948).
                         (contains? options :filter-tenant-id)
                         (conj [:= :u.tenant_id (type-conversion/uuid->string (:filter-tenant-id options))])
+
+                        ;; Matched whole, as db->role reads it: "admin" or no role (BOU-924).
+                        (:filter-role options)
+                        (conj (if (= "admin" (text/lower-case (name (:filter-role options))))
+                                [:= :u.role "admin"]
+                                [:or [:= :u.role nil] [:<> :u.role "admin"]]))
 
                         (:filter-email-contains options)
                         (conj (contains :a.email (:filter-email-contains options)))
