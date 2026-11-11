@@ -124,7 +124,7 @@ A state-changing request (POST/PUT/DELETE/PATCH) is validated — **403** on mis
 invalid token — when CSRF is enabled, the path is not exempt, and it is either
 session-authenticated or a `/web` route. This includes `/web/admin` and any
 session-authenticated `/api` route. **Not** validated: safe methods (GET/HEAD/OPTIONS),
-token-auth API clients sending no session cookie (not CSRF-vulnerable), and exempt
+bearer-token requests with no session cookie, `/web` included (not CSRF-vulnerable), and exempt
 paths (webhooks/callbacks).
 
 ### Configuration

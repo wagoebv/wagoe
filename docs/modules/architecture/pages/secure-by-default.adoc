@@ -22,7 +22,7 @@ row with no test says so.
 | On in a new app's dev and test profiles. The framework default is off, so an upgrade cannot break an app, and the boot warns while it is. An enabled check with no secret refuses to boot.
 | `:wagoe/http {:security {:csrf {:enabled? true}}}`; secret from `CSRF_SECRET`, else `JWT_SECRET`
 | 1.0.0
-| {repo}libs/platform/test/wagoe/platform/shell/security_test.clj[`csrf-interceptor-protection-test`, `csrf-default-is-opt-in-test`], {repo}libs/wagoe-cli/test/wagoe/cli/new_test.clj[`a-new-app-checks-csrf-in-every-profile-it-generates`]
+| {repo}libs/platform/test/wagoe/platform/shell/security_test.clj[`csrf-interceptor-protection-test`, `csrf-default-is-opt-in-test`, `csrf-skips-a-bearer-only-web-write`], {repo}libs/wagoe-cli/test/wagoe/cli/new_test.clj[`a-new-app-checks-csrf-in-every-profile-it-generates`]
 
 | Session cookie: `HttpOnly`, `SameSite=Strict`, `Secure`
 | On. `Secure` unless you turn it off; the generated dev profile does, for plain HTTP.

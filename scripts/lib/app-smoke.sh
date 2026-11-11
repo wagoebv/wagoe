@@ -38,7 +38,8 @@ login_token() {
 }
 
 # The CSRF token the page at $2 carries, its csrf-session cookie kept in jar $1;
-# further curl arguments follow. A new app checks it on every /web write (BOU-940).
+# further curl arguments follow. A new app checks it on every /web write
+# that carries no bearer token (BOU-940, BOU-952).
 web_csrf() {
   local jar="$1" url="$2"; shift 2
   curl -fsSL -c "$jar" -b "$jar" "$@" "$url" \

@@ -80,6 +80,14 @@
   (or (get-in request [:headers "x-session-token"])
       (get-in request [:cookies "session-token" :value])))
 
+(defn- bearer-only?
+  "A bearer token and no session cookie. A browser never attaches Authorization
+   to a cross-site request, so this one cannot be a forgery (BOU-952). The prefix
+   is matched as the user module's auth matches it, so a header it ignores skips nothing."
+  [request]
+  (and (some-> (get-in request [:headers "authorization"]) (str/starts-with? "Bearer "))
+       (nil? (get-in request [:cookies "session-token" :value]))))
+
 (defn- path-exempt?
   "True when uri matches any exempt pattern. A pattern ending in \"/*\" matches the
    base path itself and anything beneath it on a path-segment boundary (so \"/api/*\"
@@ -127,6 +135,16 @@
 
 (defn- web-route? [uri]
   (str/starts-with? (or uri "") "/web"))
+
+(defn- csrf-checked?
+  "Whether a request's CSRF token is validated: a state-changing request, not
+   exempt, that is session-authenticated or on /web, unless `bearer-only?`.
+   The interceptor and `wrap-csrf` share it so they cannot drift."
+  [request state-changing? exempt-paths uri session-binding]
+  (and state-changing?
+       (not (path-exempt? exempt-paths uri))
+       (or session-binding (web-route? uri))
+       (not (bearer-only? request))))
 
 (defn- pre-session-cookie-value
   "The pre-session cookie's attributes: Secure follows `:secure-cookies?`, true when
@@ -632,8 +650,8 @@
    A state-changing request is validated (403 on failure) when CSRF is enabled, the
    path is not in :exempt-paths, and it is either session-authenticated or a /web
    route. This protects /web/admin and any session-authenticated /api route; it does
-   NOT check token-auth API clients that send no session cookie (not CSRF-vulnerable)
-   or exempt paths (webhooks/callbacks). Safe methods (GET/HEAD/OPTIONS) are never
+   NOT check a request with a bearer token and no session cookie, on /web too (not
+   CSRF-vulnerable), or exempt paths (webhooks/callbacks). Safe methods (GET/HEAD/OPTIONS) are never
    validated.
 
    For rendering, the interceptor exposes a token on the request as
@@ -669,9 +687,7 @@
                   (cond
                     ;; Protected: state-changing, not exempt, and either session-auth or
                     ;; a /web route (which uses the pre-session cookie binding).
-                    (and state-changing?
-                         (not (path-exempt? exempt-paths uri))
-                         (or session-binding (web-route? uri)))
+                    (csrf-checked? request state-changing? exempt-paths uri session-binding)
                     (let [binding   (or session-binding pre-cookie)
                           submitted (csrf/extract-token request)]
                       (if (and binding (csrf/valid-token? secret binding submitted))
@@ -719,8 +735,8 @@
      per-handler threading.
    - An unauthenticated /web page load mints a pre-session binding and sets the
      `csrf-session` cookie on the response (for login/register/MFA forms).
-   - Safe methods (GET/HEAD/OPTIONS) and token-auth API clients (no session
-     cookie, not CSRF-vulnerable) are never blocked.
+   - Safe methods (GET/HEAD/OPTIONS) and bearer-token clients with no session
+     cookie (not CSRF-vulnerable, /web included) are never blocked.
 
    Opt-in: a falsy/absent `:enabled?` or a blank `:secret` makes it a pass-through.
 
@@ -745,9 +761,7 @@
                                 (handler request)))]
         (cond
           ;; Protected: state-changing, not exempt, session-auth or /web route.
-          (and state-changing?
-               (not (path-exempt? exempt-paths uri))
-               (or session-binding (web-route? uri)))
+          (csrf-checked? request state-changing? exempt-paths uri session-binding)
           (let [bind-val  (or session-binding pre-cookie)
                 submitted (csrf/extract-token request)]
             (if (and bind-val (csrf/valid-token? secret bind-val submitted))

@@ -100,10 +100,6 @@ printf '%s\n%s\n' "$ADMIN_PW" "$ADMIN_PW" \
 ADMIN_TOKEN=$(login_token "http://localhost:$PORT" admin@example.test "$ADMIN_PW")
 [ -n "$ADMIN_TOKEN" ] || fail "POST /api/v1/auth/login returned no jwt-token for the admin"
 AUTH=(-H "Authorization: Bearer $ADMIN_TOKEN")
-# /web writes check CSRF even under a bearer token (BOU-940).
-WEB_CSRF=$(web_csrf "$JAR" "http://localhost:$PORT/web/admin/" "${AUTH[@]}")
-[ -n "$WEB_CSRF" ] || fail "GET /web/admin/ carried no CSRF token"
-AUTH+=(-b "$JAR" -H "x-csrf-token: $WEB_CSRF")
 ok "the first admin, made with bb create-admin, gets in"
 
 # Everyone, every signed-in user's group (wagoe.user.core.group/everyone-id).

@@ -165,6 +165,24 @@
         (is (= 403 (get-in (run-csrf wild (session-request :post "/api/hooks-evil"))
                            [:response :status])))))))
 
+(deftest ^:security ^:unit csrf-skips-a-bearer-only-web-write
+  ;; BOU-952: a browser never sends Authorization cross-site, so a bearer write
+  ;; with no session cookie cannot be forged. One with the cookie still can.
+  (let [cfg    {:enabled? true :secret csrf-secret}
+        bearer {"authorization" "Bearer some.jwt.token"}]
+    (testing "a /web write with a bearer token and no session cookie is not checked"
+      (is (nil? (:response (run-csrf cfg {:request-method :post :uri "/web/admin/users" :headers bearer})))))
+    (testing "the same write with a session cookie is checked"
+      (is (= 403 (get-in (run-csrf cfg (assoc (session-request :post "/web/admin/users") :headers bearer))
+                         [:response :status]))))
+    (testing "a scheme the auth middleware does not read as bearer is checked"
+      (is (= 403 (get-in (run-csrf cfg {:request-method :post :uri "/web/admin/users"
+                                        :headers {"authorization" "bearer some.jwt.token"}})
+                         [:response :status]))))
+    (testing "a /web write with neither is checked"
+      (is (= 403 (get-in (run-csrf cfg {:request-method :post :uri "/web/admin/users"})
+                         [:response :status]))))))
+
 (deftest ^:security ^:unit csrf-default-is-opt-in-test
   (testing "a :csrf map with a secret but NO :enabled? key is a no-op (opt-in, default off)"
     (let [cfg {:secret csrf-secret :exempt-paths []} ; note: no :enabled? key
