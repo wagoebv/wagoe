@@ -72,3 +72,13 @@
         (is (= "tenant_gamma" (:schema-name result)))
         (is (table-in-schema? "tenant_gamma" "widgets")
             "the tenant-scoped table from the migration set exists in the new schema")))))
+
+(deftest ^:integration sync-runs-the-tenant-migrations-in-existing-schemas
+  ;; BOU-941: it used to copy a hard-coded list of one app's tables from public.
+  (create-schema! "tenant_delta")
+  (with-redefs [tmig/default-tenant-migration-dir test-migration-dir]
+    (let [result (provisioning/sync-tenant-schemas! @db-ctx)]
+      ;; Other tests' schemas share this database; judge tenant_delta alone.
+      (is (some #{"tenant_delta"} (:schemas-synced result)))
+      (is (not (contains? (:errors result) "tenant_delta")))
+      (is (table-in-schema? "tenant_delta" "widgets")))))
