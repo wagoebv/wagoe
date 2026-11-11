@@ -1,7 +1,9 @@
 (ns wagoe.user.shell.auth-security-test
-  "Security tests for JWT secret validation and algorithm pinning."
+  "Security tests for JWT secret validation, algorithm pinning and the bcrypt work factor."
   (:require [wagoe.user.shell.auth :as auth]
+            [wagoe.user.shell.mfa-crypto :as mfa-crypto]
             [buddy.sign.jwt :as jwt]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]])
   (:import (java.util UUID)))
 
@@ -34,3 +36,12 @@
                              "a-wrong-hs256-secret-at-least-32c!"
                              {:alg :hs256})]
         (is (false? (:valid? (auth/validate-jwt-token forged))))))))
+
+(deftest ^:unit ^:security passwords-hash-at-work-factor-12
+  ;; BOU-943. The cost is the third field of buddy-hashers' encoding.
+  (let [[alg _salt cost :as hash] (str/split (auth/hash-password "correct horse") #"\$")]
+    (is (= "bcrypt+sha512" alg))
+    (is (= "12" cost))
+    (is (auth/verify-password "correct horse" (str/join "$" hash)))
+    (is (= "12" (nth (str/split (mfa-crypto/hash-backup-code "ab12-cd34") #"\$") 2))
+        "backup codes too")))
