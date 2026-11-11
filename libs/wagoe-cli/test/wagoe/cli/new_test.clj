@@ -5,7 +5,8 @@
             [clojure.edn :as edn]
             [clojure.set :as set]
             [clojure.string :as str]
-            [wagoe.cli.new :as new])
+            [wagoe.cli.new :as new]
+            [wagoe.cli.templates :as templates])
   (:import [ch.qos.logback.classic LoggerContext]
            [ch.qos.logback.classic.joran JoranConfigurator]
            [ch.qos.logback.core ConsoleAppender]))
@@ -698,9 +699,19 @@
       (finally
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
 
+(defn- profile-config
+  "The config.edn `wagoe new` renders for `profile`, read as EDN."
+  [profile]
+  (edn/read-string {:default tagged-literal}
+                   (templates/render (templates/read-template (str profile "-config.edn.tmpl"))
+                                     {:project-name "shop"})))
+
 (deftest ^:unit ^:security a-new-app-checks-csrf-in-every-profile-it-generates
   ;; The framework default stays off so an upgrade cannot 403 an app; a new app starts on (BOU-940).
   (doseq [profile ["dev" "test"]]
-    (let [config (edn/read-string {:default (fn [_ v] v)}
-                                  (slurp (io/resource (str "wagoe/cli/templates/" profile "-config.edn.tmpl"))))]
-      (is (true? (get-in config [:active :wagoe/http :security :csrf :enabled?])) profile))))
+    (is (true? (get-in (profile-config profile) [:active :wagoe/http :security :csrf :enabled?])) profile)))
+
+(deftest ^:unit ^:security a-new-app-enforces-authorization
+  ;; BOU-943: the generated configs carry :enforce; without the key the framework does not enforce.
+  (doseq [profile ["dev" "test"]]
+    (is (= :enforce (get-in (profile-config profile) [:active :wagoe/authorization :mode])) profile)))

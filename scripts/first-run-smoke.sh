@@ -60,11 +60,15 @@ esac
 # reports.
 PLATFORM_ARG=()
 [ -n "${SMOKE_PLATFORM:-}" ] && PLATFORM_ARG=(--platform "$SMOKE_PLATFORM")
+# SMOKE_DNS="1.1.1.1 8.8.8.8": name servers for the container. On GitHub
+# runners the upstream Docker hands containers stopped answering (BOU-975).
+for ns in ${SMOKE_DNS:-}; do PLATFORM_ARG+=(--dns "$ns"); done
 
 echo "── First-run smoke test"
 echo "   image:  $IMAGE${SMOKE_PLATFORM:+  (platform: $SMOKE_PLATFORM)}"
 echo "   repo:   $REPO_ROOT"
 echo "   target: $TARGET${SMOKE_AI:+   ai: $SMOKE_AI}"
+echo "   dns:    host $(grep -h ^nameserver /etc/resolv.conf 2>/dev/null | awk '{print $2}' | xargs)${SMOKE_DNS:+, container $SMOKE_DNS}"
 echo
 
 docker run --rm \
@@ -93,6 +97,8 @@ fail() {
 }
 ok()   { echo "  ok — $*"; }
 
+echo "   in container: $(grep ^nameserver /etc/resolv.conf | xargs)"
+
 # ── 0. package manager ──────────────────────────────────────────────────────
 # SMOKE_IMAGE has always been a parameter, but the body hardcoded apt-get, so
 # pointing it at Fedora failed on packaging rather than on a defect — the matrix
@@ -119,6 +125,16 @@ if command -v apt-get >/dev/null 2>&1; then
     fi
   fi
   [ -n "$updated" ] || apt_update || { log_excerpt /tmp/pkg.log 5; fail "apt-get update failed"; }
+  # --error-on=any: a failed index download is only a warning by default, so
+  # update "succeeded" and install then found no packages at all.
+  apt_update() { apt-get update -qq --error-on=any >/tmp/pkg.log 2>&1; }
+  if ! apt_update; then
+    log_excerpt /tmp/pkg.log 5
+    [ -n "${APT_MIRROR:-}" ] || fail "apt-get update failed"
+    echo "   $APT_MIRROR failed; retrying archive.ubuntu.com"
+    sed -i "s|$APT_MIRROR|http://archive.ubuntu.com/ubuntu|" /etc/apt/sources.list.d/ubuntu.sources
+    apt_update || { log_excerpt /tmp/pkg.log 5; fail "apt-get update failed"; }
+  fi
   pkg_install() { apt-get install -y -qq "$@" >/tmp/pkg.log 2>&1 || { log_excerpt /tmp/pkg.log 5; fail "apt-get install $* failed"; }; }
 elif command -v dnf >/dev/null 2>&1; then
   PKG=dnf; EXPECT_HINT="dnf install"

@@ -16,6 +16,7 @@
             [wagoe.user.shell.hooks :as hooks]
             [wagoe.user.shell.lockout :as lockout]
             [wagoe.user.shell.mfa :as mfa-shell]
+            [wagoe.user.shell.bcrypt :as bcrypt]
             [buddy.core.codecs :as codecs]
             [buddy.core.mac :as mac]
             [buddy.hashers :as hashers]
@@ -31,17 +32,9 @@
 ;; =============================================================================
 
 (defn hash-password
-  "Shell function: Hash password using bcrypt.
-   
-   Args:
-     password: Plain text password
-     
-   Returns:
-     Bcrypt hash string (60 characters)
-     
-   Side effects: Crypto operations with secure random"
+  "`password` bcrypt-hashed, see `wagoe.user.shell.bcrypt`."
   [password]
-  (hashers/derive password {:alg :bcrypt+sha512}))
+  (bcrypt/derive-hash password))
 
 (defn verify-password
   "Shell function: Verify password against bcrypt hash.

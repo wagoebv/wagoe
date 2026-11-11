@@ -13,6 +13,7 @@
             [buddy.core.hash :as hash]
             [buddy.core.nonce :as nonce]
             [buddy.hashers :as hashers]
+            [wagoe.user.shell.bcrypt :as bcrypt]
             [clojure.string :as str]))
 
 (def ^:private encrypted-prefix
@@ -63,7 +64,7 @@
 (defn hash-backup-code
   "Bcrypt-hash a single plaintext backup code for storage."
   [code]
-  (hashers/derive code {:alg :bcrypt+sha512}))
+  (bcrypt/derive-hash code))
 
 (defn backup-code-matches?
   "Constant-time check of a presented plaintext code against a stored bcrypt hash.

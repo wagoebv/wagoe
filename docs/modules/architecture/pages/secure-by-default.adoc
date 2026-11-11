@@ -37,10 +37,10 @@ row with no test says so.
 | {repo}libs/user/test/wagoe/user/shell/session_token_storage_security_test.clj[`a-login-stores-the-hash-not-the-token`]
 
 | Password hashing
-| bcrypt+SHA-512 (buddy-hashers), at the library's default work factor.
-| —
+| bcrypt+SHA-512 (buddy-hashers), work factor 12, for passwords and MFA backup codes.
+| Not a config key: the constant `wagoe.user.shell.bcrypt/work-factor`
 | 1.0.0
-| No test pins the work factor yet.
+| {repo}libs/user/test/wagoe/user/shell/auth_security_test.clj[`passwords-hash-at-work-factor-12`]
 
 | Login lockout
 | On: 5 failed attempts lock the account for 15 minutes, counted atomically.
@@ -82,7 +82,7 @@ row with no test says so.
 | `wagoe new` writes `:enforce`. With the key absent the framework does not enforce. An unknown mode refuses to boot.
 | `:wagoe/authorization {:mode :enforce}`
 | 1.1.0
-| {repo}libs/platform/test/wagoe/platform/shell/authorization_interceptor_test.clj[`enforce-applies-each-rule-in-order`, `an-unknown-mode-fails-boot`]. No test holds the generated `:enforce` yet.
+| {repo}libs/platform/test/wagoe/platform/shell/authorization_interceptor_test.clj[`enforce-applies-each-rule-in-order`, `an-unknown-mode-fails-boot`], {repo}libs/wagoe-cli/test/wagoe/cli/new_test.clj[`a-new-app-enforces-authorization`]
 
 | Open redirects refused
 | A `return-to` that could leave the site falls back to a local path.
