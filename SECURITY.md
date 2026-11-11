@@ -45,6 +45,8 @@ In scope:
 
 - the `com.wagoe/*` artifacts on Clojars,
 - the installer: `get.wagoe.org` and [`scripts/install.sh`](scripts/install.sh).
+  To verify it before running it, see the
+  [installation guide](https://wagoe.org/docs/getting-started/installation.html).
 
 Out of scope: applications built with Wagoe (report those to their owners), and
 the `wagoe.org` website.

@@ -19,6 +19,23 @@ curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.
 
 Supports macOS, Debian/Ubuntu, Fedora/RHEL, Arch Linux, and WSL2.
 
+=== Verify before you run it
+
+Each release attaches the installer and its SHA-256. Download both, check, then run:
+
+[source,bash]
+----
+curl -fsSLO https://github.com/wagoebv/wagoe/releases/latest/download/install.sh
+curl -fsSLO https://github.com/wagoebv/wagoe/releases/latest/download/install.sh.sha256
+sha256sum -c install.sh.sha256    # macOS: shasum -a 256 -c install.sh.sha256
+bash install.sh
+----
+
+The installer pins the Clojure CLI, Babashka and bbin installers to a release and
+checks each, and the Babashka binary on Linux, against a SHA-256 it carries. Not
+checked: the Homebrew (macOS) and SDKMAN! (JDK) installers, which publish no
+checksum to pin.
+
 After installation, proceed to xref:getting-started:quickstart.adoc[Quickstart].
 
 == Manual installation

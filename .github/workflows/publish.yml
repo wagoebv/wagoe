@@ -237,12 +237,20 @@ jobs:
       - name: Verify published artifacts
         run: bb deploy --verify
 
+      # The installer and its SHA-256, so a user can check what they run (BOU-938).
+      - name: Hash the installer
+        if: startsWith(github.ref, 'refs/tags/')
+        run: cd scripts && sha256sum install.sh > install.sh.sha256
+
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ steps.version.outputs.version }}
+          files: |
+            scripts/install.sh
+            scripts/install.sh.sha256
           body: |
             ## Wagoe Framework ${{ steps.version.outputs.version }}
 
