@@ -115,6 +115,26 @@
     (is (not (re-find #"s3cret" (str r))))
     (is (= :pass (:level (first (doctor/check-secret-refs "{:active {:a #secret \"API_TOKEN\"}}" env)))))))
 
+(deftest ^:unit ^:security a-plaintext-secret-fails-outside-test
+  (let [config (str "{:active {:wagoe/postgresql {:password \"hunter2\" :user \"app\"}\n"
+                    "          :wagoe/payments {:providers [{:api-key \"sk_live_1\"}]\n"
+                    "                           :webhook-secret #secret \"WEBHOOK\"\n"
+                    "                           :client-token #or [#env TOKEN \"dev\"]\n"
+                    "                           :token-ttl 3600 :secret-name \"stripe\" :password \"\"}\n"
+                    "          :wagoe/rpc {:service-key \"k\"}\n"
+                    "          :wagoe/x #merge [{:encryption-key \"e\"}]}\n"
+                    " :inactive {:x {:password \"ignored\"}}}")
+        [r]    (doctor/check-plaintext-secrets config "prod")]
+    (is (= :error (:level r)))
+    (is (= #{[:wagoe/postgresql :password] [:wagoe/payments :providers 0 :api-key]
+             [:wagoe/rpc :service-key] [:wagoe/x 0 :encryption-key]}
+           (set (doctor/plaintext-secrets config false)))
+        "tags, blanks, non-strings and keys that only mention a secret pass")
+    (is (re-find #"client-token" (:msg r)) "in prod an #or fallback to a literal counts")
+    (is (not (re-find #"client-token" (:msg (first (doctor/check-plaintext-secrets config "dev"))))))
+    (is (not (re-find #"hunter2|sk_live" (str r))))
+    (is (= :pass (:level (first (doctor/check-plaintext-secrets config "test")))))))
+
 (deftest ^:unit an-unset-optional-setting-is-a-warning
   ;; BOU-591: a Redis without a password is valid, and doctor called an unset
   ;; REDIS_PASSWORD an error.

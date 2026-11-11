@@ -58,6 +58,8 @@ reads `WAGOE_SECRETS_DIR`, else `/run/secrets`, trimmed.
   catch it: wrapping Aero's `#or` changed it for every Aero user in the JVM.
 - `bb doctor` (`secret-refs`) reports missing `:env`/`:file` names without a
   default. It parses text, so it cannot ask custom sources.
+- `bb doctor` (`plaintext-secrets`) fails on a literal string under a key naming a
+  secret, outside the test profile.
 - Resolved values are kept in a registry so `redact` can find them by value.
   Anything that prints config must pass it through `redact`; the devtools config
   page and `(config :section)` do.
