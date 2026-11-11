@@ -107,7 +107,16 @@ if command -v apt-get >/dev/null 2>&1; then
   if [ -n "${APT_MIRROR:-}" ] && [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
     sed -i "s|http://archive.ubuntu.com/ubuntu|$APT_MIRROR|" /etc/apt/sources.list.d/ubuntu.sources
   fi
-  apt-get update -qq >/tmp/pkg.log 2>&1 || { log_excerpt /tmp/pkg.log 5; fail "apt-get update failed"; }
+  # --error-on=any: a failed index download is only a warning by default, so
+  # update "succeeded" and install then found no packages at all.
+  apt_update() { apt-get update -qq --error-on=any >/tmp/pkg.log 2>&1; }
+  if ! apt_update; then
+    log_excerpt /tmp/pkg.log 5
+    [ -n "${APT_MIRROR:-}" ] || fail "apt-get update failed"
+    echo "   $APT_MIRROR failed; retrying archive.ubuntu.com"
+    sed -i "s|$APT_MIRROR|http://archive.ubuntu.com/ubuntu|" /etc/apt/sources.list.d/ubuntu.sources
+    apt_update || { log_excerpt /tmp/pkg.log 5; fail "apt-get update failed"; }
+  fi
   pkg_install() { apt-get install -y -qq "$@" >/tmp/pkg.log 2>&1 || { log_excerpt /tmp/pkg.log 5; fail "apt-get install $* failed"; }; }
 elif command -v dnf >/dev/null 2>&1; then
   PKG=dnf; EXPECT_HINT="dnf install"
