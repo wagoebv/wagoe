@@ -61,6 +61,7 @@ jobs:
         # runs third-party installers that would see it (BOU-559).
         env:
           SMOKE_IMAGE: ${{ matrix.image }}
+          SMOKE_DNS: "1.1.1.1 8.8.8.8"
         run: ./scripts/first-run-smoke.sh
 
   smoke-released:
@@ -87,6 +88,7 @@ jobs:
       - name: First-run smoke (released)
         env:
           SMOKE_IMAGE: ubuntu:24.04
+          SMOKE_DNS: "1.1.1.1 8.8.8.8"
           SMOKE_TARGET: released
         run: ./scripts/first-run-smoke.sh
 
@@ -103,6 +105,7 @@ jobs:
       - name: First-run smoke (AI enabled)
         env:
           SMOKE_IMAGE: ubuntu:24.04
+          SMOKE_DNS: "1.1.1.1 8.8.8.8"
           SMOKE_AI: ollama
         run: ./scripts/first-run-smoke.sh
 
@@ -116,6 +119,7 @@ jobs:
       - name: First-run smoke (released, AI enabled)
         env:
           SMOKE_IMAGE: ubuntu:24.04
+          SMOKE_DNS: "1.1.1.1 8.8.8.8"
           SMOKE_TARGET: released
           SMOKE_AI: ollama
         run: ./scripts/first-run-smoke.sh
