@@ -73,6 +73,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A missing or short `JWT_SECRET` refused boot without an error code** (BOU-944). It says `WGE-103` now;
+  `bb guide error WGE-103` explains it.
 - **`sync-tenant-schemas!` copied one app's hard-coded tables into every tenant** (BOU-941). It runs
   `migrations-tenant/` now, as provisioning does; see UPGRADING.md.
 - **A repository on a second database wrote into the first's open transaction** (BOU-967). Each database's writes stay

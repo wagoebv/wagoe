@@ -64,7 +64,8 @@
 
 (defmethod run-action! :set-jwt
   [_ _params]
-  (let [secret (str "dev-secret-" (System/currentTimeMillis) "-wagoe")]
+  ;; At least 32 characters, or WGE-103 refuses the secret this fix writes.
+  (let [secret (str "dev-secret-" (java.util.UUID/randomUUID))]
     (write-env-var! "JWT_SECRET" secret)))
 
 (defmethod run-action! :integrate-module
