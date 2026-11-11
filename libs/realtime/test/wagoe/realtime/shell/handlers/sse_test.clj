@@ -64,13 +64,20 @@
           (> n 200) false
           :else     (do (Thread/sleep 10) (recur (inc n))))))
 
+(defn- subscribed?
+  "Topics subscribe after the connection registers, so a registered
+   connection can still miss a push (BOU-928)."
+  [pubsub topic]
+  (await-until #(= 1 (count (ports/get-topic-subscribers pubsub topic)))))
+
 (deftest ^:integration streams-a-pushed-fragment-to-a-subscriber
-  (let [{:keys [service registry]} (system)
+  (let [{:keys [service registry pubsub]} (system)
         {:keys [response text done broken?]}
         (open-stream service (request {"topic" "order:1"}) :authorize-topic allow-orders :heartbeat-ms 20)]
     (is (= 200 (:status response)))
     (is (str/starts-with? (get-in response [:headers "Content-Type"]) "text/event-stream"))
     (is (await-until #(= 1 (ports/connection-count registry))))
+    (is (subscribed? pubsub "order:1"))
     (sse/push-fragment! service "order:1" [:tr#row [:td "Shipped"]])
     (sse/push-fragment! service "order:2" [:p "not mine"])
     (sse/push-fragment! service "order:1" [:span [:t :order/count {:n 3}]] {:event "badge"})
@@ -89,6 +96,7 @@
         {:keys [text broken?]} (open-stream (:service node-a) (request {"topic" "order:1"})
                                             :authorize-topic allow-orders :heartbeat-ms 50)]
     (is (await-until #(= 1 (ports/connection-count (:registry node-a)))))
+    (is (subscribed? (:pubsub node-a) "order:1"))
     (sse/push-fragment! (:service node-b) "order:1" [:b "from b"])
     (is (await-until #(str/includes? (text) "data: <b>from b</b>")))
     (reset! broken? true)))
@@ -114,7 +122,7 @@
         (open-stream service (request {"topic" ["order:1" "order:2"]})
                      :authorize-topic allow-orders :heartbeat-ms 20)]
     (is (await-until #(= 1 (ports/connection-count registry))))
-    (is (= 1 (count (ports/get-topic-subscribers pubsub "order:2"))))
+    (is (subscribed? pubsub "order:2"))
     (reset! broken? true)
     (is (not= ::timeout (deref done 2000 ::timeout)) "the stream ends at the next heartbeat")
     (is (zero? (ports/connection-count registry)))
