@@ -5,6 +5,7 @@
             [integrant.core :as ig]
             [wagoe.admin.ports :as ports]
             [wagoe.admin.shell.schema-repository :as schema-repo]
+            [wagoe.admin.shell.http :as http]
             [wagoe.admin.shell.http.support :as support]
             [wagoe.admin.shell.module-wiring :as wiring]))
 
@@ -206,3 +207,16 @@
     (is (= {:domain-id :domain-id} (scope {:domain-id :domain-id})))
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"resolves to nothing"
                           (scope {:domain-id 'no.such/condition})))))
+
+(deftest ^:unit the-audit-panel-uses-the-user-services-database
+  ;; BOU-972: its savepoint goes where the audit query runs
+  (let [built (fn [user-service]
+                (let [seen (atom nil)]
+                  (with-redefs [http/admin-routes (fn [_ _ config _] (reset! seen config))]
+                    (ig/init-key :wagoe/admin-routes {:admin-service {:db-ctx ::admin-db}
+                                                      :user-service  user-service
+                                                      :config        {}}))
+                  @seen))]
+    (is (= {:db-ctx ::admin-db :user-db-ctx ::user-db}
+           (built {:audit-repository {:ctx ::user-db}})))
+    (is (= {:db-ctx ::admin-db} (built nil)) "unknown: the dashboard falls back to admin's")))

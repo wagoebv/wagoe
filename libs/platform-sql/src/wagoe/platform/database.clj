@@ -152,6 +152,11 @@
    tables are there without asking the database for its search_path."
   nil)
 
+(def ^:dynamic *tenant-transaction*
+  "The connection of the transaction `*tenant-schema*` is bound to, or nil.
+   Not the innermost: another database's may be nested inside it (BOU-972)."
+  nil)
+
 (defn connectable-for
   "What code holding `datasource` runs a statement on: `datasource` when it is
    an open transaction already, else the platform transaction open on this

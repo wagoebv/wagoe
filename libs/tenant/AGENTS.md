@@ -259,7 +259,7 @@ The set is the application's `migrations-tenant/` plus each library's
 (`tenant-migration-dirs`), of the modules switched on in `:active` only;
 workflow names its public series there, so its tenants get every migration.
 The tenant middleware binds `wagoe.platform.database/*tenant-id*` for the
-request, and `call-in-schema` binds `*tenant-schema*` for its transaction.
+request, and `call-in-schema` binds `*tenant-schema*` and `*tenant-transaction*` for its transaction.
 
 `db-ctx` is the boot `:wagoe/db-context`. Each run opens its own connection with
 search_path set to the tenant schema **only** (no `,public` fallback) so

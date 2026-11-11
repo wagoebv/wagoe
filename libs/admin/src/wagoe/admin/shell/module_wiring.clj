@@ -97,15 +97,19 @@
 (defmethod ig/init-key :wagoe/admin-routes
   [_ {:keys [admin-service schema-provider user-service config workflows permission-registry rights]}]
   ;; The module's contribution: web routes, mounted under :web-prefix
-  (http/admin-routes admin-service schema-provider
-                     (cond-> config
-                       ;; A page part's savepoint is on the service's database,
-                       ;; hand-written wiring included
-                       (:db-ctx admin-service) (assoc :db-ctx (:db-ctx admin-service))
-                       workflows           (assoc :workflows workflows)
-                       permission-registry (assoc :access (access-fn (:authorization-mode config)
-                                                                     permission-registry rights)))
-                     user-service))
+  (let [;; The audit panel's savepoint goes on the user service's database
+        ;; when its record says which; else admin's (BOU-972)
+        user-db (get-in user-service [:audit-repository :ctx])]
+    (http/admin-routes admin-service schema-provider
+                       (cond-> config
+                         ;; A page part's savepoint is on the service's database,
+                         ;; hand-written wiring included
+                         (:db-ctx admin-service) (assoc :db-ctx (:db-ctx admin-service))
+                         user-db             (assoc :user-db-ctx user-db)
+                         workflows           (assoc :workflows workflows)
+                         permission-registry (assoc :access (access-fn (:authorization-mode config)
+                                                                       permission-registry rights)))
+                       user-service)))
 
 (defmethod ig/halt-key! :wagoe/admin-routes
   [_ _routes]
