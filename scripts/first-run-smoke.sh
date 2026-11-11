@@ -118,8 +118,10 @@ elif command -v pacman >/dev/null 2>&1; then
   # emulation ("error restricting syscalls via seccomp: 22"), which is how Arch
   # is reached from an Apple Silicon host. Without it every pacman call fails.
   PAC_FLAGS="--noconfirm --disable-sandbox"
-  pacman -Sy $PAC_FLAGS >/tmp/pkg.log 2>&1 \
-    || { log_excerpt /tmp/pkg.log 5; fail "pacman -Sy failed"; }
+  # -Syu, not -Sy: Arch supports no partial upgrade. -Sy then -S curl pulled
+  # openssl 4 under a pacman linked to libcrypto.so.3 and refused (#1000).
+  pacman -Syu $PAC_FLAGS >/tmp/pkg.log 2>&1 \
+    || { log_excerpt /tmp/pkg.log 5; fail "pacman -Syu failed"; }
   pkg_install() { pacman -S $PAC_FLAGS --needed "$@" >/tmp/pkg.log 2>&1 || { log_excerpt /tmp/pkg.log 5; fail "pacman -S $* failed"; }; }
 else
   fail "no supported package manager (apt-get/dnf/pacman) in this image"
