@@ -7,12 +7,16 @@
             [clojure.test :refer [deftest is testing]])
   (:import (java.util UUID)))
 
+(defn- refusal [secret]
+  (try (#'auth/validate-jwt-secret* secret) nil
+       (catch clojure.lang.ExceptionInfo e e)))
+
 (deftest ^:unit ^:security jwt-secret-validation-test
-  (testing "a missing or blank secret is rejected"
-    (is (thrown? clojure.lang.ExceptionInfo (#'auth/validate-jwt-secret* nil)))
-    (is (thrown? clojure.lang.ExceptionInfo (#'auth/validate-jwt-secret* ""))))
-  (testing "a secret shorter than 32 characters is rejected"
-    (is (thrown? clojure.lang.ExceptionInfo (#'auth/validate-jwt-secret* "too-short-secret"))))
+  (testing "a missing, blank or short secret is refused with WGE-103 (BOU-944)"
+    (doseq [secret [nil "" "too-short-secret"]
+            :let [e (refusal secret)]]
+      (is (str/starts-with? (str (some-> e ex-message)) "WGE-103: ") (pr-str secret))
+      (is (= "WGE-103" (:wagoe/error-code (ex-data e))))))
   (testing "a >= 32 character secret is accepted"
     (let [secret "this-secret-is-exactly-32-chars!"]
       (is (= 32 (count secret)))

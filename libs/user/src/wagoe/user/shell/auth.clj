@@ -66,21 +66,20 @@
   :hs256)
 
 (defn- validate-jwt-secret*
-  "Return secret when valid, else throw a :configuration-error. Enforces
+  "Return secret when valid, else throw a WGE-103 :configuration-error. Enforces
    presence and the minimum length."
   [secret]
-  (cond
-    (str/blank? secret)
-    (throw (ex-info "JWT_SECRET environment variable not configured. Set JWT_SECRET before starting the application."
-                    {:type :configuration-error
-                     :required-env-var "JWT_SECRET"}))
+  (if-let [problem (cond
+                     (str/blank? secret)
+                     "JWT_SECRET environment variable not configured. Set JWT_SECRET before starting the application."
 
-    (< (count secret) min-jwt-secret-length)
-    (throw (ex-info (str "JWT_SECRET must be at least " min-jwt-secret-length " characters (HMAC key strength).")
+                     (< (count secret) min-jwt-secret-length)
+                     (str "JWT_SECRET must be at least " min-jwt-secret-length " characters (HMAC key strength)."))]
+    (throw (ex-info (str "WGE-103: " problem)
                     {:type :configuration-error
+                     :wagoe/error-code "WGE-103"
                      :required-env-var "JWT_SECRET"}))
-
-    :else secret))
+    secret))
 
 (def ^:private jwt-secret
   "JWT signing secret, resolved and validated from the environment once per
