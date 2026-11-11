@@ -72,6 +72,7 @@ bb doctor --all              # Config checks plus the environment checks of bb d
 | `config-loadable` | error | `config.edn` does not parse, or has no `:active` section |
 | `upgrade-wiring` | error | A namespace that moved between releases, and where it went |
 | `secret-refs` | error | `#secret` names without a `:default` that no env or file source provides |
+| `plaintext-secrets` | error | A literal string under a key naming a secret (`:password`, `:api-key`, `:token`, …), outside the test profile; in prod and acc an `#or` literal fallback too |
 | `reset-endpoint-flag` | error | `:test/reset-endpoint-enabled?` true outside test/dev |
 | `rate-limit-cache` | error | Rate limiting on without `:wagoe/cache` active (prod refuses to boot) |
 

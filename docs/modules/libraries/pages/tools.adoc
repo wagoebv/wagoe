@@ -91,6 +91,7 @@ bb install-hooks             # Configure git hooks path to .githooks
 | `config-loadable` | error | `config.edn` does not parse, or has no `:active` section
 | `env-refs` | error | `#env VAR` without `#or` fallback and not set. A warning instead when the setting is optional: inside a `:fallback` block, or a Redis `:password`
 | `secret-refs` | error | `#secret` references with no default that resolve to nothing
+| `plaintext-secrets` | error | A literal string under a key naming a secret (`:password`, `:api-key`, `:token`, …), outside the test profile; in prod and acc an `#or` literal fallback too
 | `providers` | error | Unknown `:provider` values
 | `jwt-secret` | error | `JWT_SECRET` not set when user module is active, in config or through `:extra-modules` in `system_config.clj`
 | `admin-parity` | warn | Admin entity EDN mismatch between dev and test

@@ -165,13 +165,18 @@
           :level :pass
           :msg   "All #env references resolved or have defaults"}])))))
 
+(defn- read-tagged
+  "`config-text` read with every tag kept as a tagged literal, or nil when it does not parse."
+  [config-text]
+  (try (edn/read-string {:default tagged-literal} config-text)
+       (catch Exception _ nil)))
+
 (defn secret-refs
   "Every #secret in `config-text`'s :active section, as {:source :name} plus
    :default? when the form gives one. A name that is itself a tag is skipped.
    Mirrors wagoe.config.secrets/secret-ref, which Babashka cannot load."
   [config-text]
-  (let [tree   (try (edn/read-string {:default tagged-literal} config-text)
-                    (catch Exception _ nil))
+  (let [tree   (read-tagged config-text)
         active (when (map? tree) (:active tree))]
     (for [x     (tree-seq (some-fn coll? tagged-literal?) #(if (tagged-literal? %) [(:form %)] (seq %)) active)
           :when (and (tagged-literal? x) (= 'secret (:tag x)))
@@ -206,6 +211,40 @@
       [{:id    :secret-refs
         :level :pass
         :msg   "All #secret references resolve or have defaults"}])))
+
+(def ^:private secret-key-name
+  #"(?:^|-)(?:password|passwd|passphrase|secret|token|credentials?|(?:api|private|secret|access|service|encryption|signing)-key)$")
+
+(defn plaintext-secrets
+  "Paths in `config-text`'s :active section where a key that names a secret holds
+   a literal string. #secret and #env read it from elsewhere, so they pass; #or too,
+   unless `strict?`: then its literal fallback counts. Other tags (#merge) are walked into."
+  [config-text strict?]
+  (let [tree      (read-tagged config-text)
+        skip-tag? (if strict? '#{env secret} '#{env secret or})
+        secret?   #(and (keyword? %) (re-find secret-key-name (name %)))
+        walk      (fn walk [path under-secret? v]
+                  (cond
+                    (map? v)            (mapcat (fn [[k x]] (walk (conj path k) (secret? k) x)) v)
+                    (coll? v)           (mapcat #(walk (conj path %1) under-secret? %2) (range) v)
+                    (tagged-literal? v) (when-not (skip-tag? (:tag v))
+                                          (walk path under-secret? (:form v)))
+                    :else               (when (and under-secret? (string? v) (not (str/blank? v)))
+                                          [path])))]
+    (when (map? (:active tree)) (walk [] false (:active tree)))))
+
+(defn check-plaintext-secrets
+  "A literal password or key under :active fails outside the test profile, and in prod
+   and acc an #or fallback to one too (BOU-942). Names the key, never the value."
+  [config-text env-name]
+  (let [found (when (not= "test" env-name)
+                (plaintext-secrets config-text (contains? #{"prod" "acc"} env-name)))]
+    (if (seq found)
+      [{:id    :plaintext-secrets
+        :level :error
+        :msg   (str "Plaintext secrets in " env-name " config: " (str/join ", " (map pr-str found)))
+        :fix   "Read each from the environment or a secrets file: #secret \"NAME\" or #env NAME."}]
+      [{:id :plaintext-secrets :level :pass :msg "No plaintext secrets in config"}])))
 
 (defn check-providers
   "Check that :provider values in the config are known/valid.
@@ -625,6 +664,7 @@
          (check-config-loadable parsed)
          (check-env-refs active-text env-map (optional-env-refs active))
          (check-secret-refs config-text env-map)
+         (check-plaintext-secrets config-text env)
          (check-providers active)
          (check-jwt-secret active env-map (code-enabled-modules (root-dir)))
          ;; It compares dev with test, so it says nothing about another
@@ -672,6 +712,7 @@
   (println "  env-refs            #env vars without #or defaults are set")
   (println "                      (an optional one, a Redis :password, only warns)")
   (println "  secret-refs         #secret names without a :default exist (env and file sources)")
+  (println "  plaintext-secrets   No literal password, secret, token or key outside the test profile")
   (println "  providers           Provider values are recognized")
   (println "  jwt-secret          JWT_SECRET set when user module active (config or :extra-modules)")
   (println "  admin-parity        Admin entity files exist in both dev and test")

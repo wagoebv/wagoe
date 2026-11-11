@@ -121,10 +121,10 @@ row with no test says so.
 | {repo}test/wagoe/tenant_isolation_registry_test.clj[The tenancy registry]: every library that carries a tenant id names its test.
 
 | Secrets outside config files
-| `#secret` and `#env` read secrets from the environment or a file.
+| `#secret` and `#env` read secrets from the environment or a file. `bb doctor` fails on a literal password, secret, token or key outside the test profile, or an `#or` fallback to one in prod and acc.
 | `#secret`, `:secret-sources`
 | 1.1.0
-| {repo}libs/config/test/wagoe/config/secrets_test.clj[`secrets_test`]. Nothing refuses a literal secret in `config.edn` yet.
+| {repo}libs/config/test/wagoe/config/secrets_test.clj[`secrets_test`], {repo}libs/tools/test/wagoe/tools/doctor_test.clj[`a-plaintext-secret-fails-outside-test`]
 
 | Known vulnerabilities in dependencies
 | Scanned weekly, on every change to a `deps.edn`, and before each release publishes.

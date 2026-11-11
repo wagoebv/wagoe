@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A plaintext secret in `config.edn` passed `bb doctor`** (BOU-942). It fails now outside the test profile; move
+  each named one to `#secret` or `#env`.
 - **A push send or broadcast reached every tenant's devices** (BOU-946). A device records the tenant it registered in,
   and a send reaches the sender's tenant's devices only. Devices registered before keep no tenant; re-register them.
 - **Events and realtime role and broadcast messages reached every tenant** (BOU-947). They keep to the sender's tenant
