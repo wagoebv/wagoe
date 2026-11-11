@@ -60,14 +60,15 @@ esac
 # reports.
 PLATFORM_ARG=()
 [ -n "${SMOKE_PLATFORM:-}" ] && PLATFORM_ARG=(--platform "$SMOKE_PLATFORM")
-# SMOKE_NETWORK=host: the container uses the runner's own network and resolver.
-# On GitHub runners the default bridge stopped resolving any host (BOU-975).
-[ -n "${SMOKE_NETWORK:-}" ] && PLATFORM_ARG+=(--network "$SMOKE_NETWORK")
+# SMOKE_DNS="1.1.1.1 8.8.8.8": name servers for the container. On GitHub
+# runners the upstream Docker hands containers stopped answering (BOU-975).
+for ns in ${SMOKE_DNS:-}; do PLATFORM_ARG+=(--dns "$ns"); done
 
 echo "── First-run smoke test"
 echo "   image:  $IMAGE${SMOKE_PLATFORM:+  (platform: $SMOKE_PLATFORM)}"
 echo "   repo:   $REPO_ROOT"
 echo "   target: $TARGET${SMOKE_AI:+   ai: $SMOKE_AI}"
+echo "   dns:    host $(grep -h ^nameserver /etc/resolv.conf 2>/dev/null | awk '{print $2}' | xargs)${SMOKE_DNS:+, container $SMOKE_DNS}"
 echo
 
 docker run --rm \
@@ -95,6 +96,8 @@ fail() {
   exit 1
 }
 ok()   { echo "  ok — $*"; }
+
+echo "   in container: $(grep ^nameserver /etc/resolv.conf | xargs)"
 
 # ── 0. package manager ──────────────────────────────────────────────────────
 # SMOKE_IMAGE has always been a parameter, but the body hardcoded apt-get, so
