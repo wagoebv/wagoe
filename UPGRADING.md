@@ -18,6 +18,13 @@ Nothing to do: `wagoe-platform` depends on it, and the namespaces kept their nam
 Depend on `com.wagoe/wagoe-platform-sql` instead of platform when you want Wagoe's
 database layer without Jetty, Reitit and Muuntaja.
 
+### `sync-tenant-schemas!` runs the tenant migrations (BOU-941)
+
+It used to copy a fixed list of tables (`contractors`, `invoices`, …) from
+`public` into each tenant schema. It now runs `migrations-tenant/`, as
+provisioning and boot do. If your tenant tables came from that list, move their
+DDL into `resources/migrations-tenant/`. The result has `:errors` instead of `:tables`.
+
 ## 1.0.x → 1.1.0
 
 ### 1. API docs moved from Swagger 2.0 to OpenAPI 3.1 (BOU-462)

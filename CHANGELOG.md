@@ -73,6 +73,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`sync-tenant-schemas!` copied one app's hard-coded tables into every tenant** (BOU-941). It runs
+  `migrations-tenant/` now, as provisioning does; see UPGRADING.md.
 - **A repository on a second database wrote into the first's open transaction** (BOU-967). Each database's writes stay
   in its own transaction now. Nothing to change.
 - **Admin, storage, push and workflow took a savepoint on another database's transaction** when two were nested, and

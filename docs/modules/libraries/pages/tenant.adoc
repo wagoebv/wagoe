@@ -73,7 +73,7 @@ NOTE: Requires PostgreSQL. On SQLite, MySQL or H2 the application refuses to boo
 ----
 (require '[wagoe.tenant.shell.provisioning :as provisioning])
 
-;; Provision: creates PostgreSQL schema and copies table structure
+;; Provision: creates the PostgreSQL schema and runs the tenant migrations into it
 (provisioning/provision-tenant! db-ctx tenant)
 ;=> {:success? true :schema-name "tenant_acme_corp" :table-count 5}
 

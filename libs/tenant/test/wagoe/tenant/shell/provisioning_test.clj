@@ -211,22 +211,6 @@
          (:type (ex-data (try (sut/refuse-unsupported-database! {:datasource ::ds} true)
                               (catch clojure.lang.ExceptionInfo e e)))))))
 
-(deftest ^:unit get-public-tables-filters-shared-tables-test
-  (testing "only tenant-scoped tables are copied into tenant schemas"
-    (with-redefs [db/execute-query! (fn [_ _]
-                                      [{:table-name "assignments"}
-                                       {:table-name "auth_users"}
-                                       {:table-name "contractors"}
-                                       {:table-name "contracts"}
-                                       {:table-name "invoices"}
-                                       {:table-name "payments"}
-                                       {:table-name "tenant_memberships"}
-                                       {:table-name "timesheets"}
-                                       {:table-name "user_sessions"}
-                                       {:table-name "users"}])]
-      (is (= ["assignments" "contractors" "contracts" "invoices" "timesheets"]
-             (#'sut/get-public-tables {:adapter nil :datasource nil}))))))
-
 (deftest ^:unit deprovision-tenant-validation-test
   (testing "rejects nil tenant entity"
     (let [mock-adapter (postgres-adapter-stub)
@@ -604,22 +588,11 @@
    # All tests
    clojure -M:test --focus wagoe.tenant.shell.provisioning-test")
 
-;; =============================================================================
-;; tenant-scoped-tables membership (ZZP-86)
-;; =============================================================================
-
-(deftest ^:unit tenant-scoped-tables-includes-added-entities
-  (testing "compliance/vbar/import tables are provisioned per-tenant (ZZP-86)"
-    (is (= #{"contractors" "contracts" "assignments" "timesheets" "invoices"
-             "compliance_snapshots" "compliance_changes" "vbar_assessments"
-             "import_batches"}
-           @#'sut/tenant-scoped-tables))))
-
 (deftest ^:integration sync-tenant-schemas-noop-on-non-postgresql-test
   (testing "sync-tenant-schemas! is a no-op with empty result on non-PostgreSQL (ZZP-86)"
     (with-h2-database
       (fn []
-        (is (= {:schemas-synced [] :tables []}
+        (is (= {:schemas-synced [] :errors {}}
                (sut/sync-tenant-schemas! *test-ctx*)))))))
 
 ;; =============================================================================
