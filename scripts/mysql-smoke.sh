@@ -95,11 +95,6 @@ TOKEN=$(login_token "$B" admin@smoke.test "$PW")
 [ -n "$TOKEN" ] || fail "login returned no jwt-token"
 A=(-H "Authorization: Bearer $TOKEN")
 J=(-H "Content-Type: application/json")
-# /web writes check CSRF even under a bearer token (BOU-940); the API ignores the extra header.
-JAR="$WORK/cookies"
-WEB_CSRF=$(web_csrf "$JAR" "$B/web/admin/" "${A[@]}")
-[ -n "$WEB_CSRF" ] || fail "GET /web/admin/ carried no CSRF token"
-A+=(-b "$JAR" -H "x-csrf-token: $WEB_CSRF")
 
 # ── 3. API ──────────────────────────────────────────────────────────────────
 echo "[3/5] API: enum, belongs-to, timestamps"

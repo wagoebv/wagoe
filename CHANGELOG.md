@@ -110,6 +110,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **A `/web` write with a bearer token and no session cookie skips the CSRF check** (BOU-952). A browser cannot
+  forge one; API-style clients of `/web` no longer need a page's token. Session-cookie writes are still checked.
 - **The admin sidebar is wider (240px) and resizable** (BOU-939): drag its edge, double-click to reset. Opening a module group
   closes the others. Nothing to change.
 - **`wagoe-search` no longer depends on `wagoe-admin`**, which it never used (BOU-869).

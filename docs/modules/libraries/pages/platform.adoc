@@ -172,8 +172,8 @@ A state-changing request (POST/PUT/DELETE/PATCH) is validated — `403` on a mis
 invalid token — when CSRF is enabled, the path is not exempt, and the request is either
 session-authenticated (`session-token` cookie / `X-Session-Token` header) or a `/web`
 route. This covers `/web`, `/web/admin`, and any session-authenticated `/api` route.
-Token-auth API clients that send no session cookie are not CSRF-vulnerable and are not
-checked; safe methods (GET/HEAD/OPTIONS) and `:exempt-paths` are skipped.
+A request with a bearer token and no session cookie is not CSRF-vulnerable and is not
+checked, on `/web` too; safe methods (GET/HEAD/OPTIONS) and `:exempt-paths` are skipped.
 
 [source,clojure]
 ----

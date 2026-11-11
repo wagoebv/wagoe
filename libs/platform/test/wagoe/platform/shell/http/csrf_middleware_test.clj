@@ -119,3 +119,10 @@
       (is (string? (:value cookie)) "pre-session cookie set")
       (is (= :strict (:same-site cookie)))
       (is (true? (:http-only cookie))))))
+
+(deftest ^:security ^:unit wrap-csrf-skips-a-bearer-only-web-write
+  ;; BOU-952, as the interceptor.
+  (let [handler (interceptors/wrap-csrf (ok-handler (atom [])) cfg)
+        bearer  {"authorization" "Bearer some.jwt.token"}]
+    (is (= 200 (:status (handler {:request-method :post :uri "/web/admin/users" :headers bearer}))))
+    (is (= 403 (:status (handler (assoc (session-request :post "/web/admin/users") :headers bearer)))))))

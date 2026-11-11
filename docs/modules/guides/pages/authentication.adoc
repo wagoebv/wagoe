@@ -521,8 +521,8 @@ State-changing web requests are protected against Cross-Site Request Forgery by 
 `http-csrf-protection` interceptor (in the default stack). A POST/PUT/DELETE/PATCH is
 validated — and rejected with `403` on a missing or invalid token — when it is either
 session-authenticated or targets a `/web` route. This covers the web UI, `/web/admin`,
-and any session-authenticated `/api` route. Token-auth API clients that send only a
-bearer token (no session cookie) are not CSRF-vulnerable and are not checked.
+and any session-authenticated `/api` route. A request that sends only a bearer
+token (no session cookie) is not CSRF-vulnerable and is not checked, on `/web` too.
 
 How a token reaches the browser and back:
 
