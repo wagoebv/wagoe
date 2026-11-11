@@ -103,11 +103,22 @@ export DEBIAN_FRONTEND=noninteractive
 if command -v apt-get >/dev/null 2>&1; then
   PKG=apt; EXPECT_HINT="apt-get install"
   # archive.ubuntu.com took up to four minutes from a GitHub runner; CI points
-  # the container at the mirror the runner itself uses.
-  if [ -n "${APT_MIRROR:-}" ] && [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
-    sed -i "s|http://archive.ubuntu.com/ubuntu|$APT_MIRROR|" /etc/apt/sources.list.d/ubuntu.sources
+  # the container at the mirror the runner itself uses, and falls back to the
+  # archive when that mirror is down. Error-Mode=any: a failed fetch otherwise
+  # exits 0 and surfaces later as "Unable to locate package curl".
+  apt_update() { apt-get update -qq -o APT::Update::Error-Mode=any >/tmp/pkg.log 2>&1; }
+  SOURCES=/etc/apt/sources.list.d/ubuntu.sources
+  updated=
+  if [ -n "${APT_MIRROR:-}" ] && [ -f "$SOURCES" ]; then
+    cp "$SOURCES" /tmp/ubuntu.sources.orig
+    sed -i "s|http://archive.ubuntu.com/ubuntu|$APT_MIRROR|" "$SOURCES"
+    if apt_update; then updated=1; else
+      log_excerpt /tmp/pkg.log 5
+      echo "     NOTE: $APT_MIRROR failed, falling back to archive.ubuntu.com"
+      cp /tmp/ubuntu.sources.orig "$SOURCES"
+    fi
   fi
-  apt-get update -qq >/tmp/pkg.log 2>&1 || { log_excerpt /tmp/pkg.log 5; fail "apt-get update failed"; }
+  [ -n "$updated" ] || apt_update || { log_excerpt /tmp/pkg.log 5; fail "apt-get update failed"; }
   pkg_install() { apt-get install -y -qq "$@" >/tmp/pkg.log 2>&1 || { log_excerpt /tmp/pkg.log 5; fail "apt-get install $* failed"; }; }
 elif command -v dnf >/dev/null 2>&1; then
   PKG=dnf; EXPECT_HINT="dnf install"
