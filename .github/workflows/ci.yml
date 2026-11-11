@@ -1776,6 +1776,7 @@ jobs:
         env:
           SMOKE_TARGET: worktree
           SMOKE_APT_MIRROR: http://azure.archive.ubuntu.com/ubuntu
+          SMOKE_NETWORK: host
           # install.sh's release lookup honours GITHUB_TOKEN (BOU-410) —
           # 5000 requests/hour instead of 60 per shared runner IP, which is
           # the throttle that has been failing this job at step [2/9].

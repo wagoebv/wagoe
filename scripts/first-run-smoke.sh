@@ -60,6 +60,9 @@ esac
 # reports.
 PLATFORM_ARG=()
 [ -n "${SMOKE_PLATFORM:-}" ] && PLATFORM_ARG=(--platform "$SMOKE_PLATFORM")
+# SMOKE_NETWORK=host: the container uses the runner's own network and resolver.
+# On GitHub runners the default bridge stopped resolving any host (BOU-975).
+[ -n "${SMOKE_NETWORK:-}" ] && PLATFORM_ARG+=(--network "$SMOKE_NETWORK")
 
 echo "── First-run smoke test"
 echo "   image:  $IMAGE${SMOKE_PLATFORM:+  (platform: $SMOKE_PLATFORM)}"
