@@ -1,0 +1,141 @@
+name: Scaffold AI eval
+
+# `bb scaffold ai` against real providers (BOU-909). Run by hand for now:
+# a few runs on main measure the Ollama runtime and the OpenAI cost before
+# this gets a schedule, a results branch and a regression issue (BOU-979).
+# Not a required check: a model having a bad night must not block a merge.
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Comma-separated prompt ids to run (empty: all)'
+        required: false
+        default: ''
+
+concurrency:
+  group: eval-scaffold
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    name: Eval — ${{ matrix.provider }}
+    runs-on: ubuntu-latest
+    # Ollama runs a 7B model on CPU. Results are saved per prompt, so a
+    # timeout keeps what ran.
+    timeout-minutes: 300
+    # The `eval` environment allows main only and holds OPENAI_API_KEY, so a
+    # branch's copy of this file never sees the key.
+    environment: eval
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [ollama, openai]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Clojure
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          cli: 1.12.6.1673
+          bb: 1.13.229
+
+      # Restore only. ci.yml's warm-deps is the one job that saves this key.
+      - name: Restore dependency cache
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-v6-${{ hashFiles('**/deps.edn') }}
+          restore-keys: ${{ runner.os }}-clojure-v6-
+
+      # Serial Maven resolution, as scripts/first-run-smoke.sh does (BOU-643).
+      - name: Serial clojure wrapper
+        run: |
+          real="$(command -v clojure)"
+          mkdir -p "$HOME/.eval-bin"
+          printf '#!/usr/bin/env bash\nexec %q -Sthreads 1 "$@"\n' "$real" > "$HOME/.eval-bin/clojure"
+          chmod +x "$HOME/.eval-bin/clojure"
+          echo "$HOME/.eval-bin" >> "$GITHUB_PATH"
+
+      # Pinned by digest and commit: the openai cell runs it with OPENAI_API_KEY set.
+      - name: Install clj-paren-repair
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$HOME/.local/bin/bbin" https://raw.githubusercontent.com/babashka/bbin/v0.2.5/bbin
+          echo "ef3436fff67850423dec28333d69a67f5be0da075e2ac93c39fcf278d69b625b  $HOME/.local/bin/bbin" | sha256sum -c -
+          chmod +x "$HOME/.local/bin/bbin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.local/bin:$PATH"
+          bbin install https://github.com/bhauman/clojure-mcp-light.git --git/sha cf48cc6ab1d79809a97a74355492d44ee3bbc4ba \
+            --as clj-paren-repair --main-opts '["-m" "clojure-mcp-light.paren-repair"]'
+          command -v clj-paren-repair
+
+      - name: Restore Ollama model
+        id: ollama-cache
+        if: matrix.provider == 'ollama'
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.ollama-models
+          key: ollama-qwen2.5-coder-7b-v1
+
+      # A pinned release, checked against its digest, not install.sh from main.
+      - name: Start Ollama
+        if: matrix.provider == 'ollama'
+        env:
+          OLLAMA_VERSION: v0.40.13
+          OLLAMA_SHA256: c9490e0f520be21271d969e6703f012268b1d39f8b70dd58854e5bfef7a75bb6
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/ollama.tar.zst" \
+            "https://github.com/ollama/ollama/releases/download/$OLLAMA_VERSION/ollama-linux-amd64.tar.zst"
+          echo "$OLLAMA_SHA256  $RUNNER_TEMP/ollama.tar.zst" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/ollama" "$HOME/.ollama-models"
+          tar -C "$RUNNER_TEMP/ollama" --zstd -xf "$RUNNER_TEMP/ollama.tar.zst"
+          rm "$RUNNER_TEMP/ollama.tar.zst"
+          echo "$RUNNER_TEMP/ollama/bin" >> "$GITHUB_PATH"
+          export PATH="$RUNNER_TEMP/ollama/bin:$PATH"
+          OLLAMA_MODELS="$HOME/.ollama-models" nohup ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 &
+          for _ in $(seq 1 30); do curl -fs http://localhost:11434/api/tags >/dev/null && break; sleep 1; done
+          ollama pull qwen2.5-coder:7b
+          ollama list
+
+      # Saved here: actions/cache saves at job end only when the job passed.
+      - name: Save Ollama model
+        if: matrix.provider == 'ollama' && steps.ollama-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.ollama-models
+          key: ollama-qwen2.5-coder-7b-v1
+
+      # Below the job's timeout, so the report and upload still run.
+      - name: Run the eval
+        timeout-minutes: 280
+        env:
+          # cell-env drops it for ollama too; this keeps it out of that job entirely.
+          OPENAI_API_KEY: ${{ matrix.provider == 'openai' && secrets.OPENAI_API_KEY || '' }}
+          ONLY: ${{ inputs.only }}
+        run: |
+          bb eval:scaffold --provider "${{ matrix.provider }}" --out eval-out ${ONLY:+--only "$ONLY"}
+
+      - name: Report
+        if: always()
+        run: |
+          ls eval-out/*.edn >/dev/null 2>&1 || exit 0
+          bb eval:report eval-out | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: eval-${{ matrix.provider }}
+          path: eval-out/*.edn
+          if-no-files-found: warn

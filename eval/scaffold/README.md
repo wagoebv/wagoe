@@ -28,8 +28,14 @@ under `:endpoint`.
 ## Read the results
 
 Each run writes `<date>-<provider>.edn` to `--out` (default `target/eval-scaffold`). A run without
-`OPENAI_API_KEY` is recorded with `:status :skipped`. A nightly CI job is a
-follow-up (BOU-979); until then, run it by hand and keep the files.
+`OPENAI_API_KEY` is recorded with `:status :skipped`. The file is rewritten
+after each prompt with `:status :partial`, so a killed run keeps what ran;
+`eval:report` counts only finished runs.
+
+In CI, run the "Scaffold AI eval" workflow by hand on main; each provider's
+file is a run artifact. It needs the `eval` environment (main only) with the
+`OPENAI_API_KEY` secret. A nightly schedule follows once a few runs show the
+Ollama runtime and the OpenAI cost (BOU-979).
 
 ```bash
 bb eval:report target/eval-scaffold

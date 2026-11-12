@@ -337,8 +337,10 @@
   (fs/path out (str date "-" provider ".edn")))
 
 (defn evaluate
-  "Run every prompt for `provider-id`; the result map."
-  [{:keys [repo env catalogue only] :as ctx} provider-id]
+  "Run every prompt for `provider-id`; the result map. After each prompt,
+   `save!` (when given) gets the result so far, `:status :partial`, so a
+   killed run keeps what ran (BOU-979)."
+  [{:keys [repo env catalogue only save!] :or {save! (fn [_])} :as ctx} provider-id]
   (let [{:keys [label model requires]} (providers provider-id)
         ;; A run against a stub or a compatible endpoint is not a run against OpenAI.
         base (cond-> {:date     (str (java.time.LocalDate/now java.time.ZoneOffset/UTC))
@@ -357,14 +359,16 @@
                                            {"WAGOE_SCAFFOLDER_ROOT" (str repo "/libs/scaffolder")
                                             "WAGOE_AI_ROOT"         (str repo "/libs/ai")}))
             project (new-base-project! ctx)
-            results (mapv (fn [p]
-                            (println (str "── " (name (:id p)) ": " (:prompt p)))
-                            (let [r (run-prompt ctx project p)]
-                              (println (str "   " (if (:mergeable? r) "mergeable" "not mergeable")
-                                            ", edits " (pr-str (:edits r))
-                                            ", " (quot (:duration-ms r) 1000) "s"))
-                              r))
-                          prompts)]
+            results (reduce (fn [acc p]
+                              (println (str "── " (name (:id p)) ": " (:prompt p)))
+                              (let [r   (run-prompt ctx project p)
+                                    acc (conj acc r)]
+                                (println (str "   " (if (:mergeable? r) "mergeable" "not mergeable")
+                                              ", edits " (pr-str (:edits r))
+                                              ", " (quot (:duration-ms r) 1000) "s"))
+                                (save! (assoc base :status :partial :prompts acc :summary (summarise acc)))
+                                acc))
+                            [] prompts)]
         (assoc base :status :ran :prompts results :summary (summarise results))))))
 
 (def ^:private usage
@@ -384,12 +388,29 @@
         repo   (str (fs/canonicalize "."))
         out    (fs/absolutize (get opts "--out" "target/eval-scaffold"))
         work   (fs/create-dirs (fs/absolutize (or (get opts "--work") (fs/create-temp-dir {:prefix "eval-scaffold"}))))
+        catalogue (load-prompts (get opts "--prompts" default-prompts))
+        only   (some-> (get opts "--only") str/trim (str/split #"\s*,\s*"))
+        unknown (remove (set (map (comp name :id) (:prompts catalogue))) only)
+        _      (when (seq unknown)
+                 ;; A typo would otherwise run fewer prompts and look like a result.
+                 (binding [*out* *err*] (println "Unknown prompt ids:" (str/join ", " unknown)))
+                 (System/exit 1))
+        _      (fs/create-dirs out)
+        save!  (fn [r]
+                 ;; Via a temp file: a run killed mid-write must not leave
+                 ;; half an EDN for eval:report to choke on.
+                 (let [file (result-file out r)
+                       tmp  (fs/path out (str (fs/file-name file) ".tmp"))]
+                   (spit (str tmp) (with-out-str (pprint/pprint r)))
+                   (fs/move tmp file {:replace-existing true :atomic-move true})
+                   file))
         result (try
                  (evaluate {:repo      repo
                             :work      work
                             :env       (into {} (System/getenv))
-                            :catalogue (load-prompts (get opts "--prompts" default-prompts))
-                            :only      (some-> (get opts "--only") (str/split #","))}
+                            :catalogue catalogue
+                            :only      only
+                            :save!     save!}
                            (get opts "--provider"))
                  ;; The base project could not be made: no prompt can run, and
                  ;; that is a broken harness, not a score.
@@ -398,11 +419,9 @@
                      (println (ex-message e))
                      (some-> (:log (ex-data e)) println))
                    (System/exit 1)))
-        file   (result-file out result)]
-    (fs/create-dirs out)
-    (spit (str file) (with-out-str (pprint/pprint result)))
-    (let [{:keys [mergeable of median-edits]} (:summary result)]
-      (println (str "Wrote " file ": " (if (= :skipped (:status result))
-                                         (str "skipped (" (:reason result) ")")
-                                         (str mergeable " of " of " mergeable without edits, median edits "
-                                              (pr-str median-edits))))))))
+        file   (save! result)
+        {:keys [mergeable of median-edits]} (:summary result)]
+    (println (str "Wrote " file ": " (if (= :skipped (:status result))
+                                       (str "skipped (" (:reason result) ")")
+                                       (str mergeable " of " of " mergeable without edits, median edits "
+                                            (pr-str median-edits)))))))
