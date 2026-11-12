@@ -14,6 +14,7 @@
             [buddy.core.nonce :as nonce]
             [buddy.hashers :as hashers]
             [wagoe.user.shell.bcrypt :as bcrypt]
+            [wagoe.user.shell.jwt-secret :as jwt-secret]
             [clojure.string :as str]))
 
 (def ^:private encrypted-prefix
@@ -25,14 +26,8 @@
 
 (def ^:private mfa-key
   "32-byte AES-256 key derived from JWT_SECRET (reused per the BOU-162 decision).
-   Resolved once per process; throws if JWT_SECRET is absent, so a misconfigured
-   deployment fails fast rather than storing recoverable secrets."
-  (delay
-    (let [secret (or (System/getenv "JWT_SECRET")
-                     (throw (ex-info "JWT_SECRET not configured (required to encrypt MFA secrets)"
-                                     {:type :configuration-error
-                                      :required-env-var "JWT_SECRET"})))]
-      (hash/sha256 secret))))
+   A missing or short secret throws WGE-103, as it does for auth (BOU-977)."
+  (delay (hash/sha256 (jwt-secret/value))))
 
 (defn encrypted-secret?
   "True if s is an encrypted TOTP secret produced by encrypt-secret (vs a legacy

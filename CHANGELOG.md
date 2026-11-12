@@ -73,6 +73,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **MFA encryption accepted a `JWT_SECRET` shorter than 32 characters** (BOU-977). It checks the secret as auth
+  does now; only a process encrypting MFA secrets without the auth service could notice.
 - **The user role filter matched a part of the role, and missed users with no role** (BOU-924). `?role=admin` matches
   admins only, `?role=user` everyone else.
 - **A missing or short `JWT_SECRET` refused boot without an error code** (BOU-944). It says `WGE-103` now;

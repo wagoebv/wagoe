@@ -17,6 +17,7 @@
             [wagoe.user.shell.lockout :as lockout]
             [wagoe.user.shell.mfa :as mfa-shell]
             [wagoe.user.shell.bcrypt :as bcrypt]
+            [wagoe.user.shell.jwt-secret :as jwt-secret]
             [buddy.core.codecs :as codecs]
             [buddy.core.mac :as mac]
             [buddy.hashers :as hashers]
@@ -54,43 +55,16 @@
 ;; JWT Token Operations (Side Effects)
 ;; =============================================================================
 
-(def ^:private min-jwt-secret-length
-  "Minimum JWT_SECRET length. A short HMAC key materially weakens signing, so the
-   framework refuses anything shorter."
-  32)
-
 (def ^:private jwt-alg
   "Pinned JWT signature algorithm. Passed to both sign and unsign so a token
    presented with a different alg (e.g. the classic alg:none downgrade) is
    rejected instead of trusting the header's self-declared algorithm."
   :hs256)
 
-(defn- validate-jwt-secret*
-  "Return secret when valid, else throw a WGE-103 :configuration-error. Enforces
-   presence and the minimum length."
-  [secret]
-  (if-let [problem (cond
-                     (str/blank? secret)
-                     "JWT_SECRET environment variable not configured. Set JWT_SECRET before starting the application."
-
-                     (< (count secret) min-jwt-secret-length)
-                     (str "JWT_SECRET must be at least " min-jwt-secret-length " characters (HMAC key strength)."))]
-    (throw (ex-info (str "WGE-103: " problem)
-                    {:type :configuration-error
-                     :wagoe/error-code "WGE-103"
-                     :required-env-var "JWT_SECRET"}))
-    secret))
-
-(def ^:private jwt-secret
-  "JWT signing secret, resolved and validated from the environment once per
-   process. The environment cannot change within a JVM, so a per-call lookup
-   only added cost on every sign/verify."
-  (delay (validate-jwt-secret* (System/getenv "JWT_SECRET"))))
-
 (defn get-jwt-secret
-  "The validated JWT_SECRET. Throws :configuration-error when it is missing or short."
+  "The validated JWT_SECRET. Throws WGE-103 when it is missing or short."
   []
-  @jwt-secret)
+  (jwt-secret/value))
 
 (defn validate-jwt-secret!
   "Fail-fast startup check: force resolution + validation of JWT_SECRET so a
