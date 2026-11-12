@@ -8,7 +8,8 @@
    a known filter type and a supported operator and never throw — their unknown
    branches fail safe (nil / a false predicate)."
   (:require [clojure.string :as str]
-            [wagoe.core.utils.pii-redaction :as pii])
+            [wagoe.core.utils.pii-redaction :as pii]
+            [wagoe.core.utils.secret-keys :as secret-keys])
   (:import [java.util.regex Pattern]))
 
 ;; =============================================================================
@@ -328,8 +329,10 @@
   "Whether `field` looks like a credential, which no configuration may allow.
    Matched without separators, so `:apikey` and `:passWord` are caught too."
   [field]
-  (boolean (re-find #"password|passwd|hash|secret|token|salt|mfa|otp|backupcode|apikey|lockout|failedlogin"
-                    (str/replace (name (normalize-field field)) "-" ""))))
+  (or (secret-keys/secret-key? field)
+      ;; Broader on purpose: account-security columns that are not secrets.
+      (boolean (re-find #"password|passwd|hash|secret|token|salt|mfa|otp|backupcode|apikey|lockout|failedlogin"
+                        (str/replace (name (normalize-field field)) "-" "")))))
 
 (defn- filter-field
   "The column a filter reads, or nil. A :feature-usage field names a feature

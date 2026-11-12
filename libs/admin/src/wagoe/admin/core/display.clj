@@ -5,7 +5,8 @@
    due date — and decides how a list cell renders it. Roles are derived from
    the field's type, its name and the entity's relations; an explicit
    `:display` in the field config wins. Pure: config in, data out."
-  (:require [wagoe.core.utils.text :as text]
+  (:require [wagoe.core.utils.secret-keys :as secret-keys]
+            [wagoe.core.utils.text :as text]
             [clojure.string :as str]))
 
 (def roles
@@ -200,9 +201,8 @@
 (def ^:private audit-fields #{:updated-at :deleted-at :created-by :updated-by})
 
 (def ^:private technical-name
-  ;; Kept out of a derived list the way introspection's own defaults keep them
-  ;; out (should-be-in-list-view?): an MFA secret or a reset token is not hidden
-  ;; by name, only by this.
+  ;; Kept out of a derived list, with what `secret-keys/secret-key?` names (BOU-981).
+  ;; A substring on purpose: :access-token-encrypted is no column to show by default.
   #"hash|secret|token|backup-codes")
 
 (defn- list-rank
@@ -210,7 +210,8 @@
   [entity-config facet field role]
   (let [type (get-in entity-config [:fields field :type])]
     (cond
-      (re-find technical-name (name field))    nil
+      (or (re-find technical-name (name field))
+          (secret-keys/secret-key? field))     nil
       (= role :title)                          0
       ;; Before relations: created-by and updated-by are belongs-to users
       (audit-fields field)                     nil

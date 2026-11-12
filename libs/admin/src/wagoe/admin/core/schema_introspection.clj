@@ -12,6 +12,7 @@
    - Merge auto-detected configuration with manual overrides
    - Generate sensible defaults for labels and field ordering"
   (:require
+   [wagoe.core.utils.secret-keys :as secret-keys]
    [wagoe.core.utils.text :as text]
    [clojure.string :as str]
    [wagoe.admin.schema :as admin-schema]
@@ -220,7 +221,9 @@
     :deleted-at :deleted-by :version :revision})
 
 (def common-hidden-fields
-  "Set of field names that are typically hidden in admin UI (in kebab-case)."
+  "Fields hidden in the admin UI even when an app's admin config lists them
+   (BOU-562). `should-be-hidden?` also hides, by default only, what
+   `secret-keys/secret-key?` names (BOU-981)."
   #{:password-hash :password-encrypted :secret :token
     :api-key :private-key :salt :hash
     :search-vector :tsv :fts-vector})
@@ -256,7 +259,7 @@
      (should-be-hidden? :password-hash) ;=> true
      (should-be-hidden? :email)         ;=> false"
   [field-name]
-  (contains? common-hidden-fields field-name))
+  (or (contains? common-hidden-fields field-name) (secret-keys/secret-key? field-name)))
 
 (defn should-be-searchable?
   "Determine if field should be searchable.
@@ -674,7 +677,7 @@
     (let [;; Detected secrets stay hidden whatever the manual config says: a
           ;; manual :hide-fields replaced this set, and a scaffolded
           ;; #{:deleted-at} showed password hashes (BOU-562).
-          secrets (set (filter should-be-hidden? (:hide-fields auto-config)))
+          secrets (set (filter common-hidden-fields (:hide-fields auto-config)))
           visible #(some->> % (remove secrets) vec)
           merged (-> auto-config
                      (merge (dissoc manual-config :fields))  ; Merge all except :fields

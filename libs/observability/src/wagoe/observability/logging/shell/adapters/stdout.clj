@@ -5,6 +5,7 @@
    formatting options including plain text and JSON output with optional
    colors, timestamps, and structured context."
   (:require
+   [wagoe.core.utils.pii-redaction :as pii]
    [wagoe.observability.logging.shell.time :as time]
    [wagoe.observability.logging.ports :as ports]
    [wagoe.observability.core.sql-redaction :as redaction]
@@ -97,13 +98,8 @@
    
    Pure: Yes"
   [context]
-  (let [sensitive-keys #{:password :token :secret :api-key :private-key}]
-    (reduce-kv (fn [m k v]
-                 (if (sensitive-keys k)
-                   (assoc m k "***REDACTED***")
-                   (assoc m k v)))
-               {}
-               context)))
+  ;; The rule the rest of the framework logs with, nested maps included (BOU-981).
+  (pii/redact-for-log context))
 
 (defn- merge-contexts
   "Merge base context, dynamic context, and call context.

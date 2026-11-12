@@ -241,5 +241,5 @@
     (testing "secret-field? catches the user tables' credentials"
       (is (every? f/secret-field? [:password-hash :mfa-secret :mfa-backup-codes :session-token
                                    :failed-login-count :lockout-until :api-key
-                                   :apikey :backupcodes :passWord]))
+                                   :apikey :backupcodes :passWord :client-credential :private-key]))
       (is (not-any? f/secret-field? f/default-filter-fields)))))

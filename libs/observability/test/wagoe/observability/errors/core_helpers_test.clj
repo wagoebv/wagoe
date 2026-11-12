@@ -70,6 +70,10 @@
     (is (= {:password "[REDACTED]" :user "ann"}
            (ec/sanitize-context {:password "hunter2" :user "ann"} #{:password :token}))))
 
+  (testing "a key naming a secret is redacted though the set omits it (BOU-981)"
+    (is (= {:db-password "[REDACTED]" :stripe-api-key "[REDACTED]" :user "ann"}
+           (ec/sanitize-context {:db-password "x" :stripe-api-key "y" :user "ann"} #{}))))
+
   (testing "with-request-context upper-cases the method"
     (is (= {:request-id "r1" :http-method "POST" :http-path "/a" :http-headers {}}
            (ec/with-request-context {} "r1" :post "/a" {}))))

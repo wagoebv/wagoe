@@ -5,6 +5,7 @@
    the error reporting protocols, making it easier for feature modules to
    report errors without dealing with protocol details directly."
   (:require
+   [wagoe.core.utils.secret-keys :as secret-keys]
    [wagoe.core.utils.text :as text]
    [wagoe.observability.errors.ports :as ports]
    [wagoe.observability.core.sql-redaction :as redaction]
@@ -80,21 +81,16 @@
          :action (str action)))
 
 (defn sanitize-context
-  "Removes sensitive information from error context.
-   
-   Args:
-     context        - Context map
-     sensitive-keys - Set of keys to remove or mask
-   
-   Returns:
-     Sanitized context map"
+  "`context` with the value of each key in `sensitive-keys`, or naming a secret
+   by `secret-keys/secret-key?`, replaced by \"[REDACTED]\" (BOU-981)."
   [context sensitive-keys]
-  (reduce (fn [ctx key]
-            (if (contains? ctx key)
-              (assoc ctx key "[REDACTED]")
-              ctx))
-          context
-          sensitive-keys))
+  (let [sensitive (set sensitive-keys)]
+    (reduce-kv (fn [ctx k _]
+                 (if (or (contains? sensitive k) (secret-keys/secret-key? k))
+                   (assoc ctx k "[REDACTED]")
+                   ctx))
+               context
+               context)))
 
 ;; =============================================================================
 ;; Error Classification Utilities
