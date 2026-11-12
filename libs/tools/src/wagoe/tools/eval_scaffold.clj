@@ -123,6 +123,21 @@
   (and (every? #(#{:pass :skipped} (:status %)) (vals steps))
        (every? :pass? expectations)))
 
+(defn provider-error
+  "The provider's refusal in a failed generate log, or nil. A rejected key, an
+   empty account, a missing model, a rate limit or an unreachable provider says
+   nothing about the model, so such a night is not a score (BOU-979). The
+   bracket is the line wagoe.ai.shell.cli-entry/describe-failure prints."
+  [log]
+  (some->> (str log)
+           (re-find #"\[[^\]\n]*HTTP (?:401|403|404|429|5\d\d)\]|Cannot reach [^\n]*|No AI provider is configured")
+           str/trim))
+
+(defn run-status
+  "`:provider-error` when any prompt hit one, else `:ran`."
+  [prompt-results]
+  (if (some #(get-in % [:failure :provider-error]) prompt-results) :provider-error :ran))
+
 (defn summarise
   "{:mergeable n :of n :median-edits x}: mergeable means without edits; the
    median is over prompts that were mergeable at all."
@@ -292,8 +307,12 @@
       (git ctx "commit" "--no-verify" "-qm" "setup" "--allow-empty")
       (git ctx "tag" "-f" "eval-setup")
       (let [ctx  (update ctx :env merge (dev/dotenv (str (fs/path dir ".env"))))
-            gen  (step (run (assoc ctx :timeout-ms (* 30 minute))
-                            "bb" "scaffold" "ai" prompt "--yes"))
+            raw  (run (assoc ctx :timeout-ms (* 30 minute))
+                      "bb" "scaffold" "ai" prompt "--yes")
+            gen  (step raw)
+            ;; From the whole output: the CLI's stdout, logs included, is
+            ;; reprinted after the refusal and can push it out of the tail.
+            refusal (when (= :fail (:status gen)) (provider-error (:out raw)))
             _    (git ctx "add" "-A")
             _    (git ctx "commit" "--no-verify" "-qm" "scaffold ai" "--allow-empty")
             mod  (module-of (source-files dir "eval-setup"))
@@ -309,7 +328,8 @@
           (done {:generated? false :module mod
                  :steps setup
                  :mergeable? false :edits nil
-                 :failure {:step :generate :log (or (:log gen) (:log intg))}})
+                 :failure (cond-> {:step :generate :log (or (:log gen) (:log intg))}
+                            refusal (assoc :provider-error refusal))})
           (let [checks (run-checks ctx files)
                 exps   (check-expectations expected (read-sources dir files))
                 steps  (merge setup checks)]
@@ -367,9 +387,10 @@
                                               ", edits " (pr-str (:edits r))
                                               ", " (quot (:duration-ms r) 1000) "s"))
                                 (save! (assoc base :status :partial :prompts acc :summary (summarise acc)))
-                                acc))
+                                ;; The night is not a score now; the rest would only spend time.
+                                (cond-> acc (get-in r [:failure :provider-error]) reduced)))
                             [] prompts)]
-        (assoc base :status :ran :prompts results :summary (summarise results))))))
+        (assoc base :status (run-status results) :prompts results :summary (summarise results))))))
 
 (def ^:private usage
   "Usage: bb eval:scaffold --provider ollama|openai [--only id,id] [--prompts FILE] [--out DIR] [--work DIR]")
@@ -420,8 +441,12 @@
                      (some-> (:log (ex-data e)) println))
                    (System/exit 1)))
         file   (save! result)
-        {:keys [mergeable of median-edits]} (:summary result)]
-    (println (str "Wrote " file ": " (if (= :skipped (:status result))
-                                       (str "skipped (" (:reason result) ")")
+        {:keys [mergeable of median-edits]} (:summary result)
+        refusal (some #(get-in % [:failure :provider-error]) (:prompts result))]
+    (println (str "Wrote " file ": " (case (:status result)
+                                       :skipped        (str "skipped (" (:reason result) ")")
+                                       :provider-error (str "not scored, the provider refused: " refusal)
                                        (str mergeable " of " of " mergeable without edits, median edits "
-                                            (pr-str median-edits)))))))
+                                            (pr-str median-edits)))))
+    ;; Red in CI: a broken key or an empty account needs someone to act.
+    (when (= :provider-error (:status result)) (System/exit 1))))

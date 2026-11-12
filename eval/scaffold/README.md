@@ -32,6 +32,10 @@ Each run writes `<date>-<provider>.edn` to `--out` (default `target/eval-scaffol
 after each prompt with `:status :partial`, so a killed run keeps what ran;
 `eval:report` counts only finished runs.
 
+A run where the provider refused (a rejected key, no credit, a rate limit, an
+unreachable provider) is `:status :provider-error`, not a score: `eval:report`
+skips it and `eval:scaffold` exits 1, so the CI job goes red.
+
 In CI, run the "Scaffold AI eval" workflow by hand on main; each provider's
 file is a run artifact. It needs the `eval` environment (main only) with the
 `OPENAI_API_KEY` secret. A nightly schedule follows once a few runs show the
