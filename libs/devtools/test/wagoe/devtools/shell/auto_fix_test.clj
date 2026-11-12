@@ -90,12 +90,10 @@
                      :action :set-jwt
                      :params {}}
                     {:guidance-level :full}))
-          env-file (io/file ".env")]
+          env-file (io/file (System/getProperty "user.dir") ".env")]
       (is (str/includes? output "Written to .env"))
       (is (str/includes? output "Restart the REPL"))
-      (when (.exists env-file)
-        (let [content (slurp env-file)]
-          (is (str/includes? content "JWT_SECRET=\"dev-secret-")))))))
+      (is (str/includes? (slurp env-file) "JWT_SECRET=\"dev-secret-")))))
 
 (deftest ^:integration set-env-reads-required-env-var-test
   (testing ":set-env reads :required-env-var from ex-data params"
@@ -107,8 +105,6 @@
                      :action :set-env
                      :params {:required-env-var "DATABASE_URL" :value "postgres://localhost/dev"}}
                     {:guidance-level :full}))
-          env-file (io/file ".env")]
+          env-file (io/file (System/getProperty "user.dir") ".env")]
       (is (str/includes? output "Written to .env"))
-      (when (.exists env-file)
-        (let [content (slurp env-file)]
-          (is (str/includes? content "DATABASE_URL=\"postgres://localhost/dev\"")))))))
+      (is (str/includes? (slurp env-file) "DATABASE_URL=\"postgres://localhost/dev\"")))))

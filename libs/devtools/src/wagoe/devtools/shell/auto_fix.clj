@@ -25,7 +25,9 @@
    Returns true on success."
   [var-name value]
   (try
-    (let [env-file (io/file ".env")
+    (let [;; user.dir, not a relative path: Java resolves those against the
+          ;; launch directory, so a test pointing user.dir away wrote the repo's .env (BOU-978).
+          env-file (io/file (System/getProperty "user.dir") ".env")
           existing (when (.exists env-file) (slurp env-file))
           prefix   (str var-name "=")
           ;; Also match quoted form: VAR="value"
