@@ -1,0 +1,43 @@
+;; The fixed prompts `bb eval:scaffold` runs each night (BOU-909), easiest first.
+;; Changing a prompt changes what the history measures: add a new id instead.
+;;
+;; :expectations at the top apply to every prompt. A check is one of
+;;   :no-protocol-interop  no (.method ...) call on a protocol method
+;;   :no-request-identity  no :identity read; platform puts the user under :user
+;;   :keywords             each of :keywords appears in the generated sources
+;;   :matches              :pattern (a regex) matches the generated sources
+;; :setup is run with the worktree `wagoe` CLI before scaffolding.
+{:expectations
+ [{:id    :no-protocol-interop
+   :check :no-protocol-interop
+   :why   "Conj tryout: (.create-thing repo ...) called a protocol method with Java interop"}
+  {:id    :no-request-identity
+   :check :no-request-identity
+   :why   "Conj tryout: the workflow actor was read from :identity, where platform puts :user"}]
+
+ :prompts
+ [{:id           :product
+   :prompt       "product module with name, price, stock"
+   :expectations [{:id :fields :check :keywords :keywords [:name :price :stock]}]}
+
+  {:id           :invoice
+   :prompt       "invoice module: number, customer, line items, total in cents, due date, status draft→sent→paid"
+   :expectations [{:id :fields :check :keywords :keywords [:number :customer :due-date]}
+                  {:id :line-items :check :matches :pattern "(?i)line[-_]?item"}
+                  {:id :workflow :check :matches :pattern "(?s)draft.*sent.*paid"}]}
+
+  {:id           :order
+   :prompt       "order module: an order has a reference and a placed-at time, and has many order lines, at least one; each line has a product name and a quantity"
+   :expectations [{:id :has-many :check :matches :pattern "(?i)order[-_]?line"}
+                  {:id :min-one :check :matches :pattern "keeps at least 1"}]}
+
+  {:id           :document
+   :setup        [["add" "storage"]]
+   :prompt       "document module with a title, a description and an uploaded attachment file stored with wagoe-storage"
+   :expectations [{:id :fields :check :keywords :keywords [:title]}
+                  {:id :storage-port :check :matches :pattern "wagoe\\.storage\\.ports"}]}
+
+  {:id           :klant
+   :prompt       "klantmodule met naam, e-mailadres, telefoonnummer en een vlag of de klant actief is"
+   :expectations [{:id :email :check :matches :pattern "(?i)e-?mail"}
+                  {:id :phone :check :matches :pattern "(?i)telefoon|phone"}]}]}
