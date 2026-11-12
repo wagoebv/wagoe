@@ -1,6 +1,7 @@
 (ns wagoe.user.shell.auth-security-test
   "Security tests for JWT secret validation, algorithm pinning and the bcrypt work factor."
   (:require [wagoe.user.shell.auth :as auth]
+            [wagoe.user.shell.jwt-secret :as jwt-secret]
             [wagoe.user.shell.mfa-crypto :as mfa-crypto]
             [buddy.sign.jwt :as jwt]
             [clojure.string :as str]
@@ -8,7 +9,7 @@
   (:import (java.util UUID)))
 
 (defn- refusal [secret]
-  (try (#'auth/validate-jwt-secret* secret) nil
+  (try (#'jwt-secret/validate secret) nil
        (catch clojure.lang.ExceptionInfo e e)))
 
 (deftest ^:unit ^:security jwt-secret-validation-test
@@ -20,7 +21,7 @@
   (testing "a >= 32 character secret is accepted"
     (let [secret "this-secret-is-exactly-32-chars!"]
       (is (= 32 (count secret)))
-      (is (= secret (#'auth/validate-jwt-secret* secret))))))
+      (is (= secret (#'jwt-secret/validate secret))))))
 
 (deftest ^:unit ^:security jwt-algorithm-pinning-test
   ;; Relies on JWT_SECRET being set for the test run (>= 32 chars).

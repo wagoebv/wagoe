@@ -275,7 +275,7 @@
 
 (def jwt-secret-min-length
   "Minimum JWT_SECRET length, mirroring the runtime guard in
-   `wagoe.user.shell.auth/validate-jwt-secret*` (HMAC key strength)."
+   `wagoe.user.shell.jwt-secret/validate` (HMAC key strength)."
   32)
 
 (def ^:private jwt-secret-fix
