@@ -82,3 +82,24 @@
                            "ollama")]
         (is (= [[:partial 1] [:partial 2]] (map (juxt :status (comp count :prompts)) @saved)))
         (is (= :ran (:status r)))))))
+
+(deftest ^:unit a-provider-refusal-is-not-a-score
+  (testing "the bracket describe-failure prints"
+    (is (= "[openai, gpt-4o-mini, HTTP 401]"
+           (es/provider-error "The AI provider (openai) rejected the API key.\n  [openai, gpt-4o-mini, HTTP 401]\n  clj-http: status 401")))
+    (is (= "[openai, gpt-4o-mini, HTTP 429]" (es/provider-error "x\n  [openai, gpt-4o-mini, HTTP 429]")))
+    (is (= "[ollama, qwen2.5-coder:7b, HTTP 404]" (es/provider-error "[ollama, qwen2.5-coder:7b, HTTP 404]")))
+    (is (= "Cannot reach Ollama at http://localhost:11434. Is it running?"
+           (es/provider-error "Cannot reach Ollama at http://localhost:11434. Is it running?\n"))))
+  (testing "a model's bad output is a score"
+    (is (nil? (es/provider-error "AI scaffolder could not parse the description.")))
+    (is (nil? (es/provider-error "[ollama, qwen2.5-coder:7b, HTTP 400]"))))
+  (is (= :provider-error (es/run-status [{:edits 0} {:failure {:provider-error "[x, HTTP 429]"}}])))
+  (is (= :ran (es/run-status [{:edits 0} {:failure {:step :generate}}])))
+  (testing "the run stops at the first refusal"
+    (with-redefs [es/new-base-project! (constantly "base")
+                  es/run-prompt        (fn [_ _ p] {:id (:id p) :edits nil :duration-ms 0
+                                                    :failure {:provider-error "[x, HTTP 401]"}})]
+      (let [r (es/evaluate {:repo "." :env {} :catalogue {:prompts [{:id :a} {:id :b}]}} "ollama")]
+        (is (= [:a] (map :id (:prompts r))))
+        (is (= :provider-error (:status r)))))))
