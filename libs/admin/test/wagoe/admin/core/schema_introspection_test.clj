@@ -291,6 +291,17 @@
     (doseq [k [:list-fields :search-fields :detail-fields :editable-fields]]
       (is (not-any? #{:api-key :password-hash} (get cfg k)) (str k)))))
 
+(deftest ^:unit a-manual-config-may-show-a-field-the-shared-rule-hides
+  ;; BOU-981: :smtp-password is hidden by default, but an app that lists it in
+  ;; its own admin config keeps editing it; only BOU-562's list is forced.
+  (let [col  (fn [n] {:name n :type "VARCHAR" :not-null false :default nil :primary-key false})
+        auto (introspection/parse-table-metadata
+              :settings [{:name "id" :type "UUID" :not-null true :default nil :primary-key true}
+                         (col "host") (col "smtp_password")])
+        cfg  (introspection/build-entity-config auto {:editable-fields [:host :smtp-password]})]
+    (is (introspection/should-be-hidden? :smtp-password))
+    (is (= [:host :smtp-password] (:editable-fields cfg)))))
+
 (deftest ^:unit build-entity-config-test
   (testing "Merge auto-detected config with manual overrides"
     (let [auto-config (introspection/parse-table-metadata :users sample-users-table-metadata)
@@ -671,6 +682,11 @@
     (is (introspection/should-be-hidden? :search-vector))
     (is (introspection/should-be-hidden? :tsv))
     (is (introspection/should-be-hidden? :fts-vector))))
+
+(deftest ^:unit ^:security a-field-naming-a-secret-is-hidden
+  ;; BOU-981: by the shared rule, not only the names in common-hidden-fields.
+  (is (every? introspection/should-be-hidden? [:db-password :stripe-api-key :client-secret :reset-token]))
+  (is (not-any? introspection/should-be-hidden? [:secret-name :token-ttl :title])))
 
 (deftest ^:unit tsvector-hidden-by-sql-type-test
   (testing "Column with TSVECTOR SQL type is hidden regardless of name"

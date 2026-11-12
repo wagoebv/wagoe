@@ -114,6 +114,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Log context, error-report context, example payloads, admin hidden fields and list columns, and audience filters each
+  had their own list of secret keys** (BOU-981). They add the shared rule now, so `:db-password` is caught in each.
 - **Log redaction, the devtools config views and `bb doctor` disagreed on which keys hold a secret** (BOU-973). One rule
   now: the key's last word (`:db-password`, `:stripe-api-key`), so `:secret-name` and `:token-ttl` are shown.
 - **A `/web` write with a bearer token and no session cookie skips the CSRF check** (BOU-952). A browser cannot

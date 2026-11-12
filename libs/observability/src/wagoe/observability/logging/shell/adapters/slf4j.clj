@@ -13,6 +13,7 @@
    actual log routing, formatting, and output, eliminating duplication
    with clojure.tools.logging infrastructure."
   (:require
+   [wagoe.core.utils.pii-redaction :as pii]
    [wagoe.observability.logging.ports :as ports]
    [wagoe.observability.core.sql-redaction :as redaction])
   (:import
@@ -114,13 +115,8 @@
    
    Pure: Yes"
   [context]
-  (let [sensitive-keys #{:password :token :secret :api-key :private-key}]
-    (reduce-kv (fn [m k v]
-                 (if (sensitive-keys k)
-                   (assoc m k "***REDACTED***")
-                   (assoc m k v)))
-               {}
-               context)))
+  ;; The rule the rest of the framework logs with, nested maps included (BOU-981).
+  (pii/redact-for-log context))
 
 (defn- merge-contexts
   "Merge base context, dynamic context, and call context.

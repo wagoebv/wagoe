@@ -13,6 +13,7 @@
    - Redacted: Sensitive fields are replaced with placeholders
    - Minimal: Examples include only required + relevant fields"
   (:require [clojure.string :as str]
+            [wagoe.core.utils.secret-keys :as secret-keys]
             [wagoe.core.validation.messages :as messages]
             [malli.core :as m]
             [malli.generator :as mg]))
@@ -148,8 +149,8 @@
 ;; =============================================================================
 
 (def ^:private sensitive-fields
-  "Fields that should be redacted in examples."
-  #{:password :secret :token :api-key :auth-token :credit-card :ssn})
+  "What `secret-keys/secret-key?` does not cover, redacted in examples too."
+  #{:credit-card :ssn})
 
 (def ^:private example-seed
   "Fixed seed for deterministic example generation."
@@ -166,7 +167,7 @@
   [data]
   (reduce-kv
    (fn [result k _v]
-     (if (sensitive-fields k)
+     (if (or (sensitive-fields k) (secret-keys/secret-key? k))
        (assoc result k (str "<" (name k) ">"))
        result))
    data

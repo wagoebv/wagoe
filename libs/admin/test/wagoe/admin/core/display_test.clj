@@ -132,6 +132,13 @@
       (is (= :name (first cols)))
       (is (not (some #{:n0} cols))))))
 
+(deftest ^:unit ^:security a-secret-is-never-a-default-column
+  ;; BOU-981: the shared rule adds :db-password to what the substring caught.
+  (let [cfg   (entity {:name :string :api-key :string :password-hash :string
+                       :reset-token :string :db-password :string :total :int})
+        order [:name :api-key :password-hash :reset-token :db-password :total]]
+    (is (= [:name :total] (display/default-list-fields cfg order)))))
+
 (deftest ^:unit with-display-adds-the-derived-keys
   (let [cfg (display/with-display (entity {:id :uuid :name :string :status :enum :amount :decimal}
                                           :list-fields [:name :amount])

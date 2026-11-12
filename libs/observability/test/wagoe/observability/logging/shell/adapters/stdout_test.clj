@@ -102,12 +102,13 @@
                       :password "secret"
                       :token "t123"
                       :secret "s456"
-                      :api-key "k789"}))
+                      :api-key "k789"
+                      :db-password "p0"}))
         parsed (json/parse-string (str/trim out) true)
         ctx (:context parsed)]
     (is (= "u1" (:user-id ctx)))
-    (doseq [k [:password :token :secret :api-key]]
-      (is (= "***REDACTED***" (get ctx k))))))
+    (doseq [k [:password :token :secret :api-key :db-password]]
+      (is (= "[REDACTED]" (get ctx k))))))
 
 (deftest ^:unit json-format-via-json-flag
   (let [logger (stdout/create-stdout-logger {:level :debug
