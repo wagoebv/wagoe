@@ -84,6 +84,14 @@
     (or (some #(when (= type (:type %)) %) @seen)
         (when (< n 100) (Thread/sleep 20) (recur (inc n))))))
 
+(defn- settle!
+  "Wait for `n` events, then forget them: the creates a test sets up with
+   arrive async, and late ones would land in what it asserts on (BOU-980)."
+  [seen n]
+  (loop [i 0]
+    (when (and (< i 100) (< (count @seen) n)) (Thread/sleep 20) (recur (inc i))))
+  (reset! seen []))
+
 (defn- invoice-row [number]
   (db/execute-one! *db* {:select [:*] :from [:invoices] :where [:= :number number]}))
 
@@ -236,7 +244,7 @@
             get-calls (atom 0)
             svc       (service/->PublishingAdminService (counting-inner provider get-calls)
                                                         *db* provider bus)]
-        (reset! seen [])
+        (settle! seen 2)
         (is (= 2 (:success-count (admin-ports/bulk-delete-entities svc :invoices ids))))
         (is (zero? @get-calls) "no read per id")
         (loop [n 0]
@@ -262,7 +270,7 @@
                        (admin-ports/bulk-delete-entities real e ids))
             svc      (service/->PublishingAdminService (counting-inner provider (atom 0) racing)
                                                        *db* provider bus)]
-        (reset! seen [])
+        (settle! seen 2)
         (is (= 1 (:success-count (admin-ports/bulk-delete-entities svc :invoices ids))))
         (Thread/sleep 200)
         (is (empty? @seen))))))
