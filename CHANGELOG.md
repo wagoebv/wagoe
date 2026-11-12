@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A tenant's admin managed every tenant and could make themselves admin of another** (BOU-983). Tenant routes take a
+  platform admin now, and membership routes an admin of that tenant. Upgrade if you use `:wagoe/tenant`.
 - **Nothing let a user verify the installer** (BOU-938). Releases attach `install.sh` and its SHA-256, and the
   installer pins and checks the Clojure, Babashka and bbin installers it runs.
 - **A plaintext secret in `config.edn` passed `bb doctor`** (BOU-942). It fails now outside the test profile; move

@@ -150,8 +150,9 @@ DELETE /tenants/:tenant-id/memberships/:id      ; Revoke membership (tenant admi
 POST   /memberships/:id/accept                  ; Accept invitation (the invitee only)
 ```
 
-A global admin passes every tenant check. The `/tenants` routes themselves
-(create, update, suspend, provision) take the global admin role (BOU-568).
+A platform admin passes every tenant check, and an admin user of a tenant its
+own. The `/tenants` routes themselves (create, update, suspend, provision) take
+a platform admin (BOU-568, BOU-983).
 
 ---
 

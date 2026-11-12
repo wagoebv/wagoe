@@ -247,8 +247,14 @@
                            ["/tenants/:id/suspend" :post] ["/tenants/:id/activate" :post]
                            ["/tenants/:id/provision" :post]]]
       (testing (str (name method) " " path)
-        (is (= 403 (:status (call path method {:id (UUID/randomUUID) :role :user}))))))
-    (testing "an admin gets through"
+        (is (= 403 (:status (call path method {:id (UUID/randomUUID) :role :user}))))
+        (is (= 403 (:status (call path method {:id (UUID/randomUUID) :role :admin
+                                               :tenant-id (UUID/randomUUID)})))
+            "an admin of a tenant is no platform admin (BOU-983)")))
+    (testing "the tenant survives its neighbour's admin"
+      (call "/tenants/:id" :delete {:id (UUID/randomUUID) :role :admin :tenant-id (UUID/randomUUID)})
+      (is (some? (tenant-ports/get-tenant *service* (:id tenant)))))
+    (testing "a platform admin gets through"
       (is (= 200 (:status (call "/tenants" :get {:id (UUID/randomUUID) :role :admin})))))
     (testing "a signed-in browser refused gets the 403, not the login form"
       (let [data    (some (fn [[p d]] (when (= p "/tenants") d)) routes)

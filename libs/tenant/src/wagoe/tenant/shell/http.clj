@@ -6,7 +6,7 @@
    - Tenant provisioning (schema creation, data seeding)
    - Tenant activation/suspension
    
-   All routes require the global admin role (BOU-568)."
+   All routes require a platform admin (BOU-568, BOU-983)."
   (:require [wagoe.core.http.access :as access]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.core.http.errors :as errors]
@@ -52,23 +52,10 @@
     (catch IllegalArgumentException _
       nil)))
 
-(defn- require-role
-  "Answer 403 with `message` unless `allowed?` holds for the request. The
-   platform has already refused anyone not signed in."
-  [allowed? message]
-  (fn [handler]
-    (fn [request]
-      (if (allowed? request)
-        (handler request)
-        (access/forbidden-response message request
-                                   (access/correlation-id request (str (random-uuid))))))))
-
-;; Tenant management is for global admins.
-(def ^:private require-admin (require-role access/admin? "Admin role required"))
-
-;; A tenant's export holds every member's data; a tenant's own admin does not get it.
-(def ^:private require-platform-admin
-  (require-role (comp access/platform-admin? :user) "Platform admin required"))
+;; Tenant management, exports included, is for platform admins: an admin of a
+;; tenant has the admin role too, and must not manage the others (BOU-983).
+(defn- require-platform-admin [handler]
+  (access/require-platform-admin handler #(str (random-uuid))))
 
 (def ^:private tenant-input-explainer (m/explainer tenant-schema/TenantInput))
 (def ^:private tenant-update-explainer (m/explainer tenant-schema/TenantUpdate))
@@ -236,11 +223,11 @@
 (defn tenant-routes
   "This module's contribution to the route table: Reitit route data under
    :api, at paths relative to /api/v1, and its sidebar group. Every route
-   requires the admin role."
+   requires a platform admin."
   [tenant-service db-context _config]
   {:api
    (mapv
-    (fn [[path data]] [path (update data :middleware (fnil conj []) require-admin)])
+    (fn [[path data]] [path (update data :middleware (fnil conj []) require-platform-admin)])
     [;; Tenant collection endpoint
      ["/tenants"
       {:get {:handler (list-tenants-handler tenant-service)

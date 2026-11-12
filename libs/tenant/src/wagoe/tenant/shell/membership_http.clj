@@ -10,8 +10,9 @@
    - Accepting an invitation (POST /api/memberships/:id/accept)
 
    Reading a tenant's memberships takes an active membership of that tenant;
-   changing them takes its admin role. A global admin may do both. Only the
-   invitee may accept an invitation (BOU-568)."
+   changing them takes its admin role. A platform admin, or an admin user of
+   that tenant, may do both. Only the invitee may accept an invitation
+   (BOU-568, BOU-983)."
   (:require [wagoe.core.http.access :as access]
             [wagoe.core.http.errors :as errors]
             [wagoe.tenant.ports :as membership-ports]
@@ -42,21 +43,25 @@
       nil)))
 
 (defn- require-tenant-role
-  "Middleware: the caller is a global admin, or an active member of the path's
-   tenant whose role is in `roles` (any role when `roles` is nil).
+  "Middleware: the caller is a platform admin, an admin user of the path's
+   tenant, or an active member of it whose role is in `roles` (any role when
+   `roles` is nil).
 
    An unparseable tenant id passes through, and the handler answers 400."
   [membership-service roles]
   (fn [handler]
     (fn [request]
       (let [tenant-id (some-> (get-in request [:path-params :tenant-id]) parse-uuid-safe)
-            user-id   (get-in request [:user :id])
-            member    (when (and tenant-id user-id)
-                        (membership-ports/get-active-membership
-                         membership-service user-id tenant-id))]
+            user-id   (get-in request [:user :id])]
+        ;; Not `admin?`: an admin of another tenant holds that role too (BOU-983)
         (if (or (nil? tenant-id)
-                (access/admin? request)
-                (and member (or (nil? roles) (contains? roles (:role member)))))
+                (access/platform-admin? (:user request))
+                (and (access/admin? request)
+                     (access/same-id? (get-in request [:user :tenant-id]) tenant-id))
+                (when-let [member (when user-id
+                                    (membership-ports/get-active-membership
+                                     membership-service user-id tenant-id))]
+                  (or (nil? roles) (contains? roles (:role member)))))
           (handler request)
           (access/forbidden-response
            (if roles "Tenant admin role required" "Tenant membership required")
