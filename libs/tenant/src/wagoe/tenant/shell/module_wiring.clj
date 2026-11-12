@@ -272,7 +272,10 @@
     ms
     (conj (fn [handler]
             (log/info "Adding tenant membership middleware to HTTP pipeline")
-            (membership-mw/wrap-tenant-membership ms handler)))))
+            (membership-mw/wrap-tenant-membership ms handler)))
+    ;; Innermost, after the membership is known (BOU-982)
+    (and ts db)
+    (conj membership-mw/wrap-tenant-scope)))
 
 (defmethod ig/halt-key! :wagoe/tenant-http-middleware
   [_ _mw]
