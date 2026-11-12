@@ -360,8 +360,7 @@ Writes `resources/conf/<profile>/admin/<entity>.edn` into every profile that has
 
 ### `bb eval:scaffold` / `bb eval:report` — Scaffold AI eval (monorepo only)
 
-Scores `bb scaffold ai` against a real provider; run nightly by
-`.github/workflows/eval-nightly.yml`. See [eval/scaffold/README.md](../../eval/scaffold/README.md).
+Scores `bb scaffold ai` against a real provider; run by hand for now. See [eval/scaffold/README.md](../../eval/scaffold/README.md).
 
 ```bash
 bb eval:scaffold --provider ollama|openai [--only product,invoice] [--out DIR]  # one EDN per run

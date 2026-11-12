@@ -1,7 +1,6 @@
 (ns wagoe.tools.eval-report
-  "`bb eval:report`: the nightly `bb eval:scaffold` results, summarised per
-   provider, the regression rule the workflow acts on, and the stability-page
-   line (BOU-909)."
+  "`bb eval:report`: `bb eval:scaffold` results summarised per provider, the
+   regression rule, and the stability-page line (BOU-909)."
   (:require [babashka.fs :as fs]
             [clojure.edn :as edn]
             [clojure.string :as str]

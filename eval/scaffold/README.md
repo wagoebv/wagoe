@@ -27,17 +27,17 @@ under `:endpoint`.
 
 ## Read the results
 
-The nightly workflow commits each result to the `eval-results` branch under
-`scaffold/`. A run without `OPENAI_API_KEY` is recorded with `:status :skipped`.
+Each run writes `<date>-<provider>.edn` to `--out` (default `target/eval-scaffold`). A run without
+`OPENAI_API_KEY` is recorded with `:status :skipped`. A nightly CI job is a
+follow-up (BOU-979); until then, run it by hand and keep the files.
 
 ```bash
-git fetch origin eval-results && git worktree add /tmp/eval-results origin/eval-results
-bb eval:report /tmp/eval-results/scaffold
+bb eval:report target/eval-scaffold
 ```
 
-`:summary {:mergeable n}` counts prompts mergeable without edits. A night more
-than one below its provider's 7-day average opens an `eval-regression` issue
-with the failing step's log and the repair diff. Per prompt, `:failure` names
+`:summary {:mergeable n}` counts prompts mergeable without edits.
+`--regression <provider>` exits 2 when the latest run is more than one below
+the provider's 7-day average. Per prompt, `:failure` names
 the first red step or expectation.
 
 `bb eval:report <dir> --stability-line` prints the stability page sentence once
