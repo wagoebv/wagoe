@@ -4,6 +4,7 @@
             [cheshire.core :as json]
             [clojure.test :refer [deftest testing is]]
             [wagoe.platform.database :as db]
+            [wagoe.tenant.shell.membership-middleware :as membership-mw]
             [wagoe.tenant.shell.tenant-middleware :as tenant-mw]
             [wagoe.platform.ports.database]
             [wagoe.tenant.ports :as tenant-ports]
@@ -432,3 +433,29 @@
           (is (= 200 (:status response)))
           (is (nil? (get-in response [:body :tenant])))
           (is (empty? ((:get-schema-calls db-ctx)))))))))  ; No schema switch for localhost) ; No schema switch
+
+(deftest ^:unit wrap-tenant-resolution-falls-back-to-the-users-tenant
+  ;; Nothing sets :identity; a user of a tenant runs in it (BOU-982)
+  (let [handler (tenant-mw/wrap-tenant-resolution simple-handler (create-mock-tenant-service))
+        user    {:id (UUID/randomUUID) :tenant-id (:id test-tenant-1)}]
+    (is (= (:id test-tenant-1)
+           (get-in (handler {:server-name "myapp.com" :user user :uri "/x" :request-method :get})
+                   [:body :tenant :id])))
+    (testing "a tenant named by header wins, so the scope gate sees it"
+      (is (= (:id test-tenant-2)
+             (get-in (handler {:server-name "myapp.com" :user user :uri "/x" :request-method :get
+                               :headers {"x-tenant-id" (str (:id test-tenant-2))}})
+                     [:body :tenant :id]))))
+    (testing "a host that names no tenant, app.myapp.com, leaves the user in their own"
+      (is (= (:id test-tenant-1)
+             (get-in (handler {:server-name "app.myapp.com" :user user :uri "/x" :request-method :get})
+                     [:body :tenant :id]))))))
+
+(deftest ^:unit ^:security resolution-and-the-scope-gate-refuse-another-tenant
+  (let [handler (tenant-mw/wrap-tenant-resolution
+                 (membership-mw/wrap-tenant-scope simple-handler) (create-mock-tenant-service))
+        user    {:id (UUID/randomUUID) :role :user :tenant-id (:id test-tenant-1)}
+        req     {:server-name "myapp.com" :user user :uri "/x" :request-method :get}]
+    (is (= 200 (:status (handler req))))
+    (is (= 403 (:status (handler (assoc req :headers {"x-tenant-slug" (:slug test-tenant-2)})))))
+    (is (= 403 (:status (handler (assoc req :server-name (str (:slug test-tenant-2) ".myapp.com"))))))))

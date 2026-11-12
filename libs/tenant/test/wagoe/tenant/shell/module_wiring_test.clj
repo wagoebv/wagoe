@@ -121,16 +121,16 @@
   ;; tenant module owns its middleware and the app injects it via :extra-middleware.
   ;; The entries are (fn [handler] ...) built lazily, so absent services simply
   ;; contribute nothing — building the seq must not invoke the wrap-* fns.
-  (testing "both services present -> tenant then membership middleware (2 fns)"
+  (testing "both services present -> tenant, membership, then the scope gate (BOU-982)"
     (let [mw (ig/init-key :wagoe/tenant-http-middleware
                           {:tenant-service ::ts :membership-service ::ms :db-context ::db})]
-      (is (= 2 (count mw)))
+      (is (= 3 (count mw)))
       (is (every? fn? mw))))
   (testing "no services -> empty seq (platform pipeline gets no tenant middleware)"
     (is (empty? (ig/init-key :wagoe/tenant-http-middleware {}))))
   (testing "tenant needs db-context; membership stands alone"
     (is (empty? (ig/init-key :wagoe/tenant-http-middleware {:tenant-service ::ts})))
-    (is (= 1 (count (ig/init-key :wagoe/tenant-http-middleware
+    (is (= 2 (count (ig/init-key :wagoe/tenant-http-middleware
                                  {:tenant-service ::ts :db-context ::db}))))
     (is (= 1 (count (ig/init-key :wagoe/tenant-http-middleware
                                  {:membership-service ::ms}))))))
