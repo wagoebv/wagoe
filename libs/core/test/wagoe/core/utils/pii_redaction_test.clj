@@ -54,11 +54,11 @@
     (let [state (pii/build-redact-state {:redact {}})
           data  {:user {:password "secret"
                         :name     "John"}
-                 :tokens ["tok1" "tok2"]}
+                 :tags   ["a" "b"]}
           out   (pii/redact-pii data state)]
       (is (= "[REDACTED]" (get-in out [:user :password])))
       (is (= "John" (get-in out [:user :name])))
-      (is (= ["tok1" "tok2"] (:tokens out))))))
+      (is (= ["a" "b"] (:tags out))))))
 
 (deftest ^:unit apply-redaction-test
   (testing "Applies redaction to :extra and :tags"

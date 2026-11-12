@@ -1,6 +1,6 @@
 (ns wagoe.core.utils.pii-redaction
   "Shared PII redaction utilities used by error reporting adapters."
-  (:require [wagoe.core.utils.text :as text]
+  (:require [wagoe.core.utils.secret-keys :as secret-keys]
             [clojure.string :as str]))
 
 (def default-redact-keys
@@ -23,28 +23,18 @@
   #{"content-hash" "commit-hash" "etag"})
 
 (defn normalize-key-name
-  "Normalize a map key to a lower-case kebab string for matching:
-   `:Password`, `\"password_hash\"` and `\"passwordHash\"` become
-   \"password\", \"password-hash\" and \"password-hash\"."
+  "Normalize a map key to a lower-case kebab string for matching."
   [k]
-  (-> (cond
-        (keyword? k) (name k)
-        (string? k) k
-        :else (str k))
-      (str/replace #"([a-z0-9])([A-Z])" "$1-$2")
-      (text/lower-case)
-      (str/replace "_" "-")))
+  (secret-keys/normalize k))
 
 (defn sensitive-key-name?
-  "True when a normalized key name is in `keys`, or ends in -secret, -token,
-   -hash, -password or a credential-bearing -key (`stripe-secret-key`,
-   `x-api-key`). A bare -key suffix would also catch `idempotency-key` and
-   `cache-key`, so only the key kinds that are secrets are listed."
+  "True when a normalized key name is in `keys`, names a secret
+   (`secret-keys/secret-key?`), or ends in -hash."
   [keys kname]
   (boolean (and (not (contains? non-secret-key-names kname))
                 (or (contains? keys kname)
-                    (re-find #"-(secret|token|hash|password)$" kname)
-                    (re-find #"(^|-)(secret|private|api|access|signing|encryption|master)-key$" kname)))))
+                    (secret-keys/secret-name? kname)
+                    (re-find #"-hash$" kname)))))
 
 (defn email-string?
   "Best-effort detection of email-like strings.

@@ -1,25 +1,13 @@
 (ns wagoe.devtools.core.introspection
   "Pure formatting functions for REPL display of routes, config, and modules.
    No I/O, no side effects — data in, formatted strings out."
-  (:require [wagoe.core.utils.text :as text]
+  (:require [wagoe.core.utils.secret-keys :as secret-keys]
+            [wagoe.core.utils.text :as text]
             [clojure.string :as str]))
 
 ;; =============================================================================
 ;; Constants
 ;; =============================================================================
-
-(def ^:private secret-patterns
-  "Substrings that indicate a key holds sensitive data.
-   Uses substring matching on the key name so compound keys like
-   :auth-token, :webhook-secret, :stripe-api-key are caught."
-  ["password" "secret" "api-key" "token" "private-key"
-   "access-key" "credentials" "apikey"])
-
-(defn- secret-key?
-  "Return true if the key name contains any secret pattern."
-  [k]
-  (let [kn (name k)]
-    (some #(str/includes? kn %) secret-patterns)))
 
 (def ^:private section-aliases
   {:database     ["postgresql" "sqlite" "mysql" "h2" "db-context"]
@@ -94,7 +82,7 @@
   (into {}
         (map (fn [[k v]]
                [k (cond
-                    (secret-key? k) "****"
+                    (secret-keys/secret-key? k) "****"
                     (map? v) (redact-map v)
                     :else v)]))
         m))
@@ -104,7 +92,7 @@
   [indent k v]
   (let [spaces (apply str (repeat indent " "))
         redacted (cond
-                   (secret-key? k) "****"
+                   (secret-keys/secret-key? k) "****"
                    (map? v) (redact-map v)
                    :else v)]
     (if (map? redacted)
