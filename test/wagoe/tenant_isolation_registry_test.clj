@@ -8,9 +8,11 @@
 (def registry
   "lib -> {:scoped-by how, :tests {file [deftest]}, :gaps [ticket]} or {:carries why}.
    :carries is for code that passes a tenant id along but stores no tenant data."
-  {"tenant"        {:scoped-by "explicit tenant_id; tenant-admin guards on membership routes"
+  {"tenant"        {:scoped-by "explicit tenant_id; tenant-admin guards on membership routes; a request runs only in a tenant its caller is in"
                     :tests     {"libs/tenant/test/wagoe/tenant/shell/membership_http_test.clj"
-                                ["a-tenant-admin-cannot-reach-another-tenants-memberships" "changing-memberships-takes-a-tenant-admin"]}}
+                                ["a-tenant-admin-cannot-reach-another-tenants-memberships" "changing-memberships-takes-a-tenant-admin"]
+                                "libs/tenant/test/wagoe/tenant/shell/tenant_scope_test.clj"
+                                ["a-caller-outside-the-chosen-tenant-is-refused" "a-user-of-a-tenant-gets-no-public-schema"]}}
    "workflow"      {:scoped-by "tables in each tenant schema; tenant work refuses the shared tables"
                     :tests     {"libs/workflow/test/wagoe/workflow/shell/tenant_isolation_test.clj"
                                 ["a-tenant-sees-only-its-own-instances" "tenant-work-never-falls-back-to-public"]

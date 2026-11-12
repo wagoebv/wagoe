@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **Any signed-in user ran requests in another tenant by naming it in a header or host** (BOU-982). Such a request
+  answers 403 now, and a user of a tenant runs in it; upgrade if you use `:wagoe/tenant`.
 - **A tenant's admin managed every tenant and could make themselves admin of another** (BOU-983). Tenant routes take a
   platform admin now, and membership routes an admin of that tenant. Upgrade if you use `:wagoe/tenant`.
 - **Nothing let a user verify the installer** (BOU-938). Releases attach `install.sh` and its SHA-256, and the

@@ -116,18 +116,16 @@
 ;; ============================================================================
 
 (defn- request-owner
-  "Who an upload belongs to, for the upload index: the signed-in user and the
-   request's tenant."
+  "Who an upload belongs to, for the upload index: the signed-in user, and the
+   request's tenant when the caller is in it (BOU-982)."
   [request]
   {:user-id   (get-in request [:user :id])
-   :tenant-id (get-in request [:tenant :id])})
+   :tenant-id (when (access/in-tenant-scope? request) (get-in request [:tenant :id]))})
 
 (defn- reachable?
   "`uploads/may-access?` for the request's caller (BOU-945); an admin needs no lookup."
   [storage-service request file-key]
-  (let [caller (-> (request-owner request)
-                   (update :tenant-id #(when (access/in-tenant-scope? request) %))
-                   (assoc :admin? (access/platform-admin? (:user request))))]
+  (let [caller (assoc (request-owner request) :admin? (access/platform-admin? (:user request)))]
     (or (:admin? caller)
         (uploads/may-access? (service/upload-at storage-service file-key) caller))))
 

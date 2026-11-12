@@ -89,40 +89,21 @@
   (or (get-in request [:headers "x-tenant-slug"])
       (get-in request [:headers "x-tenant-id"])))
 
-(defn- resolve-tenant-identifier
-  "Resolve tenant identifier from request using multiple strategies.
-   
-   Extraction priority:
-   1. Subdomain (acme-corp.myapp.com)
-   2. JWT claim (from authenticated user)
-   3. HTTP header (X-Tenant-Slug or X-Tenant-Id)
-   
-   Args:
-     request: Ring request map
-     
-   Returns:
-     {:type :slug, :value \"acme-corp\"} or
-     {:type :id, :value \"uuid-string\"} or
-     nil"
+(defn- as-identifier
+  ([v] (as-identifier v (if (parse-uuid (str v)) :id :slug)))
+  ([v type] (when v {:type type :value v})))
+
+(defn- tenant-identifiers
+  "Where the request may name its tenant, first first: the subdomain (always a
+   slug), a JWT claim, the X-Tenant-Slug/X-Tenant-Id header, then the signed-in
+   user's own tenant. The user's comes last so a tenant named by header still
+   reaches the scope gate, which refuses it or admits a member (BOU-982)."
   [request]
-  (let [subdomain (extract-subdomain request)
-        jwt-tenant (extract-jwt-tenant request)
-        header-tenant (extract-header-tenant request)]
-    (cond
-      ;; Subdomain is always a slug
-      subdomain {:type :slug :value subdomain}
-
-      ;; JWT could be slug or ID - check format
-      jwt-tenant (if (re-matches #"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" jwt-tenant)
-                   {:type :id :value jwt-tenant}
-                   {:type :slug :value jwt-tenant})
-
-      ;; Header could be slug or ID - check format
-      header-tenant (if (re-matches #"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" header-tenant)
-                      {:type :id :value header-tenant}
-                      {:type :slug :value header-tenant})
-
-      :else nil)))
+  (keep identity
+        [(as-identifier (extract-subdomain request) :slug)
+         (as-identifier (extract-jwt-tenant request))
+         (as-identifier (extract-header-tenant request))
+         (as-identifier (some-> (get-in request [:user :tenant-id]) str))]))
 
 ;; =============================================================================
 ;; Tenant Lookup
@@ -249,9 +230,9 @@
                             :or {require-tenant? false
                                  cache (create-tenant-cache)}}]
    (fn [request]
-     (let [identifier (resolve-tenant-identifier request)]
+     (let [identifiers (tenant-identifiers request)]
 
-       (if-not identifier
+       (if-not (seq identifiers)
          ;; No tenant identifier found
          (if require-tenant?
            (error-response 404 :not-found "No tenant identifier in request" request)
@@ -259,9 +240,15 @@
            (handler request))
 
          ;; Try to lookup tenant
-         (let [cached-tenant (cached-tenant-lookup cache tenant-service identifier)
-               tenant (or cached-tenant
-                          (lookup-tenant tenant-service identifier))]
+         ;; The first source naming a tenant that exists: a host like app.example.com
+         ;; names none, and its users then run in their own (BOU-982)
+         (let [[identifier cached-tenant tenant]
+               (or (some (fn [id]
+                           (let [cached (cached-tenant-lookup cache tenant-service id)]
+                             (when-let [t (or cached (lookup-tenant tenant-service id))]
+                               [id cached t])))
+                         identifiers)
+                   [(first identifiers) nil nil])]
 
            (if-not tenant
              ;; Tenant not found in database
