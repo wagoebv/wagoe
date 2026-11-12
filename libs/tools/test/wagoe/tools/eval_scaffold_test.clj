@@ -72,3 +72,13 @@
            (es/cell-env env "ollama")))
     (is (= {"PATH" "/bin" "OPENAI_API_KEY" "o" "AI_MODEL" "gpt-4o-mini"}
            (es/cell-env env "openai")))))
+
+(deftest ^:unit each-prompt-is-saved-as-it-finishes
+  (let [saved (atom [])]
+    (with-redefs [es/new-base-project! (constantly "base")
+                  es/run-prompt        (fn [_ _ p] {:id (:id p) :mergeable? true :edits 0 :duration-ms 0})]
+      (let [r (es/evaluate {:repo "." :env {} :save! #(swap! saved conj %)
+                            :catalogue {:prompts [{:id :a} {:id :b}]}}
+                           "ollama")]
+        (is (= [[:partial 1] [:partial 2]] (map (juxt :status (comp count :prompts)) @saved)))
+        (is (= :ran (:status r)))))))
