@@ -114,6 +114,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Log redaction, the devtools config views and `bb doctor` disagreed on which keys hold a secret** (BOU-973). One rule
+  now: the key's last word (`:db-password`, `:stripe-api-key`), so `:secret-name` and `:token-ttl` are shown.
 - **A `/web` write with a bearer token and no session cookie skips the CSRF check** (BOU-952). A browser cannot
   forge one; API-style clients of `/web` no longer need a page's token. Session-cookie writes are still checked.
 - **The admin sidebar is wider (240px) and resizable** (BOU-939): drag its edge, double-click to reset. Opening a module group

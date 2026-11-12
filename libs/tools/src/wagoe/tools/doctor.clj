@@ -17,7 +17,8 @@
             [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.string :as str]
-            [wagoe.tools.report :as report]))
+            [wagoe.tools.report :as report]
+            [wagoe.tools.secret-keys :as secret-keys]))
 
 ;; =============================================================================
 ;; Known valid providers
@@ -212,9 +213,6 @@
         :level :pass
         :msg   "All #secret references resolve or have defaults"}])))
 
-(def ^:private secret-key-name
-  #"(?:^|-)(?:password|passwd|passphrase|secret|token|credentials?|(?:api|private|secret|access|service|encryption|signing)-key)$")
-
 (defn plaintext-secrets
   "Paths in `config-text`'s :active section where a key that names a secret holds
    a literal string. #secret and #env read it from elsewhere, so they pass; #or too,
@@ -222,7 +220,7 @@
   [config-text strict?]
   (let [tree      (read-tagged config-text)
         skip-tag? (if strict? '#{env secret} '#{env secret or})
-        secret?   #(and (keyword? %) (re-find secret-key-name (name %)))
+        secret?   #(and (keyword? %) (secret-keys/secret-key? %))
         walk      (fn walk [path under-secret? v]
                   (cond
                     (map? v)            (mapcat (fn [[k x]] (walk (conj path k) (secret? k) x)) v)

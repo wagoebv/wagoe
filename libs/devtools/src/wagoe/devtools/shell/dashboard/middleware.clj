@@ -1,5 +1,6 @@
 (ns wagoe.devtools.shell.dashboard.middleware
-  (:require [wagoe.core.utils.text :as text]
+  (:require [wagoe.core.utils.secret-keys :as secret-keys]
+            [wagoe.core.utils.text :as text]
             [ring.middleware.params :as ring-params])
   (:import [java.time Instant]))
 
@@ -11,11 +12,8 @@
   #{"authorization" "cookie" "x-api-key" "x-auth-token" "set-cookie"})
 
 (def ^:private sensitive-param-keys
-  #{"password" "password_hash" "password-hash" "passwordHash"
-    "token" "secret" "api_key" "api-key" "apiKey"
-    "access_token" "access-token" "accessToken"
-    "refresh_token" "refresh-token" "refreshToken"
-    "credit_card" "credit-card" "creditCard" "cvv" "ssn"})
+  "What `secret-keys/secret-name?` does not cover, normalized."
+  #{"password-hash" "credit-card" "cvv" "ssn"})
 
 (defn request-log
   "Return captured requests, newest first."
@@ -39,8 +37,8 @@
     (cond
       (map? params)
       (reduce-kv (fn [m k v]
-                   (let [k-str (text/lower-case (str (if (keyword? k) (name k) k)))]
-                     (assoc m k (if (contains? sensitive-param-keys k-str)
+                   (let [kname (secret-keys/normalize k)]
+                     (assoc m k (if (or (contains? sensitive-param-keys kname) (secret-keys/secret-name? kname))
                                   "[REDACTED]"
                                   (sanitize-params v)))))
                  {} params)

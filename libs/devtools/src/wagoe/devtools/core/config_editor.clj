@@ -4,21 +4,15 @@
   (:require [clojure.pprint :as pp]
             [clojure.set :as set]
             [clojure.string :as str]
-            [integrant.core :as ig]))
-
-(def ^:private secret-key-patterns
-  [#"(?i)password" #"(?i)secret" #"(?i)api[-_]?key" #"(?i)token" #"(?i)credential"])
-
-(defn- secret-key? [k]
-  (let [kname (if (keyword? k) (name k) (str k))]
-    (some #(re-find % kname) secret-key-patterns)))
+            [integrant.core :as ig]
+            [wagoe.core.utils.secret-keys :as secret-keys]))
 
 (defn redact-secrets
   "Recursively replace values of sensitive keys with \"********\"."
   [m]
   (cond
     (map? m) (reduce-kv (fn [acc k v]
-                          (assoc acc k (if (secret-key? k) "********" (redact-secrets v))))
+                          (assoc acc k (if (secret-keys/secret-key? k) "********" (redact-secrets v))))
                         {} m)
     (sequential? m) (mapv redact-secrets m)
     :else m))
