@@ -141,14 +141,14 @@
   "Create in-memory tenant cache with TTL.
    
    Simple atom-based cache for tenant lookups to reduce database queries.
-   Cache entries expire after `cache-ttl-ms`.
+   Cache entries expire after `default-cache-ttl-ms` unless told otherwise.
    
    Returns:
      Atom containing cache map"
   []
   (atom {}))
 
-(def ^:private cache-ttl-ms
+(def ^:private default-cache-ttl-ms
   "How long a looked-up tenant is trusted: a suspension takes effect within it
    (BOU-992). It was an hour."
   ;; ponytail: a TTL, not invalidation; evict on suspend if a minute is too long.
@@ -238,7 +238,7 @@
   ([handler tenant-service {:keys [require-tenant? cache cache-ttl-ms]
                             :or {require-tenant? false
                                  cache (create-tenant-cache)
-                                 cache-ttl-ms cache-ttl-ms}}]
+                                 cache-ttl-ms default-cache-ttl-ms}}]
    (fn [request]
      (let [identifiers (tenant-identifiers request)]
 
@@ -280,8 +280,7 @@
                  (cache-tenant cache identifier tenant))
 
                ;; Another ITenantService may hand the status over as a string
-               (if-not (tenant-core/tenant-active? (update tenant :status #(some-> % keyword)))
-                 (error-response 403 :forbidden "Tenant is not active" request)
+               (if (tenant-core/tenant-active? (update tenant :status #(some-> % keyword)))
                  (do
                    (log/debug "Tenant resolved"
                               {:tenant-id (:id tenant)
@@ -290,7 +289,8 @@
                                :uri (:uri request)})
 
                    ;; Add tenant to request and continue
-                   (handler (assoc request :tenant tenant))))))))))))
+                   (handler (assoc request :tenant tenant)))
+                 (error-response 403 :forbidden "Tenant is not active" request))))))))))
 
 ;; =============================================================================
 ;; Middleware - Schema Switching

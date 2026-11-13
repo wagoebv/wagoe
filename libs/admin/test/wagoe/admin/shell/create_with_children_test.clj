@@ -288,26 +288,24 @@
         "the row the database refused, and only it")
     (is (zero? (count-rows :nc_invoices)))))
 
+(defn- thrown-data
+  "The ex-data `(f)` throws, or nil."
+  [f]
+  (try (f) nil (catch clojure.lang.ExceptionInfo e (ex-data e))))
+
 (deftest ^:integration ^:security a-tenants-admin-creates-children-only-in-their-tenant
   ;; Only the parent's scope was checked: a child row named any tenant, or none (BOU-992)
   (let [{:keys [svc sp]} (system)
         [a b]    [(str (random-uuid)) (str (random-uuid))]
         as-a     (scoped/for-request svc sp {:user {:id (random-uuid) :role :admin :tenant-id a}})
-        create!  #(ports/create-entity-with-children as-a :tc-orders {:number "O-1" :tenant-id a}
-                                                     {:tc-items [{:description "x" :tenant-id %}]})
-        refused? #(= :validation-error (:type (ex-data (try (create! %) nil (catch clojure.lang.ExceptionInfo e e)))))]
-    (is (refused? b) "another tenant's")
-    (is (refused? nil) "no tenant's")
-    (is (= :validation-error (:type (ex-data (try (ports/create-entity-with-children as-a :tc-orders {:number "O-1" :tenant-id a}
-                                                                                     {:tc-items [{:description "x"}]})
-                                                   nil (catch clojure.lang.ExceptionInfo e e)))))
-        "a row that names no tenant at all")
-    (is (= {:entity :tc-items :index 1}
-           (:child (ex-data (try (ports/create-entity-with-children as-a :tc-orders {:number "O-1" :tenant-id a}
-                                                                    {:tc-items [{:description "ok" :tenant-id a}
-                                                                                {:description "bad" :tenant-id b}]})
-                                 nil (catch clojure.lang.ExceptionInfo e e)))))
-        "the refusal names the row, so the form marks it")
+        create!  #(ports/create-entity-with-children as-a :tc-orders {:number "O-1" :tenant-id a} {:tc-items %&})
+        refused? #(= :validation-error (:type (thrown-data (fn [] (apply create! %&)))))]
+    (is (refused? {:description "x" :tenant-id b}) "another tenant's")
+    (is (refused? {:description "x" :tenant-id nil}) "no tenant's")
+    (is (refused? {:description "x"}) "a row that names no tenant at all")
     (is (zero? (count-rows :tc_orders)))
-    (create! a)
+    (is (= {:entity :tc-items :index 1}
+           (:child (thrown-data #(create! {:description "ok" :tenant-id a} {:description "bad" :tenant-id b}))))
+        "the refusal names the row, so the form marks it")
+    (create! {:description "x" :tenant-id a})
     (is (= 1 (count-rows :tc_items)))))

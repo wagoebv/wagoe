@@ -8,6 +8,7 @@
             [wagoe.admin.core.display :as display]
             [wagoe.admin.core.permissions :as permissions]
             [wagoe.admin.ports :as ports]
+            [wagoe.admin.shell.service :as service]
             [wagoe.platform.core.scope :as scope]))
 
 (defn- narrow
@@ -169,10 +170,7 @@
       (doseq [[child rows] children
               :when (nested child)
               [index row] (map-indexed vector rows)]
-        (try (writable! schema-provider user child row)
-             (catch clojure.lang.ExceptionInfo e
-               ;; Shaped as the inner service's row refusal, so the form marks the row
-               (throw (ex-info (ex-message e) (assoc (ex-data e) :child {:entity child :index index}) e))))))
+        (service/with-child-index child index #(writable! schema-provider user child row))))
     (ports/create-entity-with-children inner entity-name (with-link-scopes schema-provider user entity-name data) children))
 
   (update-entity [_ entity-name id data]

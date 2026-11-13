@@ -959,6 +959,14 @@
                       {:type :validation-error :errors {} :too-many many})))
     by-entity))
 
+(defn with-child-index
+  "`(f)`, a refusal from it saying it was row `index` of `entity`: the shape the
+   create form reads to mark the row."
+  [entity index f]
+  (try (f)
+       (catch clojure.lang.ExceptionInfo e
+         (throw (ex-info (ex-message e) (assoc (ex-data e) :child {:entity entity :index index}) e)))))
+
 (defn- insert-children!
   "Insert each row of `children` on `tx` with `parent-id` as its foreign key.
    A refused row says which it was."
@@ -967,12 +975,7 @@
              [index row]   (map-indexed vector rows)
              :let [{:keys [entity-config fk]} (by-entity entity)]]
          {:entity entity
-          :record (try
-                    (insert-record! tx entity-config (assoc row fk parent-id))
-                    (catch clojure.lang.ExceptionInfo e
-                      (throw (ex-info (ex-message e)
-                                      (assoc (ex-data e) :child {:entity entity :index index})
-                                      e))))})))
+          :record (with-child-index entity index #(insert-record! tx entity-config (assoc row fk parent-id)))})))
 
 ;; =============================================================================
 ;; Linked records (BOU-778)

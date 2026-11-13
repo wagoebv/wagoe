@@ -266,19 +266,22 @@
                                                                    :ok)}}))
       (is (= tx-context @seen-tx)))))
 
+(defn- thrown-data
+  "The ex-data `(f)` throws, or nil."
+  [f]
+  (try (f) nil (catch clojure.lang.ExceptionInfo e (ex-data e))))
+
 (deftest ^:unit ^:security an-invite-binds-to-its-email-when-the-caller-names-one
   ;; A token joined whoever held it (BOU-992)
   (let [service (make-service)
         invite  #(ports/invite-external-member service (UUID/randomUUID) "Contractor@Example.nl" :contractor {})
         accept  #(ports/accept-external-invite! service (merge {:token (:invite-token %1) :accepted-by-user-id (UUID/randomUUID)} %2))]
     (testing "another email is refused"
-      (is (= :forbidden (:type (ex-data (try (accept (invite) {:accepted-by-email "someone@else.nl"})
-                                             (catch clojure.lang.ExceptionInfo e e)))))))
+      (is (= :forbidden (:type (thrown-data #(accept (invite) {:accepted-by-email "someone@else.nl"}))))))
     (testing "the invited one is accepted, in any case"
       (is (= :accepted (get-in (accept (invite) {:accepted-by-email "contractor@EXAMPLE.nl"}) [:invite :status]))))
     (testing "named but nil is refused, not read as a bearer token"
-      (is (= :forbidden (:type (ex-data (try (accept (invite) {:accepted-by-email nil})
-                                             (catch clojure.lang.ExceptionInfo e e)))))))
+      (is (= :forbidden (:type (thrown-data #(accept (invite) {:accepted-by-email nil}))))))
     (testing "without one the token is a bearer token, as documented"
       (is (= :accepted (get-in (accept (invite) {}) [:invite :status]))))
     (testing "get and revoke take any tenant's invite id: the caller checks :tenant-id"
