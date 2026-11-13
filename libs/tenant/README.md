@@ -328,7 +328,7 @@ under `/api/v1/tenants` (kebab-case JSON; errors are typed 400/404/409 — a tak
 | `GET`    | `/api/v1/tenants/:id/export` | Download the tenant's data (platform admin; audited) |
 | `POST`   | `/api/v1/tenants/:id/export-jobs` | The same as a background job (needs storage + jobs) |
 
-All `/tenants` routes take the global admin role (BOU-568).
+All `/tenants` routes take a platform admin: an admin user of no tenant (BOU-568, BOU-983).
 
 ## Configuration
 

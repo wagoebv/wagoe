@@ -225,8 +225,10 @@
       (is (= 403 (:status (invite {:id active-user :role :user})))))
     (testing "the tenant's admin can"
       (is (= 201 (:status (invite {:id tenant-admin :role :user})))))
-    (testing "and so can a global admin"
-      (is (= 201 (:status (invite {:id stranger :role :admin}))))))
+    (testing "and so can a platform admin"
+      (is (= 201 (:status (invite {:id stranger :role :admin})))))
+    (testing "and an admin user of the tenant"
+      (is (= 201 (:status (invite {:id stranger :role :admin :tenant-id tenant-id-1}))))))
 
   (doseq [method [:put :delete]]
     (testing (str (name method) " by a plain member is refused")
@@ -261,3 +263,17 @@
                                        :user {:id tenant-admin :role :user}))]
     (is (= 404 (:status response)))
     (is (= :invited (:status (ports/get-membership *service* *invited-id*))))))
+
+(deftest ^:contract ^:security an-admin-of-one-tenant-cannot-join-another
+  ;; The admin role alone let them add themselves to any tenant (BOU-983)
+  (let [admin-of-other {:id stranger :role :admin :tenant-id other-tenant}
+        invite   (through-route "/tenants/:tenant-id/memberships" :post
+                                (assoc (make-request :post {:tenant-id (str tenant-id-1)}
+                                                     {:userId (str stranger) :role "admin"})
+                                       :user admin-of-other))
+        listing  (through-route "/tenants/:tenant-id/memberships" :get
+                                (assoc (make-request :get {:tenant-id (str tenant-id-1)})
+                                       :user admin-of-other))]
+    (is (= 403 (:status invite)))
+    (is (= 403 (:status listing)))
+    (is (nil? (ports/get-active-membership *service* stranger tenant-id-1)))))
