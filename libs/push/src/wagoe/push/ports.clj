@@ -43,7 +43,8 @@
   (register-device! [this user-id device-info]
     "Store device token. device-info: {:token str :platform kw :app-id str},
      and :tenant-id, the tenant it was registered in, which sends filter on.
-     Throws `{:type :conflict}` when another tenant holds the token and app-id.")
+     Throws `{:type :conflict}` when another tenant holds the token, under any
+     app-id: a token is one device (BOU-994).")
   (unregister-device! [this user-id device-token]
     "Remove device token.")
   (get-user-devices [this user-id]

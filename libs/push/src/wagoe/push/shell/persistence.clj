@@ -5,8 +5,8 @@
    db-context through platform's execution layer, which encodes each parameter
    as the engine takes it.
 
-   A token is upserted on (token, app_id, tenant_id) with platform's `upsert!`;
-   the unique (token, app_id) index keeps it in one tenant."
+   A token is upserted on (token, app_id, tenant_id) with platform's `upsert!`,
+   and refused when another tenant holds it under any app-id."
   (:require [wagoe.push.ports :as ports]
             [wagoe.push.core.device :as device]
             [wagoe.core.utils.type-conversion :as tc]
@@ -46,8 +46,16 @@
         (assoc :active? (tc/int->boolean (:active row)))
         (dissoc :active))))
 
+(defn- token-rows
+  "Every registration of `token`: id, app-id and tenant, under any app-id."
+  [db token]
+  (mapv #(update % :tenant-id tc/string->uuid)
+        (database/execute-query! db (-> (h/select :id :app-id :tenant-id)
+                                        (h/from :push-device-tokens)
+                                        (h/where [:= :token token])))))
+
 (defn- conflict
-  "The refusal of a token another tenant holds (BOU-990)."
+  "The refusal of a token another tenant holds, under any app-id (BOU-990, BOU-994)."
   [{:keys [token app-id]}]
   (ex-info "The token is registered in another tenant" {:type :conflict :token token :app-id app-id}))
 
@@ -68,17 +76,10 @@
                   :active       true
                   :created-at   (->instant (:created-at record))
                   :last-used-at (->instant (:last-used-at record))}
-        stored   #(some-> (database/execute-one! db (-> (h/select :id :tenant-id)
-                                                        (h/from :push-device-tokens)
-                                                        (h/where [:= :token (:token row)] [:= :app-id (:app-id row)])))
-                          (update :tenant-id tc/string->uuid))
-        existing (stored)
-        tenants  (into #{} (map (comp tc/string->uuid :tenant-id))
-                       (database/execute-query! db (-> (h/select :tenant-id)
-                                                       (h/from :push-device-tokens)
-                                                       (h/where [:= :token (:token row)]))))]
+        stored   #(first (filter (comp #{(:app-id row)} :app-id) (token-rows db (:token row))))
+        rows     (token-rows db (:token row))]
     ;; ponytail: checked before the write; two tenants racing under two app-ids can both pass.
-    (when (seq (disj tenants (:tenant-id row)))
+    (when (seq (disj (set (map :tenant-id rows)) (:tenant-id row)))
       (throw (conflict row)))
     ;; Keyed on the tenant too, so a racing registration in another tenant
     ;; matches no update and its insert meets the unique (token, app_id) index.
@@ -87,7 +88,7 @@
                           (catch clojure.lang.ExceptionInfo e
                             (throw (if (database/unique-conflict? e) (conflict row) e)))))
       (:id row)
-      (tc/string->uuid (:id (or existing (stored)))))))
+      (tc/string->uuid (:id (or (first (filter (comp #{(:app-id row)} :app-id) rows)) (stored)))))))
 
 (defrecord DeviceTokenStore [db]
   ports/IDeviceTokenStore
@@ -185,10 +186,7 @@
                                                 (h/where [:= :callback-id (:callback-id event)] [:= :event-type "sent"])
                                                 (h/limit 1))))]
     (assoc event :tenant-id (:tenant-id sent))
-    (let [tenants (into #{} (map (comp tc/string->uuid :tenant-id))
-                        (database/execute-query! db (-> (h/select :tenant-id)
-                                                        (h/from :push-device-tokens)
-                                                        (h/where [:= :token (:device-token event)]))))]
+    (let [tenants (set (map :tenant-id (token-rows db (:device-token event))))]
       (assoc event :tenant-id (when (= 1 (count tenants)) (first tenants))))))
 
 (defn- record-callback!

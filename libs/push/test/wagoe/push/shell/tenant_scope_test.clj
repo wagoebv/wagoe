@@ -180,7 +180,19 @@
       (is (= 409 (:status (register! store alice "bobs-phone" tenant-a "anything"))))
       (is (= [tenant-b] (rows "bobs-phone"))))
     (testing "one tenant may hold a token under several app-ids"
-      (is (= 201 (:status (register! store carol "bobs-phone" tenant-b "com.other")))))))
+      (is (= 201 (:status (register! store carol "bobs-phone" tenant-b "com.other"))))
+      (is (= #{"com.test" "com.other"} (set (map :app-id (ports/get-user-devices store carol))))))
+    (testing "no tenant is a holder too, under any app-id"
+      (register! store alice "nil-x" nil)
+      (is (= 409 (:status (register! store bob "nil-x" tenant-a "other"))))
+      (is (= [nil] (rows "nil-x")))
+      (register! store alice "a-x" tenant-a)
+      (is (= 409 (:status (register! store bob "a-x" nil "other"))))
+      (is (= [tenant-a] (rows "a-x"))))
+    (testing "a token two tenants hold from before is not registered in a third way"
+      (seed! alice "old-both" tenant-a "com.a")
+      (seed! bob "old-both" tenant-b "com.b")
+      (is (= 409 (:status (register! store carol "old-both" tenant-a "com.c")))))))
 
 (deftest ^:integration ^:security delete-removes-only-the-requests-tenants-device
   ;; DELETE removed the user's token in every tenant (BOU-990)
