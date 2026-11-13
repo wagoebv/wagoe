@@ -14,6 +14,7 @@
             [wagoe.events.shell.adapters.redis-streams :as redis-streams]
             [wagoe.events.shell.publisher :as publisher]
             [wagoe.events.ports :as ports]
+            [wagoe.platform.database :as db]
             [clojure.test :refer [deftest is testing]])
   (:import (redis.clients.jedis JedisPool JedisPoolConfig)))
 
@@ -24,14 +25,15 @@
       (.close pool) true)
     (catch Exception _ false)))
 
-(defn- adapters []
-  (cond-> [["in-memory" #(in-memory/create-in-memory-bus) in-memory/stop!]]
+(defn- adapters [& [opts]]
+  (cond-> [["in-memory" #(in-memory/create-in-memory-bus opts) in-memory/stop!]]
     (redis-available?)
     (conj ["redis-streams"
            #(redis-streams/create-redis-streams-bus
              (JedisPool. (JedisPoolConfig.) "localhost" 6379 2000)
-             {:group (str "surface-" (subs (str (random-uuid)) 0 8))
-              :min-idle-ms 100})
+             (merge {:group (str "surface-" (subs (str (random-uuid)) 0 8))
+                     :min-idle-ms 100}
+                    opts))
            redis-streams/stop!])))
 
 (defn- wait-for
@@ -356,3 +358,30 @@
                      (map (comp :n :payload)
                           (ports/history bus topic {:since cutoff}))))))
           (finally (stop bus)))))))
+
+;; =============================================================================
+;; Tenants (BOU-985)
+;; =============================================================================
+
+(deftest ^:integration ^:security a-tenants-events-stay-in-that-tenant-on-every-adapter
+  (let [ran (atom [])]
+    (doseq [[label make stop] (adapters {:tenant-runner (fn [t f] (swap! ran conj t) (binding [db/*tenant-id* t] (f)))})]
+      (testing label
+        (reset! ran [])
+        (let [bus   (make)
+              topic (unique)
+              seen  (atom [])
+              sub   (ports/subscribe! bus topic #(swap! seen conj [(:tenant-id %) db/*tenant-id*]))]
+          (try
+            (Thread/sleep 400)
+            (doseq [t ["a" "b" "b" "b" nil]]
+              (publisher/emit! bus topic :e/x :test {} {:tenant-id t}))
+            (is (wait-for #(= 5 (count @seen))))
+            (testing "a handler runs in its event's tenant, through the runner"
+              (is (every? (fn [[event-tenant bound]] (= event-tenant bound)) @seen))
+              (is (= ["a" "b" "b" "b"] @ran) "a system event needs no tenant"))
+            (testing "history in a tenant filters before :limit"
+              (is (wait-for #(= 5 (count (ports/history bus topic)))))
+              (is (= ["a" nil] (map :tenant-id (binding [db/*tenant-id* "a"] (ports/history bus topic {:limit 2}))))
+                  "other tenants' newer events do not use up a's limit"))
+            (finally (ports/unsubscribe! bus sub) (stop bus))))))))

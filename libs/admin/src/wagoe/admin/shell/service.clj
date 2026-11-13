@@ -1646,7 +1646,10 @@
                                                  :type         type
                                                  :source       :admin
                                                  :payload      payload
-                                                 :published-at (Instant/now)}))
+                                                 :published-at (Instant/now)
+                                                 ;; Without it the event is a system event and every
+                                                 ;; tenant's subscribers got the rows (BOU-985)
+                                                 :tenant-id    db/*tenant-id*}))
                   (catch Exception e
                     {:error {:type :events/publish-failed :message (ex-message e)}}))]
     (if (:error result)

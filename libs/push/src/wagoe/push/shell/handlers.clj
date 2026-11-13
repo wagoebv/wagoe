@@ -81,7 +81,7 @@
   (cond
     (nil? reach)                 []
     (:tenant-id reach)           (device/of-tenant (:tenant-id reach) devices)
-    (contains? reach :tenant-id) (filterv (comp nil? :tenant-id) devices)
+    (contains? reach :tenant-id) (device/of-tenant nil devices)
     :else                        (vec devices)))
 
 (defn get-device-handler

@@ -16,6 +16,7 @@
   (:require [wagoe.events.core.event :as event]
             [wagoe.platform.database :as db]
             [wagoe.events.ports :as ports]
+            [wagoe.events.shell.event-tenant :as event-tenant]
             [wagoe.observability.errors.ports :as errors]
             [wagoe.platform.transit :as transit]
             [clojure.tools.logging :as log])
@@ -138,7 +139,8 @@
             (if (and max-deliveries delivered (>= delivered max-deliveries))
               (dead-letter! pool stream group t entry parsed)
               (log/warn t "event handler threw; entry left for redelivery"
-                        {:stream stream :id (:id parsed) :delivered delivered}))))))))
+                        {:stream stream :id (:id parsed) :delivered delivered
+                         :tenant-id (:tenant-id parsed) :error-type (:type (ex-data t))}))))))))
 
 (defn- read-entries
   "XREADGROUP for `from` — `>` for new entries, `0` for this consumer's
@@ -181,7 +183,9 @@
     (when-let [t (reduce (fn [first-failure [_ h]]
                            (try (h event) first-failure
                                 (catch Throwable t
-                                  (log/warn t "event handler threw" {:stream stream})
+                                  (log/warn t "event handler threw"
+                                            {:stream stream :id (:id event) :tenant-id (:tenant-id event)
+                                             :error-type (:type (ex-data t))})
                                   (or first-failure t))))
                          nil
                          handlers)]
@@ -250,8 +254,10 @@
             id       (str (random-uuid))
             ;; The poller thread holds the previous handler's error context (BOU-848).
             reporter (:error-reporter this)
-            ;; Subscribed inside a tenant, it sees that tenant's events only (BOU-947)
-            handler  (event/for-tenant db/*tenant-id* handler)
+            ;; Subscribed inside a tenant, it sees that tenant's events only (BOU-947);
+            ;; filtered first, so another tenant's event opens no transaction
+            handler  (event/for-tenant db/*tenant-id*
+                                       (event-tenant/in-event-tenant (:tenant-runner this) handler))
             scoped   (fn [event] (errors/with-clean-context reporter #(handler event)))]
         (ensure-group! pool stream group)
         ;; One Redis consumer per topic, fanning out to every local handler.
@@ -342,14 +348,22 @@
             ;;
             ;; The id is still used to *start* the scan: Redis assigns it at or
             ;; after the publisher's timestamp, so nothing wanted is skipped.
+            ;; In a tenant the last n entries may all be other tenants', so
+            ;; `:limit` is applied after the tenant filter, not in Redis.
             raw     (cond
-                      since       (.xrange jedis stream (str (inst-ms since) "-0") "+")
-                      limit       (reverse (.xrevrange jedis stream "+" "-" (int limit)))
-                      :else       (.xrange jedis stream "-" "+"))
+                      since
+                      (.xrange jedis stream (str (inst-ms since) "-0") "+")
+
+                      (and limit (nil? db/*tenant-id*))
+                      (reverse (.xrevrange jedis stream "+" "-" (int limit)))
+
+                      :else
+                      (.xrange jedis stream "-" "+"))
             decoded (into [] (keep decode-entry) raw)
-            matching (if since
-                       (filterv #(> (inst-ms (:published-at %)) (inst-ms since)) decoded)
-                       decoded)]
+            matching (event-tenant/visible
+                      (if since
+                        (filterv #(> (inst-ms (:published-at %)) (inst-ms since)) decoded)
+                        decoded))]
         ;; `:limit` is the most recent n of what is left, as in-memory's
         ;; `take-last` gives.
         (if limit (vec (take-last limit matching)) matching)))))
@@ -370,8 +384,10 @@
                              topic behind a poison message)
             :min-idle-ms     how long an entry must be untouched before this
                              consumer reclaims it from another (default 30000)
-            :error-reporter  gives each handler a clean error context"
-  [pool & [{:keys [prefix group max-len max-deliveries min-idle-ms error-reporter] :as opts}]]
+            :error-reporter  gives each handler a clean error context
+            :tenant-runner   (fn [tenant-id f]) that runs a handler in its
+                             event's tenant"
+  [pool & [{:keys [prefix group max-len max-deliveries min-idle-ms error-reporter tenant-runner] :as opts}]]
   (cond-> (->RedisStreamsEventBus pool
                                   (or prefix "wagoe:events:")
                                   (or group "wagoe")
@@ -382,7 +398,8 @@
                                   ;; which is a choice, and `or` would silently override it.
                                   (if (contains? opts :max-deliveries) max-deliveries 5)
                                   (or min-idle-ms 30000))
-    error-reporter (assoc :error-reporter error-reporter)))
+    error-reporter (assoc :error-reporter error-reporter)
+    tenant-runner  (assoc :tenant-runner tenant-runner)))
 
 (defn stop!
   "Stop every subscription and release the threads.

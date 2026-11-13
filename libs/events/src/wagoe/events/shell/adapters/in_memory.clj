@@ -14,6 +14,7 @@
   (:require [wagoe.events.core.event :as event]
             [wagoe.platform.database :as db]
             [wagoe.events.ports :as ports]
+            [wagoe.events.shell.event-tenant :as event-tenant]
             [wagoe.observability.errors.ports :as errors]
             [clojure.tools.logging :as log])
   (:import (java.util.concurrent Executors ExecutorService TimeUnit)))
@@ -33,7 +34,9 @@
       ;; Logged and swallowed. A throwing handler must not take down the
       ;; delivery thread — the next event, and every other subscriber, would
       ;; be lost with it.
-      (log/warn t "event handler threw" {:type (:type event) :id (:id event)}))))
+      (log/warn t "event handler threw" {:type       (:type event) :id (:id event)
+                                         :tenant-id  (:tenant-id event)
+                                         :error-type (:type (ex-data t))}))))
 
 (defrecord InMemoryEventBus [state ^ExecutorService executor history-limit]
   ports/IEventPublisher
@@ -52,12 +55,16 @@
         (:id event))))
 
   ports/IEventSubscriber
-  (subscribe! [_ topic handler]
+  (subscribe! [this topic handler]
     (if-let [problem (event/topic-problem topic)]
       {:error {:type :events/invalid :message problem}}
       (let [id (str (random-uuid))]
-        ;; Subscribed inside a tenant, it sees that tenant's events only (BOU-947)
-        (swap! state assoc-in [:subscriptions id] {:topic' (keyword topic) :handler (event/for-tenant db/*tenant-id* handler)})
+        ;; Subscribed inside a tenant, it sees that tenant's events only (BOU-947);
+        ;; filtered first, so another tenant's event opens no transaction
+        (swap! state assoc-in [:subscriptions id]
+               {:topic'  (keyword topic)
+                :handler (event/for-tenant db/*tenant-id*
+                                           (event-tenant/in-event-tenant (:tenant-runner this) handler))})
         id)))
 
   (unsubscribe! [_ subscription]
@@ -72,18 +79,23 @@
       ;; which is java.util.Date or java.time.Instant depending on who built
       ;; the event, and only one of them has .isAfter.
       since (filter #(> (inst-ms (:published-at %)) (inst-ms since)))
+      ;; A tenant's caller sees its own and system events (BOU-985); before
+      ;; `:limit`, so other tenants' events do not use it up
+      true  event-tenant/visible
       limit (take-last limit)
       true  vec)))
 
 (defn create-in-memory-bus
   "An event bus confined to this process.
 
-   `opts` may carry `:history-limit` (default 1000) and `:error-reporter`."
-  [& [{:keys [history-limit error-reporter]}]]
+   `opts` may carry `:history-limit` (default 1000), `:error-reporter` and
+   `:tenant-runner` (fn [tenant-id f]) that runs a handler in its event's tenant."
+  [& [{:keys [history-limit error-reporter tenant-runner]}]]
   (cond-> (->InMemoryEventBus (atom {:history {} :subscriptions {}})
                               (Executors/newSingleThreadExecutor)
                               (or history-limit default-history-limit))
-    error-reporter (assoc :error-reporter error-reporter)))
+    error-reporter (assoc :error-reporter error-reporter)
+    tenant-runner  (assoc :tenant-runner tenant-runner)))
 
 (defn drain!
   "Wait until every accepted event has reached its subscribers, then return

@@ -2,6 +2,7 @@
   "A subscriber in a tenant receives that tenant's events and system events,
    never another tenant's (BOU-947)."
   (:require [clojure.test :refer [deftest is testing]]
+            [wagoe.events.ports]
             [wagoe.events.shell.adapters.in-memory :as in-memory]
             [wagoe.events.shell.publisher :as publisher]
             [wagoe.platform.database :as db]))
@@ -40,3 +41,41 @@
   (is (nil? (:tenant-id (binding [db/*tenant-id* tenant-a] (publisher/build :t :src {} {:tenant-id nil}))))
       "an explicit nil makes a system event")
   (is (nil? (:tenant-id (publisher/build :t :src {})))))
+
+(deftest ^:unit ^:security a-handler-runs-in-its-events-tenant
+  ;; A handler subscribed at boot ran with no tenant bound: its writes went to
+  ;; public and a push it sent reached every tenant (BOU-985)
+  (let [ran (atom [])]
+    (testing "with a tenant runner, through it"
+      (let [bus  (in-memory/create-in-memory-bus
+                  {:tenant-runner (fn [t f] (binding [db/*tenant-id* t] (swap! ran conj [:runner t]) (f)))})
+            seen (atom [])]
+        (try
+          (publisher/subscribe-for-tenant! bus nil :orders (fn [_] (swap! seen conj db/*tenant-id*)))
+          (doseq [t [tenant-a nil]]
+            (publisher/emit! bus :orders :order/placed :orders {} {:tenant-id t}))
+          (in-memory/drain! bus :orders)
+          (is (= [tenant-a nil] @seen))
+          (is (= [[:runner tenant-a]] @ran) "a system event needs no tenant")
+          (finally (in-memory/stop! bus)))))
+    (testing "without one, with the tenant bound"
+      (let [bus  (in-memory/create-in-memory-bus)
+            seen (atom nil)]
+        (try
+          (publisher/subscribe-for-tenant! bus nil :orders (fn [_] (reset! seen db/*tenant-id*)))
+          (publisher/emit! bus :orders :order/placed :orders {} {:tenant-id tenant-b})
+          (in-memory/drain! bus :orders)
+          (is (= tenant-b @seen))
+          (finally (in-memory/stop! bus)))))))
+
+(deftest ^:unit ^:security history-in-a-tenant-shows-its-own-and-system-events
+  (let [bus (in-memory/create-in-memory-bus)]
+    (try
+      (doseq [t [tenant-a tenant-b nil]]
+        (publisher/emit! bus :orders :order/placed :orders {} {:tenant-id t}))
+      (in-memory/drain! bus :orders)
+      (is (= 3 (count (wagoe.events.ports/history bus :orders))))
+      (is (= #{tenant-a :system}
+             (set (map #(or (:tenant-id %) :system)
+                       (binding [db/*tenant-id* tenant-a] (wagoe.events.ports/history bus :orders))))))
+      (finally (in-memory/stop! bus)))))

@@ -49,3 +49,9 @@
   (let [bus (ig/init-key :wagoe/events {:provider :memory :error-reporter ::reporter})]
     (is (= ::reporter (:error-reporter bus)))
     (ig/halt-key! :wagoe/events bus)))
+
+(deftest ^:unit ^:security with-tenancy-a-handler-gets-the-tenant-runner
+  ;; Without it a handler only binds the tenant id and writes to public (BOU-985)
+  (let [events #(get-in (wiring/ig-config {:provider :memory} {:enabled %}) [:components :wagoe/events :tenant-runner])]
+    (is (= (ig/ref :wagoe/in-tenant) (events #{:wagoe/events :wagoe/tenant})))
+    (is (nil? (events #{:wagoe/events})))))

@@ -41,4 +41,7 @@
   "`subscribe!` for one tenant's events, and those of no tenant, from code that
    runs outside that tenant's binding (BOU-947)."
   [bus tenant-id topic handler]
-  (ports/subscribe! bus topic (event/for-tenant tenant-id handler)))
+  ;; Bound, not wrapped: the adapter then filters before it enters the event's
+  ;; tenant, so another tenant's event opens no transaction (BOU-985)
+  (binding [db/*tenant-id* (or tenant-id db/*tenant-id*)]
+    (ports/subscribe! bus topic handler)))

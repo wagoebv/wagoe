@@ -159,7 +159,8 @@ All three methods enqueue jobs and return a job UUID immediately — delivery is
 
 A device records the tenant its registration ran in. A send or broadcast is kept to the
 sender's tenant (the one bound on the thread, else `:tenant-id` in `opts`), which the job
-carries; one sent in no tenant reaches every device (BOU-946). A token belongs to one tenant at a
+carries (BOU-946). One sent in no tenant reaches the devices registered in no tenant; with
+`:all-tenants? true` in `opts`, every device (BOU-985). A token belongs to one tenant at a
 time: registering it in another moves it there. The device routes and the stats keep to the
 request's tenant.
 
