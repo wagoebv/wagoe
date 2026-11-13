@@ -76,6 +76,8 @@ On the PR head, run the gates that enforce the architecture rules, and keep thei
 bb check:fcis; bb check:ports; bb check:deps; bb check:error-shape
 ```
 
+When a dependency file changed (`deps.edn`, `bb.edn`), also run `bb check:vulns` (needs `GITHUB_TOKEN`; report it as not run without one).
+
 Do not ask an agent to re-derive FC/IS, ports or dependency rules by reading code; the gates are the source of truth. A failing gate is a CRITICAL finding quoting the gate output. If the head is not checked out locally, use a worktree (`git worktree add ../<repo>-review-<slug> origin/<head>`) and remove it afterwards.
 
 ## Step 3: Route and dispatch agents
@@ -91,6 +93,7 @@ Determine which agents to dispatch based on the changes:
 | `code-quality-reviewer`          | Always                                                                                                                    | All source file contents, diff, conventions, PR context, story contract                                                    |
 | `error-handling-reviewer`        | When changes include error handling (try/catch, ex-info, `{:success? false}` / `{:error …}` values) or business logic                          | Relevant source file contents, diff, conventions, PR context, story contract                                               |
 | `test-coverage-reviewer`         | When source files are changed (not just config/docs)                                                                      | Source files + their test files, diff, conventions, PR context, story contract                                             |
+| `security-reviewer`              | When source or dependency files change (`deps.edn`, `bb.edn`, `.github/workflows/*`, vendored assets)                     | Changed source and dependency files, diff, conventions, PR context, story contract; `bb check:vulns` output when it ran    |
 
 For each agent, construct a prompt containing:
 
@@ -102,7 +105,7 @@ For each agent, construct a prompt containing:
 
 Every agent receives the story contract, not just the conformance agent. The contract raises the bar on every lens: a silent error path becomes an AC citation, not a first-principles inference; a concurrency primitive becomes an invariant violation, not a vibe; a per-message allocation becomes a measurable cost against a stated throughput, not a stylistic note.
 
-Launch applicable agents in parallel using the Agent tool. With a contract present, expect 3–5 agents — `story-conformance` and `operational` are nearly always worth running alongside the first-principles lenses.
+Launch applicable agents in parallel using the Agent tool. With a contract present, expect 3–6 agents — `story-conformance` and `operational` are nearly always worth running alongside the first-principles lenses.
 
 ## Step 4: Aggregate and format report
 
