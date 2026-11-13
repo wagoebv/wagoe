@@ -5,6 +5,7 @@
             [clojure.test :refer [deftest testing is]]
             [wagoe.platform.database :as db]
             [wagoe.tenant.shell.membership-middleware :as membership-mw]
+            [wagoe.tenant.shell.provisioning]
             [wagoe.tenant.shell.tenant-middleware :as tenant-mw]
             [wagoe.platform.ports.database]
             [wagoe.tenant.ports :as tenant-ports]
@@ -329,6 +330,7 @@
     (let [db-ctx (create-mock-db-context)
           handler (tenant-mw/wrap-tenant-schema schema-tracking-handler db-ctx)]
       (with-redefs [db/with-transaction* (fn [ctx f] (f ctx))
+                    wagoe.tenant.shell.provisioning/known-schema? (constantly true)
                     next.jdbc/execute! (fn [_ds [sql]]
                                          (swap! (:schema-calls-atom db-ctx) conj sql)
                                          nil)]
@@ -358,6 +360,7 @@
     (let [db-ctx (create-mock-db-context)
           handler (tenant-mw/wrap-tenant-schema schema-tracking-handler db-ctx)]
       (with-redefs [db/with-transaction* (fn [ctx f] (f ctx))
+                    wagoe.tenant.shell.provisioning/known-schema? (constantly true)
                     next.jdbc/execute! (fn [_ _] (throw (Exception. "Schema not found")))]
         (let [request {:tenant test-tenant-1
                        :uri "/api/users"
@@ -380,6 +383,7 @@
                    tenant-service
                    db-ctx)]
       (with-redefs [db/with-transaction* (fn [ctx f] (f ctx))
+                    wagoe.tenant.shell.provisioning/known-schema? (constantly true)
                     next.jdbc/execute! (fn [_ds [sql]]
                                          (swap! (:schema-calls-atom db-ctx) conj sql)
                                          nil)]
@@ -402,6 +406,7 @@
                    db-ctx
                    {:require-tenant? true})]
       (with-redefs [db/with-transaction* (fn [ctx f] (f ctx))
+                    wagoe.tenant.shell.provisioning/known-schema? (constantly true)
                     next.jdbc/execute! (fn [_ds [sql]]
                                          (swap! (:schema-calls-atom db-ctx) conj sql)
                                          nil)]
@@ -422,6 +427,7 @@
                    db-ctx
                    {:require-tenant? false})]
       (with-redefs [db/with-transaction* (fn [ctx f] (f ctx))
+                    wagoe.tenant.shell.provisioning/known-schema? (constantly true)
                     next.jdbc/execute! (fn [_ds [sql]]
                                          (swap! (:schema-calls-atom db-ctx) conj sql)
                                          nil)]

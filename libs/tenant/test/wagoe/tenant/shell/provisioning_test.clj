@@ -351,7 +351,8 @@
   (testing "sets search_path and executes the callback inside a transaction"
     (let [queries (atom [])
           adapter (postgres-adapter-stub)]
-      (with-redefs [wagoe.platform.database/with-transaction*
+      (with-redefs [sut/known-schema? (constantly true)
+                    wagoe.platform.database/with-transaction*
                     (fn [tx-ctx f]
                       (is (= adapter (:adapter tx-ctx)))
                       (is (= ::ds (:datasource tx-ctx)))
@@ -377,7 +378,8 @@
 
   (testing "wraps callback failures as tenant-context errors"
     (let [adapter (postgres-adapter-stub)]
-      (with-redefs [wagoe.platform.database/with-transaction*
+      (with-redefs [sut/known-schema? (constantly true)
+                    wagoe.platform.database/with-transaction*
                     (fn [tx-ctx f]
                       (f {:adapter (:adapter tx-ctx)
                           :datasource ::tx}))
