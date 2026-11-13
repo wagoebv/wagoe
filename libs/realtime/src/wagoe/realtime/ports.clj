@@ -140,8 +140,9 @@
       - Logs send event (debug level)")
 
   (publish-to-topic [this topic message]
-    "Publish message to all connections subscribed to topic.
-    
+    "Publish message to all connections subscribed to topic, of the sender's
+    tenant when it has one (BOU-986).
+
     Topic-based pub/sub messaging. Connections must subscribe to topic first
     via IPubSubManager. Used for:
       - Room-based messaging (e.g., chat rooms, game lobbies)

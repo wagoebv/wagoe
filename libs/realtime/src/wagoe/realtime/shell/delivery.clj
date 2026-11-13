@@ -23,9 +23,10 @@
     :broadcast  (of-tenant registry tenant-id (ports/all-connections registry))
     :connection (ports/find-adapters-by-ids registry [target])
     :topic      (if pubsub-manager
-                  (ports/find-adapters-by-ids
-                   registry
-                   (ports/get-topic-subscribers pubsub-manager target))
+                  (of-tenant registry tenant-id
+                             (ports/find-adapters-by-ids
+                              registry
+                              (ports/get-topic-subscribers pubsub-manager target)))
                   [])
     []))
 
