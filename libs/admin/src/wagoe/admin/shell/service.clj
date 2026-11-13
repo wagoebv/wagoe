@@ -795,15 +795,15 @@
         (when (seq added)
           (db/execute-update!
            tx {:insert-into table
-               :values (for [other added]
-                         (case-conversion/kebab-case->snake-case-map
-                          (cond-> {foreign-key id-str other-key other}
+             :values (for [other added]
+                       (case-conversion/kebab-case->snake-case-map
+                        (cond-> {foreign-key id-str other-key other}
                           ;; A surrogate key the database does not number
-                            (and (not (#{foreign-key other-key} jpk))
-                                 (#{:uuid :string} (get-in jcfg [:fields jpk :type])))
-                            (assoc jpk (str (UUID/randomUUID)))
-                            (contains? (:fields jcfg) :created-at) (assoc :created-at now)
-                            (contains? (:fields jcfg) :updated-at) (assoc :updated-at now))))}))
+                          (and (not (#{foreign-key other-key} jpk))
+                               (#{:uuid :string} (get-in jcfg [:fields jpk :type])))
+                          (assoc jpk (str (UUID/randomUUID)))
+                          (contains? (:fields jcfg) :created-at) (assoc :created-at now)
+                          (contains? (:fields jcfg) :updated-at) (assoc :updated-at now))))}))
         (catch Exception e
           (throw (refused-write jcfg e)))))))
 
@@ -1062,7 +1062,7 @@
   [data]
   [(dissoc data :admin/links :admin/link-scopes)
    (with-meta (update-vals (:admin/links data) #(into [] (comp (map str) (remove str/blank?) (distinct)) %))
-     {:scopes (:admin/link-scopes data)})])
+              {:scopes (:admin/link-scopes data)})])
 
 ;; =============================================================================
 ;; List Overview (ADR-040)
@@ -1502,43 +1502,43 @@
                  primary-key (:primary-key entity-config :id)
                  ; Prepare single field update with updated-at timestamp
                  now (Instant/now)
-                 update-data {field value :updated-at now}
+               update-data {field value :updated-at now}
 
-                 db-ready-data (prepare-values-for-db update-data)
+               db-ready-data (prepare-values-for-db update-data)
 
                ; Convert to snake_case for database
-                 db-data (case-conversion/kebab-case->snake-case-map db-ready-data)
+               db-data (case-conversion/kebab-case->snake-case-map db-ready-data)
 
                ; Convert ID to string
-                 id-str (type-conversion/uuid->string id)
+               id-str (type-conversion/uuid->string id)
 
                ; Determine which table owns this field (handles split-table entities)
-                 split-cfg (:split-table-update entity-config)
-                 effective-table (if (and split-cfg
-                                          (contains? (:secondary-fields split-cfg) field))
-                                   (:secondary-table split-cfg)
-                                   table-name)
+               split-cfg (:split-table-update entity-config)
+               effective-table (if (and split-cfg
+                                        (contains? (:secondary-fields split-cfg) field))
+                                 (:secondary-table split-cfg)
+                                 table-name)
 
                ; Execute update against the correct table
-                 update-query {:update effective-table
-                               :set db-data
-                               :where [:= primary-key id-str]}
-                 _ (try
-                     (db/execute-update! db-ctx update-query)
-                     (catch Exception e
-                       (throw (refused-write entity-config e))))
+               update-query {:update effective-table
+                             :set db-data
+                             :where [:= primary-key id-str]}
+               _ (try
+                   (db/execute-update! db-ctx update-query)
+                   (catch Exception e
+                     (throw (refused-write entity-config e))))
 
                ; Fetch updated record using join-aware query
-                 {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
-                 id-field (get field-aliases :id primary-key)
-                 select-query (cond-> {:select select-clause
-                                       :from from-clause
-                                       :where [:= id-field id-str]}
-                                join-clause (assoc :join join-clause))
-                 db-result (db/execute-one! db-ctx select-query)]
+               {:keys [from-clause select-clause join-clause field-aliases]} (resolve-query-config entity-config)
+               id-field (get field-aliases :id primary-key)
+               select-query (cond-> {:select select-clause
+                                     :from from-clause
+                                     :where [:= id-field id-str]}
+                              join-clause (assoc :join join-clause))
+               db-result (db/execute-one! db-ctx select-query)]
 
            ; Keys arrive kebab-case from the execution layer builder-fn
-             (typed-record entity-config db-result)))
+           (typed-record entity-config db-result)))
          db-ctx))))
 
   (delete-entity [this entity-name id]

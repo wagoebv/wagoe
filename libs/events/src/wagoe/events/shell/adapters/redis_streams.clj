@@ -139,7 +139,8 @@
             (if (and max-deliveries delivered (>= delivered max-deliveries))
               (dead-letter! pool stream group t entry parsed)
               (log/warn t "event handler threw; entry left for redelivery"
-                        {:stream stream :id (:id parsed) :delivered delivered}))))))))
+                        {:stream stream :id (:id parsed) :delivered delivered
+                         :tenant-id (:tenant-id parsed) :error-type (:type (ex-data t))}))))))))
 
 (defn- read-entries
   "XREADGROUP for `from` — `>` for new entries, `0` for this consumer's
@@ -182,7 +183,9 @@
     (when-let [t (reduce (fn [first-failure [_ h]]
                            (try (h event) first-failure
                                 (catch Throwable t
-                                  (log/warn t "event handler threw" {:stream stream})
+                                  (log/warn t "event handler threw"
+                                            {:stream stream :id (:id event) :tenant-id (:tenant-id event)
+                                             :error-type (:type (ex-data t))})
                                   (or first-failure t))))
                          nil
                          handlers)]

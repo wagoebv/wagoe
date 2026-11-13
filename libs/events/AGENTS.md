@@ -237,6 +237,9 @@ subscriber registered in no tenant gets every tenant's; an event with no
 `:tenant-id` is a system event and goes to everyone (BOU-947). A handler runs
 in its event's tenant, through tenant's `:wagoe/in-tenant` when tenancy is on,
 and `history` in a tenant shows its own and system events (BOU-985).
+A handler then runs in one transaction: writes it made before throwing roll
+back, and it holds a pool connection for its whole run (on Redis, one per
+subscribed topic, plus one more when it enqueues on the DB queue).
 
 **One connection per subscribed topic.** Each topic's poller holds a Redis
 connection for the length of its blocking read. The pool defaults to 32

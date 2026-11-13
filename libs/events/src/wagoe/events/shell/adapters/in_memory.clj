@@ -34,7 +34,9 @@
       ;; Logged and swallowed. A throwing handler must not take down the
       ;; delivery thread — the next event, and every other subscriber, would
       ;; be lost with it.
-      (log/warn t "event handler threw" {:type (:type event) :id (:id event)}))))
+      (log/warn t "event handler threw" {:type       (:type event) :id (:id event)
+                                         :tenant-id  (:tenant-id event)
+                                         :error-type (:type (ex-data t))}))))
 
 (defrecord InMemoryEventBus [state ^ExecutorService executor history-limit]
   ports/IEventPublisher

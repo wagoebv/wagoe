@@ -79,3 +79,10 @@
     (is (= ["c"] (map :token (wagoe.push.core.device/of-tenant nil devices))))
     (is (= ["a" "b" "c"] (map :token (wagoe.push.core.device/of-tenant nil true devices)))
         "the operator reaches every tenant only when asked")))
+
+(deftest ^:unit ^:security all-tenants-is-honoured-only-outside-a-tenant
+  ;; A tenant's code must not reach every tenant's devices by asking (BOU-985)
+  (let [send #(job-args (fn [svc] (ports/send-push! svc :tenant-test {} (merge {:user-id (random-uuid)} %1))) %2)]
+    (is (true? (:all-tenants? (send {:all-tenants? true} nil))))
+    (is (false? (:all-tenants? (send {:all-tenants? true} tenant-a))) "ignored inside a tenant")
+    (is (false? (:all-tenants? (send {} nil))) "never by default")))
