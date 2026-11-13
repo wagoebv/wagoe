@@ -27,13 +27,16 @@
     (> (.toMillis elapsed) (.toMillis max-age))))
 
 (defn of-tenant
-  "Those of `devices` registered in `tenant-id`; all of them without one, a
-   send of no tenant (BOU-946)."
-  [tenant-id devices]
-  (if tenant-id
-    (let [t (str tenant-id)]
-      (filterv #(= t (some-> (:tenant-id %) str)) devices))
-    (vec devices)))
+  "Those of `devices` registered in `tenant-id` (BOU-946). Without one, those
+   registered in no tenant: a send that lost its tenant reached every tenant's
+   devices (BOU-985). `all-tenants?` is the operator's explicit reach."
+  ([tenant-id devices] (of-tenant tenant-id false devices))
+  ([tenant-id all-tenants? devices]
+   (cond
+     tenant-id    (let [t (str tenant-id)]
+                    (filterv #(= t (some-> (:tenant-id %) str)) devices))
+     all-tenants? (vec devices)
+     :else        (filterv #(nil? (:tenant-id %)) devices))))
 
 (defn prepare-device-record
   "Pure: build device record from user-id and device-info. Caller supplies id and now."

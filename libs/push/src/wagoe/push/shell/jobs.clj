@@ -42,12 +42,12 @@
 (defn handle-send-push
   "Job handler for :push/send. Resolves notification, fans out to devices, delivers."
   [{:keys [device-store analytics-store callback-secret] :as deps}
-   {:keys [notification-id data user-id tenant-id locale]}]
+   {:keys [notification-id data user-id tenant-id all-tenants? locale]}]
   (let [push-def (registry/get-push notification-id)]
     (when-not push-def
       (throw (ex-info "Push notification not found in registry"
                       {:type :not-found :notification-id notification-id})))
-    (let [devices   (device/of-tenant tenant-id (ports/get-user-devices device-store user-id))
+    (let [devices   (device/of-tenant tenant-id all-tenants? (ports/get-user-devices device-store user-id))
           active    (filter :active? devices)
           rendered  (render push-def notification-id data locale callback-secret)
           grouped   (delivery/group-devices-by-platform active)]
@@ -69,7 +69,7 @@
 (defn handle-broadcast
   "Job handler for :push/broadcast. Paginated send to all devices on platform."
   [{:keys [device-store callback-secret] :as deps}
-   {:keys [notification-id data platform _app-id tenant-id locale]}]
+   {:keys [notification-id data platform _app-id tenant-id all-tenants? locale]}]
   (let [push-def  (registry/get-push notification-id)
         rendered  (render push-def notification-id data locale callback-secret)
         ;; An unreadable tenant must not drop the filter and reach every tenant
@@ -83,7 +83,7 @@
                                                    (cond-> {:limit broadcast-page-size :after-id after-id}
                                                      tenant (assoc :tenant-id tenant)))
             ;; Again here: a store of the app's own may not know `:tenant-id`
-            in-tenant (device/of-tenant tenant devices)]
+            in-tenant (device/of-tenant tenant all-tenants? devices)]
         (when (seq devices)
           (let [results (when (seq in-tenant)
                           (deliver! deps platform notification-id rendered in-tenant))]

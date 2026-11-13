@@ -169,6 +169,12 @@
   [opts]
   (some-> (or db/*tenant-id* (:tenant-id opts)) str))
 
+(defn- all-tenants?
+  "Whether a send of no tenant reaches every tenant's devices: only when asked,
+   and never from inside a tenant (BOU-985)."
+  [opts]
+  (boolean (and (nil? db/*tenant-id*) (:all-tenants? opts))))
+
 (defrecord PushService [device-store analytics-store
                         fcm-provider apns-provider
                         job-queue queue-name callback-secret]
@@ -180,6 +186,7 @@
                          :data            data
                          :user-id         (:user-id opts)
                          :tenant-id       (sender-tenant opts)
+                         :all-tenants?    (all-tenants? opts)
                          :locale          (:locale opts)})]
       (log/infof "Push: enqueueing %s for user %s" notification-id (:user-id opts))
       (job-ports/enqueue-job! job-queue queue-name job)
@@ -191,6 +198,7 @@
                          :data            data
                          :user-id         (:user-id opts)
                          :tenant-id       (sender-tenant opts)
+                         :all-tenants?    (all-tenants? opts)
                          :locale          (:locale opts)})]
       (log/infof "Push: scheduling %s for %s" notification-id scheduled-at)
       ;; `schedule-job!`, not `enqueue-job!` with a `:scheduled-at` key: the
@@ -206,6 +214,7 @@
                          :platform        (:platform opts)
                          :app-id          (:app-id opts)
                          :tenant-id       (sender-tenant opts)
+                         :all-tenants?    (all-tenants? opts)
                          :locale          (:locale opts)})]
       (log/infof "Push: enqueueing broadcast %s" notification-id)
       (job-ports/enqueue-job! job-queue queue-name job)

@@ -234,7 +234,9 @@ listens to the same topic. `publisher/build` takes the tenant bound on the threa
 (`db/*tenant-id*`), and `subscribe!` while a tenant is bound, or
 `publisher/subscribe-for-tenant!`, delivers only that tenant's events. A
 subscriber registered in no tenant gets every tenant's; an event with no
-`:tenant-id` is a system event and goes to everyone (BOU-947).
+`:tenant-id` is a system event and goes to everyone (BOU-947). A handler runs
+in its event's tenant, through tenant's `:wagoe/in-tenant` when tenancy is on,
+and `history` in a tenant shows its own and system events (BOU-985).
 
 **One connection per subscribed topic.** Each topic's poller holds a Redis
 connection for the length of its blocking read. The pool defaults to 32

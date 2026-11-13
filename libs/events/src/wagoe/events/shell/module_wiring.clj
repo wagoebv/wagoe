@@ -62,9 +62,10 @@
                               ;; five attempts — the documentation and the
                               ;; behaviour disagreeing, with nothing to say so.
                       (select-keys config [:prefix :group :max-len
-                                           :max-deliveries :min-idle-ms :error-reporter]))
+                                           :max-deliveries :min-idle-ms :error-reporter
+                                           :tenant-runner]))
               :memory (in-memory/create-in-memory-bus
-                       (select-keys config [:history-limit :error-reporter]))
+                       (select-keys config [:history-limit :error-reporter :tenant-runner]))
               (throw (ex-info (str "Unknown event bus provider: " (pr-str provider))
                               {:type     :unknown-provider
                                :provider provider
@@ -126,10 +127,14 @@
   "`:wagoe/events`, plus `:wagoe/events-outbox` and `:wagoe/events-relay` when
    the settings carry `:outbox` (overrides of `outbox/defaults`; `{}` takes
    them all). `:relay? false` leaves the relay out."
-  [settings _ctx]
+  [settings {:keys [enabled]}]
   (let [outbox (:outbox settings)]
     {:components
-     (cond-> {:wagoe/events (assoc settings :error-reporter (ig/ref :wagoe/error-reporting))}
+     (cond-> {:wagoe/events (cond-> (assoc settings :error-reporter (ig/ref :wagoe/error-reporting))
+                              ;; Tenant's, so a handler runs in its event's tenant
+                              ;; schema without events depending on tenant (BOU-985)
+                              (contains? (or enabled #{}) :wagoe/tenant)
+                              (assoc :tenant-runner (ig/ref :wagoe/in-tenant)))}
        outbox
        (assoc :wagoe/events-outbox (merge outbox
                                           {:bus    (ig/ref :wagoe/events)

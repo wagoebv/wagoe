@@ -62,11 +62,14 @@
                                  "an-upload-cannot-replace-another-users-file"]}}
    "push"          {:scoped-by "a device records the request's tenant; a send or broadcast reaches the sender's tenant's devices"
                     :tests     {"libs/push/test/wagoe/push/shell/tenant_scope_test.clj"
-                                ["a-tenants-send-reaches-only-its-devices"]}}
+                                ["a-tenants-send-reaches-only-its-devices"
+                                 "a-send-of-no-tenant-reaches-no-tenants-devices"]}}
    "events"        {:scoped-by "an event takes the bound tenant; a subscriber in a tenant gets only its tenant's and system events"
                     :tests     {"libs/events/test/wagoe/events/shell/tenant_scope_test.clj"
                                 ["a-subscriber-in-a-tenant-sees-only-that-tenants-events"
-                                 "an-event-built-in-a-tenant-carries-it"]}}
+                                 "an-event-built-in-a-tenant-carries-it"
+                                 "a-handler-runs-in-its-events-tenant"
+                                 "history-in-a-tenant-shows-its-own-and-system-events"]}}
    "realtime"      {:scoped-by "role and broadcast messages reach only the sender's tenant; topics need the app's :authorize-topic"
                     :tests     {"libs/realtime/test/wagoe/realtime/shell/tenant_scope_test.clj"
                                 ["role-and-broadcast-stay-in-the-senders-tenant"]}}

@@ -280,3 +280,15 @@
     (is (= (ig/ref :wagoe/events) (:event-publisher (service-deps #{:wagoe/events}))))
     (is (not (contains? (service-deps #{}) :event-publisher))
         "a ref to an absent component would fail the boot")))
+
+(deftest ^:integration ^:security a-tenants-write-publishes-in-that-tenant
+  ;; With no tenant the event was a system event and every tenant's
+  ;; subscribers got the row (BOU-985)
+  (with-bus
+    (fn [bus]
+      (let [seen    (collect! bus)
+            request (handler bus)
+            tenant  "a0000000-0000-0000-0000-00000000000a"]
+        (binding [db/*tenant-id* tenant]
+          (request :post "/web/admin/invoices" {"number" "INV-T" "status" "draft"}))
+        (is (= tenant (:tenant-id (await-event seen :admin/entity-created))))))))
