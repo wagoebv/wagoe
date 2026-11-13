@@ -239,7 +239,13 @@ in its event's tenant, through tenant's `:wagoe/in-tenant` when tenancy is on,
 and `history` in a tenant shows its own and system events (BOU-985).
 A handler then runs in one transaction: writes it made before throwing roll
 back, and it holds a pool connection for its whole run (on Redis, one per
-subscribed topic, plus one more when it enqueues on the DB queue).
+subscribed topic, plus one more when it enqueues on the DB queue). Size the
+DB pool for that. Each call looks the tenant up and opens a transaction, even
+for an event the handler then ignores, such as a scaffolded subscriber's other
+types on `:admin`. Inside it, `in-tenant` and `for-each-tenant` throw
+(an open transaction), a throw also logs at ERROR, and an event whose tenant
+was deleted fails with `:tenant-not-found` and is dead-lettered at once on
+Redis. Webhook dispatch runs this way too.
 
 **One connection per subscribed topic.** Each topic's poller holds a Redis
 connection for the length of its blocking read. The pool defaults to 32

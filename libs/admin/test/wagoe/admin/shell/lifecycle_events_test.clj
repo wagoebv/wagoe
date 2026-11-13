@@ -21,8 +21,9 @@
   {:enabled?         true
    :base-path        "/web/admin"
    :require-role     :admin
-   :entity-discovery {:mode :allowlist :allowlist #{:invoices}}
-   :entities         {:invoices {:label "Invoices" :hide-fields #{:internal-note}}}})
+   :entity-discovery {:mode :allowlist :allowlist #{:invoices :members}}
+   :entities         {:invoices {:label "Invoices" :hide-fields #{:internal-note}}
+                      :members  {:label "Members" :scope {:tenant-id :tenant-id}}}})
 
 (def ^:private admin-user
   {:id #uuid "00000000-0000-0000-0000-000000000001" :email "admin@example.com"
@@ -42,14 +43,20 @@
                                        internal_note VARCHAR(200),
                                        created_at TIMESTAMP,
                                        updated_at TIMESTAMP)"})
+      (db/execute-update! ctx {:raw "CREATE TABLE IF NOT EXISTS members (
+                                       id UUID PRIMARY KEY,
+                                       name VARCHAR(50) NOT NULL,
+                                       tenant_id VARCHAR(36))"})
       (try (binding [*db* ctx] (f))
            (finally
              (db/execute-update! ctx {:raw "DROP TABLE IF EXISTS invoices"})
+             (db/execute-update! ctx {:raw "DROP TABLE IF EXISTS members"})
              (db-factory/close-db-context! ctx))))))
 
 (use-fixtures :each
   (fn [f]
     (db/execute-update! *db* {:raw "DELETE FROM invoices"})
+    (db/execute-update! *db* {:raw "DELETE FROM members"})
     (f)))
 
 (defn- handler
@@ -291,4 +298,15 @@
             tenant  "a0000000-0000-0000-0000-00000000000a"]
         (binding [db/*tenant-id* tenant]
           (request :post "/web/admin/invoices" {"number" "INV-T" "status" "draft"}))
+        (is (= tenant (:tenant-id (await-event seen :admin/entity-created))))))))
+
+(deftest ^:integration ^:security a-platform-admins-write-publishes-in-the-rows-tenant
+  ;; A platform admin has no tenant bound, so the event was a system event and
+  ;; every tenant's subscribers got the row (BOU-985)
+  (with-bus
+    (fn [bus]
+      (let [seen    (collect! bus)
+            request (handler bus)
+            tenant  "a0000000-0000-0000-0000-00000000000a"]
+        (request :post "/web/admin/members" {"name" "M-A" "tenant-id" tenant})
         (is (= tenant (:tenant-id (await-event seen :admin/entity-created))))))))

@@ -347,6 +347,30 @@
              (is (seq dead) "the failing event should be inspectable, not gone"))))
        (finally (redis-streams/stop! bus) (.close p))))))
 
+(deftest ^:integration an-event-of-a-deleted-tenant-is-dead-lettered-at-once
+  ;; It never comes back, so retrying only delays the dead letter (BOU-985)
+  (when-redis
+   (let [topic (unique-topic)
+         p     (pool)
+         tries (atom 0)
+         bus   (redis-streams/create-redis-streams-bus
+                p {:group (str "g-" (name topic)) :min-idle-ms 100 :max-deliveries 5
+                   :tenant-runner (fn [t _]
+                                    (swap! tries inc)
+                                    (throw (ex-info "gone" {:type :tenant-not-found :tenant-id t})))})
+         calls (atom 0)]
+     (try
+       (ports/subscribe! bus topic (fn [_] (swap! calls inc)))
+       (Thread/sleep 300)
+       (publisher/emit! bus topic :e/x :test nil {:tenant-id "gone"})
+       (with-open [j (.getResource p)]
+         (let [dead #(seq (.xrange j (str "wagoe:events:" (name topic) ":dead") "-" "+"))]
+           (is (loop [n 0] (or (dead) (when (< n 100) (Thread/sleep 50) (recur (inc n))))))))
+       (Thread/sleep 500)
+       (is (= 1 @tries) "not retried up to :max-deliveries")
+       (is (zero? @calls) "the handler never ran outside its tenant")
+       (finally (redis-streams/stop! bus) (.close p))))))
+
 (deftest ^:integration configured-retry-options-reach-the-bus
   ;; `select-keys` in the module wiring dropped :max-deliveries and
   ;; :min-idle-ms, so a deployment that configured "retry forever" got the

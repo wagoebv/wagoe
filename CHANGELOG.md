@@ -31,7 +31,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
-- **Events lost their tenant** (BOU-985): admin events reached every tenant, handlers ran in none, `history` showed all.
+- **Events lost their tenant** (BOU-985): admin events reached every tenant, a platform admin's too; handlers ran in none.
   A handler runs in its event's tenant now; a push of no tenant needs `:all-tenants? true` to reach every tenant's devices.
 - **A job enqueued in a tenant ran on the public schema** (BOU-987), reports and data exports included. It carries the
   tenant now; a recurring job is refused inside one. `wrap-handler-with-tenant-context` no longer reads the tenant from args.

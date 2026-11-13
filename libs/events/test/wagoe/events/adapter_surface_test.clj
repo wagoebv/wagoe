@@ -384,4 +384,27 @@
               (is (wait-for #(= 5 (count (ports/history bus topic)))))
               (is (= ["a" nil] (map :tenant-id (binding [db/*tenant-id* "a"] (ports/history bus topic {:limit 2}))))
                   "other tenants' newer events do not use up a's limit"))
+            (testing "and with :since"
+              (is (= ["a" nil] (map :tenant-id (binding [db/*tenant-id* "a"]
+                                                 (ports/history bus topic {:since (.minusSeconds (java.time.Instant/now) 60)}))))))
+            (finally (ports/unsubscribe! bus sub) (stop bus))))))))
+
+(deftest ^:integration ^:security a-tenants-subscriber-enters-no-other-tenant-on-every-adapter
+  ;; Filtered first: another tenant's event opens no transaction (BOU-985)
+  (let [ran (atom [])]
+    (doseq [[label make stop] (adapters {:tenant-runner (fn [t f] (swap! ran conj t) (binding [db/*tenant-id* t] (f)))})]
+      (testing label
+        (reset! ran [])
+        (let [bus   (make)
+              topic (unique)
+              seen  (atom [])
+              sub   (publisher/subscribe-for-tenant! bus "a" topic #(swap! seen conj (:tenant-id %)))]
+          (try
+            (Thread/sleep 400)
+            (doseq [t ["b" "a" nil "b"]]
+              (publisher/emit! bus topic :e/x :test {} {:tenant-id t}))
+            (is (wait-for #(= 2 (count @seen))))
+            (Thread/sleep 200)
+            (is (= ["a" nil] @seen))
+            (is (= ["a"] @ran) "the runner never entered b")
             (finally (ports/unsubscribe! bus sub) (stop bus))))))))

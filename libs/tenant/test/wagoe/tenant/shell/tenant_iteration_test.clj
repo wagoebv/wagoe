@@ -93,7 +93,15 @@
       (is (= :tenant-not-found
              (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
                                           (sut/in-tenant service provider {:datasource :ds} "gone"
-                                                         (fn [] :ran)))))))))))
+                                                         (fn [] :ran)))))))))
+    (testing "a service that throws :not-found gives :tenant-not-found too"
+      (let [throwing #_{:clj-kondo/ignore [:missing-protocol-method]}
+            (reify ports/ITenantService
+              (get-tenant [_ id] (throw (ex-info "Tenant not found" {:type :not-found :tenant-id id}))))]
+        (is (= :tenant-not-found
+               (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
+                                            (sut/in-tenant throwing provider {:datasource :ds} "gone"
+                                                           (fn [] :ran))))))))))))
 
 (deftest ^:unit ^:security the-tenant-is-bound-where-after-commit-hooks-run
   ;; The hooks run after the transaction, inside with-tenant-schema: a job they

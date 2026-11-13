@@ -57,7 +57,8 @@
                                 ["a-tenants-admin-reaches-only-their-tenants-records"
                                  "a-platform-admin-reaches-every-tenant-or-the-resolved-one"]
                                 "libs/admin/test/wagoe/admin/shell/lifecycle_events_test.clj"
-                                ["a-tenants-write-publishes-in-that-tenant"]}}
+                                ["a-tenants-write-publishes-in-that-tenant"
+                                 "a-platform-admins-write-publishes-in-the-rows-tenant"]}}
    "storage"       {:scoped-by "download, delete and URL check the uploader or tenant in the upload index"
                     :tests     {"libs/storage/test/wagoe/storage/shell/http_handlers_test.clj"
                                 ["a-file-is-reached-only-by-its-owner-its-tenant-or-an-admin"
@@ -65,13 +66,20 @@
    "push"          {:scoped-by "a device records the request's tenant; a send or broadcast reaches the sender's tenant's devices"
                     :tests     {"libs/push/test/wagoe/push/shell/tenant_scope_test.clj"
                                 ["a-tenants-send-reaches-only-its-devices"
-                                 "a-send-of-no-tenant-reaches-no-tenants-devices"]}}
+                                 "a-send-of-no-tenant-reaches-no-tenants-devices"
+                                 "all-tenants-is-honoured-only-outside-a-tenant"
+                                 "a-job-of-no-tenant-reaches-only-no-tenants-devices"]}}
    "events"        {:scoped-by "an event takes the bound tenant; a subscriber in a tenant gets only its tenant's and system events"
                     :tests     {"libs/events/test/wagoe/events/shell/tenant_scope_test.clj"
                                 ["a-subscriber-in-a-tenant-sees-only-that-tenants-events"
                                  "an-event-built-in-a-tenant-carries-it"
                                  "a-handler-runs-in-its-events-tenant"
-                                 "history-in-a-tenant-shows-its-own-and-system-events"]}}
+                                 "history-in-a-tenant-shows-its-own-and-system-events"]
+                                "libs/events/test/wagoe/events/adapter_surface_test.clj"
+                                ["a-tenants-events-stay-in-that-tenant-on-every-adapter"
+                                 "a-tenants-subscriber-enters-no-other-tenant-on-every-adapter"]
+                                "test/wagoe/events_tenant_schema_test.clj"
+                                ["a-boot-handler-writes-into-its-events-tenant-schema"]}}
    "realtime"      {:scoped-by "role and broadcast messages reach only the sender's tenant; topics need the app's :authorize-topic"
                     :tests     {"libs/realtime/test/wagoe/realtime/shell/tenant_scope_test.clj"
                                 ["role-and-broadcast-stay-in-the-senders-tenant"]}}

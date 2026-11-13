@@ -5,11 +5,15 @@
 
 (defprotocol IPushService
   (send-push! [this notification-id data opts]
-    "Enqueue push delivery for all user devices. opts: {:user-id uuid, :locale kw}")
+    "Enqueue push delivery for all user devices. opts: {:user-id uuid, :locale kw,
+     :tenant-id, :all-tenants? bool}. The bound tenant wins over `:tenant-id`; with
+     neither, only devices of no tenant are reached, every tenant's only with
+     `:all-tenants? true` outside a tenant.")
   (schedule-push! [this notification-id data opts scheduled-at]
-    "Schedule push for future delivery via jobs.")
+    "Schedule push for future delivery via jobs. opts as `send-push!`.")
   (broadcast! [this notification-id data opts]
-    "Send to all registered devices matching opts: {:platform kw, :app-id str}"))
+    "Send to all registered devices matching opts: {:platform kw, :app-id str,
+     :tenant-id, :all-tenants? bool}, kept to a tenant as `send-push!`."))
 
 ;; ===== Providers =====
 
