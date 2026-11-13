@@ -160,3 +160,15 @@
     (is (some #(clojure.string/includes? % "unparseable")
               (gen/validate-modules [{:name "x" :docs-url "https://example.com/not-a-lib"}]
                                     {:dev-modules []})))))
+
+(deftest every-framework-section-has-exactly-one-target
+  ;; --check verifies only what targets lists: a target dropped here would
+  ;; leave its file unchecked with everything green.
+  (let [framework (remove #(= gen/tmpl-path (:file %)) gen/targets)]
+    (is (= {:naming "AGENTS.md" :fc-is "AGENTS.md"
+            :pitfalls "dev-docs/agents/pitfalls.md" :modules "dev-docs/agents/maintenance.md"}
+           (into {} (for [{:keys [file sections]} framework, s sections] [s file]))))
+    (is (= 4 (count (mapcat :sections framework))) "no section is rendered twice")
+    (doseq [{:keys [file sections]} framework
+            s sections]
+      (is (str/includes? (slurp file) (str "<!-- gen:" (name s) " -->")) (str file " lacks " s)))))

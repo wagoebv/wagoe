@@ -2,7 +2,8 @@
 
 `knowledge.edn` is the single structured source for Wagoe's agent guardrails.
 A deterministic generator (`scripts/agents_gen.clj`, `bb agents:gen`) renders it
-into the framework root `AGENTS.md` and the downstream
+into the framework root `AGENTS.md`, `dev-docs/agents/pitfalls.md` and
+`dev-docs/agents/maintenance.md`, and the downstream
 `libs/wagoe-cli/resources/wagoe/cli/templates/AGENTS.md.tmpl`.
 
 ## Keys
