@@ -501,8 +501,8 @@
              :description "Returns whether MFA is enabled and remaining backup codes"}}]]))
 
 (defn- require-platform-admin-middleware
-  "An admin outside any tenant only: the export carries the user's audit trail,
-   which only a platform admin reads (/web/audit)."
+  "An admin outside any tenant only: for what spans tenants, such as a user's
+   export with its audit trail, or roles and groups (BOU-984)."
   [handler]
   (fn [request]
     (if (access/platform-admin? (:user request))
@@ -795,13 +795,13 @@
           :entities [:users]
           :items    [{:href "/web/profile" :icon :user
                       :label [:t :user/nav-profile-title] :description [:t :user/nav-profile-description]}
-                     {:href "/web/admin/groups" :icon :shield :access :admin
+                     {:href "/web/admin/groups" :icon :shield :access :platform-admin
                       :label [:t :admin/groups-title] :description [:t :admin/groups-description]}
-                     {:href "/web/admin/roles" :icon :key :access :admin
+                     {:href "/web/admin/roles" :icon :key :access :platform-admin
                       :label [:t :user.roles/page-title] :description [:t :user.roles/nav-description]}
-                     {:href "/web/admin/permissions" :icon :check :access :admin
+                     {:href "/web/admin/permissions" :icon :check :access :platform-admin
                       :label [:t :user.permissions/page-title] :description [:t :user.permissions/nav-description]}
-                     {:href "/web/admin/access" :icon :clipboard :access :admin
+                     {:href "/web/admin/access" :icon :clipboard :access :platform-admin
                       :label [:t :user.access/page-title] :description [:t :user.access/nav-description]}
                      {:href "/web/audit" :icon :file-text :access :platform-admin
                       :label [:t :admin/audit-trail-title] :description [:t :admin/audit-trail-description]}]}})
@@ -822,11 +822,12 @@
 
 (defn group-routes
   "Groups, roles and permissions, mounted under /web/admin beside the admin UI,
-   and a user's rights at /web/users/:id/rights, /explain and /grant: admins only. Absent when the
-   web UI is switched off."
+   and a user's rights at /web/users/:id/rights, /explain and /grant: platform
+   admins only. Roles and groups carry no tenant, so a tenant's admin who edits
+   one edits it for every tenant (BOU-984). Absent when the web UI is switched off."
   [user-service group-service config]
   (let [guard [(user-middleware/flexible-authentication-middleware user-service)
-               user-middleware/require-admin-middleware]
+               require-platform-admin-middleware]
         route (fn [path methods] [path (assoc methods :no-doc true :authorization :self :middleware guard)])]
     {:api    []
      :static []

@@ -78,22 +78,25 @@
       (is (not (pages/mounted? off-req "/web/admin/groups")))
       (is (not (pages/mounted? off-req "/web/audit"))))))
 
+(def ^:private platform-admin-hrefs
+  ["/web/admin/groups" "/web/admin/roles" "/web/admin/permissions" "/web/admin/access" "/web/audit"])
+
 (deftest ^:unit dashboard-cards-follow-the-user-web-ui-switch
-  (testing "on: both cards"
+  (testing "on: every platform-admin card"
     (let [body (home nil nil)]
-      (is (str/includes? body "href=\"/web/admin/groups\""))
-      (is (str/includes? body "href=\"/web/audit\""))))
+      (doseq [href platform-admin-hrefs]
+        (is (str/includes? body (str "href=\"" href "\"")) href))))
   (testing "off: neither, nor a logout form"
     (let [body (home off nil)]
       (is (not (str/includes? body "/web/admin/groups")))
       (is (not (str/includes? body "/web/audit")))
       (is (not (str/includes? body "/web/logout"))))))
 
-(deftest ^:unit a-tenant-admin-sees-no-audit-card
-  ;; /web/audit admits platform admins only.
+(deftest ^:unit a-tenant-admin-sees-no-platform-admin-card
+  ;; These pages admit platform admins only (BOU-984).
   (let [body (home nil {:tenant-id (random-uuid)})]
-    (is (str/includes? body "href=\"/web/admin/groups\""))
-    (is (not (str/includes? body "/web/audit")))))
+    (doseq [href platform-admin-hrefs]
+      (is (not (str/includes? body href)) href))))
 
 (deftest ^:unit a-plain-user-sees-only-what-they-may-open
   (testing "an admin: entity tiles with counts"
