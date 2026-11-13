@@ -294,6 +294,7 @@
                            [k v]))]
     (is (local/verify-signed-url secret "2a/photo.jpg"
                                  {:expires   (get params "expires")
+                                  :version   (get params "v")
                                   :signature (get params "signature")})
         "a key signed in the platform form verifies against the slash form the router supplies")))
 
@@ -376,3 +377,69 @@
     (is (= 201 (:status resp)))
     (is (instance? java.io.InputStream (:body resp)))
     (is (clojure.string/includes? (slurp (:body resp)) "\"key\""))))
+
+(defn- query-of
+  "The query parameters of `url`, as Ring hands them over."
+  [url]
+  (into {} (for [kv (rest (clojure.string/split url #"[?&]"))
+                 :let [[k v] (clojure.string/split kv #"=")]]
+             [k v])))
+
+(defn- hmac-hex [^String secret ^String message]
+  (let [mac (javax.crypto.Mac/getInstance "HmacSHA256")]
+    (.init mac (javax.crypto.spec.SecretKeySpec. (.getBytes secret "UTF-8") "HmacSHA256"))
+    (apply str (map #(format "%02x" %) (.doFinal mac (.getBytes message "UTF-8"))))))
+
+(deftest ^:unit ^:security a-signed-url-dies-with-the-file-it-was-signed-for
+  ;; It served whatever was written at its key later, by anyone, for 68 years (BOU-991)
+  (let [secret   "s3cr3t"
+        storage  (local/create-local-storage {:base-path test-dir :url-base "http://x/files" :signing-secret secret})
+        svc      (service/create-storage-service {:storage storage})
+        put!     #(-> (service/upload-file svc {:bytes (.getBytes ^String %) :content-type "text/plain"}
+                                           {:filename "a.txt" :path "docs"} {})
+                      :data :key)
+        key      (put! "first")
+        download #((sut/download-file-handler svc secret) {:path-params {:file-key key} :query-params %})
+        query    (query-of (wagoe.storage.ports/generate-signed-url storage key 3600))]
+    (is (= 200 (:status (download query))))
+    (testing "a URL without the file's version is refused"
+      (let [exp (str (+ 60 (quot (System/currentTimeMillis) 1000)))]
+        (is (= 403 (:status (download {"expires" exp "signature" (hmac-hex secret (str key ":" exp))}))))))
+    (testing "a URL that lives past the cap is refused, however it was signed"
+      (let [exp (str (+ (quot (System/currentTimeMillis) 1000) local/max-signed-seconds 60))
+            v   (get query "v")]
+        (is (= 403 (:status (download {"expires" exp "v" v "signature" (hmac-hex secret (str key ":" exp ":" v))}))))))
+    (testing "the cap bounds what is issued"
+      (let [exp (parse-long (get (query-of (wagoe.storage.ports/generate-signed-url storage key 2147483647)) "expires"))]
+        (is (<= exp (+ (quot (System/currentTimeMillis) 1000) local/max-signed-seconds)))))
+    (testing "a file written at the key since is not served"
+      (Thread/sleep 20)
+      (is (= key (put! "second")))
+      (is (= 403 (:status (download query)))))
+    (testing "nor a deleted one"
+      (service/remove-file svc key)
+      (is (= 404 (:status (download query)))))))
+
+(deftest ^:unit a-url-asks-at-most-the-cap
+  (let [svc (create-test-service)
+        key (-> (service/upload-file svc {:bytes (.getBytes "x") :content-type "text/plain"} {:filename "u.txt"} {}) :data :key)]
+    (is (= 400 (:status ((sut/get-file-url-handler svc) {:path-params  {:file-key key}
+                                                          :query-params {"expiration" (str (inc local/max-signed-seconds))}}))))))
+
+(deftest ^:unit ^:security tenants-name-the-same-path-without-colliding
+  ;; Keys were not prefixed by tenant: another tenant's file answered 403, a free name 201 (BOU-991)
+  (let [svc     (indexed-service {})
+        upload  (fn [tenant content]
+                  ((sut/upload-file-handler svc)
+                   {:multipart-params  {"file" (make-multipart-file "report.pdf" "application/pdf" content) "path" "docs"}
+                    :query-params      {}
+                    :user              {:id (random-uuid) :tenant-id tenant}
+                    :tenant            {:id tenant}}))
+        [a b]   [(random-uuid) (random-uuid)]
+        key-of  #(get-in % [:body :key])
+        in-a    (upload a "a's")
+        in-b    (upload b "b's")]
+    (is (= [201 201] (map :status [in-a in-b])))
+    (is (= (str a "/docs/report.pdf") (key-of in-a)))
+    (is (= (str b "/docs/report.pdf") (key-of in-b)))
+    (is (= "a's" (slurp (io/file test-dir (key-of in-a)))))))

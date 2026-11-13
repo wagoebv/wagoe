@@ -60,10 +60,12 @@
                                 "libs/admin/test/wagoe/admin/shell/lifecycle_events_test.clj"
                                 ["a-tenants-write-publishes-in-that-tenant"
                                  "a-platform-admins-write-publishes-in-the-rows-tenant"]}}
-   "storage"       {:scoped-by "download, delete and URL check the uploader or tenant in the upload index"
+   "storage"       {:scoped-by "download, delete and URL check the uploader or tenant in the upload index; a tenant's named path sits under its id; a signed URL dies with its file"
                     :tests     {"libs/storage/test/wagoe/storage/shell/http_handlers_test.clj"
                                 ["a-file-is-reached-only-by-its-owner-its-tenant-or-an-admin"
-                                 "an-upload-cannot-replace-another-users-file"]}}
+                                 "an-upload-cannot-replace-another-users-file"
+                                 "a-signed-url-dies-with-the-file-it-was-signed-for"
+                                 "tenants-name-the-same-path-without-colliding"]}}
    "push"          {:scoped-by "a device records the request's tenant and stays in it; a send or broadcast reaches the sender's tenant's devices"
                     :tests     {"libs/push/test/wagoe/push/shell/tenant_scope_test.clj"
                                 ["a-tenants-send-reaches-only-its-devices"

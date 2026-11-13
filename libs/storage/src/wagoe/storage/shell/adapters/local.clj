@@ -59,15 +59,26 @@
   [file-key]
   (some-> file-key str (str/replace "\\" "/")))
 
+(def max-signed-seconds
+  "The longest a signed URL lives: 7 days, as S3 and GCS allow (BOU-991)."
+  (* 7 24 3600))
+
+(defn- signed-message
+  "What a signature covers: the key, the expiry, and the file's version, so a
+   URL dies with the file it was issued for (BOU-991)."
+  [file-key expires version]
+  (cond-> (str (canonical-key file-key) ":" expires)
+    version (str ":" version)))
+
 (defn- sign-url
-  "`base-url` with the `expires`/`signature` query a signed local URL carries.
-   One place, so the URL a stored file reports and the URL the route accepts
-   cannot disagree."
-  [signing-secret file-key base-url expiration-seconds]
-  (let [k       (canonical-key file-key)
-        expires (+ (now-epoch-seconds) (long (or expiration-seconds 3600)))
-        sig     (hmac-sha256-hex signing-secret (str k ":" expires))]
-    (str base-url "?expires=" expires "&signature=" sig)))
+  "`base-url` with the `expires`/`v`/`signature` query a signed local URL
+   carries; `version` is the file's, see `file-version`. One place, so the URL
+   a stored file reports and the URL the route accepts cannot disagree."
+  [signing-secret file-key base-url expiration-seconds version]
+  (let [expires (+ (now-epoch-seconds) (min (long (or expiration-seconds 3600)) max-signed-seconds))
+        version (or version 0)
+        sig     (hmac-sha256-hex signing-secret (signed-message file-key expires version))]
+    (str base-url "?expires=" expires "&v=" version "&signature=" sig)))
 
 (defn verify-signed-url
   "Verify a signed local-storage URL. Given the configured `signing-secret`, the
@@ -82,16 +93,18 @@
    ClassCastException — a 500 where the answer is simply \"not a valid
    signature\" (BOU-421). Anything that is not a single scalar is
    invalid, which is also the fail-closed reading of an ambiguous request."
-  [signing-secret file-key {:keys [expires signature]}]
+  [signing-secret file-key {:keys [expires signature version]}]
   (boolean
-   (when (and signing-secret file-key (string? signature))
+   (when (and signing-secret file-key (string? signature) (or (nil? version) (string? version)))
      (let [exp (cond (integer? expires) expires
-                     (string? expires)  (parse-long expires))]
+                     (string? expires)  (parse-long expires))
+           now (now-epoch-seconds)]
        (and exp
-            (>= (long exp) (now-epoch-seconds))
+            (>= (long exp) now)
+            ;; A URL issued before the cap may name any expiry (BOU-991)
+            (<= (long exp) (+ now max-signed-seconds))
             (constant-time=? signature
-                             (hmac-sha256-hex signing-secret
-                                              (str (canonical-key file-key) ":" exp))))))))
+                             (hmac-sha256-hex signing-secret (signed-message file-key exp version))))))))
 
 (defn- compute-sha256
   "Compute SHA-256 hash of bytes."
@@ -211,6 +224,19 @@
     (ensure-directory-exists (.getParent file-path))
     file-path))
 
+(defn- modified-ms
+  "When the file at `path` was last written, in epoch millis: a signed URL's
+   version (BOU-991)."
+  [^Path path]
+  (.toMillis (Files/getLastModifiedTime path (make-array java.nio.file.LinkOption 0))))
+
+(defn- file-version
+  "`modified-ms` of the file `file-key` names, or nil when there is none."
+  [base-path file-key]
+  (let [path (some-> (resolve-within-root base-path file-key) (Paths/get (into-array String [])))]
+    (when (and path (Files/exists path (make-array java.nio.file.LinkOption 0)))
+      (modified-ms path))))
+
 (defn- spool-dir
   "Where a streamed file is written before it is moved to its key: inside the
    root, so the move stays on one filesystem and is atomic, and in one place,
@@ -222,21 +248,21 @@
   "Signed when a secret is configured: the download route rejects an
    unsigned URL, so reporting one would hand the caller a link that 403s
    (BOU-421)."
-  [url-base signing-secret storage-key]
+  [url-base signing-secret storage-key version]
   (when url-base
     (let [base (str url-base "/" (canonical-key storage-key))]
       (if signing-secret
-        (sign-url signing-secret storage-key base nil)
+        (sign-url signing-secret storage-key base nil version)
         base))))
 
 (defn- stored
   "Log a stored file and return `store-file`'s result for it."
-  [logger url-base signing-secret storage-key size content-type]
+  [logger url-base signing-secret storage-key size content-type version]
   (when logger
     (logging/info logger "File stored"
                   {:event ::file-stored :key storage-key :size size :content-type content-type}))
   {:key          storage-key
-   :url          (file-url url-base signing-secret storage-key)
+   :url          (file-url url-base signing-secret storage-key version)
    :size         size
    :content-type content-type
    :stored-at    (java.util.Date.)})
@@ -255,7 +281,7 @@
                             (generate-storage-key bytes (:filename metadata)))
             file-path   (target-path base-path storage-key)]
         (Files/write file-path ^bytes bytes (make-array java.nio.file.OpenOption 0))
-        (stored logger url-base signing-secret storage-key (alength ^bytes bytes) content-type))
+        (stored logger url-base signing-secret storage-key (alength ^bytes bytes) content-type (modified-ms file-path)))
 
       (catch Exception e
         (when logger
@@ -291,7 +317,9 @@
 
             {:bytes bytes
              :content-type content-type
-             :size size})))
+             :size size
+             ;; What a signed URL for it carries as `v` (BOU-991)
+             :version (str (modified-ms file-path))})))
 
       (catch Exception e
         (when logger
@@ -347,12 +375,12 @@
 
   (generate-signed-url [_ file-key expiration-seconds]
     ;; With a signing-secret we issue a genuinely signed URL (HMAC-SHA256 over
-    ;; "<key>:<expires>", with an expiry the serving route enforces via
+    ;; "<key>:<expires>:<version>", which the serving route enforces via
     ;; `verify-signed-url`). Without a secret we fall back to the plain public URL.
     (when url-base
       (let [base (str url-base "/" (canonical-key file-key))]
         (if signing-secret
-          (sign-url signing-secret file-key base expiration-seconds)
+          (sign-url signing-secret file-key base expiration-seconds (file-version base-path file-key))
           base))))
 
   ports/IStreamingFileStorage
@@ -365,7 +393,7 @@
       (spool/with-spooled write! (doto (spool-dir base-path) ensure-directory-exists)
         #(Files/move ^Path % file-path (into-array CopyOption [StandardCopyOption/REPLACE_EXISTING
                                                                 StandardCopyOption/ATOMIC_MOVE])))
-      (stored logger url-base signing-secret storage-key (Files/size file-path) content-type))))
+      (stored logger url-base signing-secret storage-key (Files/size file-path) content-type (modified-ms file-path)))))
 
 ;; ============================================================================
 ;; Factory

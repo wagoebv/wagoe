@@ -263,6 +263,7 @@
               (not (local/verify-signed-url
                     signing-secret file-key
                     {:expires   (get query-params "expires")
+                     :version   (get query-params "v")
                      :signature (get query-params "signature")})))
          (forbidden "Missing, invalid or expired signature")
          (and (not signing-secret) (not (reachable? storage-service request file-key)))
@@ -271,11 +272,14 @@
          :else
 
          (if-let [file-data (service/download-file storage-service file-key)]
-           {:status 200
-            :headers {"Content-Type" (:content-type file-data)
-                      "Content-Length" (str (:size file-data))
-                      "Content-Disposition" (str "attachment; filename=\"" file-key "\"")}
-            :body (io/input-stream (:bytes file-data))}
+           ;; A URL serves the file it was signed for, not one written there since (BOU-991)
+           (if (and signing-secret (not= (get query-params "v") (:version file-data)))
+             (forbidden "Missing, invalid or expired signature")
+             {:status 200
+              :headers {"Content-Type" (:content-type file-data)
+                        "Content-Length" (str (:size file-data))
+                        "Content-Disposition" (str "attachment; filename=\"" file-key "\"")}
+              :body (io/input-stream (:bytes file-data))})
 
            (not-found
             "File not found"
@@ -317,14 +321,21 @@
     (if-let [bad (repeated-params query-params ["expiration"])]
       (repeated-params-response bad)
       (let [file-key (let [k (get path-params :file-key)] (when-not (str/blank? k) k))
-            expiration (if-let [exp (get query-params "expiration")]
-                         (parse-int-safe exp)
-                         3600)]
+            expiration (or (some-> (get query-params "expiration") parse-int-safe) 3600)]
 
-        (if-not file-key
+        (cond
+          (not file-key)
           (bad-request
            "Missing required parameter: file-key"
            {:missing-parameter "file-key"})
+
+          ;; As S3 and GCS cap theirs: a URL outlives a membership by at most this (BOU-991)
+          (not (<= 1 expiration local/max-signed-seconds))
+          (bad-request
+           (str "expiration must be between 1 and " local/max-signed-seconds " seconds")
+           {:invalid-parameter "expiration"})
+
+          :else
 
           (if-let [url (and (reachable? storage-service request file-key)
                             (service/get-file-url storage-service file-key expiration))]

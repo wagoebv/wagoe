@@ -158,17 +158,18 @@
                                             :signing-secret secret})
         url     (ports/generate-signed-url storage "ab/file.png" 3600)
         expires (second (re-find #"expires=(\d+)" url))
+        version (second (re-find #"v=(\d+)" url))
         sig     (second (re-find #"signature=([0-9a-f]+)" url))]
-    (testing "URL carries an expiry + 64-hex HMAC signature"
-      (is (re-matches #"https://cdn\.example\.com/ab/file\.png\?expires=\d+&signature=[0-9a-f]{64}" url)))
+    (testing "URL carries an expiry, the file's version and a 64-hex HMAC signature"
+      (is (re-matches #"https://cdn\.example\.com/ab/file\.png\?expires=\d+&v=\d+&signature=[0-9a-f]{64}" url)))
     (testing "a valid signature verifies"
-      (is (true? (sut/verify-signed-url secret "ab/file.png" {:expires expires :signature sig}))))
+      (is (true? (sut/verify-signed-url secret "ab/file.png" {:expires expires :version version :signature sig}))))
     (testing "a tampered signature is rejected"
-      (is (false? (sut/verify-signed-url secret "ab/file.png" {:expires expires :signature (apply str (repeat 64 "0"))}))))
+      (is (false? (sut/verify-signed-url secret "ab/file.png" {:expires expires :version version :signature (apply str (repeat 64 "0"))}))))
     (testing "a different file-key is rejected (signature is key-bound)"
-      (is (false? (sut/verify-signed-url secret "other/key.png" {:expires expires :signature sig}))))
+      (is (false? (sut/verify-signed-url secret "other/key.png" {:expires expires :version version :signature sig}))))
     (testing "a different secret is rejected"
-      (is (false? (sut/verify-signed-url "wrong-secret" "ab/file.png" {:expires expires :signature sig}))))))
+      (is (false? (sut/verify-signed-url "wrong-secret" "ab/file.png" {:expires expires :version version :signature sig}))))))
 
 (deftest ^:unit signed-url-expiry-is-enforced
   (let [secret  "top-secret-signing-key"
@@ -177,9 +178,10 @@
                                             :signing-secret secret})
         ;; negative lifetime => an already-past expiry, signature still valid
         url     (ports/generate-signed-url storage "ab/file.png" -10000)
+        version (second (re-find #"v=(\d+)" url))
         expires (second (re-find #"expires=(\d+)" url))
         sig     (second (re-find #"signature=([0-9a-f]+)" url))]
-    (is (false? (sut/verify-signed-url secret "ab/file.png" {:expires expires :signature sig}))
+    (is (false? (sut/verify-signed-url secret "ab/file.png" {:expires expires :version version :signature sig}))
         "an expired but correctly-signed URL is rejected")))
 
 (deftest ^:unit without-signing-secret-url-is-plain-public

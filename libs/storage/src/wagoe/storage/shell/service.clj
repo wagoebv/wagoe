@@ -79,6 +79,15 @@
         (try (ports/delete-file storage (:key stored)) (catch Exception _ nil))
         (throw e)))))
 
+(defn- in-tenant-dir
+  "`metadata` with a tenant's named path below the tenant's id, under the local
+   adapter: two tenants' `invoices/a.pdf` are two files, and one tenant cannot
+   learn or occupy another's names (BOU-991). S3 and GCS add a random suffix."
+  [storage {:keys [owner path] :as metadata}]
+  (cond-> metadata
+    (and path (:tenant-id owner) (instance? wagoe.storage.shell.adapters.local.LocalFileStorage storage))
+    (assoc :path (str (:tenant-id owner) "/" path))))
+
 (defn- refused-key?
   "Whether `metadata` names a key that holds a file `may-replace?` says no to (BOU-950).
    Only the local adapter writes a named key as is; S3 and GCS add a random suffix."
@@ -101,9 +110,10 @@
 
     (try
       ;; Sanitize filename
-      (let [sanitized-metadata (-> metadata
-                                   (update :filename validation/sanitize-filename)
-                                   (update :path validation/normalize-path))
+      (let [sanitized-metadata (->> (-> metadata
+                                        (update :filename validation/sanitize-filename)
+                                        (update :path validation/normalize-path))
+                                    (in-tenant-dir storage))
 
             ;; Validate file
             validation-result (validation/validate-file file-data sanitized-metadata options)]
