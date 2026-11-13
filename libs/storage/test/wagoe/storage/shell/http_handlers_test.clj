@@ -397,49 +397,72 @@
         svc      (service/create-storage-service {:storage storage})
         put!     #(-> (service/upload-file svc {:bytes (.getBytes ^String %) :content-type "text/plain"}
                                            {:filename "a.txt" :path "docs"} {})
-                      :data :key)
-        key      (put! "first")
+                      :data)
+        stored   (put! "first")
+        key      (:key stored)
         download #((sut/download-file-handler svc secret) {:path-params {:file-key key} :query-params %})
         query    (query-of (wagoe.storage.ports/generate-signed-url storage key 3600))]
     (is (= 200 (:status (download query))))
+    (testing "the URL a store reports is one the route serves"
+      (is (= 200 (:status (download (query-of (:url stored)))))))
     (testing "a URL without the file's version is refused"
       (let [exp (str (+ 60 (quot (System/currentTimeMillis) 1000)))]
         (is (= 403 (:status (download {"expires" exp "signature" (hmac-hex secret (str key ":" exp))}))))))
     (testing "a URL that lives past the cap is refused, however it was signed"
-      (let [exp (str (+ (quot (System/currentTimeMillis) 1000) local/max-signed-seconds 60))
+      (let [exp (str (+ (quot (System/currentTimeMillis) 1000) local/max-signed-seconds 3600))
             v   (get query "v")]
         (is (= 403 (:status (download {"expires" exp "v" v "signature" (hmac-hex secret (str key ":" exp ":" v))}))))))
     (testing "the cap bounds what is issued"
       (let [exp (parse-long (get (query-of (wagoe.storage.ports/generate-signed-url storage key 2147483647)) "expires"))]
         (is (<= exp (+ (quot (System/currentTimeMillis) 1000) local/max-signed-seconds)))))
-    (testing "a file written at the key since is not served"
-      (Thread/sleep 20)
-      (is (= key (put! "second")))
+    (testing "a file written at the key since is not served, however soon"
+      (is (= key (:key (put! "second"))))
       (is (= 403 (:status (download query)))))
     (testing "nor a deleted one"
       (service/remove-file svc key)
       (is (= 404 (:status (download query)))))))
 
-(deftest ^:unit a-url-asks-at-most-the-cap
+(deftest ^:unit a-streamed-file-reports-a-url-its-route-serves
+  (let [secret  "s3cr3t"
+        storage (local/create-local-storage {:base-path test-dir :url-base "http://x/files" :signing-secret secret})
+        svc     (service/create-storage-service {:storage storage})
+        stored  (wagoe.storage.ports/store-stream storage {:write! #(.write ^java.io.OutputStream % (.getBytes "streamed"))
+                                                           :content-type "text/plain"}
+                                                  {:filename "s.txt"})]
+    (is (= 200 (:status ((sut/download-file-handler svc secret)
+                         {:path-params {:file-key (:key stored)} :query-params (query-of (:url stored))}))))))
+
+(deftest ^:unit a-url-asks-between-one-second-and-the-cap
   (let [svc (create-test-service)
-        key (-> (service/upload-file svc {:bytes (.getBytes "x") :content-type "text/plain"} {:filename "u.txt"} {}) :data :key)]
-    (is (= 400 (:status ((sut/get-file-url-handler svc) {:path-params  {:file-key key}
-                                                          :query-params {"expiration" (str (inc local/max-signed-seconds))}}))))))
+        key (-> (service/upload-file svc {:bytes (.getBytes "x") :content-type "text/plain"} {:filename "u.txt"} {}) :data :key)
+        ask #(:status ((sut/get-file-url-handler svc) {:path-params {:file-key key} :query-params {"expiration" %}}))]
+    (doseq [bad ["0" "-1" (str (inc local/max-signed-seconds))]]
+      (is (= 400 (ask bad)) bad))
+    (testing "the cap itself, and an unreadable value, which means the default hour"
+      (is (not= 400 (ask (str local/max-signed-seconds))))
+      (is (not= 400 (ask "abc"))))))
 
 (deftest ^:unit ^:security tenants-name-the-same-path-without-colliding
   ;; Keys were not prefixed by tenant: another tenant's file answered 403, a free name 201 (BOU-991)
   (let [svc     (indexed-service {})
-        upload  (fn [tenant content]
+        upload  (fn [tenant path content]
                   ((sut/upload-file-handler svc)
-                   {:multipart-params  {"file" (make-multipart-file "report.pdf" "application/pdf" content) "path" "docs"}
+                   {:multipart-params  {"file" (make-multipart-file "report.pdf" "application/pdf" content) "path" path}
                     :query-params      {}
                     :user              {:id (random-uuid) :tenant-id tenant}
-                    :tenant            {:id tenant}}))
+                    :tenant            (when tenant {:id tenant})}))
         [a b]   [(random-uuid) (random-uuid)]
         key-of  #(get-in % [:body :key])
-        in-a    (upload a "a's")
-        in-b    (upload b "b's")]
+        in-a    (upload a "docs" "a's")
+        in-b    (upload b "docs" "b's")]
     (is (= [201 201] (map :status [in-a in-b])))
-    (is (= (str a "/docs/report.pdf") (key-of in-a)))
-    (is (= (str b "/docs/report.pdf") (key-of in-b)))
-    (is (= "a's" (slurp (io/file test-dir (key-of in-a)))))))
+    (is (= (str ".tenants/" a "/docs/report.pdf") (key-of in-a)))
+    (is (= (str ".tenants/" b "/docs/report.pdf") (key-of in-b)))
+    (is (= "a's" (slurp (io/file test-dir (key-of in-a)))))
+    (testing "a caller of no tenant cannot name a tenant's directory"
+      (is (= 400 (:status (upload nil (str ".tenants/" b "/docs") "mine")))))
+    (testing "nor reach it through the tenant's id"
+      (let [r (upload nil (str b "/docs") "mine")]
+        (is (= 201 (:status r)))
+        (is (= (str b "/docs/report.pdf") (key-of r)))
+        (is (= "b's" (slurp (io/file test-dir (key-of in-b)))))))))

@@ -63,6 +63,10 @@
   "The longest a signed URL lives: 7 days, as S3 and GCS allow (BOU-991)."
   (* 7 24 3600))
 
+(def ^:private clock-skew-seconds
+  "How far another node's clock may run ahead when it signed at the cap."
+  60)
+
 (defn- signed-message
   "What a signature covers: the key, the expiry, and the file's version, so a
    URL dies with the file it was issued for (BOU-991)."
@@ -72,7 +76,7 @@
 
 (defn- sign-url
   "`base-url` with the `expires`/`v`/`signature` query a signed local URL
-   carries; `version` is the file's, see `file-version`. One place, so the URL
+   carries; `version` is its content's, see `content-version`. One place, so the URL
    a stored file reports and the URL the route accepts cannot disagree."
   [signing-secret file-key base-url expiration-seconds version]
   (let [expires (+ (now-epoch-seconds) (min (long (or expiration-seconds 3600)) max-signed-seconds))
@@ -82,11 +86,13 @@
 
 (defn verify-signed-url
   "Verify a signed local-storage URL. Given the configured `signing-secret`, the
-   `file-key`, and the URL's query params (`:expires` epoch-seconds, `:signature`
-   hex), return true iff the signature matches and the URL has not expired.
+   `file-key`, and the URL's query params (`:expires` epoch-seconds, `:version`
+   its `v`, `:signature` hex), return true iff the signature matches and the
+   URL has not expired nor names an expiry past `max-signed-seconds`.
 
-   The serving route is responsible for calling this before streaming a private
-   file — the local adapter cannot enforce it at the filesystem layer.
+   A valid signature names a version; the serving route must also check it is
+   the file's, `retrieve-file`'s `:version`, or a replaced file is served
+   (BOU-991). The local adapter cannot enforce either at the filesystem layer.
 
    Total on any input a query string can produce: Ring gives a repeated
    parameter as a vector, and a vector reached `(long …)` as a
@@ -102,7 +108,7 @@
        (and exp
             (>= (long exp) now)
             ;; A URL issued before the cap may name any expiry (BOU-991)
-            (<= (long exp) (+ now max-signed-seconds))
+            (<= (long exp) (+ now max-signed-seconds clock-skew-seconds))
             (constant-time=? signature
                              (hmac-sha256-hex signing-secret (signed-message file-key exp version))))))))
 
@@ -224,18 +230,19 @@
     (ensure-directory-exists (.getParent file-path))
     file-path))
 
-(defn- modified-ms
-  "When the file at `path` was last written, in epoch millis: a signed URL's
-   version (BOU-991)."
-  [^Path path]
-  (.toMillis (Files/getLastModifiedTime path (make-array java.nio.file.LinkOption 0))))
+(defn- content-version
+  "A signed URL's version of `bytes`: their hash, so a URL dies with the
+   content it was issued for, whatever the clock or filesystem (BOU-991)."
+  [bytes]
+  (subs (compute-sha256 bytes) 0 16))
 
 (defn- file-version
-  "`modified-ms` of the file `file-key` names, or nil when there is none."
+  "`content-version` of the file `file-key` names, or nil when there is none."
+  ;; ponytail: reads the whole file per signed URL; keep a stored hash if large files make that slow.
   [base-path file-key]
   (let [path (some-> (resolve-within-root base-path file-key) (Paths/get (into-array String [])))]
     (when (and path (Files/exists path (make-array java.nio.file.LinkOption 0)))
-      (modified-ms path))))
+      (content-version (Files/readAllBytes path)))))
 
 (defn- spool-dir
   "Where a streamed file is written before it is moved to its key: inside the
@@ -281,7 +288,7 @@
                             (generate-storage-key bytes (:filename metadata)))
             file-path   (target-path base-path storage-key)]
         (Files/write file-path ^bytes bytes (make-array java.nio.file.OpenOption 0))
-        (stored logger url-base signing-secret storage-key (alength ^bytes bytes) content-type (modified-ms file-path)))
+        (stored logger url-base signing-secret storage-key (alength ^bytes bytes) content-type (content-version bytes)))
 
       (catch Exception e
         (when logger
@@ -304,8 +311,6 @@
                    (Files/exists file-path (make-array java.nio.file.LinkOption 0)))
           (let [bytes (Files/readAllBytes file-path)
                 size (alength bytes)
-                ;; Try to determine content type from extension
-                _ext (validation/get-file-extension file-key)
                 content-type (or (validation/mime-type-from-extension file-key)
                                  "application/octet-stream")]
 
@@ -319,7 +324,7 @@
              :content-type content-type
              :size size
              ;; What a signed URL for it carries as `v` (BOU-991)
-             :version (str (modified-ms file-path))})))
+             :version (content-version bytes)})))
 
       (catch Exception e
         (when logger
@@ -392,8 +397,9 @@
           file-path   (target-path base-path storage-key)]
       (spool/with-spooled write! (doto (spool-dir base-path) ensure-directory-exists)
         #(Files/move ^Path % file-path (into-array CopyOption [StandardCopyOption/REPLACE_EXISTING
-                                                                StandardCopyOption/ATOMIC_MOVE])))
-      (stored logger url-base signing-secret storage-key (Files/size file-path) content-type (modified-ms file-path)))))
+                                                               StandardCopyOption/ATOMIC_MOVE])))
+      (stored logger url-base signing-secret storage-key (Files/size file-path) content-type
+              (file-version base-path storage-key)))))
 
 ;; ============================================================================
 ;; Factory

@@ -48,10 +48,11 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 - `file-data` is `{:bytes <byte-array> :content-type <string>}`.
 - `metadata` is `{:filename <string> :path <optional> :visibility :public|:private}`.
 - Local `generate-signed-url` issues a real HMAC-SHA256 signed URL
-  (`?expires=<epoch>&v=<file mtime>&signature=<hex>`) when `:signing-secret` is
-  configured, living at most `local/max-signed-seconds` (7 days). The serving
-  route enforces it via `local/verify-signed-url` and serves only the file
-  version it was signed for, so a replaced or deleted file kills it (BOU-991). Without a secret
+  (`?expires=<epoch>&v=<content hash>&signature=<hex>`) when `:signing-secret`
+  is configured, living at most `local/max-signed-seconds` (7 days). The serving
+  route enforces it via `local/verify-signed-url` and serves only the content
+  it was signed for, so a replaced or deleted file kills it (BOU-991). A member
+  who leaves a tenant keeps a URL they hold until it expires. Without a secret
   it falls back to the plain public URL (or `nil` if `:url-base` is unset).
 - **A signed URL is only checked where a route checks it.** The URL is built as
   `<url-base>/<key>`, and the module's own download route
@@ -117,8 +118,9 @@ they refuse to boot without it (WGE-107).
 - Auto-generated key (no `:path`): `{shard}/{timestamp}-{uuid}-{hash16}.{ext}`
   where `shard` = first 2 hex chars of the content SHA-256 (directory sharding
   to avoid huge dirs). With an explicit `:path`, the key is
-  `{sanitized-path}/{sanitized-filename}`, below `{tenant-id}/` for an upload
-  in a tenant, so tenants' names never collide (BOU-991).
+  `{sanitized-path}/{sanitized-filename}`, below `.tenants/{tenant-id}/` for an
+  upload in a tenant, so tenants' names never collide; no caller may name
+  `.tenants` itself (BOU-991).
 
 ### S3 (`create-s3-storage` / `close-s3-storage`)
 
@@ -283,9 +285,9 @@ built by `wagoe.platform.core.http.problem-details`.
 5. **Cloud resources must be released** — call `close-s3-storage` /
    `close-gcs-storage` on shutdown (the `:wagoe/storage` halt-key does this).
 6. **Local signed URLs** are real HMAC-SHA256 signatures **only with a
-   `:signing-secret`**; the serving route must call `local/verify-signed-url`
-   to enforce expiry (the filesystem adapter can't). Without a secret the URL is
-   the plain public one.
+   `:signing-secret`**; a serving route must call `local/verify-signed-url` and
+   compare the URL's `v` with `retrieve-file`'s `:version` (the filesystem
+   adapter can't). Without a secret the URL is the plain public one.
 7. **GCS public-read?** controls public-URL *emission*, not object ACLs — make
    the bucket/object publicly accessible via GCS itself for those URLs to work.
 

@@ -5,6 +5,7 @@
   (:require [wagoe.storage.shell.service :as service]
             [wagoe.storage.shell.adapters.local :as local]
             [wagoe.storage.core.uploads :as uploads]
+            [wagoe.storage.core.validation :as validation]
             [wagoe.core.http.access :as access]
             [wagoe.core.http.errors :as errors]
             [clojure.java.io :as io]
@@ -278,7 +279,10 @@
              {:status 200
               :headers {"Content-Type" (:content-type file-data)
                         "Content-Length" (str (:size file-data))
-                        "Content-Disposition" (str "attachment; filename=\"" file-key "\"")}
+                        ;; The key's last segment, sanitized: a `"` in a path broke the header
+                        "Content-Disposition" (str "attachment; filename=\""
+                                                   (validation/sanitize-filename (last (str/split file-key #"/")))
+                                                   "\"")}
               :body (io/input-stream (:bytes file-data))})
 
            (not-found

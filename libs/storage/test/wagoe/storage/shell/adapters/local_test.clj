@@ -169,7 +169,11 @@
     (testing "a different file-key is rejected (signature is key-bound)"
       (is (false? (sut/verify-signed-url secret "other/key.png" {:expires expires :version version :signature sig}))))
     (testing "a different secret is rejected"
-      (is (false? (sut/verify-signed-url "wrong-secret" "ab/file.png" {:expires expires :version version :signature sig}))))))
+      (is (false? (sut/verify-signed-url "wrong-secret" "ab/file.png" {:expires expires :version version :signature sig}))))
+    (testing "a different version is rejected (signature is version-bound)"
+      (is (false? (sut/verify-signed-url secret "ab/file.png" {:expires expires :version "1" :signature sig}))))
+    (testing "a repeated v is invalid, not a 500"
+      (is (false? (sut/verify-signed-url secret "ab/file.png" {:expires expires :version [version version] :signature sig}))))))
 
 (deftest ^:unit signed-url-expiry-is-enforced
   (let [secret  "top-secret-signing-key"

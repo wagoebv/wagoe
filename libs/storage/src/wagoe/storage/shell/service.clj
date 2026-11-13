@@ -9,7 +9,8 @@
             [wagoe.storage.shell.adapters.local :as local]
             [wagoe.storage.core.uploads :as uploads]
             [wagoe.storage.core.validation :as validation]
-            [wagoe.observability.logging.ports :as logging])
+            [wagoe.observability.logging.ports :as logging]
+            [clojure.string :as str])
   (:import [java.time Instant]))
 
 ;; ============================================================================
@@ -71,22 +72,39 @@
   "Record `stored` in the upload index. A file the index does not know is
    invisible to data export and retention, so when recording fails the file
    is deleted again and the upload fails."
-  [storage upload-index stored owner]
+  [storage upload-index logger stored owner]
   (when upload-index
     (try
       (ports/record-upload! upload-index (uploads/upload-record stored owner (Instant/now)))
       (catch Exception e
-        (try (ports/delete-file storage (:key stored)) (catch Exception _ nil))
+        (try (ports/delete-file storage (:key stored))
+             (catch Exception de
+               (when logger
+                 (logging/warn logger "Could not delete a file the upload index did not record"
+                               {:event ::unindexed-file-kept :key (:key stored) :error (.getMessage de)}))))
         (throw e)))))
 
+(def ^:private tenants-dir
+  "Where the local adapter keeps tenants' named paths; no caller may name it."
+  ".tenants")
+
+(defn- local? [storage]
+  (instance? wagoe.storage.shell.adapters.local.LocalFileStorage storage))
+
+(defn- reserved-path?
+  "Whether `path`, normalized, names the tenants' directory (BOU-991)."
+  [storage path]
+  (and (local? storage) (= tenants-dir (first (some-> path (str/split #"/"))))))
+
 (defn- in-tenant-dir
-  "`metadata` with a tenant's named path below the tenant's id, under the local
-   adapter: two tenants' `invoices/a.pdf` are two files, and one tenant cannot
-   learn or occupy another's names (BOU-991). S3 and GCS add a random suffix."
+  "`metadata` with a tenant's named path below `.tenants/<tenant-id>/`, under
+   the local adapter: two tenants' `invoices/a.pdf` are two files, and nobody
+   learns or occupies another tenant's names (BOU-991). S3 and GCS add a
+   random suffix."
   [storage {:keys [owner path] :as metadata}]
   (cond-> metadata
-    (and path (:tenant-id owner) (instance? wagoe.storage.shell.adapters.local.LocalFileStorage storage))
-    (assoc :path (str (:tenant-id owner) "/" path))))
+    (and path (:tenant-id owner) (local? storage))
+    (assoc :path (str tenants-dir "/" (:tenant-id owner) "/" path))))
 
 (defn- refused-key?
   "Whether `metadata` names a key that holds a file `may-replace?` says no to (BOU-950).
@@ -129,13 +147,17 @@
             {:success false
              :errors (:errors validation-result)})
 
+          (reserved-path? storage (validation/normalize-path (:path metadata)))
+          {:success false
+           :errors [{:code :invalid-path :message "That path is reserved"}]}
+
           (refused-key? storage sanitized-metadata options)
           {:success false
            :errors [{:code :forbidden :message "That path holds a file you may not replace"}]}
 
           :else
           (let [result (ports/store-file storage file-data (dissoc sanitized-metadata :owner))]
-            (index-upload! storage upload-index result (:owner metadata))
+            (index-upload! storage upload-index logger result (:owner metadata))
             (when logger
               (logging/info logger "Upload file completed"
                             {:event ::upload-file-completed
@@ -292,7 +314,7 @@
                          {:event ::file-url-generated
                           :key file-key
                           :expiration-seconds expiration-seconds
-                          :url-type (if (and url (re-find #"X-Amz-" url))
+                          :url-type (if (and url (re-find #"X-Amz-|X-Goog-|signature=" url))
                                       :signed
                                       :public)}))
         url)
