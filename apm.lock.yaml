@@ -6,6 +6,8 @@ dependencies:
   version: 1.0.0
   package_type: apm_package
   deployed_files:
+  - .agents/skills/handle-linear-code-ticket
+  - .agents/skills/handle-linear-code-ticket/SKILL.md
   - .agents/skills/rebase
   - .agents/skills/rebase/SKILL.md
   - .agents/skills/review-pr
@@ -22,6 +24,8 @@ dependencies:
   - .claude/agents/security-reviewer.md
   - .claude/agents/story-conformance-reviewer.md
   - .claude/agents/test-coverage-reviewer.md
+  - .claude/skills/handle-linear-code-ticket
+  - .claude/skills/handle-linear-code-ticket/SKILL.md
   - .claude/skills/rebase
   - .claude/skills/rebase/SKILL.md
   - .claude/skills/review-pr
@@ -45,6 +49,7 @@ dependencies:
   - .cursor/agents/story-conformance-reviewer.md
   - .cursor/agents/test-coverage-reviewer.md
   deployed_file_hashes:
+    .agents/skills/handle-linear-code-ticket/SKILL.md: sha256:7646f593104b3148be05c6aed12c2c489d5a826ee8733c8b0db522c1c15f8760
     .agents/skills/rebase/SKILL.md: sha256:79dc3b2b10476046d77ba7b88fcdaed31eb9e8de6d8ddfece6eff0767ed57fd3
     .agents/skills/review-pr/SKILL.md: sha256:f043f5673eba33cb868ed00810ad8070689eed2a2f2fea35fa31a4f3b4630fef
     .agents/skills/review-security/SKILL.md: sha256:ad937371788359910642bc79937b0549620b1bb8130e6d3613b166bc4e8adcc0
@@ -56,6 +61,7 @@ dependencies:
     .claude/agents/security-reviewer.md: sha256:8f0802d29eb99f0705a11dbbeff15d5c0da29e475c000c9bbc586c9e29c553b9
     .claude/agents/story-conformance-reviewer.md: sha256:1709f83a43858802f1629ec593579469056d46d00c91470e4681852b737331fd
     .claude/agents/test-coverage-reviewer.md: sha256:bfe4dd1247eb2b918f9e31d289338af6886ca0285bd9896d82e75c79bf3d2334
+    .claude/skills/handle-linear-code-ticket/SKILL.md: sha256:7646f593104b3148be05c6aed12c2c489d5a826ee8733c8b0db522c1c15f8760
     .claude/skills/rebase/SKILL.md: sha256:79dc3b2b10476046d77ba7b88fcdaed31eb9e8de6d8ddfece6eff0767ed57fd3
     .claude/skills/review-pr/SKILL.md: sha256:f043f5673eba33cb868ed00810ad8070689eed2a2f2fea35fa31a4f3b4630fef
     .claude/skills/review-security/SKILL.md: sha256:ad937371788359910642bc79937b0549620b1bb8130e6d3613b166bc4e8adcc0
@@ -76,6 +82,24 @@ dependencies:
   source: local
   local_path: ./ai
 deployments:
+- kind: project-relative
+  target: agent-skills
+  value: .agents/skills/handle-linear-code-ticket
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: null
+- kind: project-relative
+  target: agent-skills
+  value: .agents/skills/handle-linear-code-ticket/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:7646f593104b3148be05c6aed12c2c489d5a826ee8733c8b0db522c1c15f8760
 - kind: project-relative
   target: agent-skills
   value: .agents/skills/rebase
@@ -220,6 +244,24 @@ deployments:
   - ./ai
   active_owner: ./ai
   content_hash: sha256:bfe4dd1247eb2b918f9e31d289338af6886ca0285bd9896d82e75c79bf3d2334
+- kind: project-relative
+  target: claude
+  value: .claude/skills/handle-linear-code-ticket
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/handle-linear-code-ticket/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:7646f593104b3148be05c6aed12c2c489d5a826ee8733c8b0db522c1c15f8760
 - kind: project-relative
   target: claude
   value: .claude/skills/rebase
