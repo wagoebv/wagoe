@@ -163,6 +163,9 @@
 
   (create-entity-with-children [_ entity-name data children]
     (writable! schema-provider user entity-name data)
+    ;; Each row against its own entity's scopes: a child was created in any tenant (BOU-992)
+    (doseq [[child rows] children, row rows]
+      (writable! schema-provider user child row))
     (ports/create-entity-with-children inner entity-name (with-link-scopes schema-provider user entity-name data) children))
 
   (update-entity [_ entity-name id data]

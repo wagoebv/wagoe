@@ -31,6 +31,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A suspended tenant kept serving** (BOU-992), for up to an hour from cache. A tenant that is not active answers 403
+  now, within a minute of suspension.
+- **Smaller tenant gaps** (BOU-992): admin child rows keep to the child's scope, search admin pages count only for a
+  platform admin, and `extract-tenant-cache` takes a resolved tenant. Pass `:accepted-by-email` to bind an invite.
 - **A signed local storage URL outlived its file and its holder** (BOU-991): any expiry, and it served whatever was later
   stored at its key. It lives 7 days at most and dies with its file; URLs issued before this are refused, so issue new ones.
 - **Tenants' named local uploads shared one key space** (BOU-991), so a 403 told one tenant another's file names. A

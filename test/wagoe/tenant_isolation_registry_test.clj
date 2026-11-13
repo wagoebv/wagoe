@@ -8,11 +8,15 @@
 (def registry
   "lib -> {:scoped-by how, :tests {file [deftest]}, :gaps [ticket]} or {:carries why}.
    :carries is for code that passes a tenant id along but stores no tenant data."
-  {"tenant"        {:scoped-by "explicit tenant_id; tenant-admin guards on membership routes; a request runs only in a tenant its caller is in"
+  {"tenant"        {:scoped-by "explicit tenant_id; tenant-admin guards on membership routes; a request runs only in a tenant its caller is in, and only an active one"
                     :tests     {"libs/tenant/test/wagoe/tenant/shell/membership_http_test.clj"
                                 ["a-tenant-admin-cannot-reach-another-tenants-memberships" "changing-memberships-takes-a-tenant-admin"]
                                 "libs/tenant/test/wagoe/tenant/shell/tenant_scope_test.clj"
-                                ["a-caller-outside-the-chosen-tenant-is-refused" "a-user-of-a-tenant-gets-no-public-schema"]}}
+                                ["a-caller-outside-the-chosen-tenant-is-refused" "a-user-of-a-tenant-gets-no-public-schema"]
+                                "libs/tenant/test/wagoe/tenant/shell/tenant_middleware_test.clj"
+                                ["a-suspended-tenant-does-not-serve"]
+                                "libs/tenant/test/wagoe/tenant/shell/invite_service_test.clj"
+                                ["an-invite-binds-to-its-email-when-the-caller-names-one"]}}
    "workflow"      {:scoped-by "tables in each tenant schema; tenant work refuses the shared tables"
                     :tests     {"libs/workflow/test/wagoe/workflow/shell/tenant_isolation_test.clj"
                                 ["a-tenant-sees-only-its-own-instances" "tenant-work-never-falls-back-to-public"]
@@ -34,12 +38,15 @@
                                  "a-request-in-a-tenant-reaches-only-its-subscriptions"]}}
    "cache"         {:scoped-by "tenant:<id>: key prefix, when the app uses create-tenant-cache"
                     :tests     {"libs/cache/test/wagoe/cache/shell/tenant_cache_test.clj"
-                                ["tenant-cache-key-test"]}}
+                                ["tenant-cache-key-test"
+                                 "extract-tenant-cache-test"]}}
    "search"        {:scoped-by "tenant_id filter from the request; an index without it is refused to a tenant's caller unless :global?"
                     :tests     {"libs/search/test/wagoe/search/shell/tenant_scope_test.clj"
                                 ["a-member-reads-only-their-own-tenant"
                                  "an-index-without-a-tenant-filter-is-refused-to-a-caller-in-a-tenant"
-                                 "only-a-platform-admin-writes-documents"]}}
+                                 "only-a-platform-admin-writes-documents"]
+                                "libs/search/test/wagoe/search/shell/http_test.clj"
+                                ["a-tenants-admin-sees-no-count-across-tenants"]}}
    "user"          {:scoped-by "users.tenant_id; listings and routes by user id forced to the caller's tenant; roles and groups, which carry no tenant, take a platform admin"
                     :tests     {"libs/user/test/wagoe/user/shell/authz_negative_security_test.clj"
                                 ["require-tenant-member-denies-non-member"]
@@ -49,7 +56,9 @@
                                  "a-bulk-action-skips-another-tenants-users"
                                  "a-tenants-admin-creates-users-in-their-tenant"
                                  "another-tenants-users-rights-are-not-found"
-                                 "roles-and-groups-take-a-platform-admin"]}}
+                                 "roles-and-groups-take-a-platform-admin"
+                                 "creating-a-user-tells-that-an-email-exists-in-another-tenant"]}
+                    :gaps      ["BOU-995"]}
    "audience"      {:scoped-by "segments span every tenant, so only a platform admin reaches them"
                     :tests     {"libs/audience/test/wagoe/audience/shell/http_test.clj"
                                 ["a-tenants-admin-gets-no-audience"]}}
@@ -57,6 +66,8 @@
                     :tests     {"libs/admin/test/wagoe/admin/shell/tenant_scope_test.clj"
                                 ["a-tenants-admin-reaches-only-their-tenants-records"
                                  "a-platform-admin-reaches-every-tenant-or-the-resolved-one"]
+                                "libs/admin/test/wagoe/admin/shell/create_with_children_test.clj"
+                                ["a-tenants-admin-creates-children-only-in-their-tenant"]
                                 "libs/admin/test/wagoe/admin/shell/lifecycle_events_test.clj"
                                 ["a-tenants-write-publishes-in-that-tenant"
                                  "a-platform-admins-write-publishes-in-the-rows-tenant"]}}

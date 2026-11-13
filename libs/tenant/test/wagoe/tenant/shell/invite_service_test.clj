@@ -266,6 +266,19 @@
                                                                    :ok)}}))
       (is (= tx-context @seen-tx)))))
 
+(deftest ^:unit ^:security an-invite-binds-to-its-email-when-the-caller-names-one
+  ;; A token joined whoever held it (BOU-992)
+  (let [service (make-service)
+        invite  #(ports/invite-external-member service (UUID/randomUUID) "Contractor@Example.nl" :contractor {})
+        accept  #(ports/accept-external-invite! service (merge {:token (:invite-token %1) :accepted-by-user-id (UUID/randomUUID)} %2))]
+    (testing "another email is refused"
+      (is (= :forbidden (:type (ex-data (try (accept (invite) {:accepted-by-email "someone@else.nl"})
+                                             (catch clojure.lang.ExceptionInfo e e)))))))
+    (testing "the invited one is accepted, in any case"
+      (is (= :accepted (get-in (accept (invite) {:accepted-by-email "contractor@EXAMPLE.nl"}) [:invite :status]))))
+    (testing "without one the token is a bearer token, as documented"
+      (is (= :accepted (get-in (accept (invite) {}) [:invite :status]))))))
+
 (deftest ^:unit revoke-external-invite-test
   (testing "revokes a pending invite"
     (let [service (make-service)

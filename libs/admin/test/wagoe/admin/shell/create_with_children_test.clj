@@ -10,6 +10,7 @@
             [wagoe.admin.shell.http.handlers.crud :as crud]
             [wagoe.admin.shell.http.handlers.detail :as detail]
             [wagoe.admin.shell.schema-repository :as schema-repo]
+            [wagoe.admin.shell.scoped-service :as scoped]
             [wagoe.admin.shell.service :as service]
             [wagoe.events.ports :as events]
             [wagoe.events.shell.module-wiring]
@@ -25,12 +26,16 @@
    :label "Lines" :fields [:description] :editable true :on-delete :cascade :min 1})
 
 (def ^:private config
-  {:entity-discovery {:mode :allowlist :allowlist #{:nc-invoices :nc-lines :nc-drafts}}
+  {:entity-discovery {:mode :allowlist :allowlist #{:nc-invoices :nc-lines :nc-drafts :tc-orders :tc-items}}
    :entities         {:nc-invoices {:label "Invoices" :has-many [lines-rel]}
                       :nc-lines    {:label "Line"}
                       ;; The same table, without a :min: today's flow.
                       :nc-drafts   {:label "Drafts" :table-name :nc-invoices
-                                    :has-many [(dissoc lines-rel :min)]}}
+                                    :has-many [(dissoc lines-rel :min)]}
+                      :tc-orders   {:label "Orders" :scope {:tenant-id :tenant-id}
+                                    :has-many [{:entity :tc-items :table :tc_items :foreign-key :tc-order-id
+                                                :label "Items" :fields [:description :tenant-id] :editable true :min 1}]}
+                      :tc-items    {:label "Item" :scope {:tenant-id :tenant-id}}}
    :pagination       {:default-page-size 20 :max-page-size 200}})
 
 (def ^:private ^:dynamic *db* nil)
@@ -46,14 +51,21 @@
                                                            description VARCHAR(50) NOT NULL,
                                                            qty INT DEFAULT 1 NOT NULL,
                                                            CONSTRAINT uq_nc_lines UNIQUE (nc_invoice_id, description))"})
+      (db/execute-update! ctx {:raw "CREATE TABLE tc_orders (id UUID PRIMARY KEY, number VARCHAR(20) NOT NULL, tenant_id VARCHAR(36))"})
+      (db/execute-update! ctx {:raw "CREATE TABLE tc_items (id UUID PRIMARY KEY, tc_order_id UUID NOT NULL REFERENCES tc_orders(id),
+                                                           description VARCHAR(50) NOT NULL, tenant_id VARCHAR(36))"})
       (try (binding [*db* ctx] (f))
            (finally
+             (db/execute-update! ctx {:raw "DROP TABLE tc_items"})
+             (db/execute-update! ctx {:raw "DROP TABLE tc_orders"})
              (db/execute-update! ctx {:raw "DROP TABLE nc_lines"})
              (db/execute-update! ctx {:raw "DROP TABLE nc_invoices"})
              (db-factory/close-db-context! ctx))))))
 
 (use-fixtures :each
   (fn [f]
+    (db/execute-update! *db* {:raw "DELETE FROM tc_items"})
+    (db/execute-update! *db* {:raw "DELETE FROM tc_orders"})
     (db/execute-update! *db* {:raw "DELETE FROM nc_lines"})
     (db/execute-update! *db* {:raw "DELETE FROM nc_invoices"})
     (f)))
@@ -275,3 +287,17 @@
     (is (= [(line 4 :description)] (filter #(marked? body %) [(line 0 :description) (line 4 :description)]))
         "the row the database refused, and only it")
     (is (zero? (count-rows :nc_invoices)))))
+
+(deftest ^:integration ^:security a-tenants-admin-creates-children-only-in-their-tenant
+  ;; Only the parent's scope was checked: a child row named any tenant, or none (BOU-992)
+  (let [{:keys [svc sp]} (system)
+        [a b]    [(str (random-uuid)) (str (random-uuid))]
+        as-a     (scoped/for-request svc sp {:user {:id (random-uuid) :role :admin :tenant-id a}})
+        create!  #(ports/create-entity-with-children as-a :tc-orders {:number "O-1" :tenant-id a}
+                                                     {:tc-items [{:description "x" :tenant-id %}]})
+        refused? #(= :validation-error (:type (ex-data (try (create! %) nil (catch clojure.lang.ExceptionInfo e e)))))]
+    (is (refused? b) "another tenant's")
+    (is (refused? nil) "no tenant's")
+    (is (zero? (count-rows :tc_orders)))
+    (create! a)
+    (is (= 1 (count-rows :tc_items)))))

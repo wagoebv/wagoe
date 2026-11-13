@@ -137,6 +137,23 @@
     (testing "a platform admin creates a user of no tenant"
       (is (= [200 nil] (create {:user {:id (UUID/randomUUID) :role :admin}}))))))
 
+(deftest ^:unit ^:security creating-a-user-tells-that-an-email-exists-in-another-tenant
+  ;; Accepted for now: auth_users and its unique email span every tenant.
+  ;; BOU-995 makes users per tenant; this test then flips (BOU-992).
+  (let [taken   "b@example.com"
+        users   #_{:clj-kondo/ignore [:missing-protocol-method]}
+                (reify ports/IUserService
+                  (register-user [_ u]
+                    (if (= taken (:email u))
+                      (throw (ex-info "User already exists" {:type :user-exists}))
+                      (assoc u :id (UUID/randomUUID)))))
+        create  (fn [email]
+                  ((web-handlers/create-user-htmx-handler users nil {})
+                   {:user admin-of-a :form-params {"name" "New" "email" email "password" "password123" "role" "user"}}))
+        taken?  #(re-find #"(?i)already|taken|in use" (str (:body %)))]
+    (is (not (taken? (create "free@example.com"))))
+    (is (taken? (create taken)) "a tenant's admin learns another tenant's email is in use")))
+
 (deftest ^:unit ^:security another-tenants-users-rights-are-not-found
   (is (= 404 (:status ((rights-handlers/user-rights (service (atom [])) nil)
                        {:user admin-of-a :path-params {:id (str (:id user-of-b))}})))))

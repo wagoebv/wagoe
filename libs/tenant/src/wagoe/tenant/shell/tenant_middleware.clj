@@ -140,18 +140,24 @@
   "Create in-memory tenant cache with TTL.
    
    Simple atom-based cache for tenant lookups to reduce database queries.
-   Cache entries expire after 1 hour.
+   Cache entries expire after `cache-ttl-ms`.
    
    Returns:
      Atom containing cache map"
   []
   (atom {}))
 
+(def ^:private cache-ttl-ms
+  "How long a looked-up tenant is trusted: a suspension takes effect within it
+   (BOU-992). It was an hour."
+  ;; ponytail: a TTL, not invalidation; evict on suspend if a minute is too long.
+  (* 60 1000))
+
 (defn- cached-tenant-lookup
   "Look up tenant with caching.
    
    Cache key: [type value] (e.g., [:slug 'acme-corp'])
-   Cache TTL: 1 hour
+   Cache TTL: `ttl-ms`
    
    Args:
      cache: Atom containing cache map
@@ -160,10 +166,9 @@
      
    Returns:
      Tenant entity map or nil"
-  [cache _tenant-service identifier]
+  [cache _tenant-service identifier ttl-ms]
   (let [cache-key [(:type identifier) (:value identifier)]
-        now (System/currentTimeMillis)
-        ttl-ms (* 60 60 1000)] ; 1 hour
+        now (System/currentTimeMillis)]
 
     ;; Check cache
     (if-let [cached (get @cache cache-key)]
@@ -222,13 +227,18 @@
    Returns:
      Ring middleware function
      
+   A tenant that is not active answers 403, whether or not one is required:
+   a suspended tenant served on (BOU-992). `:cache-ttl-ms` is how long a
+   cached tenant is trusted (default: one minute).
+
    Example:
      (wrap-tenant-resolution handler tenant-service {:require-tenant? true})"
   ([handler tenant-service]
    (wrap-tenant-resolution handler tenant-service {}))
-  ([handler tenant-service {:keys [require-tenant? cache]
+  ([handler tenant-service {:keys [require-tenant? cache cache-ttl-ms]
                             :or {require-tenant? false
-                                 cache (create-tenant-cache)}}]
+                                 cache (create-tenant-cache)
+                                 cache-ttl-ms cache-ttl-ms}}]
    (fn [request]
      (let [identifiers (tenant-identifiers request)]
 
@@ -244,7 +254,7 @@
          ;; names none, and its users then run in their own (BOU-982)
          (let [[identifier cached-tenant tenant]
                (or (some (fn [id]
-                           (let [cached (cached-tenant-lookup cache tenant-service id)]
+                           (let [cached (cached-tenant-lookup cache tenant-service id cache-ttl-ms)]
                              (when-let [t (or cached (lookup-tenant tenant-service id))]
                                [id cached t])))
                          identifiers)
@@ -269,14 +279,17 @@
                (when-not cached-tenant
                  (cache-tenant cache identifier tenant))
 
-               (log/debug "Tenant resolved"
-                          {:tenant-id (:id tenant)
-                           :tenant-slug (:slug tenant)
-                           :schema-name (:schema-name tenant)
-                           :uri (:uri request)})
+               (if (not= :active (some-> (:status tenant) keyword))
+                 (error-response 403 :forbidden "Tenant is not active" request)
+                 (do
+                   (log/debug "Tenant resolved"
+                              {:tenant-id (:id tenant)
+                               :tenant-slug (:slug tenant)
+                               :schema-name (:schema-name tenant)
+                               :uri (:uri request)})
 
-               ;; Add tenant to request and continue
-               (handler (assoc request :tenant tenant))))))))))
+                   ;; Add tenant to request and continue
+                   (handler (assoc request :tenant tenant))))))))))))
 
 ;; =============================================================================
 ;; Middleware - Schema Switching

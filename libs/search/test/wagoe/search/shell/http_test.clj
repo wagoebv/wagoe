@@ -65,7 +65,7 @@
       [])
     (list-indices [_]
       (mapv (fn [[id d]] {:id id :entity-type (:entity-type d) :language :english
-                          :fields [] :doc-count 0})
+                          :fields [] :doc-count 7})
             definitions))
     (reindex! [_ _ _] nil)
     ports/ISearchDefinitions
@@ -166,3 +166,12 @@
     (is (= 404 (page sut/handle-get-index-web "private")))
     (is (= 200 (page sut/handle-get-index-web "products")))
     (is (= :not-found (page sut/handle-search-fragment "private")))))
+
+(deftest ^:unit ^:security a-tenants-admin-sees-no-count-across-tenants
+  ;; The admin pages counted every tenant's documents for a tenant's admin (BOU-992)
+  (let [engine (engine-with (atom []) definitions)
+        body   (fn [handler user]
+                 (:body (handler engine {:user user :path-params {:index-id "products"}})))]
+    (doseq [handler [sut/handle-list-indices-web sut/handle-get-index-web]]
+      (is (str/includes? (body handler {:id (random-uuid) :role :admin}) "7 docs"))
+      (is (not (str/includes? (body handler {:id (random-uuid) :role :admin :tenant-id (random-uuid)}) "7 docs"))))))

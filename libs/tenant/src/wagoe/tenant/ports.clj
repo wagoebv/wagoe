@@ -71,10 +71,13 @@
 
 (defprotocol ITenantInviteService
   (invite-external-member [this tenant-id email role options])
-  (get-external-invite [this invite-id])
+  (get-external-invite [this invite-id]
+    "The invite by id, in any tenant: a caller in one checks its :tenant-id (BOU-992).")
   (get-external-invite-by-token [this token])
-  (accept-external-invite [this token accepted-by-user-id])
-  (revoke-external-invite [this invite-id])
+  (accept-external-invite [this token accepted-by-user-id]
+    "Accept as `accept-external-invite!` without :accepted-by-email: the token is a bearer token.")
+  (revoke-external-invite [this invite-id]
+    "Revoke by id, in any tenant: a caller in one checks the invite's :tenant-id first (BOU-992).")
   (list-tenant-invites [this tenant-id options]))
 
 (defprotocol ITenantInviteAcceptanceService
@@ -97,8 +100,13 @@
      Request shape:
        {:token raw-token
         :accepted-by-user-id uuid
+        :accepted-by-email optional-email
         :tx-context optional-db-tx
         :hooks {:after-accept-tx (fn [{:keys [invite membership tx-context]}] ...)}}
+
+     Without :accepted-by-email the token is a bearer token: whoever holds it
+     joins. Pass the accepting user's email to bind it to the invited one; a
+     different email throws :forbidden (BOU-992).
 
      Returns:
        {:invite updated-invite
