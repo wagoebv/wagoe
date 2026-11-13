@@ -89,10 +89,10 @@
       (is (not (str/includes? body "/web/audit")))
       (is (not (str/includes? body "/web/logout"))))))
 
-(deftest ^:unit a-tenant-admin-sees-no-audit-card
-  ;; /web/audit admits platform admins only.
+(deftest ^:unit a-tenant-admin-sees-no-audit-or-groups-card
+  ;; /web/audit and the groups pages admit platform admins only (BOU-984).
   (let [body (home nil {:tenant-id (random-uuid)})]
-    (is (str/includes? body "href=\"/web/admin/groups\""))
+    (is (not (str/includes? body "/web/admin/groups")))
     (is (not (str/includes? body "/web/audit")))))
 
 (deftest ^:unit a-plain-user-sees-only-what-they-may-open
