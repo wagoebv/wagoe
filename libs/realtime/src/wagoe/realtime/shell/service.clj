@@ -157,7 +157,9 @@
       (when (some? n) (pos? n))))
 
   (publish-to-topic [_this topic message]
-    (ports/publish bus (bus/topic-envelope topic (stamp message))))
+    ;; Ids are per tenant schema, so order:123 names a different order in each
+    ;; tenant: kept to the sender's like role and broadcast (BOU-986)
+    (ports/publish bus (to-sender-tenant (bus/topic-envelope topic (stamp message)))))
 
   ports/IIdentifiedConnections
   (connect-identified [this connection identity topics]
