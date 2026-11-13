@@ -1,11 +1,13 @@
 name: Scaffold AI eval
 
-# `bb scaffold ai` against real providers (BOU-909). Run by hand for now:
-# a few runs on main measure the Ollama runtime and the OpenAI cost before
-# this gets a schedule, a results branch and a regression issue (BOU-979).
+# `bb scaffold ai` against real providers, one number per night (BOU-909,
+# BOU-979). Results go to the eval-results branch; a drop opens an issue.
 # Not a required check: a model having a bad night must not block a merge.
 
 on:
+  schedule:
+    # 04:41 UTC, after the first-run matrix, off the hour.
+    - cron: '41 4 * * *'
   workflow_dispatch:
     inputs:
       only:
@@ -24,9 +26,10 @@ jobs:
   eval:
     name: Eval — ${{ matrix.provider }}
     runs-on: ubuntu-latest
-    # Ollama runs a 7B model on CPU. Results are saved per prompt, so a
-    # timeout keeps what ran.
-    timeout-minutes: 300
+    # Measured: 10-13 minutes a run (BOU-979). Results are saved per prompt,
+    # so a timeout keeps what ran. The margin over the eval step's 40 covers
+    # setup, an uncached Ollama model pull included.
+    timeout-minutes: 60
     # The `eval` environment allows main only and holds OPENAI_API_KEY, so a
     # branch's copy of this file never sees the key.
     environment: eval
@@ -119,7 +122,7 @@ jobs:
 
       # Below the job's timeout, so the report and upload still run.
       - name: Run the eval
-        timeout-minutes: 280
+        timeout-minutes: 40
         env:
           # cell-env drops it for ollama too; this keeps it out of that job entirely.
           OPENAI_API_KEY: ${{ matrix.provider == 'openai' && secrets.OPENAI_API_KEY || '' }}
@@ -139,3 +142,82 @@ jobs:
           name: eval-${{ matrix.provider }}
           path: eval-out/*.edn
           if-no-files-found: warn
+
+  publish:
+    name: Publish results
+    runs-on: ubuntu-latest
+    needs: eval
+    # Only main's full runs are history: a branch or --only run would
+    # overwrite tonight's file with a partial night and read as a drop.
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && !inputs.only }}
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: 1.13.229
+
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: eval-*
+          path: eval-out
+          merge-multiple: true
+
+      - name: Commit to eval-results
+        run: |
+          ls eval-out/*.edn >/dev/null 2>&1 || { echo "No result files to publish"; exit 1; }
+          if git ls-remote --exit-code --heads origin eval-results >/dev/null; then
+            git fetch --depth=1 origin eval-results
+            git worktree add --detach results FETCH_HEAD
+            git -C results switch -c eval-results
+          else
+            git worktree add --detach results
+            git -C results switch --orphan eval-results
+          fi
+          mkdir -p results/scaffold
+          cp eval-out/*.edn results/scaffold/
+          cd results
+          git add scaffold
+          # A re-run publishes the same files; that is not a failure.
+          if git diff --cached --quiet; then
+            echo "eval-results already has these files"
+          else
+            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "Scaffold eval $(date -u +%F) (${GITHUB_SHA::9})"
+            git push origin eval-results
+          fi
+
+      - name: Report
+        run: bb eval:report results/scaffold | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Open an issue on regression
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          for p in ollama openai; do
+            # Only a provider scored tonight: a skipped or refused night would
+            # report an old drop again.
+            grep -qs ':status :ran' eval-out/*-"$p".edn || continue
+            set +e
+            bb eval:report results/scaffold --regression "$p" > "body-$p.md"
+            rc=$?
+            set -e
+            [ "$rc" -eq 0 ] && continue
+            [ "$rc" -eq 2 ] || { cat "body-$p.md"; exit "$rc"; }
+            printf '\nRun: %s\n' "$RUN_URL" >> "body-$p.md"
+            title="Scaffold AI eval regressed: $p"
+            open=$(gh issue list --label eval-regression --state open --search "\"$title\" in:title" \
+                     --json number --jq '.[0].number // empty')
+            if [ -n "$open" ]; then
+              gh issue comment "$open" --body-file "body-$p.md"
+            else
+              gh label create eval-regression --color d73a4a --force \
+                --description "The nightly scaffold AI eval dropped"
+              gh issue create --title "$title" --label eval-regression --body-file "body-$p.md"
+            fi
+          done

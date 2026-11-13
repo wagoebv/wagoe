@@ -36,10 +36,12 @@ A run where the provider refused (a rejected key, no credit, a rate limit, an
 unreachable provider) is `:status :provider-error`, not a score: `eval:report`
 skips it and `eval:scaffold` exits 1, so the CI job goes red.
 
-In CI, run the "Scaffold AI eval" workflow by hand on main; each provider's
-file is a run artifact. It needs the `eval` environment (main only) with the
-`OPENAI_API_KEY` secret. A nightly schedule follows once a few runs show the
-Ollama runtime and the OpenAI cost (BOU-979).
+In CI, the "Scaffold AI eval" workflow runs nightly on main, about 12
+minutes, and the OpenAI cell costs under a cent (BOU-979). Each night's files
+are committed to the `eval-results` branch, and a provider more than one below
+its 7-day average opens or updates an `eval-regression` issue. It needs the
+`eval` environment (main only) with the `OPENAI_API_KEY` secret. Run it by hand
+with the `only` input to try prompts; such a run is not published.
 
 ```bash
 bb eval:report target/eval-scaffold
