@@ -133,7 +133,8 @@
             broken (assoc ctx :data-export (platform-privacy/create-data-export
                                             {:boom (reify privacy/IDataExporter
                                                      (export-data [_ _] (throw (ex-info "down" {:type :database-error}))))}))]
-        (is (false? (:success? (run-queued-job! broken))))
+        (is (= [false true] ((juxt :success? :commit?) (run-queued-job! broken)))
+            ":commit? keeps the :failed row when a tenant job rolls back (BOU-987)")
         (is (= :failed (get-in (call app :get (str "/api/v1/me/export-jobs/" id) user) [:body :status])))
         (testing "a retry of the failed job leaves it failed"
           (is (= :failed (get-in (sut/run-export-job ctx {:export-id id}) [:result :skipped])))

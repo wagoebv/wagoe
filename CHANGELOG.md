@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A job enqueued in a tenant ran on the public schema** (BOU-987), reports and data exports included. It carries the
+  tenant now; a recurring job is refused inside one. `wrap-handler-with-tenant-context` no longer reads the tenant from args.
 - **Tenant work could run in the wrong schema** (BOU-988). Switching schema inside an open transaction, or to a schema
   that does not exist, is refused now; call `in-tenant` outside your transaction.
 - **A webhook subscription made in a tenant without `:tenant-id` received every tenant's events** (BOU-989). The API
@@ -81,6 +83,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Every push send was retried, and so delivered again** (BOU-987). Its handlers returned nil, which reads as a
+  failure. Nothing to change.
 - **MFA encryption accepted a `JWT_SECRET` shorter than 32 characters** (BOU-977). It checks the secret as auth
   does now; only a process encrypting MFA secrets without the auth service could notice.
 - **The user role filter matched a part of the role, and missed users with no role** (BOU-924). `?role=admin` matches

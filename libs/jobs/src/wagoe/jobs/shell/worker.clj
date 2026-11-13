@@ -140,11 +140,12 @@
     (if-let [in-tenant (:tenant-runner config)]
       ;; A failed handler throws its result out, so the tenant transaction
       ;; rolls back rather than commit half a job that will be retried. Typed,
-      ;; so `with-tenant-schema` rethrows it unwrapped.
+      ;; so `with-tenant-schema` rethrows it unwrapped. A failure that says
+      ;; `:commit? true` recorded itself, and keeps that record (BOU-987).
       (try
         (in-tenant tenant-id
                    #(let [result (execute-job-handler handler-fn (:args job))]
-                      (if (:success? result)
+                      (if (or (:success? result) (:commit? result))
                         result
                         (throw (ex-info "Tenant job failed"
                                         {:type :job-failed ::failed result})))))

@@ -20,6 +20,7 @@
    - failed: Vector of failed job-ids
    - stats: Map of queue-name -> statistics"
   (:require [wagoe.jobs.ports :as ports]
+            [wagoe.jobs.shell.bound-tenant :as bound-tenant]
             [wagoe.jobs.core.job :as job]
             [wagoe.jobs.core.outcome :as outcome]
             [clojure.tools.logging :as log])
@@ -208,7 +209,7 @@
           nil)
       (let [job-id (:id job)]
         ;; Store job
-        (swap! (:jobs state) assoc job-id job)
+        (swap! (:jobs state) assoc job-id (bound-tenant/stamp job))
 
         ;; Add to appropriate queue
         (if (:execute-at job)

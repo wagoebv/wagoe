@@ -56,7 +56,7 @@
     (testing "a send enqueued in tenant A carries it, and reaches A's device only"
       (let [args (job-args #(ports/send-push! % :tenant-test {} {:user-id user}) tenant-a)]
         (is (= (str tenant-a) (:tenant-id args)))
-        (jobs/handle-send-push deps args)
+        (is (:success? (jobs/handle-send-push deps args)) "nil read as a failure, and was sent again (BOU-987)")
         (is (= 1 (sent)))))
     (testing "a broadcast in tenant B reaches B's device only"
       (jobs/handle-broadcast deps (job-args #(ports/broadcast! % :tenant-test {} {:platform :fcm}) tenant-b))

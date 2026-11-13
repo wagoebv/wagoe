@@ -94,3 +94,19 @@
              (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
                                           (sut/in-tenant service provider {:datasource :ds} "gone"
                                                          (fn [] :ran)))))))))))
+
+(deftest ^:unit ^:security the-tenant-is-bound-where-after-commit-hooks-run
+  ;; The hooks run after the transaction, inside with-tenant-schema: a job they
+  ;; enqueue lost its tenant when the binding sat inside (BOU-987)
+  (let [after    (atom [])
+        provider (reify ports/ITenantSchemaProvider
+                   (with-tenant-schema [_ _ schema f] (let [r (f schema)] (swap! after conj db/*tenant-id*) r))
+                   (tenant-provisioned? [_ _ _] true)
+                   (list-tenant-schemas [_ _] []))
+        service  #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify ports/ITenantService
+          (get-tenant [_ id] {:id id :schema-name "tenant_one"})
+          (list-tenants [_ {:keys [offset]}] (when (zero? offset) [{:id "t2" :schema-name "tenant_two"}])))]
+    (sut/in-tenant service provider {:datasource :ds} "t1" (fn [] :ok))
+    (sut/for-each-tenant service provider {:datasource :ds} (fn [_] :ok))
+    (is (= ["t1" "t2"] @after))))

@@ -17,6 +17,7 @@
             [wagoe.jobs.core.job :as job]
             [wagoe.jobs.core.outcome :as outcome]
             [wagoe.jobs.shell.adapters.codec :as codec]
+            [wagoe.jobs.shell.bound-tenant :as bound-tenant]
             [clojure.tools.logging :as log])
   (:import [redis.clients.jedis Jedis JedisPool JedisPoolConfig]
            [redis.clients.jedis.params ScanParams SetParams]
@@ -225,10 +226,11 @@
 (defrecord RedisJobQueue [^JedisPool pool]
   ports/IJobQueue
 
-  (enqueue-job! [_ queue-name job]
+  (enqueue-job! [_ queue-name job*]
     (with-redis pool
       (fn [^Jedis redis]
-        (let [job-id (:id job)
+        (let [job (bound-tenant/stamp job*)
+              job-id (:id job)
               job-key (job-key job-id)
               queue-key (queue-key queue-name)
               serialized (codec/encode-job job)

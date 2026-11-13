@@ -96,13 +96,19 @@
    `opts`: `:args`, `:queue`, `:priority`, `:max-retries`, and `:zone`, a zone
    id like \"Europe/Amsterdam\". Calling it again for a job type replaces its
    schedule. Throws `:validation-error` for an expression that is malformed or
-   never fires."
+   never fires, and `:configuration-error` inside a tenant."
   [{:keys [schedules next-due opts]} job-type cron-expr & [job-opts]]
   (let [schedule (cron/parse cron-expr)
         zone     (zone-of (:zone job-opts (:zone opts)))
         now      (Instant/now)]
     (when-let [error (:error schedule)]
       (throw (ex-info (:message error) (assoc error :job-type job-type))))
+    ;; One schedule per job type and no tenant on its ticks: a tenant's schedule
+    ;; would run against public and replace another tenant's (BOU-987)
+    (when db/*tenant-id*
+      (throw (ex-info "A recurring job cannot be scheduled inside a tenant"
+                      {:type    :configuration-error :job-type job-type
+                       :message "Schedule it at boot, and iterate tenants in its handler with for-each-tenant"})))
     (when-not (cron/next-run schedule zone now)
       (throw (ex-info (str "Cron expression never fires: " cron-expr)
                       {:type :validation-error :job-type job-type :expression cron-expr})))
