@@ -45,6 +45,15 @@
   (:status (handlers/unregister-device-handler (handlers/with-capabilities {:device-store store})
                                                (assoc (in-tenant user-id tenant) :path-params {:token token}))))
 
+(defn- seed!
+  "A registration of `token` in `tenant`, written as data stored before BOU-994
+   could hold it: one token in two tenants."
+  [user-id token tenant app-id]
+  (db/execute-update! pt/*db* {:insert-into :push-device-tokens
+                               :values [{:id (random-uuid) :user-id user-id :token token :platform "fcm"
+                                         :app-id app-id :tenant-id tenant :active true
+                                         :created-at (java.time.Instant/now) :last-used-at (java.time.Instant/now)}]}))
+
 (defn- rows
   "Every registration of `token`, active or not, by tenant."
   [token]
@@ -166,14 +175,19 @@
       (is (= 201 (:status (register! store alice "no-tenants" nil))))
       (is (= 201 (:status (register! store bob "no-tenants" nil))))
       (is (= [nil] (rows "no-tenants")))
-      (is (= 409 (:status (register! store carol "no-tenants" tenant-b)))))))
+      (is (= 409 (:status (register! store carol "no-tenants" tenant-b)))))
+    (testing "nor under another app-id: a token is one device (BOU-994)"
+      (is (= 409 (:status (register! store alice "bobs-phone" tenant-a "anything"))))
+      (is (= [tenant-b] (rows "bobs-phone"))))
+    (testing "one tenant may hold a token under several app-ids"
+      (is (= 201 (:status (register! store carol "bobs-phone" tenant-b "com.other")))))))
 
 (deftest ^:integration ^:security delete-removes-only-the-requests-tenants-device
   ;; DELETE removed the user's token in every tenant (BOU-990)
   (let [store (p/->DeviceTokenStore pt/*db*)
         user  (random-uuid)]
     (register! store user "phone" tenant-a "com.a")
-    (register! store user "phone" tenant-b "com.b")
+    (seed! user "phone" tenant-b "com.b")
     (register! store user "old" tenant-a)
     (ports/mark-token-invalid! store "old")
     (is (= 204 (delete! store user "phone" tenant-a)))
@@ -188,7 +202,7 @@
         older (without-removal store)
         user  (random-uuid)]
     (register! store user "both" tenant-a "com.a")
-    (register! store user "both" tenant-b "com.b")
+    (seed! user "both" tenant-b "com.b")
     (register! store user "in-b" tenant-b)
     (register! store user "in-a" tenant-a)
     (testing "the token in another tenant too: refused, both kept"
@@ -206,7 +220,7 @@
   (let [store     (p/->DeviceTokenStore pt/*db*)
         analytics (p/->PushAnalyticsStore pt/*db*)]
     (register! store (random-uuid) "phone" tenant-a "com.a")
-    (register! store (random-uuid) "phone" tenant-b "com.b")
+    (seed! (random-uuid) "phone" tenant-b "com.b")
     (ports/record-send! analytics {:id (random-uuid) :notification-id :tenant-test :device-token "phone"
                                    :platform :fcm :event-type :sent :callback-id "cb-1" :tenant-id tenant-b})
     (ports/record-delivery! analytics {:id (random-uuid) :notification-id :tenant-test :device-token "phone"

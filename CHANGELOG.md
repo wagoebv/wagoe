@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A push token held in another tenant registered again under another app-id** (BOU-994), so both tenants' sends
+  reached one device. A token another tenant holds now answers 409, whatever the app-id.
 - **A suspended tenant kept serving** (BOU-992), for up to an hour from cache. A tenant that is not active answers 403
   now, within a minute of suspension.
 - **Smaller tenant gaps** (BOU-992): admin child rows keep to their scope, search counts are for platform admins only.

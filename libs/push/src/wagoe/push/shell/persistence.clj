@@ -54,7 +54,8 @@
 (defn- upsert-device!
   "Returns the stored row's id: when the token was registered already, that
    row's, not ours. In one tenant the token then belongs to whoever registered
-   it last (BOU-683); another tenant's row is not taken over (BOU-990)."
+   it last (BOU-683); a token another tenant holds, under any app-id, is
+   refused (BOU-990, BOU-994): a token is one device."
   [db record]
   (let [row      {:id           (:id record)
                   :user-id      (:user-id record)
@@ -71,8 +72,13 @@
                                                         (h/from :push-device-tokens)
                                                         (h/where [:= :token (:token row)] [:= :app-id (:app-id row)])))
                           (update :tenant-id tc/string->uuid))
-        existing (stored)]
-    (when (and existing (not= (:tenant-id existing) (:tenant-id row)))
+        existing (stored)
+        tenants  (into #{} (map (comp tc/string->uuid :tenant-id))
+                       (database/execute-query! db (-> (h/select :tenant-id)
+                                                       (h/from :push-device-tokens)
+                                                       (h/where [:= :token (:token row)]))))]
+    ;; ponytail: checked before the write; two tenants racing under two app-ids can both pass.
+    (when (seq (disj tenants (:tenant-id row)))
       (throw (conflict row)))
     ;; Keyed on the tenant too, so a racing registration in another tenant
     ;; matches no update and its insert meets the unique (token, app_id) index.
