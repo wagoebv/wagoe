@@ -76,7 +76,7 @@
                   :active       true
                   :created-at   (->instant (:created-at record))
                   :last-used-at (->instant (:last-used-at record))}
-        stored   #(first (filter (comp #{(:app-id row)} :app-id) (token-rows db (:token row))))
+        same-app (fn [rs] (first (filter #(= (:app-id row) (:app-id %)) rs)))
         rows     (token-rows db (:token row))]
     ;; ponytail: checked before the write; two tenants racing under two app-ids can both pass.
     (when (seq (disj (set (map :tenant-id rows)) (:tenant-id row)))
@@ -88,7 +88,8 @@
                           (catch clojure.lang.ExceptionInfo e
                             (throw (if (database/unique-conflict? e) (conflict row) e)))))
       (:id row)
-      (tc/string->uuid (:id (or (first (filter (comp #{(:app-id row)} :app-id) rows)) (stored)))))))
+      ;; Read again only when the row was not there before: a racing insert in this tenant made it
+      (tc/string->uuid (:id (or (same-app rows) (same-app (token-rows db (:token row)))))))))
 
 (defrecord DeviceTokenStore [db]
   ports/IDeviceTokenStore
