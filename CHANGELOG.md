@@ -29,6 +29,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-11-13
+
 ### Security
 
 - **A push token held in another tenant registered again under another app-id** (BOU-994); both tenants reached one

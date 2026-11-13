@@ -11,12 +11,12 @@ File storage abstraction with local filesystem, S3 and Google Cloud Storage back
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {com.wagoe/wagoe-storage {:mvn/version "1.1.2"}}}
+{:deps {com.wagoe/wagoe-storage {:mvn/version "1.2.0"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[com.wagoe/wagoe-storage "1.1.2"]
+[com.wagoe/wagoe-storage "1.2.0"]
 ```
 
 ## Features
@@ -147,7 +147,7 @@ libs/storage/src/wagoe/storage/
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `wagoe/platform` | 1.1.2 | Configuration, database |
+| `wagoe/platform` | 1.2.0 | Configuration, database |
 | `software.amazon.awssdk/s3` | 2.54.17 | S3 client |
 | `software.amazon.awssdk/s3-transfer-manager` | 2.54.17 | Efficient uploads |
 | `com.google.cloud/google-cloud-storage` | 2.73.0 | GCS client |

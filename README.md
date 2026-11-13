@@ -366,12 +366,12 @@ subject *is* the old version numbers. Also draft/pre-releases on GitHub —
 
 ```clojure
 ;; Validation utilities only
-{:deps {com.wagoe/wagoe-core {:mvn/version "1.1.2"}}}
+{:deps {com.wagoe/wagoe-core {:mvn/version "1.2.0"}}}
 
 ;; Full web application stack
-{:deps {com.wagoe/wagoe-platform {:mvn/version "1.1.2"}
-        com.wagoe/wagoe-user     {:mvn/version "1.1.2"}
-        com.wagoe/wagoe-admin    {:mvn/version "1.1.2"}}}
+{:deps {com.wagoe/wagoe-platform {:mvn/version "1.2.0"}
+        com.wagoe/wagoe-user     {:mvn/version "1.2.0"}
+        com.wagoe/wagoe-admin    {:mvn/version "1.2.0"}}}
 ```
 
 ---

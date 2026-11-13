@@ -9,7 +9,7 @@
 
 ```clojure
 ;; deps.edn
-{:deps {com.wagoe/wagoe-webhooks {:mvn/version "1.1.2"}}}
+{:deps {com.wagoe/wagoe-webhooks {:mvn/version "1.2.0"}}}
 ```
 
 ```clojure
