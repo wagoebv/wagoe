@@ -272,6 +272,7 @@
      Request must contain either:
        {:tenant {:id \"tenant-123\" ...}} OR
        {:tenant-id \"tenant-123\"}
+     The id may be a UUID, as the tenant middleware sets it.
 
    If no tenant context found, returns base cache (public namespace)."
   [cache request]

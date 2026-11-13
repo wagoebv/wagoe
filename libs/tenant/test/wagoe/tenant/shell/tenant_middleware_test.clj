@@ -330,6 +330,12 @@
         (is (= 403 (:status ((tenant-mw/wrap-tenant-resolution simple-handler (->MockTenantService tenants)
                                                                 {:require-tenant? required?})
                              request))))))
+    (testing "any status but active, as a keyword or a string, for anyone"
+      (doseq [status [:deleted "suspended"]]
+        (is (= 403 (:status ((tenant-mw/wrap-tenant-resolution simple-handler
+                                                               (->MockTenantService (atom [(assoc test-tenant-1 :status status)])))
+                             (assoc request :user {:id (UUID/randomUUID) :role :admin}))))
+            (pr-str status))))
     (testing "a tenant suspended after it was cached, once the cache lapses"
       (reset! tenants [test-tenant-1])
       (let [handler (tenant-mw/wrap-tenant-resolution simple-handler (->MockTenantService tenants) {:cache-ttl-ms 0})]

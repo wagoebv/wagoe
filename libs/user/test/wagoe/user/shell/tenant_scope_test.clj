@@ -152,7 +152,9 @@
                    {:user admin-of-a :form-params {"name" "New" "email" email "password" "password123" "role" "user"}}))
         taken?  #(re-find #"(?i)already|taken|in use" (str (:body %)))]
     (is (not (taken? (create "free@example.com"))))
-    (is (taken? (create taken)) "a tenant's admin learns another tenant's email is in use")))
+    (let [r (create taken)]
+      (is (taken? r) "a tenant's admin learns another tenant's email is in use")
+      (is (= 400 (:status r)) "the form comes back with the error"))))
 
 (deftest ^:unit ^:security another-tenants-users-rights-are-not-found
   (is (= 404 (:status ((rights-handlers/user-rights (service (atom [])) nil)

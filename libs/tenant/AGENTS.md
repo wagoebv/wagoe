@@ -78,6 +78,11 @@ Multi-tenancy with schema-per-tenant isolation on PostgreSQL. Provides:
 :deleted      → Soft delete (schema NOT auto-dropped)
 ```
 
+A request naming a tenant that is not active answers 403, within the tenant
+cache's minute (BOU-992). Suspension stops HTTP only: a job or event already
+bound to the tenant still runs through `:wagoe/in-tenant`, so a billing
+webhook can still reactivate it. `for-each-tenant` visits active tenants only.
+
 ---
 
 ## Membership Management (ADR-016)

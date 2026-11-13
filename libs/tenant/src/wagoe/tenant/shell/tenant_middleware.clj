@@ -17,6 +17,7 @@
             [clojure.tools.logging :as log]
             [wagoe.core.http.errors :as errors]
             [wagoe.platform.database :as db]
+            [wagoe.tenant.core.tenant :as tenant-core]
             [wagoe.tenant.ports :as tenant-ports]
             [wagoe.tenant.shell.provisioning :as provisioning]))
 
@@ -161,12 +162,11 @@
    
    Args:
      cache: Atom containing cache map
-     tenant-service: ITenantService implementation (unused - for future cache invalidation)
      identifier: Map with :type and :value
      
    Returns:
      Tenant entity map or nil"
-  [cache _tenant-service identifier ttl-ms]
+  [cache identifier ttl-ms]
   (let [cache-key [(:type identifier) (:value identifier)]
         now (System/currentTimeMillis)]
 
@@ -254,7 +254,7 @@
          ;; names none, and its users then run in their own (BOU-982)
          (let [[identifier cached-tenant tenant]
                (or (some (fn [id]
-                           (let [cached (cached-tenant-lookup cache tenant-service id cache-ttl-ms)]
+                           (let [cached (cached-tenant-lookup cache id cache-ttl-ms)]
                              (when-let [t (or cached (lookup-tenant tenant-service id))]
                                [id cached t])))
                          identifiers)
@@ -279,7 +279,8 @@
                (when-not cached-tenant
                  (cache-tenant cache identifier tenant))
 
-               (if (not= :active (some-> (:status tenant) keyword))
+               ;; Another ITenantService may hand the status over as a string
+               (if-not (tenant-core/tenant-active? (update tenant :status #(some-> % keyword)))
                  (error-response 403 :forbidden "Tenant is not active" request)
                  (do
                    (log/debug "Tenant resolved"

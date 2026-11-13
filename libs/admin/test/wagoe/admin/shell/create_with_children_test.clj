@@ -298,6 +298,16 @@
         refused? #(= :validation-error (:type (ex-data (try (create! %) nil (catch clojure.lang.ExceptionInfo e e)))))]
     (is (refused? b) "another tenant's")
     (is (refused? nil) "no tenant's")
+    (is (= :validation-error (:type (ex-data (try (ports/create-entity-with-children as-a :tc-orders {:number "O-1" :tenant-id a}
+                                                                                     {:tc-items [{:description "x"}]})
+                                                   nil (catch clojure.lang.ExceptionInfo e e)))))
+        "a row that names no tenant at all")
+    (is (= {:entity :tc-items :index 1}
+           (:child (ex-data (try (ports/create-entity-with-children as-a :tc-orders {:number "O-1" :tenant-id a}
+                                                                    {:tc-items [{:description "ok" :tenant-id a}
+                                                                                {:description "bad" :tenant-id b}]})
+                                 nil (catch clojure.lang.ExceptionInfo e e)))))
+        "the refusal names the row, so the form marks it")
     (is (zero? (count-rows :tc_orders)))
     (create! a)
     (is (= 1 (count-rows :tc_items)))))

@@ -93,7 +93,8 @@
 (defn in-tenant
   "Call `(f)` in one transaction on `tenant-id`'s schema, with `db/*tenant-id*`
    bound. Throws `:tenant-not-found` for an unknown tenant, so its work never
-   runs against public."
+   runs against public. A suspended tenant's work still runs: suspension stops
+   its HTTP, not the jobs that may reactivate it (BOU-992)."
   [tenant-service schema-provider db-ctx tenant-id f]
   (let [tenant (or (find-tenant tenant-service tenant-id)
                    (throw (ex-info "Tenant not found"

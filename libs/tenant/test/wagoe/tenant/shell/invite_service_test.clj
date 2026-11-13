@@ -276,8 +276,15 @@
                                              (catch clojure.lang.ExceptionInfo e e)))))))
     (testing "the invited one is accepted, in any case"
       (is (= :accepted (get-in (accept (invite) {:accepted-by-email "contractor@EXAMPLE.nl"}) [:invite :status]))))
+    (testing "named but nil is refused, not read as a bearer token"
+      (is (= :forbidden (:type (ex-data (try (accept (invite) {:accepted-by-email nil})
+                                             (catch clojure.lang.ExceptionInfo e e)))))))
     (testing "without one the token is a bearer token, as documented"
-      (is (= :accepted (get-in (accept (invite) {}) [:invite :status]))))))
+      (is (= :accepted (get-in (accept (invite) {}) [:invite :status]))))
+    (testing "get and revoke take any tenant's invite id: the caller checks :tenant-id"
+      (let [created (invite)]
+        (is (= (:tenant-id created) (:tenant-id (ports/get-external-invite service (:id created)))))
+        (is (= :revoked (:status (ports/revoke-external-invite service (:id created)))))))))
 
 (deftest ^:unit revoke-external-invite-test
   (testing "revokes a pending invite"

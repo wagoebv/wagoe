@@ -163,9 +163,16 @@
 
   (create-entity-with-children [_ entity-name data children]
     (writable! schema-provider user entity-name data)
-    ;; Each row against its own entity's scopes: a child was created in any tenant (BOU-992)
-    (doseq [[child rows] children, row rows]
-      (writable! schema-provider user child row))
+    ;; Each row against its own entity's scopes: a child was created in any tenant (BOU-992).
+    ;; A child the parent does not create is left to the inner service to refuse.
+    (let [nested (set (map :entity (:has-many (ports/get-entity-config schema-provider entity-name))))]
+      (doseq [[child rows] children
+              :when (nested child)
+              [index row] (map-indexed vector rows)]
+        (try (writable! schema-provider user child row)
+             (catch clojure.lang.ExceptionInfo e
+               ;; Shaped as the inner service's row refusal, so the form marks the row
+               (throw (ex-info (ex-message e) (assoc (ex-data e) :child {:entity child :index index}) e))))))
     (ports/create-entity-with-children inner entity-name (with-link-scopes schema-provider user entity-name data) children))
 
   (update-entity [_ entity-name id data]
