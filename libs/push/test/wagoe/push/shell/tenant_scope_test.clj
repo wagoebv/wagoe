@@ -22,15 +22,21 @@
     (registry/register-push! {:id :tenant-test :title "Hi" :body "There" :channels #{:fcm}})
     (pt/with-test-db f)))
 
+(defn- in-tenant
+  "A request by `user-id`, a member of `tenant`, running in it."
+  [user-id tenant]
+  {:user {:id user-id :tenant-id tenant} :tenant {:id tenant}
+   :tenant-membership {:tenant-id tenant :role :member}})
+
 (defn- register!
   "Register `token` for `user-id` through the HTTP handler, as a request in `tenant` makes it."
-  [store user-id token tenant]
-  (handlers/register-device-handler
-   {:device-store store}
-   {:user {:id user-id :tenant-id tenant} :tenant {:id tenant}
-    :tenant-membership {:tenant-id tenant :role :member}
+  ([store user-id token tenant] (register! store user-id token tenant "com.test"))
+  ([store user-id token tenant app-id]
+   (handlers/register-device-handler
+    {:device-store store}
     ;; A tenant the body names is ignored
-    :body-params {:token token :platform "fcm" :app-id "com.test" :tenant-id (str tenant-b)}}))
+    (assoc (in-tenant user-id tenant)
+           :body-params {:token token :platform "fcm" :app-id app-id :tenant-id (str tenant-b)}))))
 
 (defn- job-args
   "The args `send` puts on the job, as a request bound to `tenant` enqueues it."
@@ -116,3 +122,41 @@
     (testing "a broadcast with :all-tenants?"
       (jobs/handle-broadcast deps (job-args #(ports/broadcast! % :tenant-test {} {:platform :fcm :all-tenants? true}) nil))
       (is (= 8 (sent))))))
+
+(deftest ^:integration ^:security another-tenants-device-is-not-taken-over
+  ;; A registration with the token moved B's device to A (BOU-990)
+  (let [store (p/->DeviceTokenStore pt/*db*)
+        alice (random-uuid)
+        bob   (random-uuid)
+        carol (random-uuid)]
+    (is (= 201 (:status (register! store bob "bobs-phone" tenant-b))))
+    (testing "a registration in another tenant is refused"
+      (is (= 409 (:status (register! store alice "bobs-phone" tenant-a))))
+      (is (= [tenant-b] (map :tenant-id (ports/get-user-devices store bob)))))
+    (testing "in the same tenant the phone moves to its new user (BOU-683)"
+      (is (= 201 (:status (register! store carol "bobs-phone" tenant-b))))
+      (is (empty? (ports/get-user-devices store bob)))
+      (is (= [tenant-b] (map :tenant-id (ports/get-user-devices store carol)))))))
+
+(deftest ^:integration ^:security delete-removes-only-the-requests-tenants-device
+  ;; DELETE removed the user's token in every tenant (BOU-990)
+  (let [store (p/->DeviceTokenStore pt/*db*)
+        user  (random-uuid)]
+    (register! store user "phone" tenant-a "com.a")
+    (register! store user "phone" tenant-b "com.b")
+    (is (= 204 (:status (handlers/unregister-device-handler {:device-store store}
+                                                            (assoc (in-tenant user tenant-a) :path-params {:token "phone"})))))
+    (is (= [tenant-b] (map :tenant-id (ports/get-user-devices store user))))))
+
+(deftest ^:integration ^:security a-callback-counts-in-the-tenant-of-its-send
+  ;; The token's first row named the tenant, and it may be registered in two (BOU-990)
+  (let [store     (p/->DeviceTokenStore pt/*db*)
+        analytics (p/->PushAnalyticsStore pt/*db*)]
+    (register! store (random-uuid) "phone" tenant-a "com.a")
+    (register! store (random-uuid) "phone" tenant-b "com.b")
+    (ports/record-send! analytics {:id (random-uuid) :notification-id :tenant-test :device-token "phone"
+                                   :platform :fcm :event-type :sent :callback-id "cb-1" :tenant-id tenant-b})
+    (ports/record-delivery! analytics {:id (random-uuid) :notification-id :tenant-test :device-token "phone"
+                                       :platform :fcm :callback-id "cb-1"})
+    (is (= 1 (:delivered (ports/get-push-stats analytics :tenant-test {:tenant-id tenant-b}))))
+    (is (= 0 (:delivered (ports/get-push-stats analytics :tenant-test {:tenant-id tenant-a}))))))

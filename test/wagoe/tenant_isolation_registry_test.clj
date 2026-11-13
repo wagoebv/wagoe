@@ -64,12 +64,15 @@
                     :tests     {"libs/storage/test/wagoe/storage/shell/http_handlers_test.clj"
                                 ["a-file-is-reached-only-by-its-owner-its-tenant-or-an-admin"
                                  "an-upload-cannot-replace-another-users-file"]}}
-   "push"          {:scoped-by "a device records the request's tenant; a send or broadcast reaches the sender's tenant's devices"
+   "push"          {:scoped-by "a device records the request's tenant and stays in it; a send or broadcast reaches the sender's tenant's devices"
                     :tests     {"libs/push/test/wagoe/push/shell/tenant_scope_test.clj"
                                 ["a-tenants-send-reaches-only-its-devices"
                                  "a-send-of-no-tenant-reaches-no-tenants-devices"
                                  "all-tenants-is-honoured-only-outside-a-tenant"
-                                 "a-job-of-no-tenant-reaches-only-no-tenants-devices"]}}
+                                 "a-job-of-no-tenant-reaches-only-no-tenants-devices"
+                                 "another-tenants-device-is-not-taken-over"
+                                 "delete-removes-only-the-requests-tenants-device"
+                                 "a-callback-counts-in-the-tenant-of-its-send"]}}
    "events"        {:scoped-by "an event takes the bound tenant; a subscriber in a tenant gets only its tenant's and system events"
                     :tests     {"libs/events/test/wagoe/events/shell/tenant_scope_test.clj"
                                 ["a-subscriber-in-a-tenant-sees-only-that-tenants-events"

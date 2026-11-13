@@ -42,7 +42,8 @@
 (defprotocol IDeviceTokenStore
   (register-device! [this user-id device-info]
     "Store device token. device-info: {:token str :platform kw :app-id str},
-     and :tenant-id, the tenant it was registered in, which sends filter on.")
+     and :tenant-id, the tenant it was registered in, which sends filter on.
+     Throws `{:type :conflict}` when another tenant holds the token and app-id.")
   (unregister-device! [this user-id device-token]
     "Remove device token.")
   (get-user-devices [this user-id]
@@ -60,6 +61,12 @@
   "Optional beside IDeviceTokenStore: a store without it is scanned instead."
   (find-user-devices [this user-id device-token app-id]
     "The user's active devices with this token, only under app-id unless it is nil."))
+
+(defprotocol IDeviceRemoval
+  "Optional beside IDeviceTokenStore: removes one registration, where
+   `unregister-device!` removes the token in every tenant (BOU-990)."
+  (remove-device! [this user-id device-id]
+    "Remove the user's device with this id."))
 
 ;; ===== Analytics =====
 

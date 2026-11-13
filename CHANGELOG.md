@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A push token moved between tenants** (BOU-990): registering it took over another tenant's device, DELETE removed
+  the user's token in every tenant, and callbacks could count in the wrong tenant. Another tenant's token now answers 409.
 - **Events lost their tenant** (BOU-985): admin events reached every tenant, a platform admin's too; handlers ran in none.
   A handler runs in its event's tenant now; a push of no tenant needs `:all-tenants? true` to reach every tenant's devices.
 - **A job enqueued in a tenant ran on the public schema** (BOU-987), reports and data exports included. It carries the
@@ -74,6 +76,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`wagoe.push.ports/IDeviceRemoval`** (BOU-990): removes one device registration. A custom device store without it
+  answers 409 to a DELETE that would reach another tenant; implement it to remove only the request's.
 - **`^:wagoe/allow-print` and `^:wagoe/allow-clock`, or `:allow-print`/`:allow-clock` in `.wagoe/check-fcis.edn`** (BOU-961):
   exempt a core namespace from those `bb check:fcis` warnings. An entry needs an `:ns` and a `:why`.
 - **`wagoe.core.http.errors` and `wagoe.core.http.access`**: the error body and access checks, without cheshire (BOU-930).

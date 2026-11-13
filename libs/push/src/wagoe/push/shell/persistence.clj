@@ -47,7 +47,8 @@
 
 (defn- upsert-device!
   "Returns the stored row's id: when the token was registered already, that
-   row's, not ours. The token then belongs to whoever registered it last."
+   row's, not ours. In one tenant the token then belongs to whoever registered
+   it last (BOU-683); another tenant's row is not taken over (BOU-990)."
   [db record]
   (let [row {:id           (:id record)
              :user-id      (:user-id record)
@@ -60,8 +61,15 @@
              :active       true
              :created-at   (->instant (:created-at record))
              :last-used-at (->instant (:last-used-at record))}]
-    (if (= :inserted (database/upsert! db :push-device-tokens row [:token :app-id]
-                                       {:update-columns [:user-id :tenant-id :active :last-used-at :device-name :os-version]}))
+    ;; Keyed on the tenant too: another tenant's row matches no update, and the
+    ;; insert then meets the unique (token, app_id) index.
+    (if (= :inserted (try (database/upsert! db :push-device-tokens row [:token :app-id :tenant-id]
+                                            {:update-columns [:user-id :active :last-used-at :device-name :os-version]})
+                          (catch clojure.lang.ExceptionInfo e
+                            (if (database/unique-conflict? e)
+                              (throw (ex-info "The token is registered in another tenant"
+                                              {:type :conflict :token (:token row) :app-id (:app-id row)}))
+                              (throw e)))))
       (:id row)
       (-> (database/execute-one! db (-> (h/select :id)
                                         (h/from :push-device-tokens)
@@ -124,7 +132,14 @@
                                                [:= :token device-token]
                                                [:= :active true]
                                                (when app-id [:= :app-id app-id]))))
-         (mapv row->device))))
+         (mapv row->device)))
+
+  ports/IDeviceRemoval
+
+  (remove-device! [_ user-id device-id]
+    (database/execute-update! db
+                              (-> (h/delete-from :push-device-tokens)
+                                  (h/where [:= :user-id user-id] [:= :id device-id])))))
 
 ;; =============================================================================
 ;; PushAnalyticsStore
@@ -149,6 +164,17 @@
                                                                     :where  [:= :token (:device-token event)] :limit 1})
                                             :timestamp           (or (->instant (:timestamp event)) (Instant/now))}]))))
 
+(defn- sent-tenant
+  "`event` with the tenant of the send its callback id names, when one was
+   recorded: the token alone may be registered in several tenants (BOU-990)."
+  [db event]
+  (if-let [sent (database/execute-one! db (-> (h/select :tenant-id)
+                                              (h/from :push-analytics-events)
+                                              (h/where [:= :callback-id (:callback-id event)] [:= :event-type "sent"])
+                                              (h/limit 1)))]
+    (assoc event :tenant-id (:tenant-id sent))
+    event))
+
 (defn- record-callback!
   "A push's callback, counted once per event type: the index on (callback_id,
    event_type) refuses a replay. In a savepoint, since PostgreSQL refuses the
@@ -157,7 +183,7 @@
   (if-not (:callback-id event)
     (insert-event! db event)
     (try
-      (database/in-savepoint (database/current-transaction db) #(insert-event! db event))
+      (database/in-savepoint (database/current-transaction db) #(insert-event! db (sent-tenant db event)))
       (catch clojure.lang.ExceptionInfo e
         (if (database/unique-conflict? e) 0 (throw e))))))
 

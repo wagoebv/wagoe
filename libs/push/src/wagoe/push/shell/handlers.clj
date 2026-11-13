@@ -61,13 +61,17 @@
       (nil? reach) (error-response 403 "forbidden" "Tenant membership required")
       :else
       ;; The device is the tenant's the request runs in, never one the body names (BOU-946)
-      (let [device   (ports/register-device! device-store user-id
-                                             (assoc body :tenant-id (:tenant-id reach)))
-            location (device-location request device)]
-        (cond-> (-> (resp/response device)
-                    (resp/status 201)
-                    (resp/content-type "application/json"))
-          location (resp/header "Location" location))))))
+      (if-let [device (try (ports/register-device! device-store user-id
+                                                   (assoc body :tenant-id (:tenant-id reach)))
+                           (catch clojure.lang.ExceptionInfo e
+                             (when-not (= :conflict (:type (ex-data e))) (throw e))))]
+        (let [location (device-location request device)]
+          (cond-> (-> (resp/response device)
+                      (resp/status 201)
+                      (resp/content-type "application/json"))
+            location (resp/header "Location" location)))
+        ;; Taking it over would move another tenant's device to this one (BOU-990)
+        (error-response 409 "conflict" "The token is registered in another tenant")))))
 
 (defn- user-devices-with-token [store user-id token app-id]
   (if (satisfies? ports/IDeviceLookup store)
@@ -99,13 +103,28 @@
       (error-response 409 "conflict" "The token is registered under several app-ids; pass ?app-id="))))
 
 (defn unregister-device-handler
+  "Removes the caller's registrations of the token in reach: another tenant's
+   is not this request's to remove (BOU-990). A store without `IDeviceRemoval`
+   removes the token everywhere, so it answers 409 when that reaches further."
   [{:keys [device-store]} request]
   (let [user-id (get-in request [:user :id])
-        token   (get-in request [:path-params :token])]
-    ;; Another tenant's registration of the token is not this request's to remove
-    (when (seq (in-reach (access/tenant-reach request) (user-devices-with-token device-store user-id token nil)))
-      (ports/unregister-device! device-store user-id token))
-    {:status 204 :headers {} :body nil}))
+        token   (get-in request [:path-params :token])
+        devices (user-devices-with-token device-store user-id token nil)
+        reached (in-reach (access/tenant-reach request) devices)]
+    (cond
+      (empty? reached)
+      {:status 204 :headers {} :body nil}
+
+      (satisfies? ports/IDeviceRemoval device-store)
+      (do (doseq [d reached] (ports/remove-device! device-store user-id (:id d)))
+          {:status 204 :headers {} :body nil})
+
+      (= (count reached) (count devices))
+      (do (ports/unregister-device! device-store user-id token)
+          {:status 204 :headers {} :body nil})
+
+      :else
+      (error-response 409 "conflict" "The token is registered in another tenant too"))))
 
 (defn list-devices-handler
   [{:keys [device-store]} request]
