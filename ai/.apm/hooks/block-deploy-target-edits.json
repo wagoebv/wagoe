@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "p=$(jq -re '.tool_input.file_path // empty') || exit 0; root=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; case \"$p\" in /*) abs=\"$p\" ;; *) abs=\"$root/$p\" ;; esac; case \"$abs\" in \"$root\"/*) rel=\"${abs#\"$root\"/}\" ;; *) exit 0 ;; esac; case \"$rel\" in .claude/skills/*|.claude/rules/*|.claude/agents/*|.claude/hooks/*|.claude/apm-hooks.json|.claude/settings.json|.codex/skills/*|.codex/rules/*|.codex/agents/*|.codex/hooks/*|.codex/hooks.json|.cursor/skills/*|.cursor/rules/*|.cursor/agents/*|.cursor/hooks/*|.cursor/hooks.json|.agents/skills/*) echo 'BLOCKED: That path is an APM deploy target and is overwritten by apm install, so the edit would be lost. Edit the source in ai/.apm/ instead: skills in ai/.apm/skills/, agents in ai/.apm/agents/, hooks in ai/.apm/hooks/.' >&2; exit 2 ;; esac"
+          }
+        ]
+      }
+    ]
+  }
+}

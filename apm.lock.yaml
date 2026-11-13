@@ -1,0 +1,345 @@
+lockfile_version: '1'
+apm_version: 0.33.0
+dependencies:
+- repo_url: _local/ai
+  name: wagoe-local
+  version: 1.0.0
+  package_type: apm_package
+  deployed_files:
+  - .agents/skills/rebase
+  - .agents/skills/rebase/SKILL.md
+  - .agents/skills/review-pr
+  - .agents/skills/review-pr/SKILL.md
+  - .agents/skills/understand-pr
+  - .agents/skills/understand-pr/SKILL.md
+  - .agents/skills/verify-pr
+  - .agents/skills/verify-pr/SKILL.md
+  - .claude/agents/code-quality-reviewer.md
+  - .claude/agents/error-handling-reviewer.md
+  - .claude/agents/operational-reviewer.md
+  - .claude/agents/story-conformance-reviewer.md
+  - .claude/agents/test-coverage-reviewer.md
+  - .claude/skills/rebase
+  - .claude/skills/rebase/SKILL.md
+  - .claude/skills/review-pr
+  - .claude/skills/review-pr/SKILL.md
+  - .claude/skills/understand-pr
+  - .claude/skills/understand-pr/SKILL.md
+  - .claude/skills/verify-pr
+  - .claude/skills/verify-pr/SKILL.md
+  - .codex/agents/code-quality-reviewer.toml
+  - .codex/agents/error-handling-reviewer.toml
+  - .codex/agents/operational-reviewer.toml
+  - .codex/agents/story-conformance-reviewer.toml
+  - .codex/agents/test-coverage-reviewer.toml
+  - .cursor/agents/code-quality-reviewer.md
+  - .cursor/agents/error-handling-reviewer.md
+  - .cursor/agents/operational-reviewer.md
+  - .cursor/agents/story-conformance-reviewer.md
+  - .cursor/agents/test-coverage-reviewer.md
+  deployed_file_hashes:
+    .agents/skills/rebase/SKILL.md: sha256:79dc3b2b10476046d77ba7b88fcdaed31eb9e8de6d8ddfece6eff0767ed57fd3
+    .agents/skills/review-pr/SKILL.md: sha256:3235b4d38949a2f822cd14b367c8451fe955fb3991290a0e381bb39172a90766
+    .agents/skills/understand-pr/SKILL.md: sha256:ef681593be35ea3f9b33aa23b030ddf50dc20819c90dd7deea7225bf522c6742
+    .agents/skills/verify-pr/SKILL.md: sha256:222b9223cf6ef801ffaa09e637f139bbae72559514a88ce29663c221b376f54f
+    .claude/agents/code-quality-reviewer.md: sha256:07c4bcd11deedff362136403f89abb88ff113580c1fc60cdad850868747b1383
+    .claude/agents/error-handling-reviewer.md: sha256:b0c9930a2fb6967868f52590cbaf93023d4002b18054b1cfd655aabc9dd8b7e4
+    .claude/agents/operational-reviewer.md: sha256:80091ddd5165c3b3580fa96aa653a6c8a25af63de72af658a98ff62b0b432685
+    .claude/agents/story-conformance-reviewer.md: sha256:1709f83a43858802f1629ec593579469056d46d00c91470e4681852b737331fd
+    .claude/agents/test-coverage-reviewer.md: sha256:bfe4dd1247eb2b918f9e31d289338af6886ca0285bd9896d82e75c79bf3d2334
+    .claude/skills/rebase/SKILL.md: sha256:79dc3b2b10476046d77ba7b88fcdaed31eb9e8de6d8ddfece6eff0767ed57fd3
+    .claude/skills/review-pr/SKILL.md: sha256:3235b4d38949a2f822cd14b367c8451fe955fb3991290a0e381bb39172a90766
+    .claude/skills/understand-pr/SKILL.md: sha256:ef681593be35ea3f9b33aa23b030ddf50dc20819c90dd7deea7225bf522c6742
+    .claude/skills/verify-pr/SKILL.md: sha256:222b9223cf6ef801ffaa09e637f139bbae72559514a88ce29663c221b376f54f
+    .codex/agents/code-quality-reviewer.toml: sha256:47706d19442a3ae3902d3be1a9a5aa2250faa4f802831a1882c0da589075027a
+    .codex/agents/error-handling-reviewer.toml: sha256:41540b7d346af575e71198f36faadbf58709357401bd9024010b35c219d4ff59
+    .codex/agents/operational-reviewer.toml: sha256:8ca668ac6b60171d00709ae8c65163d9e45f55617e40b0f033235839152ccc55
+    .codex/agents/story-conformance-reviewer.toml: sha256:2fc5c56eb202202a69c64664baac3b1c0e628f98424d301cb98360624ab679ce
+    .codex/agents/test-coverage-reviewer.toml: sha256:f0d750d8004e3c385b5670b1bc4cad834c8e541a7924e2c5984ef53a6e948481
+    .cursor/agents/code-quality-reviewer.md: sha256:07c4bcd11deedff362136403f89abb88ff113580c1fc60cdad850868747b1383
+    .cursor/agents/error-handling-reviewer.md: sha256:b0c9930a2fb6967868f52590cbaf93023d4002b18054b1cfd655aabc9dd8b7e4
+    .cursor/agents/operational-reviewer.md: sha256:80091ddd5165c3b3580fa96aa653a6c8a25af63de72af658a98ff62b0b432685
+    .cursor/agents/story-conformance-reviewer.md: sha256:1709f83a43858802f1629ec593579469056d46d00c91470e4681852b737331fd
+    .cursor/agents/test-coverage-reviewer.md: sha256:bfe4dd1247eb2b918f9e31d289338af6886ca0285bd9896d82e75c79bf3d2334
+  source: local
+  local_path: ./ai
+deployments:
+- kind: project-relative
+  target: agent-skills
+  value: .agents/skills/rebase
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: null
+- kind: project-relative
+  target: agent-skills
+  value: .agents/skills/rebase/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:79dc3b2b10476046d77ba7b88fcdaed31eb9e8de6d8ddfece6eff0767ed57fd3
+- kind: project-relative
+  target: agent-skills
+  value: .agents/skills/review-pr
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: null
+- kind: project-relative
+  target: agent-skills
+  value: .agents/skills/review-pr/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:3235b4d38949a2f822cd14b367c8451fe955fb3991290a0e381bb39172a90766
+- kind: project-relative
+  target: agent-skills
+  value: .agents/skills/understand-pr
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: null
+- kind: project-relative
+  target: agent-skills
+  value: .agents/skills/understand-pr/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:ef681593be35ea3f9b33aa23b030ddf50dc20819c90dd7deea7225bf522c6742
+- kind: project-relative
+  target: agent-skills
+  value: .agents/skills/verify-pr
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: null
+- kind: project-relative
+  target: agent-skills
+  value: .agents/skills/verify-pr/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:222b9223cf6ef801ffaa09e637f139bbae72559514a88ce29663c221b376f54f
+- kind: project-relative
+  target: claude
+  value: .claude/agents/code-quality-reviewer.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:07c4bcd11deedff362136403f89abb88ff113580c1fc60cdad850868747b1383
+- kind: project-relative
+  target: claude
+  value: .claude/agents/error-handling-reviewer.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:b0c9930a2fb6967868f52590cbaf93023d4002b18054b1cfd655aabc9dd8b7e4
+- kind: project-relative
+  target: claude
+  value: .claude/agents/operational-reviewer.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:80091ddd5165c3b3580fa96aa653a6c8a25af63de72af658a98ff62b0b432685
+- kind: project-relative
+  target: claude
+  value: .claude/agents/story-conformance-reviewer.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:1709f83a43858802f1629ec593579469056d46d00c91470e4681852b737331fd
+- kind: project-relative
+  target: claude
+  value: .claude/agents/test-coverage-reviewer.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:bfe4dd1247eb2b918f9e31d289338af6886ca0285bd9896d82e75c79bf3d2334
+- kind: project-relative
+  target: claude
+  value: .claude/skills/rebase
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/rebase/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:79dc3b2b10476046d77ba7b88fcdaed31eb9e8de6d8ddfece6eff0767ed57fd3
+- kind: project-relative
+  target: claude
+  value: .claude/skills/review-pr
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/review-pr/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:3235b4d38949a2f822cd14b367c8451fe955fb3991290a0e381bb39172a90766
+- kind: project-relative
+  target: claude
+  value: .claude/skills/understand-pr
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/understand-pr/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:ef681593be35ea3f9b33aa23b030ddf50dc20819c90dd7deea7225bf522c6742
+- kind: project-relative
+  target: claude
+  value: .claude/skills/verify-pr
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/verify-pr/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:222b9223cf6ef801ffaa09e637f139bbae72559514a88ce29663c221b376f54f
+- kind: project-relative
+  target: codex
+  value: .codex/agents/code-quality-reviewer.toml
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:47706d19442a3ae3902d3be1a9a5aa2250faa4f802831a1882c0da589075027a
+- kind: project-relative
+  target: codex
+  value: .codex/agents/error-handling-reviewer.toml
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:41540b7d346af575e71198f36faadbf58709357401bd9024010b35c219d4ff59
+- kind: project-relative
+  target: codex
+  value: .codex/agents/operational-reviewer.toml
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:8ca668ac6b60171d00709ae8c65163d9e45f55617e40b0f033235839152ccc55
+- kind: project-relative
+  target: codex
+  value: .codex/agents/story-conformance-reviewer.toml
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:2fc5c56eb202202a69c64664baac3b1c0e628f98424d301cb98360624ab679ce
+- kind: project-relative
+  target: codex
+  value: .codex/agents/test-coverage-reviewer.toml
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:f0d750d8004e3c385b5670b1bc4cad834c8e541a7924e2c5984ef53a6e948481
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/code-quality-reviewer.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:07c4bcd11deedff362136403f89abb88ff113580c1fc60cdad850868747b1383
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/error-handling-reviewer.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:b0c9930a2fb6967868f52590cbaf93023d4002b18054b1cfd655aabc9dd8b7e4
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/operational-reviewer.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:80091ddd5165c3b3580fa96aa653a6c8a25af63de72af658a98ff62b0b432685
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/story-conformance-reviewer.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:1709f83a43858802f1629ec593579469056d46d00c91470e4681852b737331fd
+- kind: project-relative
+  target: cursor
+  value: .cursor/agents/test-coverage-reviewer.md
+  runtime: null
+  scope: project
+  owners:
+  - ./ai
+  active_owner: ./ai
+  content_hash: sha256:bfe4dd1247eb2b918f9e31d289338af6886ca0285bd9896d82e75c79bf3d2334

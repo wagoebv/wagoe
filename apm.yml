@@ -1,0 +1,11 @@
+name: wagoe
+version: 1.0.0
+description: APM project for wagoe
+dependencies:
+  apm:
+  - ./ai
+targets:
+  - claude
+  - cursor
+  - codex
+  - agent-skills

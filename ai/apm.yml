@@ -1,0 +1,3 @@
+name: wagoe-local
+version: 1.0.0
+description: Local AI primitives for Wagoe (agents, skills, hooks)
