@@ -162,10 +162,17 @@ sender's tenant (the one bound on the thread, else `:tenant-id` in `opts`), whic
 carries (BOU-946). One sent in no tenant reaches the devices registered in no tenant; with
 `:all-tenants? true` in `opts`, every device (BOU-985). A token and app-id belong to one
 tenant: in it, the last user to register them takes the device over (BOU-683); another
-tenant's registration answers 409. DELETE removes only the request's tenant's registration
-(`IDeviceRemoval`). A callback counts in its send's tenant, so an `:all-tenants?` send's in
-none; without a recorded send, in the token's tenant, or none when it has several (BOU-990).
-The device routes and the stats keep to the request's tenant.
+tenant's registration answers 409, under any app-id, since a token is one device
+(BOU-994). A token stored in two tenants before then refuses both until one row goes:
+
+```sql
+SELECT token FROM push_device_tokens GROUP BY token HAVING COUNT(DISTINCT tenant_id) > 1
+```
+
+DELETE removes only the request's tenant's registration (`IDeviceRemoval`). A callback
+counts in its send's tenant, so an `:all-tenants?` send's in none; without a recorded send,
+in the token's tenant, or none when it has several (BOU-990). The device routes and the
+stats keep to the request's tenant.
 
 Jobs go on the `:default` queue, which is the one jobs' default worker pool
 polls. To isolate push on its own queue, set `:wagoe/push {:queue :push}` **and**
