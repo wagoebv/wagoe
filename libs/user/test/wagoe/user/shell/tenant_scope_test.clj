@@ -3,6 +3,7 @@
    tenant's admin acts on no other tenant's user (BOU-953)."
   (:require [clojure.test :refer [deftest is testing]]
             [malli.core :as m]
+            [reitit.core :as r]
             [wagoe.user.schema :as schema]
             [wagoe.user.shell.http :as http]
             [wagoe.user.shell.rights-handlers :as rights-handlers]
@@ -143,11 +144,7 @@
 (deftest ^:unit ^:security roles-and-groups-take-a-platform-admin
   ;; Roles and groups carry no tenant: a tenant's admin who edited one, or
   ;; added a role to Everyone, changed it for every tenant (BOU-984)
-  (let [routes (into {} (mapcat (fn [[path & more]]
-                                  (if (map? (first more))
-                                    [[path (first more)]]
-                                    (for [[sub data] more] [(str path sub) data]))))
-                     (:web (http/group-routes nil nil {})))
+  (let [routes (into {} (r/routes (r/router (:web (http/group-routes nil nil {})))))
         status (fn [path user]
                  (let [guard (last (:middleware (routes path)))]
                    (:status ((guard (constantly {:status 200})) {:user user :headers {}}))))]
@@ -155,4 +152,5 @@
     (doseq [path (keys routes)]
       (testing path
         (is (= 403 (status path admin-of-a)))
+        (is (= 403 (status path no-tenant)))
         (is (= 200 (status path {:id (UUID/randomUUID) :role :admin})))))))
