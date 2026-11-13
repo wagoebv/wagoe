@@ -15,12 +15,17 @@ brew install openjdk clojure/tools/clojure borkdude/brew/babashka  # macOS
 git clone https://github.com/wagoebv/wagoe.git
 cd wagoe
 bb install-hooks            # pre-commit runs the FC/IS and ports gates
+apm install                 # agent skills, reviewers and hooks from ai/.apm/
 
 bb test:services up         # Redis + MySQL for the adapter sweeps (docker compose)
 bb test:all                 # every test surface; PostgreSQL runs embedded
 bb check                    # the quality gates CI runs
 clojure -M:repl-clj         # development REPL (nREPL on 7888)
 ```
+
+`apm install` needs [APM](https://github.com/microsoft/apm) 0.33 or later. It writes
+`.claude/`, `.cursor/`, `.codex/` and `.agents/`, which are generated and ignored:
+edit the sources in `ai/.apm/` and run it again.
 
 `clojure -M:test` alone does not cover the standalone libraries (`wagoe-cli`,
 `wagoe-mcp`, `tools`); `bb test:all` does. Run one suite with
