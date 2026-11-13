@@ -321,6 +321,28 @@
       (handler request)
       (is (= 1 @lookup-count))))) ; Still 1 - cached!
 
+(deftest ^:unit ^:security a-suspended-tenant-does-not-serve
+  ;; The lookup filtered deleted_at only, and trusted a cached tenant for an hour (BOU-992)
+  (let [tenants (atom [(assoc test-tenant-1 :status :suspended)])
+        request {:server-name "acme-corp.myapp.com" :uri "/api/users" :request-method :get}]
+    (doseq [required? [true false]]
+      (testing (str "require-tenant? " required?)
+        (is (= 403 (:status ((tenant-mw/wrap-tenant-resolution simple-handler (->MockTenantService tenants)
+                                                                {:require-tenant? required?})
+                             request))))))
+    (testing "any status but active, as a keyword or a string, for anyone"
+      (doseq [status [:deleted "suspended"]]
+        (is (= 403 (:status ((tenant-mw/wrap-tenant-resolution simple-handler
+                                                               (->MockTenantService (atom [(assoc test-tenant-1 :status status)])))
+                             (assoc request :user {:id (UUID/randomUUID) :role :admin}))))
+            (pr-str status))))
+    (testing "a tenant suspended after it was cached, once the cache lapses"
+      (reset! tenants [test-tenant-1])
+      (let [handler (tenant-mw/wrap-tenant-resolution simple-handler (->MockTenantService tenants) {:cache-ttl-ms 0})]
+        (is (= 200 (:status (handler request))))
+        (swap! tenants (fn [ts] (mapv #(assoc % :status :suspended) ts)))
+        (is (= 403 (:status (handler request))))))))
+
 ;; =============================================================================
 ;; Schema Switching Tests
 ;; =============================================================================

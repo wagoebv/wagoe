@@ -126,7 +126,8 @@
        Vector of SearchResult maps")
 
   (list-indices [this]
-    "List all registered search indices with document counts.
+    "List all registered search indices with document counts. A count spans
+     every tenant, so show it to a platform admin only (BOU-992).
 
      Returns:
        Vector of maps {:id :entity-type :language :fields :doc-count}")

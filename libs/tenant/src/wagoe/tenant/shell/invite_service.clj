@@ -142,8 +142,8 @@
      :accept-external-invite
      {:token token :accepted-by-user-id accepted-by-user-id}
      (fn [_]
-         (let [{:keys [invite membership]} (ports/accept-external-invite! this {:token token
-                                                                           :accepted-by-user-id accepted-by-user-id})]
+       (let [{:keys [invite membership]} (ports/accept-external-invite! this {:token token
+                                                                              :accepted-by-user-id accepted-by-user-id})]
          {:invite invite :membership membership}))
      (service-system this)))
 
@@ -193,7 +193,7 @@
                validate-invite-for-acceptance))))
      (service-system this)))
 
-  (accept-external-invite! [this {:keys [token accepted-by-user-id tx-context hooks]}]
+  (accept-external-invite! [this {:keys [token accepted-by-user-id accepted-by-email tx-context hooks] :as request}]
     (service-interceptors/execute-service-operation
      :accept-external-invite!
      {:token token :accepted-by-user-id accepted-by-user-id :tx-context tx-context}
@@ -206,6 +206,12 @@
            (let [invite (-> (locked-invite-by-token invite-repository token)
                             validate-invite-for-acceptance)
                  now (time/now)]
+             ;; Bound when the caller says who accepts; a token alone joins whoever holds it (BOU-992)
+             ;; Named but nil is a user without an email: refused, not read as bearer
+             (when (and (contains? request :accepted-by-email)
+                        (not= (:email invite) (invite-core/normalize-email accepted-by-email)))
+               (throw (ex-info "This invite is for another email address"
+                               {:type :forbidden :invite-id (:id invite)})))
              (when (ports/membership-exists? membership-repository
                                              accepted-by-user-id
                                              (:tenant-id invite))
@@ -228,9 +234,9 @@
                {:invite updated-invite
                 :membership membership
                 :effects {:after-accept-tx (when after-accept-tx
-                                              (after-accept-tx {:invite updated-invite
-                                                                :membership membership
-                                                                :tx-context tx-context}))}})))))
+                                             (after-accept-tx {:invite updated-invite
+                                                               :membership membership
+                                                               :tx-context tx-context}))}})))))
      (service-system this))))
 
 (defn create-invite-service

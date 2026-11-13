@@ -272,6 +272,7 @@
      Request must contain either:
        {:tenant {:id \"tenant-123\" ...}} OR
        {:tenant-id \"tenant-123\"}
+     The id may be a UUID, as the tenant middleware sets it.
 
    If no tenant context found, returns base cache (public namespace)."
   [cache request]
@@ -279,7 +280,8 @@
          (map? request)]}
   (if-let [tenant-id (or (get-in request [:tenant :id])
                          (:tenant-id request))]
-    (create-tenant-cache cache tenant-id)
+    ;; A resolved tenant's id is a UUID, which the constructor's string check refused (BOU-992)
+    (create-tenant-cache cache (str tenant-id))
     cache))
 
 (comment

@@ -36,8 +36,10 @@
   (badge (name language) {:variant :neutral
                           :class "status-badge"}))
 
-(defn- doc-count-badge [n]
-  (badge (str (or n 0) " docs")
+(defn- doc-count-badge
+  "A document count, or a dash for a caller who may not see one."
+  [n]
+  (badge (if n (str n " docs") "–")
          {:variant (if (pos? (or n 0)) :success :neutral)
           :class "status-badge"}))
 

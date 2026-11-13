@@ -349,7 +349,7 @@
 ;; Integration Tests - Extract from Request
 ;; =============================================================================
 
-(deftest ^:integration extract-tenant-cache-test
+(deftest ^:integration ^:security extract-tenant-cache-test
   (testing "Extract tenant cache from request with tenant ID in :tenant map"
     (let [base-cache (create-test-cache)
           request {:tenant {:id "acme" :slug "acme-corp"}}
@@ -362,6 +362,14 @@
       (let [other-request {:tenant {:id "globex"}}
             other-cache (tenant-cache/extract-tenant-cache base-cache other-request)]
         (is (nil? (ports/get-value other-cache :user-123))))))
+
+  (testing "a resolved tenant's UUID id, as the tenant middleware sets it (BOU-992)"
+    (let [base-cache (create-test-cache)
+          id         (random-uuid)
+          a          (tenant-cache/extract-tenant-cache base-cache {:tenant {:id id}})]
+      (ports/set-value! a :k "v")
+      (is (= "v" (ports/get-value (tenant-cache/extract-tenant-cache base-cache {:tenant {:id id}}) :k)))
+      (is (nil? (ports/get-value (tenant-cache/extract-tenant-cache base-cache {:tenant {:id (random-uuid)}}) :k)))))
 
   (testing "Extract tenant cache from request with :tenant-id key"
     (let [base-cache (create-test-cache)

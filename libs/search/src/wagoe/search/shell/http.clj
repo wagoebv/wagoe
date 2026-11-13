@@ -248,11 +248,19 @@
 ;; Admin web handlers
 ;; =============================================================================
 
+(defn- counted-for
+  "`indices` as `request`'s caller may see them: a count spans every tenant,
+   so only a platform admin gets one (BOU-992)."
+  [request indices]
+  (cond->> indices
+    (not (access/platform-admin? (:user request))) (mapv #(assoc % :doc-count nil))))
+
 (defn handle-list-indices-web
   "GET /web/admin/search"
   [engine request]
-  (let [indices   (filterv #(served? request (ports/index-definition engine (:id %)))
-                           (ports/list-indices engine))
+  (let [indices   (counted-for request
+                             (filterv #(served? request (ports/index-definition engine (:id %)))
+                                      (ports/list-indices engine)))
         page-opts {:user  (:user request)
                    :flash (:flash request)}]
     (html-response request (search-ui/indices-page indices page-opts))))
@@ -262,7 +270,7 @@
   [engine request]
   (let [index-id   (keyword (get-in request [:path-params :index-id]))
         index-info (when (some->> (ports/index-definition engine index-id) (served? request))
-                     (first (filter #(= index-id (:id %)) (ports/list-indices engine))))
+                     (first (counted-for request (filter #(= index-id (:id %)) (ports/list-indices engine)))))
         page-opts  {:user  (:user request)
                     :flash (:flash request)}]
     (if (nil? index-info)
