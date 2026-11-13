@@ -81,12 +81,21 @@
                      :message "Call it outside any transaction on its database; each tenant gets its own"})))
   (each-schema schema-provider db-ctx (active-tenants tenant-service) :schema-name :id f))
 
+(defn- find-tenant
+  "`tenant-id`'s tenant, or nil. TenantService throws `:not-found` for an
+   unknown id, which a handler's own not-found would be mistaken for (BOU-985)."
+  [tenant-service tenant-id]
+  (try
+    (ports/get-tenant tenant-service tenant-id)
+    (catch clojure.lang.ExceptionInfo e
+      (when-not (= :not-found (:type (ex-data e))) (throw e)))))
+
 (defn in-tenant
   "Call `(f)` in one transaction on `tenant-id`'s schema, with `db/*tenant-id*`
-   bound. Throws for an unknown tenant (`:tenant-not-found` from a service that
-   answers nil), so its work never runs against public."
+   bound. Throws `:tenant-not-found` for an unknown tenant, so its work never
+   runs against public."
   [tenant-service schema-provider db-ctx tenant-id f]
-  (let [tenant (or (ports/get-tenant tenant-service tenant-id)
+  (let [tenant (or (find-tenant tenant-service tenant-id)
                    (throw (ex-info "Tenant not found"
                                    {:type      :tenant-not-found
                                     :tenant-id tenant-id

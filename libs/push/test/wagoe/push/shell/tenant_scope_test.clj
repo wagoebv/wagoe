@@ -37,8 +37,9 @@
   [send tenant]
   (let [enqueued (atom nil)
         queue    #_{:clj-kondo/ignore [:missing-protocol-method]}
-                 (reify wagoe.jobs.ports/IJobQueue
-                   (enqueue-job! [_ _ job] (reset! enqueued job) (:id job)))
+        (reify wagoe.jobs.ports/IJobQueue
+          (enqueue-job! [_ _ job] (reset! enqueued job) (:id job))
+          (schedule-job! [_ _ job _] (reset! enqueued job) (:id job)))
         svc      (service/map->PushService {:job-queue queue :queue-name :push})]
     (binding [db/*tenant-id* tenant] (send svc))
     (:args @enqueued)))
@@ -82,7 +83,36 @@
 
 (deftest ^:unit ^:security all-tenants-is-honoured-only-outside-a-tenant
   ;; A tenant's code must not reach every tenant's devices by asking (BOU-985)
-  (let [send #(job-args (fn [svc] (ports/send-push! svc :tenant-test {} (merge {:user-id (random-uuid)} %1))) %2)]
-    (is (true? (:all-tenants? (send {:all-tenants? true} nil))))
-    (is (false? (:all-tenants? (send {:all-tenants? true} tenant-a))) "ignored inside a tenant")
-    (is (false? (:all-tenants? (send {} nil))) "never by default")))
+  (doseq [[label call] {"send-push!"     #(ports/send-push! %1 :tenant-test {} %2)
+                        "schedule-push!" #(ports/schedule-push! %1 :tenant-test {} %2 (java.time.Instant/now))
+                        "broadcast!"     #(ports/broadcast! %1 :tenant-test {} %2)}]
+    (testing label
+      (let [send #(job-args (fn [svc] (call svc (merge {:user-id (random-uuid) :platform :fcm} %1))) %2)]
+        (is (true? (:all-tenants? (send {:all-tenants? true} nil))))
+        (is (false? (:all-tenants? (send {:all-tenants? true} tenant-a))) "ignored inside a tenant")
+        (is (false? (:all-tenants? (send {} nil))) "never by default")))))
+
+(deftest ^:integration ^:security a-job-of-no-tenant-reaches-only-no-tenants-devices
+  ;; A handler or job that lost its tenant pushed to every tenant's devices (BOU-985)
+  (let [store     (p/->DeviceTokenStore pt/*db*)
+        analytics (p/->PushAnalyticsStore pt/*db*)
+        user      (random-uuid)
+        _         (register! store user "token-in-a" tenant-a)
+        _         (register! store user "token-in-b" tenant-b)
+        _         (register! store user "token-in-none" nil)
+        deps      {:device-store store :analytics-store analytics :callback-secret "s"
+                   :fcm-provider (mock/->MockFCMProvider) :apns-provider (mock/->MockAPNsProvider)}
+        sent      #(:sent (ports/get-push-stats analytics :tenant-test {}))]
+    (is (= 3 (count (ports/get-user-devices store user))))
+    (testing "a send of no tenant"
+      (jobs/handle-send-push deps (job-args #(ports/send-push! % :tenant-test {} {:user-id user}) nil))
+      (is (= 1 (sent))))
+    (testing "with :all-tenants?"
+      (jobs/handle-send-push deps (job-args #(ports/send-push! % :tenant-test {} {:user-id user :all-tenants? true}) nil))
+      (is (= 4 (sent))))
+    (testing "a broadcast of no tenant"
+      (jobs/handle-broadcast deps (job-args #(ports/broadcast! % :tenant-test {} {:platform :fcm}) nil))
+      (is (= 5 (sent))))
+    (testing "a broadcast with :all-tenants?"
+      (jobs/handle-broadcast deps (job-args #(ports/broadcast! % :tenant-test {} {:platform :fcm :all-tenants? true}) nil))
+      (is (= 8 (sent))))))

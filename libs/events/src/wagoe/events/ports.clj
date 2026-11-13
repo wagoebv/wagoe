@@ -38,7 +38,11 @@
 
      A handler that throws must not lose the event or kill the subscription —
      implementations log and continue, and the event stays unacknowledged where
-     the backend supports it.")
+     the backend supports it.
+
+     Subscribed while `db/*tenant-id*` is bound, it gets only that tenant's
+     events and those of no tenant (BOU-947), filtered before the handler
+     enters the event's tenant (BOU-985).")
 
   (unsubscribe! [this subscription]
     "Stop delivering to a subscription. Idempotent."))

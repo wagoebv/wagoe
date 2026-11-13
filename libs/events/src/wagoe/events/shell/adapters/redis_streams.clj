@@ -104,7 +104,8 @@
                                   "original-id" (str (.getID entry))})))
     (log/error handler-error
                "event exceeded its delivery limit; moved to the dead-letter stream"
-               {:stream stream :dead (str stream ":dead") :id (:id parsed)})
+               {:stream stream :dead (str stream ":dead") :id (:id parsed)
+                :tenant-id (:tenant-id parsed) :error-type (:type (ex-data handler-error))})
     (catch Exception e
       ;; If even that fails, keep the entry pending rather than acking it away.
       (log/error e "could not dead-letter event; leaving it pending"
@@ -136,7 +137,9 @@
             (log/debug "event left pending: its subscription ended" {:stream stream :id (:id parsed)})
             (throw t))
           (let [delivered (delivery-count pool stream group (.getID entry))]
-            (if (and max-deliveries delivered (>= delivered max-deliveries))
+            ;; A deleted tenant never comes back: retrying only delays the dead letter
+            (if (or (= :tenant-not-found (:type (ex-data t)))
+                    (and max-deliveries delivered (>= delivered max-deliveries)))
               (dead-letter! pool stream group t entry parsed)
               (log/warn t "event handler threw; entry left for redelivery"
                         {:stream stream :id (:id parsed) :delivered delivered

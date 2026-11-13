@@ -30,6 +30,9 @@
   (testing "subscribed for a tenant by name"
     (is (= #{tenant-b :system}
            (received (fn [bus h] (publisher/subscribe-for-tenant! bus tenant-b :orders h))))))
+  (testing "code in a tenant cannot name another's (BOU-985)"
+    (is (= #{tenant-a :system}
+           (received (fn [bus h] (binding [db/*tenant-id* tenant-a] (publisher/subscribe-for-tenant! bus tenant-b :orders h)))))))
   (testing "subscribed outside any tenant, it opts in to every tenant's"
     (is (= #{tenant-a tenant-b :system}
            (received (fn [bus h] (publisher/subscribe-for-tenant! bus nil :orders h)))))))
