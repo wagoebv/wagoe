@@ -13,8 +13,9 @@ xref:authorization.adoc[Authorization] instead.
 User:: Someone who can sign in. A user is active or deactivated.
 
 Platform admin:: A user with the role *Admin* and no tenant. A platform admin
-may do everything, whatever their groups. Users, groups and roles are managed
-by users with the role Admin. Give it to as few people as you can.
+may do everything, whatever their groups. Users are managed by users with the
+role Admin; groups and roles span every tenant, so only a platform admin
+manages them. Give the role to as few people as you can.
 
 Permission:: One thing a user may do, written `<module>/<action>`:
 `orders/read`, `orders/write`, `orders/refund`. Each admin entity has two:

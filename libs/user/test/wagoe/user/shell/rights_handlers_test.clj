@@ -454,3 +454,26 @@
           (is (str/includes? (:body r) "grant-join"))
           (is (str/includes? (:body r) "grant-refused"))
           (is (str/includes? (:body r) "error-scope")))))))
+
+(deftest ^:integration ^:security a-tenants-admin-gets-no-group-or-role-pages
+  ;; Groups and roles span every tenant: a change to one reaches all (BOU-984)
+  (with-app
+    (fn [{:keys [app admin]}]
+      (let [tenant-admin {:id (random-uuid) :email "t@example.com" :role :admin :tenant-id (random-uuid)}
+            any-id       (random-uuid)]
+        (doseq [[method uri] [[:get "/web/admin/groups"]
+                              [:post "/web/admin/groups"]
+                              [:post (str "/web/admin/groups/" any-id "/roles")]
+                              [:post (str "/web/admin/groups/" any-id "/delete")]
+                              [:get "/web/admin/roles"]
+                              [:post "/web/admin/roles/save"]
+                              [:get "/web/admin/permissions"]
+                              [:get "/web/admin/access"]
+                              [:get (str "/web/users/" any-id "/grant")]
+                              [:post (str "/web/users/" any-id "/grant/role")]]]
+          (testing (str method " " uri)
+            (is (= 403 (:status (app (req tenant-admin method uri)))))))
+        (testing "a platform admin still gets them"
+          (is (= 200 (:status (get-page app admin "/web/admin/groups")))))
+        (testing "a tenant's admin reads rights, but only of their own tenant's users"
+          (is (= 404 (:status (get-page app tenant-admin (str "/web/users/" (:id admin) "/rights"))))))))))

@@ -32,7 +32,8 @@
    - GET    /docs/*               - Documentation
 
    All observability is handled automatically by interceptors."
-  (:require [wagoe.core.interceptor :as interceptor]
+  (:require [wagoe.core.http.access :as core-access]
+            [wagoe.core.interceptor :as interceptor]
             [wagoe.core.interceptor-context :as interceptor-context]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
@@ -795,13 +796,13 @@
           :entities [:users]
           :items    [{:href "/web/profile" :icon :user
                       :label [:t :user/nav-profile-title] :description [:t :user/nav-profile-description]}
-                     {:href "/web/admin/groups" :icon :shield :access :admin
+                     {:href "/web/admin/groups" :icon :shield :access :platform-admin
                       :label [:t :admin/groups-title] :description [:t :admin/groups-description]}
-                     {:href "/web/admin/roles" :icon :key :access :admin
+                     {:href "/web/admin/roles" :icon :key :access :platform-admin
                       :label [:t :user.roles/page-title] :description [:t :user.roles/nav-description]}
-                     {:href "/web/admin/permissions" :icon :check :access :admin
+                     {:href "/web/admin/permissions" :icon :check :access :platform-admin
                       :label [:t :user.permissions/page-title] :description [:t :user.permissions/nav-description]}
-                     {:href "/web/admin/access" :icon :clipboard :access :admin
+                     {:href "/web/admin/access" :icon :clipboard :access :platform-admin
                       :label [:t :user.access/page-title] :description [:t :user.access/nav-description]}
                      {:href "/web/audit" :icon :file-text :access :platform-admin
                       :label [:t :admin/audit-trail-title] :description [:t :admin/audit-trail-description]}]}})
@@ -822,12 +823,18 @@
 
 (defn group-routes
   "Groups, roles and permissions, mounted under /web/admin beside the admin UI,
-   and a user's rights at /web/users/:id/rights, /explain and /grant: admins only. Absent when the
-   web UI is switched off."
+   and a user's rights at /web/users/:id/rights, /explain and /grant. Absent when the
+   web UI is switched off.
+
+   Groups and roles carry no tenant, so their pages and the grant wizard,
+   which creates them, take a platform admin; a tenant's admin only reads
+   their own users' rights (BOU-984)."
   [user-service group-service config]
-  (let [guard [(user-middleware/flexible-authentication-middleware user-service)
-               user-middleware/require-admin-middleware]
-        route (fn [path methods] [path (assoc methods :no-doc true :authorization :self :middleware guard)])]
+  (let [authn          (user-middleware/flexible-authentication-middleware user-service)
+        admin          [authn user-middleware/require-admin-middleware]
+        platform-admin [authn #(core-access/require-platform-admin % (fn [] (str (random-uuid))))]
+        route*         (fn [guard path methods] [path (assoc methods :no-doc true :authorization :self :middleware guard)])
+        route          (partial route* platform-admin)]
     {:api    []
      :static []
      :web    (when (web-ui-enabled? config)
@@ -875,9 +882,9 @@
                            {:get {:handler (rights-handlers/grant-bulk user-service group-service)}})]
                    (route "/admin/access"
                           {:get {:handler (rights-handlers/access-overview user-service group-service)}})
-                   (route "/users/:id/rights"
+                   (route* admin "/users/:id/rights"
                           {:get {:handler (rights-handlers/user-rights user-service group-service)}})
-                   (route "/users/:id/explain"
+                   (route* admin "/users/:id/explain"
                           {:get {:handler (rights-handlers/explain-access user-service group-service
                                                                          (or (get-in config [:active :wagoe/authorization :mode]) :off))}})
                    (route "/users/:id/grant"

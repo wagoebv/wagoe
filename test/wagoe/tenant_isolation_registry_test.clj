@@ -40,7 +40,7 @@
                                 ["a-member-reads-only-their-own-tenant"
                                  "an-index-without-a-tenant-filter-is-refused-to-a-caller-in-a-tenant"
                                  "only-a-platform-admin-writes-documents"]}}
-   "user"          {:scoped-by "users.tenant_id; listings and routes by user id forced to the caller's tenant"
+   "user"          {:scoped-by "users.tenant_id; listings and routes by user id forced to the caller's tenant; groups and roles span tenants, so only a platform admin reaches them"
                     :tests     {"libs/user/test/wagoe/user/shell/authz_negative_security_test.clj"
                                 ["require-tenant-member-denies-non-member"]
                                 "libs/user/test/wagoe/user/shell/tenant_scope_test.clj"
@@ -48,7 +48,9 @@
                                  "a-route-naming-another-tenants-user-answers-404"
                                  "a-bulk-action-skips-another-tenants-users"
                                  "a-tenants-admin-creates-users-in-their-tenant"
-                                 "another-tenants-users-rights-are-not-found"]}}
+                                 "another-tenants-users-rights-are-not-found"]
+                                "libs/user/test/wagoe/user/shell/rights_handlers_test.clj"
+                                ["a-tenants-admin-gets-no-group-or-role-pages"]}}
    "audience"      {:scoped-by "segments span every tenant, so only a platform admin reaches them"
                     :tests     {"libs/audience/test/wagoe/audience/shell/http_test.clj"
                                 ["a-tenants-admin-gets-no-audience"]}}

@@ -432,8 +432,9 @@ assignment is group + role + scope (`{}` is everywhere). A user's grants,
 `(user-grants svc user)`, are the permissions of the roles of their groups, each
 `{:permission :scope :group-id :group-name :role}`, read on every call;
 `wagoe.user.core.group` has `holds?`, `grants-for` and `authorized?`. The admin
-pages are `/web/admin/groups` (`group-routes`, mounted beside the admin UI, admins
-only).
+pages are `/web/admin/groups` (`group-routes`, mounted beside the admin UI). Groups
+and roles carry no tenant, so those pages take a platform admin; a tenant's admin
+reads only their own users' `/web/users/:id/rights` (BOU-984).
 
 The user module's own routes say `:public`, `:signed-in` or `:self`, so
 `:wagoe/authorization :enforce` asks none of them a permission. Guide:

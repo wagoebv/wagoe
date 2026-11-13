@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A tenant's admin changed groups and roles for every tenant** (BOU-984), and saw other tenants' members. The group,
+  role, permission and grant pages take a platform admin now; a tenant's admin keeps their own users' rights pages.
 - **Events lost their tenant** (BOU-985): admin events reached every tenant, a platform admin's too; handlers ran in none.
   A handler runs in its event's tenant now; a push of no tenant needs `:all-tenants? true` to reach every tenant's devices.
 - **A job enqueued in a tenant ran on the public schema** (BOU-987), reports and data exports included. It carries the

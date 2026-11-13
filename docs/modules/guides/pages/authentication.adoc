@@ -335,9 +335,10 @@ means no role.
 Everyone is a built-in group: every signed-in user is in it, including users who sign
 up later. Give it the roles any user should have.
 
-Administrators manage groups at `/web/admin/groups` and roles at `/web/admin/roles`
+Platform administrators manage groups at `/web/admin/groups` and roles at `/web/admin/roles`
 (see xref:managing-access.adoc[Managing access]),
 where a code role can be duplicated into a managed one to adapt it.
+Groups and roles span every tenant, so a tenant's admin cannot open these pages.
 `/web/admin/permissions` and each role page show who holds what, and a user's Rights
 tab lists their groups and every permission with the group, role and scope it comes
 from. Joining or leaving a group, a
