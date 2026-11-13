@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **Tenant work could run in the wrong schema** (BOU-988). Switching schema inside an open transaction, or to a schema
+  that does not exist, is refused now; call `in-tenant` outside your transaction.
 - **A webhook subscription made in a tenant without `:tenant-id` received every tenant's events** (BOU-989). The API
   takes the bound tenant now, and acts only on that tenant's subscriptions. Nothing to change.
 - **Any signed-in user ran requests in another tenant by naming it in a header or host** (BOU-982). Such a request

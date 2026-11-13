@@ -73,6 +73,25 @@
                   :error-message (db/loggable-message e)})
       false)))
 
+(defonce ^:private known-schemas
+  ;; [datasource schema-name] seen to exist: one lookup per schema, not per
+  ;; request. Keyed by datasource, so one database's schema does not vouch for
+  ;; another's. Dropping a schema here evicts it.
+  (atom #{}))
+
+(defn known-schema?
+  "Whether `schema-name` exists on `ctx`'s database, cached once seen. `tx` is
+   the open transaction the lookup runs on."
+  [ctx tx schema-name]
+  (let [k [(:datasource ctx) schema-name]]
+    (or (contains? @known-schemas k)
+        (when (schema-exists? tx schema-name)
+          (swap! known-schemas conj k)
+          true))))
+
+(defn- forget-schema! [ctx schema-name]
+  (swap! known-schemas disj [(:datasource ctx) schema-name]))
+
 (defn- schemas?
   "Whether `ctx`'s adapter claims :schemas, a schema per tenant (ADR-039)."
   [ctx]
@@ -275,6 +294,7 @@
           ;; Attempt cleanup on failure
           (try
             (db/execute-ddl! ctx (str "DROP SCHEMA IF EXISTS " schema-name " CASCADE"))
+            (forget-schema! ctx schema-name)
             (log/info "Cleaned up failed provisioning" {:schema-name schema-name})
             (catch Exception cleanup-e
               (log/error cleanup-e "Failed to cleanup after provisioning failure"
@@ -361,6 +381,7 @@
         (log/warn "Deprovisioning tenant schema (destructive operation)"
                   {:schema-name schema-name})
         (db/execute-ddl! ctx (str "DROP SCHEMA " schema-name " CASCADE"))
+        (forget-schema! ctx schema-name)
         (log/info "Tenant schema deprovisioned successfully"
                   {:schema-name schema-name})
         {:success? true
@@ -413,8 +434,24 @@
    next.jdbc would otherwise commit it and end the search_path early (BOU-624)."
   [ctx schema-name f]
   (assert-safe-schema-name! schema-name)
+  ;; Joining an open transaction would set its search_path, and it would stay
+  ;; there after f returns: the rest of the caller's work runs in another
+  ;; tenant's schema (BOU-988). The same schema's own transaction joins
+  ;; harmlessly; the same name bound on another database's does not.
+  (when-let [open (db/current-transaction ctx)]
+    (when-not (and (= db/*tenant-schema* schema-name)
+                   (identical? open db/*tenant-transaction*))
+      (throw (ex-info (str "Cannot switch to " schema-name " inside an open transaction")
+                      {:type    :configuration-error
+                       :schema  schema-name
+                       :message "Call it outside any transaction on its database"}))))
   (db/with-transaction* ctx
     (fn [tx]
+      ;; PostgreSQL accepts a schema that does not exist in search_path, and
+      ;; every unqualified table then resolves to public (BOU-988)
+      (when-not (known-schema? ctx tx schema-name)
+        (throw (ex-info (str "Tenant schema " schema-name " does not exist")
+                        {:type :schema-not-found :schema schema-name})))
       (db/execute-ddl! tx (str "SET LOCAL search_path TO " schema-name ", public"))
       (binding [jdbc-tx/*nested-tx*      :ignore
                 db/*tenant-schema*       schema-name
