@@ -4,6 +4,7 @@
             [wagoe.storage.shell.http-handlers :as sut]
             [wagoe.storage.shell.service :as service]
             [wagoe.storage.shell.adapters.local :as local]
+            [wagoe.storage.core.validation :as validation]
             [wagoe.storage.ports]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [clojure.string]))
@@ -33,6 +34,15 @@
   {:filename filename
    :content-type content-type
    :bytes (.getBytes content)})
+
+(defn- query-of
+  "The query parameters of `url`, as Ring hands them over."
+  [url]
+  (into {} (for [kv (rest (clojure.string/split url #"[?&]"))
+                 :let [[k v] (clojure.string/split kv #"=")]]
+             [k v])))
+
+(def ^:private hmac-hex #'local/hmac-sha256-hex)
 
 ;; ============================================================================
 ;; upload-file-handler
@@ -139,9 +149,7 @@
         _       (do (.mkdirs (io/file test-dir))
                     (spit (io/file test-dir key) "content"))
         signed  (wagoe.storage.ports/generate-signed-url storage key 3600)
-        params  (into {} (for [kv (rest (clojure.string/split signed #"[?&]"))
-                               :let [[k v] (clojure.string/split kv #"=")]]
-                           [k v]))
+        params  (query-of signed)
         handler (sut/download-file-handler svc secret)
         call    #(handler {:path-params {:file-key key} :query-params %})]
     (testing "unsigned is refused"
@@ -271,9 +279,7 @@
                  storage {:bytes (.getBytes "hello") :content-type "text/plain"}
                  {:filename "hello.txt"})
         url     (:url result)
-        params  (into {} (for [kv (rest (clojure.string/split url #"[?&]"))
-                               :let [[k v] (clojure.string/split kv #"=")]]
-                           [k v]))]
+        params  (query-of url)]
     (is (clojure.string/includes? url "signature=") "the reported URL is signed")
     (is (= 200 (:status ((sut/download-file-handler svc secret)
                          {:path-params {:file-key (:key result)}
@@ -289,9 +295,7 @@
                                              :url-base "http://x/files"
                                              :signing-secret secret})
         url     (wagoe.storage.ports/generate-signed-url storage "2a\\photo.jpg" 3600)
-        params  (into {} (for [kv (rest (clojure.string/split url #"[?&]"))
-                               :let [[k v] (clojure.string/split kv #"=")]]
-                           [k v]))]
+        params  (query-of url)]
     (is (local/verify-signed-url secret "2a/photo.jpg"
                                  {:expires   (get params "expires")
                                   :version   (get params "v")
@@ -378,18 +382,6 @@
     (is (instance? java.io.InputStream (:body resp)))
     (is (clojure.string/includes? (slurp (:body resp)) "\"key\""))))
 
-(defn- query-of
-  "The query parameters of `url`, as Ring hands them over."
-  [url]
-  (into {} (for [kv (rest (clojure.string/split url #"[?&]"))
-                 :let [[k v] (clojure.string/split kv #"=")]]
-             [k v])))
-
-(defn- hmac-hex [^String secret ^String message]
-  (let [mac (javax.crypto.Mac/getInstance "HmacSHA256")]
-    (.init mac (javax.crypto.spec.SecretKeySpec. (.getBytes secret "UTF-8") "HmacSHA256"))
-    (apply str (map #(format "%02x" %) (.doFinal mac (.getBytes message "UTF-8"))))))
-
 (deftest ^:unit ^:security a-signed-url-dies-with-the-file-it-was-signed-for
   ;; It served whatever was written at its key later, by anyone, for 68 years (BOU-991)
   (let [secret   "s3cr3t"
@@ -409,12 +401,12 @@
       (let [exp (str (+ 60 (quot (System/currentTimeMillis) 1000)))]
         (is (= 403 (:status (download {"expires" exp "signature" (hmac-hex secret (str key ":" exp))}))))))
     (testing "a URL that lives past the cap is refused, however it was signed"
-      (let [exp (str (+ (quot (System/currentTimeMillis) 1000) local/max-signed-seconds 3600))
+      (let [exp (str (+ (quot (System/currentTimeMillis) 1000) validation/max-signed-seconds 3600))
             v   (get query "v")]
         (is (= 403 (:status (download {"expires" exp "v" v "signature" (hmac-hex secret (str key ":" exp ":" v))}))))))
     (testing "the cap bounds what is issued"
       (let [exp (parse-long (get (query-of (wagoe.storage.ports/generate-signed-url storage key 2147483647)) "expires"))]
-        (is (<= exp (+ (quot (System/currentTimeMillis) 1000) local/max-signed-seconds)))))
+        (is (<= exp (+ (quot (System/currentTimeMillis) 1000) validation/max-signed-seconds)))))
     (testing "a file written at the key since is not served, however soon"
       (is (= key (:key (put! "second"))))
       (is (= 403 (:status (download query)))))
@@ -436,10 +428,10 @@
   (let [svc (create-test-service)
         key (-> (service/upload-file svc {:bytes (.getBytes "x") :content-type "text/plain"} {:filename "u.txt"} {}) :data :key)
         ask #(:status ((sut/get-file-url-handler svc) {:path-params {:file-key key} :query-params {"expiration" %}}))]
-    (doseq [bad ["0" "-1" (str (inc local/max-signed-seconds))]]
+    (doseq [bad ["0" "-1" (str (inc validation/max-signed-seconds))]]
       (is (= 400 (ask bad)) bad))
     (testing "the cap itself, and an unreadable value, which means the default hour"
-      (is (not= 400 (ask (str local/max-signed-seconds))))
+      (is (not= 400 (ask (str validation/max-signed-seconds))))
       (is (not= 400 (ask "abc"))))))
 
 (deftest ^:unit ^:security tenants-name-the-same-path-without-colliding

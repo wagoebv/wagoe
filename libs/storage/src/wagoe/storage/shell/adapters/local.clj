@@ -59,10 +59,6 @@
   [file-key]
   (some-> file-key str (str/replace "\\" "/")))
 
-(def max-signed-seconds
-  "The longest a signed URL lives: 7 days, as S3 and GCS allow (BOU-991)."
-  (* 7 24 3600))
-
 (def ^:private clock-skew-seconds
   "How far another node's clock may run ahead when it signed at the cap."
   60)
@@ -71,15 +67,14 @@
   "What a signature covers: the key, the expiry, and the file's version, so a
    URL dies with the file it was issued for (BOU-991)."
   [file-key expires version]
-  (cond-> (str (canonical-key file-key) ":" expires)
-    version (str ":" version)))
+  (str (canonical-key file-key) ":" expires ":" version))
 
 (defn- sign-url
   "`base-url` with the `expires`/`v`/`signature` query a signed local URL
    carries; `version` is its content's, see `content-version`. One place, so the URL
    a stored file reports and the URL the route accepts cannot disagree."
   [signing-secret file-key base-url expiration-seconds version]
-  (let [expires (+ (now-epoch-seconds) (min (long (or expiration-seconds 3600)) max-signed-seconds))
+  (let [expires (+ (now-epoch-seconds) (min (long (or expiration-seconds 3600)) validation/max-signed-seconds))
         version (or version 0)
         sig     (hmac-sha256-hex signing-secret (signed-message file-key expires version))]
     (str base-url "?expires=" expires "&v=" version "&signature=" sig)))
@@ -88,7 +83,7 @@
   "Verify a signed local-storage URL. Given the configured `signing-secret`, the
    `file-key`, and the URL's query params (`:expires` epoch-seconds, `:version`
    its `v`, `:signature` hex), return true iff the signature matches and the
-   URL has not expired nor names an expiry past `max-signed-seconds`.
+   URL has not expired nor names an expiry past `validation/max-signed-seconds`.
 
    A valid signature names a version; the serving route must also check it is
    the file's, `retrieve-file`'s `:version`, or a replaced file is served
@@ -101,14 +96,14 @@
    invalid, which is also the fail-closed reading of an ambiguous request."
   [signing-secret file-key {:keys [expires signature version]}]
   (boolean
-   (when (and signing-secret file-key (string? signature) (or (nil? version) (string? version)))
+   (when (and signing-secret file-key (string? signature) (string? version))
      (let [exp (cond (integer? expires) expires
                      (string? expires)  (parse-long expires))
            now (now-epoch-seconds)]
        (and exp
             (>= (long exp) now)
             ;; A URL issued before the cap may name any expiry (BOU-991)
-            (<= (long exp) (+ now max-signed-seconds clock-skew-seconds))
+            (<= (long exp) (+ now validation/max-signed-seconds clock-skew-seconds))
             (constant-time=? signature
                              (hmac-sha256-hex signing-secret (signed-message file-key exp version))))))))
 
@@ -237,12 +232,17 @@
   (subs (compute-sha256 bytes) 0 16))
 
 (defn- file-version
-  "`content-version` of the file `file-key` names, or nil when there is none."
-  ;; ponytail: reads the whole file per signed URL; keep a stored hash if large files make that slow.
+  "`content-version` of the file `file-key` names, read as a stream, or nil
+   when there is none."
+  ;; ponytail: hashes the file per signed URL; store the version beside it if large files make that slow.
   [base-path file-key]
   (let [path (some-> (resolve-within-root base-path file-key) (Paths/get (into-array String [])))]
     (when (and path (Files/exists path (make-array java.nio.file.LinkOption 0)))
-      (content-version (Files/readAllBytes path)))))
+      (let [digest (MessageDigest/getInstance "SHA-256")]
+        (with-open [in (java.security.DigestInputStream.
+                        (Files/newInputStream path (make-array java.nio.file.OpenOption 0)) digest)]
+          (.transferTo in (java.io.OutputStream/nullOutputStream)))
+        (subs (bytes->hex (.digest digest)) 0 16)))))
 
 (defn- spool-dir
   "Where a streamed file is written before it is moved to its key: inside the

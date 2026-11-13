@@ -92,26 +92,24 @@
   (instance? wagoe.storage.shell.adapters.local.LocalFileStorage storage))
 
 (defn- reserved-path?
-  "Whether `path`, normalized, names the tenants' directory (BOU-991)."
-  [storage path]
-  (and (local? storage) (= tenants-dir (first (some-> path (str/split #"/"))))))
+  "Whether a normalized `path` names the tenants' directory (BOU-991)."
+  [path]
+  (= tenants-dir (first (some-> path (str/split #"/")))))
 
 (defn- in-tenant-dir
-  "`metadata` with a tenant's named path below `.tenants/<tenant-id>/`, under
-   the local adapter: two tenants' `invoices/a.pdf` are two files, and nobody
-   learns or occupies another tenant's names (BOU-991). S3 and GCS add a
-   random suffix."
-  [storage {:keys [owner path] :as metadata}]
-  (cond-> metadata
-    (and path (:tenant-id owner) (local? storage))
-    (assoc :path (str tenants-dir "/" (:tenant-id owner) "/" path))))
+  "A tenant's named `path` below `.tenants/<tenant-id>/`, under the local
+   adapter: two tenants' `invoices/a.pdf` are two files, and nobody learns or
+   occupies another tenant's names (BOU-991). S3 and GCS add a random suffix."
+  [path tenant-id]
+  (cond->> path
+    (and path tenant-id) (str tenants-dir "/" tenant-id "/")))
 
 (defn- refused-key?
   "Whether `metadata` names a key that holds a file `may-replace?` says no to (BOU-950).
    Only the local adapter writes a named key as is; S3 and GCS add a random suffix."
   [storage metadata {:keys [may-replace?]}]
   (when-let [k (and may-replace?
-                    (instance? wagoe.storage.shell.adapters.local.LocalFileStorage storage)
+                    (local? storage)
                     (local/named-storage-key metadata))]
     ;; ponytail: checked before the write, not with it; two uploads racing for one path can both pass.
     (and (ports/file-exists? storage k) (not (may-replace? k)))))
@@ -127,11 +125,11 @@
                      :content-type (:content-type file-data)}))
 
     (try
-      ;; Sanitize filename
-      (let [sanitized-metadata (->> (-> metadata
-                                        (update :filename validation/sanitize-filename)
-                                        (update :path validation/normalize-path))
-                                    (in-tenant-dir storage))
+      (let [on-local?          (local? storage)
+            path               (validation/normalize-path (:path metadata))
+            sanitized-metadata (-> metadata
+                                   (update :filename validation/sanitize-filename)
+                                   (assoc :path (cond-> path on-local? (in-tenant-dir (:tenant-id (:owner metadata))))))
 
             ;; Validate file
             validation-result (validation/validate-file file-data sanitized-metadata options)]
@@ -147,7 +145,7 @@
             {:success false
              :errors (:errors validation-result)})
 
-          (reserved-path? storage (validation/normalize-path (:path metadata)))
+          (and on-local? (reserved-path? path))
           {:success false
            :errors [{:code :invalid-path :message "That path is reserved"}]}
 

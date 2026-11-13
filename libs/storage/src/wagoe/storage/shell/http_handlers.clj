@@ -248,7 +248,8 @@
   ([storage-service] (download-file-handler storage-service nil))
   ([storage-service signing-secret]
    (fn [{:keys [path-params query-params] :as request}]
-     (let [file-key (let [k (get path-params :file-key)] (when-not (str/blank? k) k))]
+     (let [file-key (let [k (get path-params :file-key)] (when-not (str/blank? k) k))
+           version  (get query-params "v")]
 
        (cond
          (not file-key)
@@ -264,7 +265,7 @@
               (not (local/verify-signed-url
                     signing-secret file-key
                     {:expires   (get query-params "expires")
-                     :version   (get query-params "v")
+                     :version   version
                      :signature (get query-params "signature")})))
          (forbidden "Missing, invalid or expired signature")
          (and (not signing-secret) (not (reachable? storage-service request file-key)))
@@ -274,7 +275,7 @@
 
          (if-let [file-data (service/download-file storage-service file-key)]
            ;; A URL serves the file it was signed for, not one written there since (BOU-991)
-           (if (and signing-secret (not= (get query-params "v") (:version file-data)))
+           (if (and signing-secret (not= version (:version file-data)))
              (forbidden "Missing, invalid or expired signature")
              {:status 200
               :headers {"Content-Type" (:content-type file-data)
@@ -334,9 +335,9 @@
            {:missing-parameter "file-key"})
 
           ;; As S3 and GCS cap theirs: a URL outlives a membership by at most this (BOU-991)
-          (not (<= 1 expiration local/max-signed-seconds))
+          (not (<= 1 expiration validation/max-signed-seconds))
           (bad-request
-           (str "expiration must be between 1 and " local/max-signed-seconds " seconds")
+           (str "expiration must be between 1 and " validation/max-signed-seconds " seconds")
            {:invalid-parameter "expiration"})
 
           :else

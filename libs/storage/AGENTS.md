@@ -49,7 +49,7 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 - `metadata` is `{:filename <string> :path <optional> :visibility :public|:private}`.
 - Local `generate-signed-url` issues a real HMAC-SHA256 signed URL
   (`?expires=<epoch>&v=<content hash>&signature=<hex>`) when `:signing-secret`
-  is configured, living at most `local/max-signed-seconds` (7 days). The serving
+  is configured, living at most `validation/max-signed-seconds` (7 days). The serving
   route enforces it via `local/verify-signed-url` and serves only the content
   it was signed for, so a replaced or deleted file kills it (BOU-991). A member
   who leaves a tenant keeps a URL they hold until it expires. Without a secret

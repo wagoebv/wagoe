@@ -10,6 +10,11 @@
 ;; Constants
 ;; ============================================================================
 
+(def max-signed-seconds
+  "The longest a signed URL may live, on every adapter: 7 days, as S3 and GCS
+   allow (BOU-991)."
+  (* 7 24 3600))
+
 (def default-max-file-size
   "Default maximum file size in bytes (10 MB)."
   (* 10 1024 1024))
