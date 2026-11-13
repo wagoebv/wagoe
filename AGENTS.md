@@ -77,7 +77,8 @@ ports across files; wagoe-mcp uses `wagoe.mcp.*`; shared-ui uses
 ## Scaffold first
 
 Use the scaffolder for new modules and major features. Do not manually create
-module directories, schema files or tests for scaffolded functions.
+module directories, schema files or tests for scaffolded functions. Add a field
+with `bb scaffold field`, not by editing `schema.clj`.
 
 ```bash
 bb scaffold ai "invoice module with number, date, amount, status" --yes
@@ -114,7 +115,7 @@ bb check                 # registered quality gates
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
 ```
 
-Run `bb test:all` before committing or claiming the codebase is green.
+Run `bb test:all` and the kondo lint before committing or claiming the codebase is green.
 `clojure -M:test` alone misses standalone surfaces. `bb test:all --list` explains
 coverage; e2e is separate (`bb e2e`, requires Chromium) and blocks PR merges in CI.
 Adapter sweeps fail if backing services are missing.
@@ -123,12 +124,13 @@ For targeted runs use `clojure -M:test:test/all :<suite>`; on Apple Silicon add
 `:test/pg-mac` for embedded PostgreSQL. The development reference lists narrower
 aliases and metadata/namespace filters. Do not replace assertions with placeholders.
 
-After Clojure edits, use `clj-paren-repair <file>` for delimiter repair when needed.
+After Clojure edits, fix delimiters with `clj-paren-repair <file>`, never by hand.
 Use `clj-nrepl-eval --discover-ports` to find running REPLs. Installation and
 REPL restart instructions are in the development reference.
 
 ## Details that must not be missed
 
+- Define a private helper above the first function that calls it, in `src/`, `dev/` and `test/` alike; Clojure compiles top to bottom.
 - Use `[:t :module/key]` markers for UI strings; update both English and Dutch catalogues and run `bb i18n:scan` and `bb i18n:missing`.
 - Module route prefixes are added by the framework; don't repeat them in module paths.
 - Declare OpenAPI parameters explicitly; handler destructuring does not document them.

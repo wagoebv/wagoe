@@ -4,7 +4,7 @@ Read when directed by [AGENTS.md](../../AGENTS.md). Paths in commands and inline
 
 ## Maintenance Notes
 
-- Keep command examples in one place (`Quick Reference`); avoid duplicate command blocks elsewhere in this file.
+- Keep command examples in one place, the root `AGENTS.md`; avoid duplicate command blocks in these references.
 - Library-specific troubleshooting and deep implementation notes belong in `libs/*/AGENTS.md`.
 - Use `bb check-links` after editing AGENTS documentation.
 - Install local pre-commit hooks once per clone: `bb install-hooks`.

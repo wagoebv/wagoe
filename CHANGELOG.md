@@ -126,9 +126,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
-- **Agent instructions load less reference text.** Detailed guides now live in `dev-docs/agents/`;
-  `bb check-links` also validates links in that directory.
-
+- **Agent instructions load less reference text.** Detailed guides now live in `dev-docs/agents/`, which
+  `bb check-links` also checks. Nothing to change.
 - **Log context, error-report context, example payloads, admin hidden fields and list columns, and audience filters each
   had their own list of secret keys** (BOU-981). They add the shared rule now, so `:db-password` is caught in each.
 - **Log redaction, the devtools config views and `bb doctor` disagreed on which keys hold a secret** (BOU-973). One rule
