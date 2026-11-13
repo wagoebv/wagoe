@@ -507,7 +507,9 @@
         ;; Back onto the queue as a scheduled row. The in-memory store does this
         ;; through state it shares with its queue; here the two adapters share
         ;; the database instead, which is the same guarantee by other means.
-        (insert-job! ds (or (:queue retried) :default) retried)
+        ;; Unbound, so the retry keeps the job's tenant, not its caller's (BOU-987)
+        (binding [db/*tenant-id* nil]
+          (insert-job! ds (or (:queue retried) :default) retried))
         retried))))
 
 (extend-type DbJobStore

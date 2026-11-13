@@ -17,6 +17,7 @@
             [wagoe.jobs.shell.adapters.in-memory :as mem]
             [wagoe.jobs.shell.adapters.redis :as redis]
             [wagoe.jobs.shell.worker :as worker]
+            [wagoe.platform.database :as pdb]
             [next.jdbc :as jdbc]
             [clojure.test :refer [deftest is testing]])
   (:import [java.time Instant ZoneId]
@@ -117,6 +118,13 @@
 ;; =============================================================================
 ;; Round trip
 ;; =============================================================================
+
+(deftest ^:integration ^:security a-job-enqueued-in-a-tenant-carries-it
+  ;; Without it the worker ran tenant work against public (BOU-987)
+  (each-backend
+   (fn [q label]
+     (binding [pdb/*tenant-id* "t1"] (ports/enqueue-job! q :default (job)))
+     (is (= "t1" (get-in (ports/dequeue-job! q :default "w1") [:metadata :tenant-id])) label))))
 
 (deftest ^:integration a-job-comes-back-as-it-went-in
   (each-backend

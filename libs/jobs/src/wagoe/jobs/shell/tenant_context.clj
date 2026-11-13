@@ -309,7 +309,10 @@
   ;; The worker runs a tenant's job in that tenant itself, from the job's
   ;; metadata; this only hands the handler the transaction it runs in.
   (fn [args]
-    (handler-fn args (if-let [tx (db/current-transaction db-ctx)] (assoc db-ctx :tx tx) db-ctx))))
+    ;; :tx is a db-context on the transaction's connection, as process-tenant-job! passes
+    (handler-fn args (if-let [tx (db/current-transaction db-ctx)]
+                       (assoc db-ctx :tx (assoc db-ctx :datasource tx))
+                       db-ctx))))
 
 (defn ^:deprecated tenant-runner
   "The worker's `:tenant-runner`: (fn [tenant-id f]) that calls `f` in one

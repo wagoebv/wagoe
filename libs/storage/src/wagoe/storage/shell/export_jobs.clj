@@ -115,7 +115,9 @@
               (try (ports/delete-file file-storage k)
                    (catch Exception de (log/error de "Could not delete an unrecorded export archive" {:key k}))))
             (ports/save-export-job! store (core/failed job (ex-message e) (Instant/now)))
+            ;; :commit? keeps the :failed row when a tenant job rolls back (BOU-987)
             {:success? false
+             :commit?  true
              :error    {:type :data-export-failed :message (str "Data export " export-id " failed")}}))))))
 
 (defn download-response

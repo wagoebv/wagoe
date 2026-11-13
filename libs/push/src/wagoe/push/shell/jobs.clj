@@ -60,7 +60,9 @@
                                 (assoc (sent-event notification-id result tenant-id) :user-id user-id))
             (when (:token-invalid? result)
               (log/infof "Push: marking invalid token %s" (device/token-preview (:device-token result)))
-              (ports/mark-token-invalid! device-store (:device-token result)))))))))
+              (ports/mark-token-invalid! device-store (:device-token result))))))
+      ;; nil read as a failure: the worker retried, and so sent it again (BOU-987)
+      {:success? true})))
 
 (def broadcast-page-size 500)
 
@@ -90,4 +92,5 @@
               (when (:token-invalid? result)
                 (ports/mark-token-invalid! device-store (:device-token result)))))
           (when (= broadcast-page-size (count devices))
-            (recur (:id (peek devices)))))))))
+            (recur (:id (peek devices)))))))
+    {:success? true}))

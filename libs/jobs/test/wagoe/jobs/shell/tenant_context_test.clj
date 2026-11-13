@@ -306,16 +306,25 @@
 (deftest ^:integration ^:security wrap-handler-with-tenant-context-test
   ;; The worker calls a handler with the job's args; the wrapper used to read
   ;; the tenant from them, so whoever wrote the args picked the schema (BOU-987)
-  (let [seen    (atom nil)
-        wrapped (tenant-jobs/wrap-handler-with-tenant-context
-                 (fn [args _ctx] (reset! seen {:args args :tenant db/*tenant-id*}) {:success? true})
-                 {:datasource (Object.) :adapter (sqlite/new-adapter)}
-                 (create-mock-tenant-service)
-                 (create-mock-tenant-schema-provider))
-        args    {:to "test@example.com" :metadata {:tenant-id "tenant-1"}}]
+  (let [seen     (atom nil)
+        switched (atom 0)
+        db-ctx   {:datasource (Object.)}
+        wrapped  (tenant-jobs/wrap-handler-with-tenant-context
+                  (fn [args ctx] (reset! seen {:args args :ctx ctx :tenant db/*tenant-id*}) {:success? true})
+                  db-ctx
+                  (create-mock-tenant-service)
+                  #_{:clj-kondo/ignore [:missing-protocol-method]}
+                  (reify wagoe.tenant.ports/ITenantSchemaProvider
+                    (with-tenant-schema [_ _ _ f] (swap! switched inc) (f nil))))
+        args     {:to "test@example.com" :metadata {:tenant-id "tenant-1"}}]
     (is (:success? (wrapped args)))
     (is (= args (:args @seen)) "the handler gets the args as they are")
-    (is (nil? (:tenant @seen)) "a tenant named in the args is not entered")
+    (is (zero? @switched) "a tenant named in the args is not entered")
+    (is (nil? (:tenant @seen)))
+    (testing "in a transaction, :tx is a db-context on its connection, as process-tenant-job! passes"
+      (with-redefs [db/current-transaction (fn [ctx] (when (= db-ctx ctx) ::conn))]
+        (wrapped args)
+        (is (= (assoc db-ctx :datasource ::conn) (:tx (:ctx @seen))))))
     (testing "a handler's exception reaches the worker, which records the failure"
       (is (thrown? Exception ((tenant-jobs/wrap-handler-with-tenant-context
                                (fn [_ _] (throw (Exception. "Test error")))

@@ -241,6 +241,11 @@ public. Outside the wiring, build one with
 `(tenant-jobs/tenant-runner db-ctx tenant-service tenant-schema-provider)` and
 pass it as `:tenant-runner` to `worker/create-worker-pool`.
 
+A job enqueued while `db/*tenant-id*` is bound carries that tenant, so a job
+queued during a tenant request runs in it. A failed result rolls the tenant
+transaction back; one that recorded its own failure returns `:commit? true` to
+keep that record.
+
 `process-tenant-job!` runs a single job the same way, for a handler that wants
 the database context as its second argument:
 
@@ -379,7 +384,7 @@ clojure -M:test :jobs --focus wagoe.jobs.shell.tenant-context-test
 - `(enqueue-tenant-job! job-queue tenant-id job-type args [opts])` - Enqueue job with tenant context; returns the job id
 - `(extract-tenant-context job tenant-service)` - Extract tenant metadata from job; throws when the tenant is gone
 - `(process-tenant-job! job handler db-ctx tenant-service tenant-schema-provider)` - Process job with schema switching
-- `(wrap-handler-with-tenant-context handler db-ctx tenant-service tenant-schema-provider)` - Same, as a `(fn [job])`
+- `(wrap-handler-with-tenant-context handler db-ctx tenant-service tenant-schema-provider)` - A `(fn [args])` handing `handler` the db context, with `:tx` in a transaction; the worker enters the tenant
 - `(tenant-runner db-ctx tenant-service tenant-schema-provider)` - The worker's `:tenant-runner`
 
 ---

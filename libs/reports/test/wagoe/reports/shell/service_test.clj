@@ -6,6 +6,8 @@
             [wagoe.email.ports]
             [wagoe.jobs.ports]
             [wagoe.jobs.shell.adapters.db :as jobs-db]
+            [wagoe.jobs.shell.adapters.in-memory :as jobs-mem]
+            [wagoe.platform.database :as db]
             [support.test-db :as test-db]
             [wagoe.storage.ports]
             [clojure.test :refer [deftest is testing use-fixtures]])
@@ -132,3 +134,11 @@
         (let [{:keys [args]} (wagoe.jobs.ports/dequeue-job! q :default "w1")]
           (is (= {:report-id :sales :opts {:zone-id zone}} args))
           (is (:success? (jobs-integration/process-report-job svc args))))))))
+
+(deftest ^:unit ^:security a-report-requested-in-a-tenant-runs-in-it
+  ;; generate-async ran on public: the tenant got public's rows (BOU-987)
+  (registry/register-report! sales)
+  (let [queue (jobs-mem/create-in-memory-job-queue)
+        svc   (sut/create-report-service {:job-queue queue})]
+    (binding [db/*tenant-id* "t1"] (ports/generate-async svc :sales {}))
+    (is (= "t1" (get-in (wagoe.jobs.ports/dequeue-job! queue :default "w") [:metadata :tenant-id])))))

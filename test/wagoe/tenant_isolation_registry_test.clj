@@ -23,6 +23,9 @@
                                 ["a-tenant-job-reads-its-tenants-schema"]
                                 "libs/jobs/test/wagoe/jobs/shell/bound_tenant_test.clj"
                                 ["a-job-enqueued-in-a-tenant-carries-it"]}}
+   "reports"       {:scoped-by "an async report runs as a job in the tenant that asked for it"
+                    :tests     {"libs/reports/test/wagoe/reports/shell/service_test.clj"
+                                ["a-report-requested-in-a-tenant-runs-in-it"]}}
    "webhooks"      {:scoped-by "explicit tenant_id on subscriptions and deliveries; the API keeps a request to its tenant's"
                     :tests     {"libs/webhooks/test/wagoe/webhooks/core/delivery_test.clj"
                                 ["per-tenant-filtering"]

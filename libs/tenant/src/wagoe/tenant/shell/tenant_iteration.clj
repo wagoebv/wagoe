@@ -13,14 +13,18 @@
             [clojure.tools.logging :as log]))
 
 (defn- each-schema
-  "`(f item)` for each of `items`, in a transaction on `(schema-of item)`.
+  "`(f item)` for each of `items`, in a transaction on `(schema-of item)`, with
+   `db/*tenant-id*` bound to `(tenant-of item)` when `tenant-of` is given.
    Failures are logged and counted; the rest still run."
-  [schema-provider db-ctx items schema-of f]
+  [schema-provider db-ctx items schema-of tenant-of f]
   (reduce
    (fn [acc item]
-     (let [schema (schema-of item)]
+     (let [schema (schema-of item)
+           step   #(ports/with-tenant-schema schema-provider db-ctx schema (fn [_tx] (f item)))]
        (try
-         (let [r (ports/with-tenant-schema schema-provider db-ctx schema (fn [_tx] (f item)))]
+         ;; Bound outside the transaction, so its after-commit hooks run in the
+         ;; tenant too: a job they enqueue carries it (BOU-987)
+         (let [r (if tenant-of (binding [db/*tenant-id* (tenant-of item)] (step)) (step))]
            (-> acc (update :processed inc) (update :results conj r)))
          (catch Exception e
            (log/error e "Tenant-schema step failed" {:schema schema})
@@ -45,7 +49,7 @@
      {:processed n :failed n :results [<f results for succeeded tenants>]}"
   [schema-provider db-ctx f]
   (each-schema schema-provider db-ctx (ports/list-tenant-schemas schema-provider db-ctx)
-               identity f))
+               identity nil f))
 
 (def ^:private tenant-page-size 100)
 
@@ -75,8 +79,7 @@
     (throw (ex-info "for-each-tenant cannot run inside a transaction"
                     {:type    :configuration-error
                      :message "Call it outside any transaction on its database; each tenant gets its own"})))
-  (each-schema schema-provider db-ctx (active-tenants tenant-service) :schema-name
-               (fn [tenant] (binding [db/*tenant-id* (:id tenant)] (f tenant)))))
+  (each-schema schema-provider db-ctx (active-tenants tenant-service) :schema-name :id f))
 
 (defn in-tenant
   "Call `(f)` in one transaction on `tenant-id`'s schema, with `db/*tenant-id*`
@@ -88,5 +91,6 @@
                                    {:type      :tenant-not-found
                                     :tenant-id tenant-id
                                     :message   "No tenant with this id; it may have been deleted"})))]
-    (ports/with-tenant-schema schema-provider db-ctx (:schema-name tenant)
-      (fn [_tx] (binding [db/*tenant-id* tenant-id] (f))))))
+    ;; Bound outside the transaction, as each-schema does (BOU-987)
+    (binding [db/*tenant-id* tenant-id]
+      (ports/with-tenant-schema schema-provider db-ctx (:schema-name tenant) (fn [_tx] (f))))))

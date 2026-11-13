@@ -394,7 +394,17 @@
                                                        (throw e))))})]
         (is @rolled-back?)
         (is (false? (:success? result)))
-        (is (= "no" (get-in result [:error :message])))))))
+        (is (= "no" (get-in result [:error :message])))))
+    (testing "a failure that recorded itself commits that record (BOU-987)"
+      (ports/register-handler! *registry* :test-job (fn [_] {:success? false :commit? true :error {:message "no"}}))
+      (let [rolled-back? (atom false)
+            result       (run {:tenant-runner (fn [_ f]
+                                                (try (f)
+                                                     (catch Exception e
+                                                       (reset! rolled-back? true)
+                                                       (throw e))))})]
+        (is (not @rolled-back?))
+        (is (false? (:success? result)))))))
 
 (deftest ^:unit worker-processes-scheduled-jobs-test
   (testing "Worker processes scheduled jobs when due"
