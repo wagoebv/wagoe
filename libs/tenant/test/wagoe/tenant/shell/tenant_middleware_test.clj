@@ -5,6 +5,7 @@
             [clojure.test :refer [deftest testing is]]
             [wagoe.platform.database :as db]
             [wagoe.tenant.shell.membership-middleware :as membership-mw]
+            [wagoe.tenant.shell.provisioning]
             [wagoe.tenant.shell.tenant-middleware :as tenant-mw]
             [wagoe.platform.ports.database]
             [wagoe.tenant.ports :as tenant-ports]
