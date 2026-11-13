@@ -72,6 +72,7 @@
                                  "a-job-of-no-tenant-reaches-only-no-tenants-devices"
                                  "another-tenants-device-is-not-taken-over"
                                  "delete-removes-only-the-requests-tenants-device"
+                                 "a-store-without-removal-deletes-only-what-stays-in-reach"
                                  "a-callback-counts-in-the-tenant-of-its-send"]}}
    "events"        {:scoped-by "an event takes the bound tenant; a subscriber in a tenant gets only its tenant's and system events"
                     :tests     {"libs/events/test/wagoe/events/shell/tenant_scope_test.clj"

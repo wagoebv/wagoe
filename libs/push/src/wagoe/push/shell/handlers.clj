@@ -73,11 +73,19 @@
         ;; Taking it over would move another tenant's device to this one (BOU-990)
         (error-response 409 "conflict" "The token is registered in another tenant")))))
 
-(defn- user-devices-with-token [store user-id token app-id]
-  (if (satisfies? ports/IDeviceLookup store)
-    (ports/find-user-devices store user-id token app-id)
+(defn with-capabilities
+  "`deps` with what its device store implements beyond IDeviceTokenStore,
+   asked once when the routes are built (Convention 5)."
+  [{:keys [device-store] :as deps}]
+  (assoc deps
+         :device-lookup? (satisfies? ports/IDeviceLookup device-store)
+         :device-removal? (satisfies? ports/IDeviceRemoval device-store)))
+
+(defn- user-devices-with-token [{:keys [device-store device-lookup?]} user-id token app-id]
+  (if device-lookup?
+    (ports/find-user-devices device-store user-id token app-id)
     (filter #(and (= token (:token %)) (or (nil? app-id) (= app-id (:app-id %))))
-            (ports/get-user-devices store user-id))))
+            (ports/get-user-devices device-store user-id))))
 
 (defn- in-reach
   "Those of `devices` `reach` (`access/tenant-reach`) admits: one tenant's, or every one (BOU-946)."
@@ -89,11 +97,11 @@
     :else                        (vec devices)))
 
 (defn get-device-handler
-  [{:keys [device-store]} request]
+  [deps request]
   (let [app-id  (get-in request [:query-params "app-id"])
         ;; A repeated ?app-id= arrives as a vector, which SQL cannot compare to.
         devices (in-reach (access/tenant-reach request)
-                          (user-devices-with-token device-store
+                          (user-devices-with-token deps
                                                    (get-in request [:user :id])
                                                    (get-in request [:path-params :token])
                                                    (when (string? app-id) (not-empty app-id))))]
@@ -106,25 +114,24 @@
   "Removes the caller's registrations of the token in reach: another tenant's
    is not this request's to remove (BOU-990). A store without `IDeviceRemoval`
    removes the token everywhere, so it answers 409 when that reaches further."
-  [{:keys [device-store]} request]
-  (let [user-id (get-in request [:user :id])
-        token   (get-in request [:path-params :token])
-        devices (user-devices-with-token device-store user-id token nil)
-        reached (in-reach (access/tenant-reach request) devices)]
+  [{:keys [device-store device-removal?] :as deps} request]
+  (let [user-id    (get-in request [:user :id])
+        token      (get-in request [:path-params :token])
+        reach      (access/tenant-reach request)
+        removed    {:status 204 :headers {} :body nil}
+        everywhere #(do (ports/unregister-device! device-store user-id token) removed)]
     (cond
-      (empty? reached)
-      {:status 204 :headers {} :body nil}
-
-      (satisfies? ports/IDeviceRemoval device-store)
-      (do (doseq [d reached] (ports/remove-device! device-store user-id (:id d)))
-          {:status 204 :headers {} :body nil})
-
-      (= (count reached) (count devices))
-      (do (ports/unregister-device! device-store user-id token)
-          {:status 204 :headers {} :body nil})
-
+      (nil? reach) removed
+      ;; A platform admin with no tenant resolved reaches every tenant
+      (not (contains? reach :tenant-id)) (everywhere)
+      device-removal? (do (ports/remove-device! device-store user-id token (:tenant-id reach)) removed)
       :else
-      (error-response 409 "conflict" "The token is registered in another tenant too"))))
+      (let [devices (user-devices-with-token deps user-id token nil)
+            reached (in-reach reach devices)]
+        (cond
+          (empty? reached)                    removed
+          (= (count reached) (count devices)) (everywhere)
+          :else (error-response 409 "conflict" "The token is registered in another tenant too"))))))
 
 (defn list-devices-handler
   [{:keys [device-store]} request]
@@ -177,24 +184,25 @@
    devices; the stats ask `:push/read`. Contributed as `:api`, so served under
    `/api/v1`; flat, so each path gets its unversioned redirect."
   [deps]
-  [["/push/devices" {:authorization :self
-                     :post {:handler    (partial register-device-handler deps)
-                            :parameters {:body schema/DeviceInfo}}
-                     :get  {:handler (partial list-devices-handler deps)}}]
-   ["/push/devices/:token" {:authorization :self
-                            :openapi {:parameters [{:name "token" :in "path" :required true
-                                                    :schema {:type "string"}}]}
-                            :get    {:handler (partial get-device-handler deps)
-                                     :openapi {:parameters [{:name "app-id" :in "query" :required false
-                                                             :schema {:type "string"}}]}}
-                            :delete {:handler (partial unregister-device-handler deps)}}]
-   ["/push/callback" {:post {:handler    (partial analytics-callback-handler deps)
-                             :parameters {:body schema/CallbackPayload}
-                             :public     true}}]
-   ["/push/stats/:notification-id" {:permission :push/read
-                                    :openapi {:parameters [{:name "notification-id" :in "path" :required true
-                                                            :schema {:type "string"}}]}
-                                    :get {:handler (partial push-stats-handler deps)}}]])
+  (let [deps (with-capabilities deps)]
+    [["/push/devices" {:authorization :self
+                       :post {:handler    (partial register-device-handler deps)
+                              :parameters {:body schema/DeviceInfo}}
+                       :get  {:handler (partial list-devices-handler deps)}}]
+     ["/push/devices/:token" {:authorization :self
+                              :openapi {:parameters [{:name "token" :in "path" :required true
+                                                      :schema {:type "string"}}]}
+                              :get    {:handler (partial get-device-handler deps)
+                                       :openapi {:parameters [{:name "app-id" :in "query" :required false
+                                                               :schema {:type "string"}}]}}
+                              :delete {:handler (partial unregister-device-handler deps)}}]
+     ["/push/callback" {:post {:handler    (partial analytics-callback-handler deps)
+                               :parameters {:body schema/CallbackPayload}
+                               :public     true}}]
+     ["/push/stats/:notification-id" {:permission :push/read
+                                      :openapi {:parameters [{:name "notification-id" :in "path" :required true
+                                                              :schema {:type "string"}}]}
+                                      :get {:handler (partial push-stats-handler deps)}}]]))
 
 (defn- without-body-parameters
   "Route data with no `:parameters` on its methods: an app's own router may

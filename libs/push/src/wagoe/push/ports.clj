@@ -63,10 +63,11 @@
     "The user's active devices with this token, only under app-id unless it is nil."))
 
 (defprotocol IDeviceRemoval
-  "Optional beside IDeviceTokenStore: removes one registration, where
-   `unregister-device!` removes the token in every tenant (BOU-990)."
-  (remove-device! [this user-id device-id]
-    "Remove the user's device with this id."))
+  "Optional beside IDeviceTokenStore: removes the token in one tenant, where
+   `unregister-device!` removes it in every tenant (BOU-990)."
+  (remove-device! [this user-id device-token tenant-id]
+    "Remove the user's registrations of the token in the tenant, active or
+     not; a nil tenant-id names no tenant's."))
 
 ;; ===== Analytics =====
 

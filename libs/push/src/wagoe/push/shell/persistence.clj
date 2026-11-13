@@ -5,7 +5,8 @@
    db-context through platform's execution layer, which encodes each parameter
    as the engine takes it.
 
-   A token is upserted on (token, app_id) with platform's `upsert!`."
+   A token is upserted on (token, app_id, tenant_id) with platform's `upsert!`;
+   the unique (token, app_id) index keeps it in one tenant."
   (:require [wagoe.push.ports :as ports]
             [wagoe.push.core.device :as device]
             [wagoe.core.utils.type-conversion :as tc]
@@ -50,32 +51,34 @@
    row's, not ours. In one tenant the token then belongs to whoever registered
    it last (BOU-683); another tenant's row is not taken over (BOU-990)."
   [db record]
-  (let [row {:id           (:id record)
-             :user-id      (:user-id record)
-             :token        (:token record)
-             :platform     (name (:platform record))
-             :app-id       (:app-id record)
-             :device-name  (:device-name record)
-             :os-version   (:os-version record)
-             :tenant-id    (tc/string->uuid (:tenant-id record))
-             :active       true
-             :created-at   (->instant (:created-at record))
-             :last-used-at (->instant (:last-used-at record))}]
-    ;; Keyed on the tenant too: another tenant's row matches no update, and the
-    ;; insert then meets the unique (token, app_id) index.
+  (let [row      {:id           (:id record)
+                  :user-id      (:user-id record)
+                  :token        (:token record)
+                  :platform     (name (:platform record))
+                  :app-id       (:app-id record)
+                  :device-name  (:device-name record)
+                  :os-version   (:os-version record)
+                  :tenant-id    (tc/string->uuid (:tenant-id record))
+                  :active       true
+                  :created-at   (->instant (:created-at record))
+                  :last-used-at (->instant (:last-used-at record))}
+        stored   #(some-> (database/execute-one! db (-> (h/select :id :tenant-id)
+                                                        (h/from :push-device-tokens)
+                                                        (h/where [:= :token (:token row)] [:= :app-id (:app-id row)])))
+                          (update :tenant-id tc/string->uuid))
+        conflict #(ex-info "The token is registered in another tenant"
+                           {:type :conflict :token (:token row) :app-id (:app-id row)})
+        existing (stored)]
+    (when (and existing (not= (:tenant-id existing) (:tenant-id row)))
+      (throw (conflict)))
+    ;; Keyed on the tenant too, so a racing registration in another tenant
+    ;; matches no update and its insert meets the unique (token, app_id) index.
     (if (= :inserted (try (database/upsert! db :push-device-tokens row [:token :app-id :tenant-id]
                                             {:update-columns [:user-id :active :last-used-at :device-name :os-version]})
                           (catch clojure.lang.ExceptionInfo e
-                            (if (database/unique-conflict? e)
-                              (throw (ex-info "The token is registered in another tenant"
-                                              {:type :conflict :token (:token row) :app-id (:app-id row)}))
-                              (throw e)))))
+                            (throw (if (database/unique-conflict? e) (conflict) e)))))
       (:id row)
-      (-> (database/execute-one! db (-> (h/select :id)
-                                        (h/from :push-device-tokens)
-                                        (h/where [:= :token (:token row)] [:= :app-id (:app-id row)])))
-          :id
-          tc/string->uuid))))
+      (tc/string->uuid (:id (or existing (stored)))))))
 
 (defrecord DeviceTokenStore [db]
   ports/IDeviceTokenStore
@@ -136,10 +139,11 @@
 
   ports/IDeviceRemoval
 
-  (remove-device! [_ user-id device-id]
+  (remove-device! [_ user-id device-token tenant-id]
     (database/execute-update! db
                               (-> (h/delete-from :push-device-tokens)
-                                  (h/where [:= :user-id user-id] [:= :id device-id])))))
+                                  (h/where [:= :user-id user-id] [:= :token device-token]
+                                           [:= :tenant-id (tc/string->uuid tenant-id)])))))
 
 ;; =============================================================================
 ;; PushAnalyticsStore
@@ -164,16 +168,22 @@
                                                                     :where  [:= :token (:device-token event)] :limit 1})
                                             :timestamp           (or (->instant (:timestamp event)) (Instant/now))}]))))
 
-(defn- sent-tenant
-  "`event` with the tenant of the send its callback id names, when one was
-   recorded: the token alone may be registered in several tenants (BOU-990)."
+(defn- callback-tenant
+  "`event` with the tenant of the send its callback id names. Without a
+   recorded send, the token's tenant, or none when the token is registered in
+   several: one tenant's callback must not count in another's (BOU-990)."
   [db event]
-  (if-let [sent (database/execute-one! db (-> (h/select :tenant-id)
-                                              (h/from :push-analytics-events)
-                                              (h/where [:= :callback-id (:callback-id event)] [:= :event-type "sent"])
-                                              (h/limit 1)))]
+  (if-let [sent (when (:callback-id event)
+                  (database/execute-one! db (-> (h/select :tenant-id)
+                                                (h/from :push-analytics-events)
+                                                (h/where [:= :callback-id (:callback-id event)] [:= :event-type "sent"])
+                                                (h/limit 1))))]
     (assoc event :tenant-id (:tenant-id sent))
-    event))
+    (let [tenants (into #{} (map (comp tc/string->uuid :tenant-id))
+                        (database/execute-query! db (-> (h/select :tenant-id)
+                                                        (h/from :push-device-tokens)
+                                                        (h/where [:= :token (:device-token event)]))))]
+      (assoc event :tenant-id (when (= 1 (count tenants)) (first tenants))))))
 
 (defn- record-callback!
   "A push's callback, counted once per event type: the index on (callback_id,
@@ -181,9 +191,9 @@
    rest of a transaction after a failed statement."
   [db event]
   (if-not (:callback-id event)
-    (insert-event! db event)
+    (insert-event! db (callback-tenant db event))
     (try
-      (database/in-savepoint (database/current-transaction db) #(insert-event! db (sent-tenant db event)))
+      (database/in-savepoint (database/current-transaction db) #(insert-event! db (callback-tenant db event)))
       (catch clojure.lang.ExceptionInfo e
         (if (database/unique-conflict? e) 0 (throw e))))))
 
