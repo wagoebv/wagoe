@@ -80,9 +80,10 @@
                                  "a-tenants-subscriber-enters-no-other-tenant-on-every-adapter"]
                                 "test/wagoe/events_tenant_schema_test.clj"
                                 ["a-boot-handler-writes-into-its-events-tenant-schema"]}}
-   "realtime"      {:scoped-by "role and broadcast messages reach only the sender's tenant; topics need the app's :authorize-topic"
+   "realtime"      {:scoped-by "role, broadcast and topic messages reach only the sender's tenant; subscribing needs the app's :authorize-topic"
                     :tests     {"libs/realtime/test/wagoe/realtime/shell/tenant_scope_test.clj"
-                                ["role-and-broadcast-stay-in-the-senders-tenant"]}}
+                                ["role-and-broadcast-stay-in-the-senders-tenant"
+                                 "a-topic-stays-in-the-senders-tenant"]}}
    "config"        {:carries "reads a default tenant id from config"}
    "core"          {:scoped-by "in-tenant-scope? and tenant-admin?, the predicates route guards call"
                     :tests     {"libs/core/test/wagoe/core/http/access_test.clj"

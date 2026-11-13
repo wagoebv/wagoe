@@ -36,10 +36,13 @@ WebSocket-based real-time communication with JWT authentication, message routing
 | `:user` | Specific user-id | Direct message |
 | `:role` | Users with specific role, of the sender's tenant when it has one | Admin notification |
 | `:connection` | Specific connection-id | Job progress update |
+| `:topic` | Subscribers of a topic, of the sender's tenant when it has one | `order:123` updates |
 
-The sender's tenant is the message's `:tenant-id`, else the tenant bound on the
-sending thread; a connection's is the identity's `:tenant-id`, which a WebSocket
-gets only when the `IJWTVerifier` returns it (BOU-947).
+The sender's tenant is the tenant bound on the sending thread, else the
+message's `:tenant-id`, so a tenant's request cannot name another; a message
+with neither reaches every tenant. A connection's is the identity's
+`:tenant-id`, which a WebSocket gets only when the `IJWTVerifier` returns it
+(BOU-947, BOU-986).
 
 ## Connection Lifecycle
 

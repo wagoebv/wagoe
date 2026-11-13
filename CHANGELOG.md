@@ -35,6 +35,8 @@ for what is public API, what is internal, and how deprecations are announced.
   A handler runs in its event's tenant now; a push of no tenant needs `:all-tenants? true` to reach every tenant's devices.
 - **A job enqueued in a tenant ran on the public schema** (BOU-987), reports and data exports included. It carries the
   tenant now; a recurring job is refused inside one. `wrap-handler-with-tenant-context` no longer reads the tenant from args.
+- **A realtime topic reached every tenant's subscribers** (BOU-986); `order:123` names a different order in each tenant.
+  A topic message keeps to the sender's tenant now; a WebSocket gets it only if your `IJWTVerifier` returns `:tenant-id`.
 - **Tenant work could run in the wrong schema** (BOU-988). Switching schema inside an open transaction, or to a schema
   that does not exist, is refused now; call `in-tenant` outside your transaction.
 - **A webhook subscription made in a tenant without `:tenant-id` received every tenant's events** (BOU-989). The API
