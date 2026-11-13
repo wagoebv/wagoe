@@ -1,6 +1,7 @@
 (ns wagoe.push.shell.tenant-scope-test
   "A tenant's send reaches only devices registered in that tenant (BOU-946)."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
+            [wagoe.core.utils.type-conversion :as tc]
             [wagoe.jobs.ports]
             [wagoe.platform.database :as db]
             [wagoe.push.core.device]
@@ -48,7 +49,7 @@
   "Every registration of `token`, active or not, by tenant."
   [token]
   (->> (db/execute-query! pt/*db* {:select [:tenant-id] :from [:push-device-tokens] :where [:= :token token]})
-       (map (comp #(some-> % str parse-uuid) :tenant-id))
+       (map (comp tc/string->uuid :tenant-id))
        sort))
 
 (defn- without-removal

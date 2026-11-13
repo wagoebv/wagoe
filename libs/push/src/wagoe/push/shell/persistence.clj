@@ -46,6 +46,11 @@
         (assoc :active? (tc/int->boolean (:active row)))
         (dissoc :active))))
 
+(defn- conflict
+  "The refusal of a token another tenant holds (BOU-990)."
+  [{:keys [token app-id]}]
+  (ex-info "The token is registered in another tenant" {:type :conflict :token token :app-id app-id}))
+
 (defn- upsert-device!
   "Returns the stored row's id: when the token was registered already, that
    row's, not ours. In one tenant the token then belongs to whoever registered
@@ -66,17 +71,15 @@
                                                         (h/from :push-device-tokens)
                                                         (h/where [:= :token (:token row)] [:= :app-id (:app-id row)])))
                           (update :tenant-id tc/string->uuid))
-        conflict #(ex-info "The token is registered in another tenant"
-                           {:type :conflict :token (:token row) :app-id (:app-id row)})
         existing (stored)]
     (when (and existing (not= (:tenant-id existing) (:tenant-id row)))
-      (throw (conflict)))
+      (throw (conflict row)))
     ;; Keyed on the tenant too, so a racing registration in another tenant
     ;; matches no update and its insert meets the unique (token, app_id) index.
     (if (= :inserted (try (database/upsert! db :push-device-tokens row [:token :app-id :tenant-id]
                                             {:update-columns [:user-id :active :last-used-at :device-name :os-version]})
                           (catch clojure.lang.ExceptionInfo e
-                            (throw (if (database/unique-conflict? e) (conflict) e)))))
+                            (throw (if (database/unique-conflict? e) (conflict row) e)))))
       (:id row)
       (tc/string->uuid (:id (or existing (stored)))))))
 
@@ -161,11 +164,8 @@
                                             :provider-message-id (:provider-message-id event)
                                             :callback-id         (:callback-id event)
                                             :error-message       (get-in event [:error :message])
-                                            ;; A callback names no tenant: its device's (BOU-946)
-                                            :tenant-id           (if (contains? event :tenant-id)
-                                                                   (tc/string->uuid (:tenant-id event))
-                                                                   {:select [:tenant-id] :from [:push-device-tokens]
-                                                                    :where  [:= :token (:device-token event)] :limit 1})
+                                            ;; A send carries its job's tenant, a callback `callback-tenant`'s
+                                            :tenant-id           (tc/string->uuid (:tenant-id event))
                                             :timestamp           (or (->instant (:timestamp event)) (Instant/now))}]))))
 
 (defn- callback-tenant
@@ -190,12 +190,13 @@
    event_type) refuses a replay. In a savepoint, since PostgreSQL refuses the
    rest of a transaction after a failed statement."
   [db event]
-  (if-not (:callback-id event)
-    (insert-event! db (callback-tenant db event))
-    (try
-      (database/in-savepoint (database/current-transaction db) #(insert-event! db (callback-tenant db event)))
-      (catch clojure.lang.ExceptionInfo e
-        (if (database/unique-conflict? e) 0 (throw e))))))
+  (let [event (callback-tenant db event)]
+    (if-not (:callback-id event)
+      (insert-event! db event)
+      (try
+        (database/in-savepoint (database/current-transaction db) #(insert-event! db event))
+        (catch clojure.lang.ExceptionInfo e
+          (if (database/unique-conflict? e) 0 (throw e)))))))
 
 (defrecord PushAnalyticsStore [db]
   ports/IPushAnalyticsStore
