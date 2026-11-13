@@ -27,7 +27,10 @@
                           (filter #(.isDirectory %))
                           (sort-by #(.getName %))
                           (map #(io/file % "AGENTS.md"))))]
-    (->> (cons root-agents lib-agents)
+    (->> (concat [root-agents] lib-agents
+                 (->> (file-seq (io/file root-dir "dev-docs/agents"))
+                      (filter #(and (.isFile %) (str/ends-with? (.getName %) ".md")))
+                      (sort-by #(.getPath %))))
          (filter #(.exists %)))))
 
 (defn- skippable? [link]
@@ -100,7 +103,7 @@
      :broken broken}))
 
 (defn check-links
-  "Validate local links in AGENTS.md files and in the AsciiDoc documentation.
+  "Validate local links in agent instructions, references and AsciiDoc docs.
    Prints a summary and exits non-zero when broken links are found."
   []
   (let [agents (vec (iter-agents-files))

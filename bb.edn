@@ -117,7 +117,7 @@
                      :task (check-error-shape/-main)}
   check-links   {:doc "Validate local links in AGENTS.md and the AsciiDoc docs (dev-docs/ + docs/)"
                  :task (dev/check-links)}
-  agents:gen    {:doc "Generate AGENTS.md + AGENTS.md.tmpl from the agents knowledge base on the classpath (bb agents:gen [--check])"
+  agents:gen    {:doc "Generate agent instructions and references from the agents knowledge base on the classpath (bb agents:gen [--check])"
                  :task (apply agents-gen/-main *command-line-args*)}
   check:agents  {:doc "Verify AGENTS files are in sync with knowledge.edn and the module catalogue is valid (bb check:agents)"
                  :task (agents-gen/-main "--check")}

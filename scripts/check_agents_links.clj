@@ -6,6 +6,7 @@
 ;; Checks:
 ;; - root AGENTS.md
 ;; - libs/*/AGENTS.md
+;; - dev-docs/agents/**/*.md
 ;;
 ;; Exits non-zero when broken local links are found.
 ;;
@@ -27,7 +28,10 @@
                           (filter #(.isDirectory %))
                           (sort-by #(.getName %))
                           (map #(io/file % "AGENTS.md"))))]
-    (->> (cons root-agents lib-agents)
+    (->> (concat [root-agents] lib-agents
+                 (->> (file-seq (io/file root-dir "dev-docs/agents"))
+                      (filter #(and (.isFile %) (str/ends-with? (.getName %) ".md")))
+                      (sort-by #(.getPath %))))
          (filter #(.exists %)))))
 
 (defn skippable? [link]

@@ -1,318 +1,34 @@
-# Wagoe Framework — Developer Reference
+# Wagoe Framework — Agent Instructions
 
-Essential commands, conventions, and patterns for working with the Wagoe Framework.
+## Working rules
 
----
+- Don't assume or hide confusion; surface tradeoffs.
+- Write the minimum code that solves the problem. Touch only what you must and clean up your own changes.
+- Define success criteria and verify them before declaring work complete.
+- Never commit or push without explicit user approval. Show the intended changes and wait for "commit" or "push".
+- Before changing a library, read its `libs/<library>/AGENTS.md` if present.
 
-## Quick Reference
+## Read before the relevant task
 
-### Behavior essentials
-1. Don’t assume. Don’t hide confusion. Surface tradeoffs.
-2. Minimum code that solves the problem. Nothing speculative.
-3. Touch only what you must. Clean up only your own mess.
-4. Define success criteria. Loop until verified.
+These files are task-specific instructions. Read the relevant guide before acting;
+paths in commands and inline code are relative to the repository root.
 
-### Essential Commands
+| Task | Required reading |
+|---|---|
+| Run or change tests | [Testing reference](dev-docs/agents/testing.md) and [test commands](dev-docs/agents/development.md#essential-commands) |
+| Start/debug the app, scaffold a feature, change configuration or migrations | [Development reference](dev-docs/agents/development.md) |
+| Diagnose a failure; change routes, schemas, SQL pagination, Java interop or OpenAPI | [Pitfalls](dev-docs/agents/pitfalls.md) |
+| Change a public protocol or need convention examples | [Conventions](dev-docs/agents/conventions.md) |
+| Change a quality gate or use an exception to one | [Quality gates](dev-docs/agents/quality-gates.md) |
+| Add/change user-facing text | [i18n workflow](dev-docs/agents/i18n.md) and [i18n module](libs/i18n/AGENTS.md) |
+| Change agent docs, add a library/CI job, or find a module guide | [Maintenance](dev-docs/agents/maintenance.md) |
+| Change deployment/scaling | [Scaling](docs/modules/architecture/pages/scaling.adoc) and [deployment](deploy/README.md) |
 
-```bash
-# ⭐ SCAFFOLDER (Primary tool for creating modules/features — use this first!)
-bb scaffold                                        # Interactive module scaffolding wizard
-bb scaffold ai "product module with name, price"   # AI-powered NL scaffolding (interactive confirm)
-bb scaffold ai "product module with name, price" --yes  # AI-powered NL scaffolding (non-interactive)
-bb scaffold entity --module-name invoice --entity InvoiceLineItem --belongs-to invoice --field qty:int  # Add entity to existing module
-bb scaffold field --module-name invoice --entity Invoice --name amount --type decimal   # Add field to existing module
-bb scaffold endpoint --module-name invoice --path /invoices --method post --handler-name create-invoice  # Add HTTP endpoint
-bb scaffold integrate product                      # Write a scaffolded module's config key (--dry-run to preview)
+## Architecture and naming
 
-# Testing - EVERY test surface (use this before committing / claiming green)
-bb test:all                                              # main + tools + agents + wagoe-cli + wagoe-mcp
-bb test:all --list                                       # show the surfaces, and what is deliberately excluded
-bb test:services up                                      # Redis + MySQL the adapter sweeps need (docker compose, waits for healthy)
-bb test:services                                         # which of them are up; `down` stops them
-
-# Testing - main suite only (does NOT cover the standalone libs — see below)
-clojure -M:test:test/all                           # every tests.edn suite (H2 in-memory by default)
-JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:test:test/all  # With JWT secret
-
-# Why `:test/all`. The heavy test dependencies — embedded PostgreSQL's two
-# platform binaries (90 MB), the OpenTelemetry in-memory exporters, clj-http-lite
-# — used to sit in `:test`, which all 27 per-library CI jobs resolve. One flaky
-# artifact there failed them all under an innocent library's name (BOU-260).
-# They now live in narrow aliases, and `:test/all` composes them for a full local
-# run. Bare `clojure -M:test` runs the lean set: fine for a suite that needs
-# nothing extra, and it fails on ClassNotFoundException for one that does.
-#
-#   :test/pg      admin, platform, platform-sql, scaffolder, tenant, workflow (embedded PostgreSQL, Linux binary)
-#   :test/pg-mac  add to :test/pg on Apple Silicon — CI is ubuntu-only
-#   :test/otel    observability             (OpenTelemetry in-memory exporters)
-#   :test/http    devtools                  (clj-http-lite)
-#   :test/mail    external                  (GreenMail IMAP server)
-#   :test/ftp     external                  (MINA FTPS server)
-clojure -M:test:test/pg:test/pg-mac :admin         # one suite, only what it needs (macOS)
-WAGOE_TEST_DB=mysql clojure -M:test:test/pg :admin # admin, user, workflow, search, push on mysql or pg (support.test-db)
-
-# Testing - Per-library test suites
-clojure -M:test :core                              # Core library tests
-clojure -M:test:test/otel :observability           # Observability library tests
-clojure -M:test:test/pg :platform                  # Platform library tests
-clojure -M:test:test/pg :platform-sql              # Platform SQL library tests (MySQL: bb test:services up)
-clojure -M:test :user                              # User library tests
-clojure -M:test:test/pg :admin                     # Admin library tests
-clojure -M:test :storage                           # Storage library tests
-clojure -M:test:test/pg :scaffolder                # Scaffolder library tests
-clojure -M:test :cache                             # Cache library tests
-clojure -M:test :jobs                              # Jobs library tests
-clojure -M:test :email                             # Email library tests
-clojure -M:test:test/pg :tenant                    # Tenant library tests
-clojure -M:test :realtime                          # Realtime library tests
-clojure -M:test:test/pg :workflow                  # Workflow library tests
-clojure -M:test :search                            # Search library tests
-clojure -M:test:test/mail:test/ftp :external       # External adapters tests
-clojure -M:test :payments                          # Payments library tests
-clojure -M:test :reports                           # Reports library tests
-clojure -M:test :calendar                          # Calendar library tests
-clojure -M:test :geo                               # Geo library tests
-clojure -M:test :ai                                # AI library tests
-clojure -M:test :ui-style                          # UI style library tests
-clojure -M:test :i18n                              # i18n library tests
-
-# Testing - By metadata category
-clojure -M:test:test/all --focus-meta :unit                 # Unit tests only
-clojure -M:test:test/all --focus-meta :integration          # Integration tests
-clojure -M:test:test/all --focus-meta :contract             # Database contract tests
-
-# Testing - Watch mode and specific namespaces
-clojure -M:test --watch :core                      # Watch core library tests
-clojure -M:test:test/all --focus validation-test            # Single namespace
-
-# Update validation snapshots
-UPDATE_SNAPSHOTS=true clojure -M:test:test/all --focus user-validation-snapshot-test
-
-# Code Quality
-clojure -M:clj-kondo --lint src test libs/*/src libs/*/test  # Lint all code
-
-# REPL Development
-clojure -M:repl-clj                                # Start REPL (nREPL on port 7888)
-# WAG_ENV selects the profile; JWT_SECRET must be set. With WAG_ENV=test the
-# system starts on in-memory H2 and needs no database running.
-# In REPL:
-(require '[integrant.repl :as ig-repl])
-(ig-repl/go)                                       # Start system
-(ig-repl/reset)                                    # Reload and restart
-(ig-repl/halt)                                     # Stop system
-
-# Tools
-clj-nrepl-eval --discover-ports                    # Find nREPL ports
-clj-nrepl-eval -p 7888 "(+ 1 2)"                   # Evaluate code via nREPL
-clj-paren-repair <file>                            # Fix parentheses
-
-# Build
-clojure -T:build clean && clojure -T:build uber    # Build uberjar
-java -jar target/wagoe-*.jar server             # Run standalone jar (HTTP server)
-java -jar target/wagoe-*.jar worker             # Run as a background worker (no HTTP listener)
-java -jar target/wagoe-*.jar service payments  # Run one module as an independent service (BOU-91)
-java -jar target/wagoe-*.jar service user tenant  # Several modules in one process
-java -jar target/wagoe-*.jar authz-report       # Each route's authorization rule; what :enforce refuses
-
-# Deploy (see deploy/README.md)
-docker build -t wagoe:latest .                  # Prod image (root Dockerfile; server + worker modes)
-
-# Database Migrations
-clojure -M:migrate up                              # Run migrations
-
-# Scripting (Babashka)
-bb ai explain --file stacktrace.txt                # Explain error via AI (experimental)
-bb ai gen-tests libs/user/src/wagoe/user/core/validation.clj  # Generate test namespace (experimental)
-bb ai sql "find active users with orders in last 7 days"          # HoneySQL from NL (experimental)
-bb ai docs --module libs/user --type agents                       # Generate AGENTS.md
-bb ai admin-entity "products with name, price, status"            # Generate admin entity EDN config
-wagoe doctor                                       # Diagnostics front door: environment + config
-                                                   # + commands + setup, one next action
-bb doctor                                          # Just the config checks
-bb doctor --env all --ci                           # Check all environments (CI mode)
-bb setup                                           # Interactive config setup wizard
-bb setup ai "PostgreSQL with Stripe"               # AI-powered config setup
-bb create-admin                                    # Create first admin user for a new project (interactive wizard)
-bb create-admin --env prod                         # Use production config
-bb create-admin --email a@b.com --name "Admin"     # Skip email/name prompts (password still prompted securely)
-bb migrate up                                      # Run pending database migrations
-bb migrate status                                  # Show current migration status
-bb coverage                                        # Run Cloverage coverage with the monorepo test/classpath setup
-bb check-links                                     # Validate local markdown links in AGENTS.md files
-bb smoke-check                                     # Verify deps.edn aliases and key tool entrypoints
-bb install-hooks                                   # Configure git hooks path to .githooks
-bb scripts/docs_lint.clj                           # Run documentation drift linter directly
-
-# Quality Gates (all run in CI + check:fcis/check:ports run in pre-commit)
-bb check:fcis                                      # FC/IS enforcement: core/ must not import shell/IO/logging/DB, throw, or hold mutable state
-bb check:placeholder-tests                         # Detect (is true) placeholder assertions in tests
-bb check:deps                                      # Declared wagoe deps = used ones, both ways; cycles; undeclared third-party deps
-bb check:ports                                     # Hexagonal: modules must define ports.clj; shell/web must not bypass protocols
-bb check:ports-diff                                # A stable library's protocols gained, lost or moved no method since the last release (Convention 5)
-bb check:poms                                      # Published POMs must carry inter-Wagoe deps (build-shared rewrite + pom-basis)
-bb check:roadmap                                   # One roadmap, and it may not plan what scaling.adoc marks shipped
-bb check:vulns                                     # Known vulnerabilities in every deps.edn, aliases included (needs GITHUB_TOKEN; weekly in CI)
-bb check:error-shape                               # Errors carry the shape ADR-022/ADR-036 decided: :type on a thrown ex-info, {:error {:type <kw>}} on a {:success? false}
-clojure -M:test:test/all --focus-meta :security             # Security-focused tests (error mapping, CSRF, XSS, SQL)
-```
-
-### AI Assistant Helpers
-
-Wagoe assumes two Clojure assistant helpers are installed from
-`https://github.com/bhauman/clojure-mcp-light`:
-
-- `clj-nrepl-eval` for shell-driven REPL evaluation
-- `clj-paren-repair` for delimiter repair after edits
-
-Install them with `bbin`:
-
-```bash
-bbin install https://github.com/bhauman/clojure-mcp-light.git --tag v0.2.2 --as clj-nrepl-eval --main-opts '["-m" "clojure-mcp-light.nrepl-eval"]'
-bbin install https://github.com/bhauman/clojure-mcp-light.git --tag v0.2.2 --as clj-paren-repair --main-opts '["-m" "clojure-mcp-light.paren-repair"]'
-```
-
-Verify:
-
-```bash
-clj-nrepl-eval --discover-ports
-clj-paren-repair --help
-```
-
-### Architecture Quick Facts
-
-```
-┌─────────────────────────────────────────────┐
-│         IMPERATIVE SHELL (shell/*)          │
-│  I/O, validation, logging, side effects     │
-└─────────────────────────────────────────────┘
-                    ↓ calls
-┌─────────────────────────────────────────────┐
-│           PORTS (ports.clj)                 │
-│  Protocol definitions (interfaces)          │
-└─────────────────────────────────────────────┘
-                    ↑ implements
-┌─────────────────────────────────────────────┐
-│         FUNCTIONAL CORE (core/*)            │
-│  Pure functions, business logic only        │
-└─────────────────────────────────────────────┘
-```
-
-| **Module Structure:**
-| ```
-| libs/{library}/src/wagoe/{library}/
-| ├── core/          # Pure business logic
-| ├── shell/         # I/O, validation, adapters
-| ├── ports.clj      # Protocol definitions
-| └── schema.clj     # Malli validation schemas
-| 
-| # Layout exceptions (the shape above is the norm; these libs deviate by design):
-| #   - cache/         has no core/ — thin adapter lib (shell + ports only)
-| #   - platform/ , observability/  split ports across several files, not one ports.clj
-| #   - wagoe-mcp/  sources live under wagoe/mcp/ (ns wagoe.mcp.*) —
-| #                    lib dir name and namespace segment differ on purpose
-| #   - shared-ui/     shared Hiccup UI primitives (wagoe.shared.ui.*); no ports/schema
-| 
-| # Library structure (monorepo)
-| libs/
-| ├── core/          # Foundation: validation, utilities, interceptors
-| ├── observability/ # Logging, metrics, error reporting
-| ├── platform/      # HTTP, database, CLI infrastructure
-| ├── user/          # Authentication, authorization, MFA
-| ├── admin/         # Auto-CRUD admin interface
-| ├── storage/       # File storage (local & S3)
-| ├── scaffolder/    # Module code generator
-| ├── cache/         # Distributed caching (Redis/in-memory)
-| ├── jobs/          # Background job processing
-| ├── email/         # Production-ready email sending (SMTP)
-| ├── realtime/      # WebSocket/SSE for real-time features
-| ├── tenant/        # Multi-tenancy (PostgreSQL schema-per-tenant)
-| ├── workflow/      # State machine workflows with audit trails
-| ├── search/        # Full-text search (PostgreSQL FTS / H2 LIKE)
-| ├── payments/      # PSP abstraction: Mollie, Stripe, Mock (checkout-session flow)
-| ├── external/      # External communication adapters: SMTP, IMAP, Twilio, FTPS, SOAP
-| ├── reports/       # Report definitions, PDF/CSV export, scheduling (defreport macro)
-| ├── calendar/      # Calendar events, RRULE recurrence, iCal export/import, conflict detection
-| ├── geo/           # Geocoding (OSM/Google/Mapbox), DB-backed cache, Haversine distance
-| ├── ai/            # Framework-aware AI tooling: NL scaffolding, error explainer, test generator, SQL copilot, docs wizard
-| ├── ui-style/      # Shared UI style bundles, tokens, and CSS assets contract
-| └── i18n/          # Marker-based internationalisation, translation catalogues, locale chains
-| 
-| ├── tools/         # Developer tooling: scaffolding, AI, i18n, deploy, dev utilities
-| ```
-
----
-
-## Scaffolder — Enforcing FC/IS Architecture
-
-The **Wagoe Scaffolder** (`bb scaffold`) is the **primary tool for creating new modules and features** in Wagoe. It automatically generates correct FC/IS structure and prevents the most common architectural violations.
-
-### Why the Scaffolder Matters
-
-The quality gate `bb check:fcis` (run on every commit) enforces strict rules:
-- Core layers **CANNOT** require anything but pure libraries and their own core/schema/ports — the list is an allowlist, so a library nobody anticipated is refused rather than missed
-- Shell layers **MUST** depend on ports (protocols), not core implementations
-- Dependencies must flow *downward* from shell → core → ports
-
-**The scaffolder generates code that passes these gates by design.** Manually written code frequently violates these rules, especially:
-- Imports from shell in core (Pitfall #5)
-- Validation logic in core instead of shell (Pitfall #4)
-- Schema-database mismatches (Pitfall #6)
-
-### Scaffolder Commands (For LLMs)
-
-| Command | Use When |
-|---------|----------|
-| `bb scaffold` | Creating a new module from scratch (interactive wizard) |
-| `bb scaffold ai "description"` | Generating module structure from natural language description |
-| `bb scaffold entity --module-name {m} --entity {E} [--belongs-to {parent}] --field {spec}` | Adding an entity to an existing module (line items to invoices) |
-| `bb scaffold field --module-name {m} --entity {E} --name {field} --type {type}` | Adding a field to an existing module's schema |
-| `bb scaffold endpoint --module-name {m} --path {path} --method {method} --handler-name {name}` | Adding an HTTP endpoint to an existing module |
-| `bb scaffold integrate {module}` | Write a generated module's config key into every resources/conf/<profile>/config.edn |
-
-### Scaffolder Best Practices for AI Agents
-
-**RULE 1:** Always start with scaffolder when creating functionality.
-```bash
-bb scaffold ai "invoice module with number, date, amount, status" --yes
-```
-
-**RULE 2:** Use `bb scaffold field` instead of manually editing schema.clj:
-```bash
-# Instead of manually adding to schema.clj:
-bb scaffold field --module-name invoice --entity Invoice --name invoice-id --type string
-```
-
-**RULE 3:** After scaffolding, immediately run integration:
-```bash
-bb scaffold integrate invoice
-```
-
-**RULE 4:** Run quality gates after scaffolder completes:
-```bash
-bb check:fcis      # Verify FC/IS boundaries
-bb check:deps      # Check dependency direction
-clojure -M:test --watch :{module-name}  # Watch tests
-```
-
-### When NOT to Manually Write Code
-
-❌ **NEVER manually create:**
-- New module directories with existing structure (use scaffolder)
-- Schema files without scaffolder validation
-- Core→shell imports (violates FC/IS)
-- Test files for scaffolded functions (scaffolder generates these)
-
-✅ **OK to manually edit:**
-- Business logic *inside* already-correct core functions
-- Shell service implementations that wire ports
-- HTTP handler bodies (after scaffolder creates the route structure)
-- Test assertions (after scaffolder creates test file)
-
----
-
-## Critical Conventions
-
-### 1. ALWAYS Use kebab-case Internally
+Modules normally live in `libs/<library>/src/wagoe/<library>/` with `core/`,
+`shell/`, `ports.clj` and `schema.clj` (Malli). Core contains pure business logic;
+shell handles I/O, validation and side effects; ports define protocols.
 
 <!-- gen:naming -->
 | Location | Convention | Example |
@@ -322,35 +38,8 @@ clojure -M:test --watch :{module-name}  # Watch tests
 | API/JSON boundary only | camel | `passwordHash, createdAt` |
 <!-- /gen:naming -->
 
-```clojure
-;; ✅ CORRECT - Convert ONLY at persistence boundary using shared utilities
-(require '[wagoe.core.utils.case-conversion :as cc])
-
-;; At persistence boundary - DB to Clojure
-(cc/snake-case->kebab-case-map db-record)
-
-;; At persistence boundary - Clojure to DB
-(cc/kebab-case->snake-case-map entity)
-
-;; Alternative: Manual transformation
-(defn db->user-entity [db-record]
-  (-> db-record
-      (set/rename-keys {:created_at :created-at
-                        :password_hash :password-hash
-                        :updated_at :updated-at})))
-```
-
-**Why**: Recent bug caused authentication failures because service layer used `:password_hash` but entities had `:password-hash`.
-
-### 2. Layer Responsibilities
-
-| Layer | Allowed | Never |
-|-------|---------|-------|
-| **Core** | Pure functions, calculations | I/O, logging, exceptions |
-| **Shell** | I/O, validation, side effects | Business logic |
-| **Ports** | Protocol definitions | Implementations |
-
-### 3. Dependency Rules
+Convert keys only at persistence/API boundaries. Use
+`wagoe.core.utils.case-conversion` for database snake/kebab conversion.
 
 <!-- gen:fc-is -->
 | Direction | Allowed? |
@@ -378,845 +67,106 @@ Every module MUST define `ports.clj`.
 ```
 <!-- /gen:fc-is -->
 
-### 4. Write Short
+Errors thrown by the shell carry `:type` in `ex-data`; failed results use
+`{:success? false :error {:type <keyword> ...}}`. Core returns typed errors.
 
-Everything written for someone else to read — comments, docstrings, commit
-messages, PR descriptions, PR and review comments, issue descriptions — is
-short, human and to the point. Say the thing, then stop. Someone has to read
-all of it.
+Layout exceptions: cache is shell + ports; platform and observability split
+ports across files; wagoe-mcp uses `wagoe.mcp.*`; shared-ui uses
+`wagoe.shared.ui.*` and has no ports/schema.
 
-- **No slop.** No filler, no restating the diff, no recap of what you just
-  said, no stacked caveats, no "comprehensive" or "robust".
-- **No attributions.** No "Generated with …" footers, no `Co-Authored-By`
-  trailers, no tool signatures.
-- **Comments and docstrings** — explain what is not obvious from the code.
-  Usually why, not what. One or two sentences. If a comment needs paragraphs,
-  the code probably needs a rethink, or the reasoning belongs in an ADR.
-- **Commit messages** — a subject line that says what changed, and a body only
-  when the reason is not evident from the diff. Reference the ticket.
-- **PR descriptions** — what changed and why, in a few lines. Reviewers read
-  the diff; do not narrate it back to them. Include verification output only
-  when a reviewer would otherwise have to re-run it.
-- **PR and review comments** — the answer or the finding, and the evidence in
-  a line. Point to the commit; do not retell it.
-- **Issue descriptions** — the problem, how to reproduce it, and what done
-  looks like.
-- **CHANGELOG entries** — **two lines, hard limit.** What changed, and what a
-  user does about it. The reasoning, the measurements and the history belong in
-  the ticket and the commit; a changelog nobody finishes reading is worse than a
-  short one. Reference the ticket instead of explaining it.
+## Scaffold first
 
-```markdown
-<!-- too long -->
-- **Any `Authorization: Bearer` value authenticated.** JWT validation returns a
-  map on both outcomes and the middleware branched on the map itself, so the
-  rejection branch was unreachable. Two further bugs in the same expression:
-  the claims live under `:claims`, and the id claim is `:sub`, not `:user-id`…
-
-<!-- right -->
-- **Any `Authorization: Bearer` value authenticated** (BOU-374). Upgrade if you
-  use JWT auth.
-```
-
-Existing long comments in this repo are not a target for rewriting — leave
-them. This applies to what you write next. **The CHANGELOG is the exception:**
-it is read start to finish by people deciding whether to upgrade, so entries
-are trimmed in place when they are found over the limit (BOU-371).
-
-### 5. A Stable Port Only Grows by New Protocols
-
-A protocol in a stable library's `ports` is public API (see
-[Stability](docs/modules/ROOT/pages/stability.adoc)). Callers use it, and
-applications implement it with their own `defrecord` or `reify`. Changing it
-breaks one of the two, and an implementer breaks at runtime: the record
-compiles, and the first call the framework makes to what it lacks throws.
-`wagoe list modules` shows which libraries are stable.
-
-In a 1.x release, in a stable library:
-
-- **A new capability is a new protocol.** Never a new method on an existing
-  one, and never a new arity on an existing method: both break implementers.
-- **Check it once, where the component starts.** `satisfies?` in `init-key`,
-  then either take the old path, or refuse to boot with a `WGE-` error that
-  names what is missing when no old path is safe (a lockout, a lock), and add
-  the code to `libs/devtools/resources/wagoe/devtools/error_catalog.edn` so
-  `bb guide error` explains it. Not per call, and never a runtime
-  `AbstractMethodError`.
-- **Nothing is removed, renamed or moved.** Not a protocol, a method or an
-  arity. Deprecate it (`^:deprecated` and `### Deprecated`) and keep it until 2.0.
-- **A break that cannot wait** (a security fix) is named in backticks under
-  `[Unreleased]` `### Breaking`, method by method, and recorded as an exception
-  on the stability page. That is a decision for the release, not for the PR:
-  ask before writing one.
-
-```clojure
-;; ports.clj — beside IUserRepository, not inside it
-(defprotocol ILoginAttempts
-  (claim-login-attempts [this user-id n lockout]))
-
-;; shell — decided once, when the component starts
-(defmethod ig/init-key :wagoe/user-service [_ {:keys [user-repository] :as opts}]
-  (when-not (satisfies? ports/ILoginAttempts user-repository)
-    (throw (ex-info "WGE-NNN: the user repository does not implement ILoginAttempts"
-                    {:type :configuration-error :missing ['claim-login-attempts]})))
-  (service/create opts))
-```
-
-Incubating libraries may change their ports in a minor; say so under
-`### Changed`. `bb check:ports-diff` holds all of this against the last final
-release tag and fails CI on a stable change nobody named.
-
----
-
-## Common Workflows
-
-### ⭐ Creating New Modules — USE THE SCAFFOLDER FIRST
-
-**ALWAYS use the scaffolder to create new modules or add major features.** This ensures strict FC/IS architecture compliance and prevents common mistakes.
-
-**For new modules:**
-```bash
-bb scaffold                                          # Interactive wizard (recommended)
-bb scaffold ai "product module with name, price"    # AI-powered from description (interactive confirm)
-bb scaffold ai "product module with name, price" --yes  # AI-powered (non-interactive)
-```
-
-**Why scaffolder is mandatory:**
-- ✅ Creates correct FC/IS directory structure (core/, shell/, ports.clj, schema.clj)
-- ✅ Generates validated Malli schemas—prevents schema-database mismatches (Pitfall #6)
-- ✅ Prevents core→shell dependencies: scaffolder wires ports correctly (Pitfall #5)
-- ✅ Integrates with quality gates: scaffolder output passes `bb check:fcis`
-- ✅ Auto-generates unit test skeletons with correct metadata
-- ✅ Hooks into deps.edn, tests.edn, and wiring automatically
-- ✅ Enforces kebab-case conventions everywhere
-
-**After scaffolding:**
-```bash
-bb scaffold integrate {module-name}    # Writes its config key — that is the whole registration
-```
-
-**For large features within existing modules:**
-Use scaffolder's `--field` and `--endpoint` commands to add fields and HTTP handlers to existing modules. This is faster than manual creation and guarantees FC/IS compliance.
-
-### Adding New Functionality (Manual Workflow)
-
-If you cannot use the scaffolder (rare edge cases), follow this checklist:
-
-1. **Define schema** in `libs/{library}/src/wagoe/{library}/schema.clj`
-2. **Write core logic** in `libs/{library}/src/wagoe/{library}/core/{domain}.clj` (pure functions)
-3. **Write unit tests** in `libs/{library}/test/wagoe/{library}/core/{domain}_test.clj`
-4. **Define port** in `libs/{library}/src/wagoe/{library}/ports.clj` (protocol). In a stable library a new
-   capability is a new protocol, never a method added to an existing one (Convention 5)
-5. **Implement in service** in `libs/{library}/src/wagoe/{library}/shell/service.clj`
-6. **Add HTTP endpoint** in `libs/{library}/src/wagoe/{library}/shell/http.clj`
-
-⚠️ **After manual creation, run `bb check:fcis` to verify FC/IS boundaries are not violated.**
-
-### Testing Workflow
+Use the scaffolder for new modules and major features. Do not manually create
+module directories, schema files or tests for scaffolded functions.
 
 ```bash
-# Watch mode while developing
-clojure -M:test:test/all --watch --focus-meta :unit
+bb scaffold ai "invoice module with number, date, amount, status" --yes
+bb scaffold integrate invoice
+bb scaffold entity --module-name invoice --entity InvoiceLineItem --belongs-to invoice --field qty:int
+bb scaffold field --module-name invoice --entity Invoice --name amount --type decimal
+bb scaffold endpoint --module-name invoice --path /invoices --method post --handler-name create-invoice
+```
 
-# Watch specific library
-clojure -M:test --watch :core
+Integrate immediately after generating a module. Run `bb check:fcis`,
+`bb check:deps` and the module tests afterwards. Edit business logic inside
+existing core functions, shell service implementations, generated handler bodies
+and test assertions manually. For a scaffolder limitation, follow the manual
+workflow in the development reference and run `bb check:fcis`.
 
-# Full test suite before committing — every surface, not just tests.edn
-bb test:all
+## Stable ports
 
-# Lint before committing
+Use `wagoe list modules` to check stability. In stable 1.x libraries:
+
+- Add a new protocol for a new capability; never add methods or arities to an existing protocol.
+- Check capabilities once at component startup with `satisfies?`. Keep the old path when safe; otherwise refuse boot with a `WGE-` configuration error naming the missing capability, and register it in `libs/devtools/resources/wagoe/devtools/error_catalog.edn`.
+- Never remove, rename or move protocols, methods or arities. Deprecate with `^:deprecated` and `### Deprecated`; keep until 2.0.
+- Ask before introducing an urgent security break. Name each affected method in backticks under `[Unreleased]` `### Breaking`, and record an exception on the stability page.
+
+Incubating ports may change in a minor release; document under `### Changed`.
+`bb check:ports-diff` compares with the last final release tag.
+
+## Verification
+
+```bash
+bb test:services up       # Redis + MySQL; PostgreSQL suites use embedded PG
+bb test:all               # main, tools, agents, wagoe-cli and wagoe-mcp
+bb check                 # registered quality gates
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
 ```
 
-### Test surfaces — why `bb test:all` exists
+Run `bb test:all` before committing or claiming the codebase is green.
+`clojure -M:test` alone misses standalone surfaces. `bb test:all --list` explains
+coverage; e2e is separate (`bb e2e`, requires Chromium) and blocks PR merges in CI.
+Adapter sweeps fail if backing services are missing.
 
-`clojure -M:test` runs the kaocha suites declared in `tests.edn`, which
-cover the libraries on the app classpath. Three surfaces are **not** on that
-classpath and are invisible to it:
+For targeted runs use `clojure -M:test:test/all :<suite>`; on Apple Silicon add
+`:test/pg-mac` for embedded PostgreSQL. The development reference lists narrower
+aliases and metadata/namespace filters. Do not replace assertions with placeholders.
 
-| Surface | Run by | Why it is separate |
-|---|---|---|
-| `libs/wagoe-cli` | `clojure -M:test` in that dir | standalone lib, own `deps.edn` + `:test` alias |
-| `libs/wagoe-mcp` | `clojure -M:test` in that dir | standalone lib, own `deps.edn` + `:test` alias |
-| `libs/tools` | `bb test:tools` | pure Babashka, no Maven deps at runtime |
-| `scripts/agents_gen_test.clj` | `bb test:agents` | generator test, outside the lib tree |
+After Clojure edits, use `clj-paren-repair <file>` for delimiter repair when needed.
+Use `clj-nrepl-eval --discover-ports` to find running REPLs. Installation and
+REPL restart instructions are in the development reference.
 
-During the Wagoe rename this hid real failures three times — 8 in `wagoe-mcp`,
-1 in `wagoe-cli`, 5 in `tools` (including a silently-broken FC/IS gate) — each
-found only by remembering to run an extra command.
+## Details that must not be missed
 
-**So a green `clojure -M:test` does not mean the codebase is green.**
-`bb test:all` runs all of them, prints a per-surface summary, and exits non-zero
-if any fails. `bb test:all --list` shows the set, including what is deliberately
-excluded (`e2e`, which needs Chromium installed — run it with `bb e2e`, which
-starts a server on :3100 and tears it down). CI runs e2e on every pull request
-and a red e2e test blocks the merge.
+- Use `[:t :module/key]` markers for UI strings; update both English and Dutch catalogues and run `bb i18n:scan` and `bb i18n:missing`.
+- Module route prefixes are added by the framework; don't repeat them in module paths.
+- Declare OpenAPI parameters explicitly; handler destructuring does not document them.
+- SQL defaults must handle explicit `nil` values, not just absent keys.
+- New framework migration ids end in an odd second. Never rename a released migration id.
+- After changing a `defrecord`, reload its namespace and restart the system; old instances retain the old methods.
+- Development uses PostgreSQL by default. For an app without external services use `WAG_ENV=test` with a JWT secret of at least 32 characters. Read the logged HTTP port instead of assuming 3000.
+- Remove temporary debug logging before committing; keep logging in the shell.
 
-None of the surfaces enumerate namespaces: the standalone libs let kaocha
-discover `test/`, and the rest discover from disk. An earlier `bb test:wagoe-cli`
-hardcoded four requires and had already drifted, silently skipping
-`wagoe.cli.agents-update-test`.
+## Write short
 
-### Backing services — `bb test:services`
+Comments, docstrings, commits, PRs, reviews and issues must be short and human.
+Explain non-obvious reasons; avoid filler, diff narration, tool signatures,
+"Generated with" footers and `Co-Authored-By` trailers. Reference the ticket.
+Comments/docstrings usually need only one or two sentences.
 
-The adapter sweeps (`libs/{jobs,cache}/test/.../adapter_surface_test.clj`,
-`test/wagoe/audience_dialect_test.clj`) compare every backend they can reach and
-**fail** rather than pass when one is absent, because a sweep that quietly
-compares two adapters instead of three reports green while proving less. So a
-full run needs Redis and MySQL:
+Changelog entries have a hard limit of two lines: what changed and what the user
+must do. Trim existing overlong entries when encountered; leave unrelated long
+comments alone. Commit bodies are only needed when the reason is not evident.
+PRs explain what changed and why; include verification output only when useful.
+Issues state the problem, reproduction and completion criteria.
 
-```bash
-bb test:services up     # docker compose -f docker-compose.test.yml, waits for healthy
-bb test:services        # what is up; `down` stops them
-```
+## Maintaining these instructions
 
-`bb test:all` names the missing ones before it runs anything, and `bb doctor:env`
-reports them as a warning. The registry is `wagoe.tools.test-services/services`;
-a test pins it to `docker-compose.test.yml` and to the suites that need it, so
-adding a service to one and not the other fails. PostgreSQL is not here — those
-suites run embedded (`support.embedded-pg`).
+Keep commands in one reference location and library details in library guides.
+Do not expand this root file with troubleshooting or implementation histories.
 
-### Custom Test Reporter
-
-The Kaocha reporter at `dev/wagoe/test/reporter.clj` shows a green ✓ for
-passing tests and a red ✗ for failing tests. It is configured in `tests.edn` as
-`:kaocha/reporter [wagoe.test.reporter/reporter]`. The `dev/` directory is on
-the `:test` classpath via `:extra-paths` in `deps.edn`.
-
-### PostgreSQL Test Runs
-
-The default `test` profile uses in-memory H2. There is currently no dedicated
-PostgreSQL test alias such as `:db/pg`.
-
-To do a complete run against PostgreSQL:
-
-1. Start a disposable PostgreSQL instance that matches the credentials in
-   `resources/conf/test/config.edn`.
-2. Temporarily move `:wagoe/postgresql` from `:inactive` to `:active` in
-   `resources/conf/test/config.edn`, and move `:wagoe/h2` out of `:active`.
-3. Run:
+Naming and FC/IS blocks here, pitfalls in `dev-docs/agents/pitfalls.md`, the module
+table in `dev-docs/agents/maintenance.md`, and downstream template blocks are
+generated from `libs/tools/resources/wagoe/agents/knowledge.edn` and
+`modules-catalogue.edn`. Edit the sources, then run:
 
 ```bash
-WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:migrate up
-WAG_ENV=test JWT_SECRET="dev-secret-at-least-32-characters-long" clojure -M:test:test/all
+bb agents:gen
+bb check:agents
+bb check-links
 ```
 
-4. Revert `resources/conf/test/config.edn` afterwards so normal local and CI
-   runs keep using H2.
-
-### REPL Debugging
-
-```clojure
-;; Get system component
-(def user-svc (get integrant.repl.state/system :wagoe/user-service))
-
-;; Test directly
-(ports/list-users user-svc {:limit 10})
-
-;; Reload namespace with changes (use :reload)
-(require '[wagoe.user.core.user :as user-core] :reload)
-
-;; Full system reset
-(ig-repl/halt)
-(ig-repl/go)
-```
-
-### Debugging Workflow
-
-When encountering 500 errors or unexpected behavior:
-
-1. **Check logs first** - Errors are logged with stack traces:
-   ```bash
-   tail -100 logs/wagoe.log | grep -A 10 "ERROR"
-   ```
-   `resources/logback.xml` writes `logs/wagoe.log`, plus `logs/audit.log` and
-   `logs/security.log`. A generated project's `resources/logback.xml` logs to
-   the console (stderr) rather than to a file.
-
-2. **Add temporary logging** - Use `println` for quick debugging:
-   ```clojure
-   (println "DEBUG:" {:field value :other other-value})
-   ```
-   Output appears in REPL/server stdout, not log files.
-
-3. **Test in isolation via REPL** - Bypass HTTP layer to test services directly:
-   ```clojure
-   (def admin-svc (get integrant.repl.state/system :wagoe/admin-service))
-   (admin-ports/update-entity admin-svc :users uuid {:name "Test"})
-   ```
-
-4. **Check actual HTTP request data** - Add temporary logging in handlers:
-   ```clojure
-   (println "DEBUG request:"
-            {:method (:request-method request)
-             :params (:params request)
-             :headers (select-keys (:headers request) ["hx-request"])})
-   ```
-
-5. **Verify database state** - Query directly via REPL:
-   ```clojure
-   (def ds (get-in integrant.repl.state/system [:wagoe/db-context :datasource]))
-   (jdbc/execute! ds ["SELECT * FROM users WHERE id = ?" uuid])
-   ```
-
-6. **Remove debug logging before committing** - Clean up all `println` statements.
-
-**Key Principle**: Start from the innermost layer (core/database) and work outward to HTTP layer. Don't debug through the full stack if you can isolate the issue.
-
----
-
-## Common Pitfalls
-
-**Most pitfalls listed below are automatically prevented by the scaffolder.** If you use `bb scaffold` to create modules, you will avoid pitfalls #1, #2, #4, #5, #6, and #9. Manual code creation is where these issues arise.
-
-**LLM Reminder**: When adding functionality, reach for `bb scaffold` first. It's faster, safer, and ensures FC/IS compliance.
-
-<!-- gen:pitfalls -->
-### 1. snake_case vs kebab-case mixing
-
-- **Symptom:** Using snake_case internally causes nil lookups.
-- **Cause:** snake_case keys used inside Clojure code instead of converting only at boundaries.
-- **Fix:** Always use kebab-case internally; convert at the persistence/HTTP boundary only via snake-case->kebab-case-map / kebab-case->snake-case-map.
-
-### 2. defrecord changes not taking effect
-
-- **Symptom:** (ig-repl/reset) doesn't recreate defrecord instances.
-- **Cause:** ig-repl/reset reuses existing defrecord instances rather than recompiling them.
-- **Fix:** Run (ig-repl/halt) then (ig-repl/go), or restart the REPL entirely.
-
-```clojure
-(ig-repl/halt)
-(ig-repl/go)
-;; OR restart REPL entirely
-```
-
-### 3. unbalanced parentheses
-
-- **Symptom:** Manual editing creates syntax errors.
-- **Cause:** Manually fixing delimiters by hand.
-- **Fix:** ALWAYS use the tool, never manually fix: clj-paren-repair <file>.
-
-### 4. validation in wrong layer
-
-- **Symptom:** Validation side effects placed in pure core code.
-- **Cause:** Calling valid?/throwing inside core functions instead of in the shell service.
-- **Fix:** Validate in the shell; pass clean data into core functions.
-
-```clojure
-;; ❌ WRONG - Validation in core
-(defn create-user [user-data]
-  (when-not (valid? user-data)  ; Side effect in pure code!
-    (throw ...)))
-
-;; ✅ CORRECT - Validation in shell
-(defn create-user-service [user-data]
-  (let [[valid? errors data] (validate user-data)]
-    (if valid?
-      (user-core/create-user data)  ; Core gets clean data
-      (throw ...))))
-```
-
-### 5. core depending on shell
-
-- **Symptom:** Core namespace requires a shell namespace.
-- **Cause:** Core requiring shell.persistence (or other shell IO) instead of depending on ports only.
-- **Fix:** Core depends on ports only; keep core functions pure.
-
-```clojure
-(ns myapp.core.user
-  ;; WRONG - Core requires shell namespace
-  (:require [myapp.shell.persistence :as db]))  ; BAD!
-
-;; CORRECT - Core depends on ports only
-(ns myapp.core.user)
-(defn find-user-decision [user-id existing-user] ...)  ; Pure logic
-```
-
-### 6. schema-database mismatch
-
-- **Symptom:** 500 errors with cryptic messages, nil values for expected fields, SQL errors about missing columns.
-- **Cause:** Adding logic that uses new fields without adding them to the Malli schema, the database columns, and the persistence transformations.
-- **Fix:** When adding a field, synchronize all three: Malli schema, database column (migration), and persistence layer transformations.
-
-```clojure
-;; ALWAYS follow this checklist when adding new fields:
-
-;; 1. Add to Malli schema (src/{module}/schema.clj)
-[:failed-login-count {:optional true} :int]
-[:lockout-until {:optional true} [:maybe inst?]]
-
-;; 2. Add to persistence layer transformations (src/{module}/shell/persistence.clj)
-;; In entity->db: nothing, the Instant goes to the database as it is
-;; In db->entity:
-(update :lockout-until type-conversion/string->instant)
-
-;; 3. Verify database has columns (or add migration)
-ALTER TABLE users ADD COLUMN failed_login_count INTEGER DEFAULT 0;
-ALTER TABLE users ADD COLUMN lockout_until TIMESTAMP WITH TIME ZONE;
-```
-
-### 7. exception handling - missing :type in ex-data
-
-- **Symptom:** Exceptions without :type in ex-data trigger generic 500 errors; log warning "Exception reached HTTP boundary without :type in ex-data".
-- **Cause:** Throwing exceptions from Java methods or using ex-info without a :type key.
-- **Fix:** Wrap external/Java calls in try-catch and ensure ALL ex-info calls include a :type (validation-error, not-found, unauthorized, forbidden, conflict, or internal-error).
-
-```clojure
-;; WRONG - No :type in ex-data
-(parse-long "invalid")  ; Throws NumberFormatException (no ex-data)
-(UUID/fromString "bad") ; Throws IllegalArgumentException (no ex-data)
-(throw (ex-info "Error" {:field :foo}))  ; Missing :type
-
-;; CORRECT - Wrap in try-catch with :type
-(try
-  (parse-long value)
-  (catch NumberFormatException _
-    (throw (ex-info "Invalid integer value"
-                    {:type :validation-error
-                     :field field-keyword
-                     :value value
-                     :message "Must be a valid integer"}))))
-```
-
-### 8. Java interop - static vs instance methods
-
-- **Symptom:** IllegalArgumentException: No matching method <method-name> found taking N args for class java.lang.Class.
-- **Cause:** Using instance method syntax (.method) for static methods or static syntax for instance methods.
-- **Fix:** Use ClassName/method for static methods and (.method object) for instance methods; check Java docs to identify which is which.
-
-```clojure
-;; WRONG - Using instance syntax for static method
-(.between java.time.Duration instant now)
-;; Error: No matching method between found taking 2 args
-
-;; WRONG - Using static syntax for instance method
-(java.time.Instant/getSeconds my-instant)
-;; Error: No matching field or method getSeconds
-
-;; CORRECT - Static method using ClassName/method
-(java.time.Duration/between instant now)
-
-;; CORRECT - Instance method using .method
-(.getSeconds duration)
-
-;; Common Java Interop Patterns:
-;; Static methods (ClassName/method)
-(java.time.Instant/now)
-(java.util.UUID/randomUUID)
-(java.lang.Math/abs -5)
-(java.time.Duration/between start end)
-
-;; Instance methods (.method object)
-(.toString my-object)
-(.getSeconds duration)
-(.format instant formatter)
-
-;; Static fields (ClassName/FIELD)
-java.time.temporal.ChronoUnit/DAYS
-
-;; Instance fields (.field object)
-(.length my-string)
-```
-
-### 9. module routes — the prefix is added for you
-
-- **Symptom:** A route answers at /api/v1/api/my-resource instead of /api/v1/my-resource, or the module serves nothing at all and says nothing about it, or every route answers 401 to a caller who is not signed in.
-- **Cause:** A module's :wagoe/<name>-routes component returns a contribution — {:api [..] :web [..] :static [..]} — and the platform prefixes each part before mounting it: :api is versioned under /api/v1, :web mounted under /web. Paths written with the prefix already on them get it twice. A flat vector returned instead of the three-key map contributes zero routes, and nothing errors. Every route requires a signed-in user unless its route data says :public true (BOU-568).
-- **Fix:** Write Reitit route data at paths relative to the mount point, and return the three-key map. `bb scaffold generate` writes both; this is what to preserve when editing by hand. Add :public true, on the method or the path, only to a route something else authenticates: a login form, a signed webhook.
-
-```clojure
-;; WRONG — prefix written twice, and a flat vector instead of a contribution
-(defn my-routes [svc _config]
-  [["/api/my-resource"
-    {:get {:handler (fn [req] ...)}}]])
-
-;; CORRECT
-(defn api-routes [svc]
-  [["/my-resource"          ; no /api — versioning adds /api/v1
-    {:get {:handler (fn [req] ...)
-           :summary "..."}}]
-   ["/my-webhook"            ; signed by the sender, so no session
-    {:post {:handler (fn [req] ...)
-            :public  true}}]])
-
-(defn my-routes [svc config]
-  {:api    (api-routes svc)
-   :web    (web-routes svc config)   ; paths without /web
-   :static []})
-```
-
-### 10. forward references — define before use
-
-- **Symptom:** Unable to resolve symbol: my-helper in this context; Syntax error compiling.
-- **Cause:** Private helpers placed after the public functions that call them; Clojure compiles top-to-bottom.
-- **Fix:** Private helpers must always appear above the first function that calls them (in src/, dev/, and test/ alike).
-
-```clojure
-;; WRONG — system-component is called before it is defined
-(defn dev-resend-invite! [...]
-  (let [svc (system-component :wagoe/my-service)] ...))  ; used here
-
-(defn- system-component [k]   ; defined here — too late!
-  (get integrant.repl.state/system k))
-
-;; CORRECT — helper defined first
-(defn- system-component [k]
-  (get integrant.repl.state/system k))
-
-(defn dev-resend-invite! [...]
-  (let [svc (system-component :wagoe/my-service)] ...))
-```
-
-### 11. OpenAPI — parameters invisible without explicit declaration
-
-- **Symptom:** Routes with path or query parameters show no input fields in the API docs (/api-docs/).
-- **Cause:** The OpenAPI 3.1 document (/openapi.json) only lists parameters a route declares: a Malli :parameters schema, or a raw :openapi spec. A handler that reads :path-params or :query-params itself declares neither.
-- **Fix:** Add an :openapi key with OpenAPI 3.x parameter specs (type under :schema) to every handler/route that has path or query parameters. A 2.0-style :swagger key is still translated, with a warning at boot, until 2.0.
-
-```clojure
-;; Path parameter — on the method
-:get {:handler ...
-      :summary "Get product by slug"
-      :openapi {:parameters [{:name "slug" :in "path" :required true :schema {:type "string"}
-                              :description "Product slug (e.g. wagoe-tshirt)"}]}}
-
-;; Query parameters — on the method
-:get {:handler ...
-      :summary "List customer orders"
-      :openapi {:parameters [{:name "email"  :in "query" :required true  :schema {:type "string"}}
-                             {:name "limit"  :in "query" :required false :schema {:type "integer"}}
-                             {:name "offset" :in "query" :required false :schema {:type "integer"}}]}}
-
-;; Shared path param when a route has multiple methods — put :openapi at route level
-["/api/cart/items/:product-id"
- {:openapi {:parameters [{:name "product-id" :in "path" :required true :schema {:type "string"}}]}
-  :patch  {:handler ... :summary "Update item quantity"}
-  :delete {:handler ... :summary "Remove item from cart"}}]
-```
-<!-- /gen:pitfalls -->
-
----
-
-## Key Technologies
-
-| Library | Purpose | Critical Knowledge |
-|---------|---------|-------------------|
-| **Integrant** | Lifecycle | Use `ig-repl/go`, `ig-repl/reset`, `ig-repl/halt` |
-| **Aero** | Config | Environment-based profiles in `resources/conf/` |
-| **Malli** | Validation | Schemas in `{module}/schema.clj` |
-| **next.jdbc** | Database | Connection pooling, prepared statements |
-| **Ring/Reitit** | HTTP | Normalized routes, interceptors |
-| **HTMX** | Web UI | Server-side rendering, no build step |
-
----
-
-## Configuration
-
-**Supported databases**: PostgreSQL, SQLite and MySQL 8, and H2 for tests
-(`scripts/mysql-smoke.sh` proves a generated app on MySQL). Tenancy
-(`:wagoe/tenant`) needs PostgreSQL and refuses to boot on SQLite, MySQL, and H2
-unless `:wagoe/tenant` sets `:allow-h2? true` (the test profile does).
-
-**Current Setup (Development)**:
-- **Database**: PostgreSQL on `localhost:5432`, database `wagoe_dev` — `:wagoe/postgresql`
-  is the adapter in `:active`. SQLite and H2 are present but under `:inactive`;
-  move one into `:active` to use it. Without a reachable PostgreSQL,
-  `clojure -M:run server` fails at `:wagoe/db-context` with
-  `FATAL: database "wagoe_dev" does not exist`.
-- **HTTP**: Port 3000, auto-finding 3000–3099 when busy. The allocated port is
-  logged (`HTTP server started successfully {:port …}`) — read it rather than
-  assume 3000.
-- **Environment**: `WAG_ENV=dev` (`development` is accepted as an alias).
-
-**Running with no external services**: the `test` profile uses in-memory H2 and
-needs nothing installed:
-
-```bash
-JWT_SECRET="dev-secret-at-least-32-characters-long" WAG_ENV=test clojure -M:run server
-```
-
-It serves in about 30 seconds on port 3100 (range 3100–3199, chosen so it does
-not collide with a dev server on 3000).
-
-**Environment Variables**:
-```bash
-export JWT_SECRET="dev-secret-minimum-32-characters"
-export DB_PASSWORD="dev_password"
-```
-
-**Configuration File**: `resources/conf/dev/config.edn`
-
-### Sizing & Scaling
-
-Vertical scaling is config-driven (HikariCP pool, Jetty, JVM heap, Redis pool —
-all in `config.edn` + env). Horizontal scaling rides on the `ports.clj` seam: swap
-an in-process adapter for a distributed one. Cache, jobs, auth, tenancy, realtime,
-rate limiting and the event bus are all replica-safe via Redis/DB — each still has
-a single-process in-memory adapter, so the work is activating them, not building
-them. One provider vocabulary across cache, realtime, events and jobs: `:memory` and
-`:redis` everywhere, plus `:db` where a module has a database adapter — today
-only jobs. Events has no default and throws on anything else. The same seam allows
-functional decomposition: `java -jar wagoe.jar service <module>...` boots a module
-alone, `wagoe.platform.shell.rpc` gives any port a remote implementation, and no
-dependency cycles remain to block slicing. What is not done is service discovery
-and the data-ownership decision. Full readiness matrix, topologies, sliceability,
-and the production checklist: `docs/modules/architecture/pages/scaling.adoc`.
-
----
-
-## Internationalisation (i18n) — ADR-013
-
-Translation keys live as `[:t :key]` data markers inside Hiccup trees.
-A shell-layer `postwalk` resolves them before HTML is emitted.
-
-### Workflow: adding a new string
-
-1. **Add to `en.edn`** first — `libs/i18n/resources/wagoe/i18n/translations/en.edn`
-2. **Add to `nl.edn`** — `libs/i18n/resources/wagoe/i18n/translations/nl.edn`
-3. **Use marker in Hiccup** — `[:t :user/my-key]` instead of `"Hardcoded string"`
-4. **Verify** — `bb i18n:scan` (exits 0 if no unexternalised literals remain)
-5. **Check parity** — `bb i18n:missing` reports gaps between locales
-
-### Marker syntax
-
-```clojure
-[:t :user/sign-in]                        ; simple lookup
-[:t :user/greeting {:name "Alice"}]       ; interpolation
-[:t :user/items {:n 3} 3]                 ; plural (4th arg = count)
-```
-
-### Babashka tooling
-
-```bash
-bb i18n:find "Sign in"      ; search catalogue + codebase
-bb i18n:scan                ; CI gate — exit 1 if literals found
-bb i18n:missing             ; report translation gaps
-bb i18n:unused              ; report unreferenced catalogue keys
-```
-
-### Key namespaces in catalogues
-
-| Namespace | Module |
-|-----------|--------|
-| `:common/*` | Shared across all modules |
-| `:user/*` | User module |
-| `:admin/*` | Admin module |
-| `:search/*` | Search module |
-| `:calendar/*` | Calendar module |
-| `:workflow/*` | Workflow module |
-
-### Full documentation
-
-See `libs/i18n/AGENTS.md` for complete API reference, middleware wiring, and common pitfalls.
-
----
-
-## Git Policy
-
-- **Never commit or push without explicit user approval.** Always show the intended changes and wait for the user to say "commit" or "push" before running `git commit` or `git push`.
-
----
-
-## Maintenance Notes
-
-- Keep command examples in one place (`Quick Reference`); avoid duplicate command blocks elsewhere in this file.
-- Library-specific troubleshooting and deep implementation notes belong in `libs/*/AGENTS.md`.
-- Use `bb check-links` after editing AGENTS documentation.
-- Install local pre-commit hooks once per clone: `bb install-hooks`.
-
----
-
-## AGENTS.md generation
-
-FC/IS rules, naming conventions, pitfalls, and the module table in this file —
-and the FC/IS / naming / pitfalls sections of the downstream
-`libs/wagoe-cli/resources/wagoe/cli/templates/AGENTS.md.tmpl` — are
-generated from `libs/tools/resources/wagoe/agents/knowledge.edn` (+ `modules-catalogue.edn`
-for the module table). The generator lives at `scripts/agents_gen.clj` and reads
-both from the classpath — which is also how the MCP server reads the knowledge
-base in a project that installed it (BOU-320).
-
-- Regenerate:  `bb agents:gen`
-- Verify sync: `bb check:agents`  (also part of `bb check` + CI)
-- Add/edit a pitfall, naming rule, or FC/IS rule: edit `libs/tools/resources/wagoe/agents/knowledge.edn`,
-  then run `bb agents:gen`.
-- Add a library: add it to `modules-catalogue.edn` (or, for dev-only tooling not
-  published as an app module, to `:dev-modules` in `knowledge.edn`), then `bb agents:gen`.
-- **Regenerate before publishing `wagoe-cli`** so downstream `wagoe new`
-  projects ship the current template.
-
-The per-module AI doc generator (`bb ai docs --module libs/<x> --type agents`) is
-separate and unchanged.
-
----
-
-## Quality Gates
-
-Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) to prevent regressions caught during QA review (PRs #108–#116). `bb check` runs the full set — currently 22 — and `wagoe.tools.check/all-checks` is its registry; the table below covers the ones with non-obvious rules.
-
-| Gate | Command | What it catches | Hard fail? |
-|------|---------|-----------------|------------|
-| **FC/IS enforcement** | `bb check:fcis` | A core namespace requiring anything outside a small allowlist of pure libraries and its own core/schema/ports; throwing; or holding mutable state (defonce/atom/swap!/reset!, including via `apply`). A `print`/`println`/`prn`/`pr`/`printf`/`newline`/`pprint` call outside `with-out-str`, direct, handed to `map`, `run!` and the like, or a step of `->`, `->>`, `some->`, `cond->` or `doto`, or a `tap>`, warns (an error in 2.0); so does a clock or random read (`(java.util.Date.)`, `System/nanoTime`, `rand`, `random-uuid`, …) — `Instant/now`, `UUID/randomUUID` and `System/currentTimeMillis` already fail, and warn where a line check missed them before (split from the paren, passed as a function); `(comment …)` blocks are skipped. Reads operator position, so a newline between `(` and the symbol does not hide a call. Exceptions: `^:wagoe/allow-throw` / `^:wagoe/allow-mutable-state` / `^:wagoe/allow-print` / `^:wagoe/allow-clock` ns metadata, or `.wagoe/check-fcis.edn` (`:allow-require`, `:allow-print` and `:allow-clock` entries need a `:why`; a stale `:allow-print`/`:allow-clock` entry fails). Also SQL in core or ports: a `honey.sql`/`next.jdbc`/`wagoe.platform.database` require or a SQL-typed port arglist fails, a SQL-typed port docstring warns; `:allow-sql` entries need a `:why`, and one that exempts nothing fails | Yes |
-| **Placeholder tests** | `bb check:placeholder-tests` | Read with edamame, per runtime feature set: `(is true)`-style shapes (alias-qualified too), a deftest or `testing` block with no assertion at all (helpers like `check-snapshot!` count via a named list; for a `testing`, so does a helper in the file that asserts, directly or through another, and an `assert-*`/`expect-*` call into another namespace), and identical-argument `(= x x)` tautologies. Escape hatch: `^:wagoe/allow-placeholder` on the deftest name, on one `testing`, or on one assertion for a deliberate sentinel | Yes |
-| **Dependency direction** | `bb check:deps` | A library's main `:deps` wagoe libs differing from what its `src/` uses, either way: a require or `requiring-resolve` of an undeclared lib, or a declared lib nothing uses. A dep used only for a classpath resource goes under `:wagoe/resource-deps` in that deps.edn; a deliberate soft ref or unused dep goes in `.wagoe/check-deps.edn` (`:allow-soft` / `:allow-unused`, each with a `:why`; stale entries fail). Also core independence, circular deps, third-party namespaces required but not declared, requires no artifact mapping covers, unparseable `deps.edn` | Yes |
-| **Ports / hexagonal** | `bb check:ports` | Modules missing `ports.clj`; a shell namespace requiring *any* of another module's `shell.*` namespaces (composition roots exempt); web/HTTP requiring `shell.persistence` directly; an allowlist prefix that no longer exempts anything | Yes |
-| **Stable ports vs release** | `bb check:ports-diff` | A protocol in a stable library's `ports`/`protocols` namespace that, since the last final release tag, lost or moved a method or arity (callers break) or gained one (implementers break), with no backticked name under `[Unreleased]` `### Breaking`. Incubating and tooling libraries are reported, not failed; a major version skips it. Pass a ref or set `PORTS_BASE` to compare with another | Yes |
-| **POM dep completeness** | `bb check:poms` | Published POMs dropping inter-Wagoe deps: `build_shared` losing the `:local/root`→mvn rewrite, a publishable `build.clj` bypassing `pom-basis`, or a referenced wagoe dep that is not itself publishable | Yes |
-| **Branch protection** | `bb check:branch-protection` | Branch protection requires one context, `All Tests Passed`. Fails when a job can run without that summary depending on it (so it could fail without blocking a merge), or when the summary is renamed out from under the required context. Reads `ci.yml` only — no API, no token | Yes |
-| **Documented library counts** | `bb check:doc-counts` | Prose disagreeing with `wagoe.tools.deploy/all-libs`: a documented library/artifact count that is not the real number, or a document calling a published library unpublished | Yes |
-| **Roadmap agreement** | `bb check:roadmap` | The public roadmap planning something `scaling.adoc` marks `✅` shipped (titles are discovered there, not listed in the gate), or a second roadmap file that is more than a redirect | Yes |
-| **Security tests** | `clojure -M:test:test/all --focus-meta :security` | Error→HTTP mapping, CSRF routing, XSS escaping, SQL injection, sensitive field leaks | Yes (test failure) |
-| **clj-kondo lint** | `clojure -M:clj-kondo --lint ...` | Static analysis (existing gate) | Yes |
-| **Config doctor** | `bb doctor --env dev --ci` | Configuration errors (existing gate) | Yes |
-
-**`check:ports` escape hatch (for legitimate exceptions / gradual adoption):** add `^:wagoe/allow-direct` metadata to a namespace to exempt it from the coupling rules, or use `.wagoe/check-ports.edn` at the repo root: `:allow-missing-ports` (module ns prefixes), `:allow-direct` (namespaces), and `:allow-cross-module-shell` (target prefixes). Each `:allow-cross-module-shell` entry needs a `:target-prefix` and a `:why` — the gate throws without either, and reports a prefix that stops exempting anything, so the list stays a burn-down. Composition roots — `*.shell.module-wiring`, `*.shell.system.wiring`, `*.shell.cli-entry`, `*.shell.boot` — are exempt in code and need no entry.
-
-**`check:doc-counts` escape hatch:** add an entry to `.wagoe/check-doc-counts.edn`. Every entry must carry a `:why` — the gate throws on one without it. Prefer the alternatives first: a historical document (changelog, ADR, delivered talk) belongs in `excluded-paths`, and a number that is not a library count (`HTTP 200 for each library`) belongs in `gap-disqualifiers`, so the same shape never needs allowlisting twice.
-
-**Scripts location:** `libs/tools/src/wagoe/tools/check_{fcis,tests,deps,ports,ports_diff,poms,doc_counts,branch_protection}.clj`
-**Security tests:** `libs/platform/test/wagoe/platform/shell/security_test.clj` (tagged `^:security ^:unit`)
-**Handler test helpers:** `test/support/handler_test_helpers.clj` (Ring request builders, response assertions)
-**ADRs:** `dev-docs/adr/ADR-021-fcis-boundary-rules.adoc`, `ADR-022-error-handling-conventions.adoc`
-
----
-
-## Library-Specific Guides
-
-<!-- gen:modules -->
-| Module                                                                                   | Description                                                                                         |
-|------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
-| [admin](https://github.com/wagoebv/wagoe/blob/main/libs/admin/AGENTS.md)                 | Admin UI with entity config, HTMX forms                                                             |
-| [ai](https://github.com/wagoebv/wagoe/blob/main/libs/ai/AGENTS.md)                       | Multi-provider AI — Ollama, Anthropic Claude, OpenAI                                                |
-| [audience](https://github.com/wagoebv/wagoe/blob/main/libs/audience/AGENTS.md)           | Rule-based audience segmentation with SQL + predicate pipeline                                      |
-| [cache](https://github.com/wagoebv/wagoe/blob/main/libs/cache/AGENTS.md)                 | Distributed caching — Redis or in-memory, TTL, atomic ops                                           |
-| [calendar](https://github.com/wagoebv/wagoe/blob/main/libs/calendar/AGENTS.md)           | iCal, RRULE recurrence, conflict detection, Hiccup UI                                               |
-| [config](https://github.com/wagoebv/wagoe/blob/main/libs/config/AGENTS.md)               | Aero config loading and the typed accessors libraries read through                                  |
-| [core](https://github.com/wagoebv/wagoe/blob/main/libs/core/AGENTS.md)                   | Pure validation, case conversion, interceptor pipeline, feature flags                               |
-| [devtools](https://github.com/wagoebv/wagoe/blob/main/libs/devtools/AGENTS.md)           | Dev-only: error pipeline with WGE codes, REPL helpers, dashboard component                          |
-| [email](https://github.com/wagoebv/wagoe/blob/main/libs/email/AGENTS.md)                 | SMTP email sending, async and queued modes                                                          |
-| [events](https://github.com/wagoebv/wagoe/blob/main/libs/events/AGENTS.md)               | Event bus for cross-process, asynchronous module communication — in-memory and Redis Streams        |
-| [external](https://github.com/wagoebv/wagoe/blob/main/libs/external/AGENTS.md)           | External service adapters — Twilio, SMTP, IMAP, FTPS, SOAP                                          |
-| [geo](https://github.com/wagoebv/wagoe/blob/main/libs/geo/AGENTS.md)                     | Multi-provider geocoding (OSM/Google/Mapbox), Haversine distance                                    |
-| [i18n](https://github.com/wagoebv/wagoe/blob/main/libs/i18n/AGENTS.md)                   | Marker-based i18n, translation catalogues, locale chains                                            |
-| [jobs](https://github.com/wagoebv/wagoe/blob/main/libs/jobs/AGENTS.md)                   | Background job processing with retry logic                                                          |
-| [observability](https://github.com/wagoebv/wagoe/blob/main/libs/observability/AGENTS.md) | Interceptor-based metrics, logging, and error reporting                                             |
-| [payments](https://github.com/wagoebv/wagoe/blob/main/libs/payments/AGENTS.md)           | PSP abstraction — Mollie, Stripe, Mock checkout and webhook verification                            |
-| [platform](https://github.com/wagoebv/wagoe/blob/main/libs/platform/AGENTS.md)           | HTTP server, Reitit router, Ring middleware pipeline                                                |
-| [platform-sql](https://github.com/wagoebv/wagoe/blob/main/libs/platform-sql/AGENTS.md)   | JDBC adapters, migrations, seeding and leases, without the HTTP stack                               |
-| [push](https://github.com/wagoebv/wagoe/blob/main/libs/push/AGENTS.md)                   | Multi-platform push notifications — FCM (Firebase) + APNs (Apple)                                   |
-| [realtime](https://github.com/wagoebv/wagoe/blob/main/libs/realtime/AGENTS.md)           | WebSocket pub/sub messaging                                                                         |
-| [reports](https://github.com/wagoebv/wagoe/blob/main/libs/reports/AGENTS.md)             | PDF/CSV export and scheduled report generation                                                      |
-| [scaffolder](https://github.com/wagoebv/wagoe/blob/main/libs/scaffolder/AGENTS.md)       | Module generation with FC/IS structure, tests, migrations                                           |
-| [search](https://github.com/wagoebv/wagoe/blob/main/libs/search/AGENTS.md)               | Full-text search                                                                                    |
-| [storage](https://github.com/wagoebv/wagoe/blob/main/libs/storage/AGENTS.md)             | File storage — local filesystem and S3, image processing                                            |
-| [tenant](https://github.com/wagoebv/wagoe/blob/main/libs/tenant/AGENTS.md)               | Multi-tenancy with schema-per-tenant isolation                                                      |
-| [test](https://github.com/wagoebv/wagoe/blob/main/libs/test/README.md)                   | Test kit for apps: test system, Ring client with session + CSRF, deterministic jobs/events/realtime |
-| [tools](https://github.com/wagoebv/wagoe/blob/main/libs/tools/AGENTS.md)                 | Developer CLI: scaffolding, AI, config, i18n, deployment                                            |
-| [ui-style](https://github.com/wagoebv/wagoe/blob/main/libs/ui-style/AGENTS.md)           | daisyUI/Tailwind CSS and JS bundles — :pilot (default), :admin-pilot                                |
-| [user](https://github.com/wagoebv/wagoe/blob/main/libs/user/AGENTS.md)                   | Authentication, JWT, MFA, user management                                                           |
-| [wagoe-mcp](https://github.com/wagoebv/wagoe/blob/main/libs/wagoe-mcp/AGENTS.md)         | MCP server (stdio): tool/resource registry + JSON-RPC transport for editor agents                   |
-| [webhooks](https://github.com/wagoebv/wagoe/blob/main/libs/webhooks/AGENTS.md)           | Outbound webhooks: signed, retried, per-tenant delivery of bus events                               |
-| [workflow](https://github.com/wagoebv/wagoe/blob/main/libs/workflow/AGENTS.md)           | Workflow orchestration with state machines                                                          |
-<!-- /gen:modules -->
-
----
-
-## Adding a New Library to CI
-
-When a new library is added under `libs/`, update **`.github/workflows/ci.yml`** in three places:
-
-1. **Lint step** — add `libs/{name}/src` to the `clojure -M:clj-kondo --lint \` path list.
-2. **New test job** — copy an existing `test-*` job block; set `needs: lint` (or add a dependency if the lib depends on another wagoe lib); run `clojure -M:test :{name}`.
-3. **`test-summary` job** — add `test-{name}` to the `needs:` array and add an echo line.
-
-Also add the lib's `:id` test suite to `tests.edn` and its source/test paths to the root `deps.edn`.
-
----
-
-## Examples
-
-Three, all in this repository and all run by CI on every commit:
-
-| Path | What it is |
-|---|---|
-| `examples/shop` | A generated application — `wagoe new` + `bb scaffold` output, committed. Boots, serves HTTP, has one module to copy from. |
-| `examples/stores` | `examples/shop`'s module on a second store, an atom. One contract suite runs on both repositories. |
-| `examples/todo` | Functional core / imperative shell with no framework at all. ~200 lines, prints and exits. |
-
-```bash
-./scripts/example-smoke.sh     # runs all three, asserts on what they do
-bb example:regen               # rebuild examples/shop from the current generators
-bb example:regen --check       # CI: fail if it has drifted from generator output
-```
-
-`examples/shop` is regenerated rather than maintained, so it cannot describe a
-project shape nobody gets. See `examples/shop/README.md`.
-
-The former `wagoe-examples` repository is archived; these are the examples.
-
-### SQLite `nil` LIMIT/OFFSET pitfall
-
-Clojure's `{:or {limit 20 offset 0}}` destructuring only fires for **absent** keys. If the caller passes `{:limit nil :offset nil}` (e.g. from `some->` on missing query params), the defaults are ignored and `LIMIT nil` causes `SQLITE_MISMATCH`. Always guard with `(or limit 20)` / `(or offset 0)` at the point where the SQL params vector is assembled.
-
-### Framework migration ids end in an odd second
-
-Apps and libraries share one id space in `schema_migrations` (BOU-717). New framework ids end in an odd second
-(`20261020120017`), off the round timestamps apps pick by hand; `test/wagoe/migration_ids_test.clj` enforces it. Never
-rename a released id: databases that recorded it would run it again. Per-module tables are a follow-up.
-
----
-
-## libs/tools — Developer Tooling
-
-`libs/tools` contains all portable Babashka developer tooling. It lives under `libs/tools/` alongside the other libraries and is put on the monorepo's Babashka classpath through `:paths` in `bb.edn`:
-
-```clojure
-;; bb.edn (monorepo)
-{:paths ["libs/tools/src" "libs/tools/resources" ...]}
-```
-
-> **Note:** the monorepo reads `libs/tools` from source, not from Clojars — but it *is* published, as `com.wagoe/wagoe-tools`, and `bb deploy --all` includes it along with the other 33. "Dev-only" describes when you use it, not whether it ships.
-
-### Namespaces
-
-| Namespace | Entry point |
-|---|---|
-| `wagoe.tools.scaffold` | `bb scaffold` |
-| `wagoe.tools.ai` | `bb ai` |
-| `wagoe.tools.doctor` | `bb doctor` — config validation (`bb doctor --help` lists the checks; `--edn` for `wagoe doctor`) |
-| `wagoe.tools.report` | the result shape the three diagnostics share, and its two renderers |
-| `wagoe.tools.setup` | `bb setup` — config setup wizard (interactive / flags / AI) |
-| `wagoe.tools.integrate` | `bb scaffold integrate` — guide module integration (Integrant config + wiring) |
-| `wagoe.tools.i18n` | `bb i18n:find/scan/missing/unused` |
-| `wagoe.tools.admin` | `bb create-admin` |
-| `wagoe.tools.deploy` | `bb deploy` (handles all 34 libs) |
-| `wagoe.tools.dev` | `bb migrate`, `bb check-links`, `bb smoke-check`, `bb install-hooks` |
-| `wagoe.tools.check-fcis` | `bb check:fcis` — FC/IS boundary enforcement (ADR-021) |
-| `wagoe.tools.check-tests` | `bb check:placeholder-tests` — placeholder assertion detection |
-| `wagoe.tools.check-deps` | `bb check:deps` — declared wagoe deps = used ones, cycle detection, third-party declaration completeness |
-| `wagoe.tools.check-ports` | `bb check:ports` — hexagonal boundary enforcement (ports.clj presence + protocol usage) |
-| `wagoe.tools.check-poms` | `bb check:poms` — published-POM dependency completeness (build-shared rewrite + pom-basis usage + publishable deps) |
-| `wagoe.tools.check-roadmap` | `bb check:roadmap` — one roadmap, and it may not plan what `scaling.adoc` marks shipped |
-| `wagoe.tools.check-branch-protection` | `bb check:branch-protection` — the one required status check must cover every job |
-| `wagoe.tools.parsing` | Shared source-parsing utilities for quality-gate checkers |
-
-See `libs/tools/AGENTS.md` for the full command reference.
-
----
-
-## Detailed Documentation
-
-**For in-depth information, see:**
-
-- **[Documentation Index](dev-docs/content-readme.adoc)** - Main docs navigation
-- **[Architecture Guide](docs/modules/architecture/pages/fc-is.adoc)** - FC/IS patterns, design decisions
-- **[Module Scaffolding](libs/scaffolder/README.md)** - Complete scaffolding workflow
-- **[MFA Setup Guide](docs/modules/guides/pages/authentication.adoc)** - Multi-factor authentication
-- **[Observability Integration](docs/modules/libraries/pages/observability.adoc)** - Custom adapters, configuration
-- **[HTTP Interceptors](dev-docs/adr/ADR-010-http-interceptor-architecture.adoc)** - Technical specification
-- **[PRD](dev-docs/reference/wagoe-prd.adoc)** - Product vision and requirements
-
----
-
-**Last Updated**: 2026-04-20
-**Document version**: 5.2.0 (quality gate improvements, i18n library documentation, wagoe.tools.parsing extraction)
+Regenerate before publishing wagoe-cli. The maintenance guide describes source
+ownership, adding libraries and the separate per-module AI documentation tool.
+Install local pre-commit hooks once per clone with `bb install-hooks`.

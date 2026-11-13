@@ -1,6 +1,6 @@
 #!/usr/bin/env bb
 ;; scripts/agents_gen.clj
-;; Deterministic generator for the framework AGENTS.md and the downstream
+;; Deterministic generator for framework agent docs and the downstream
 ;; AGENTS.md.tmpl, from the agents knowledge base + modules-catalogue.edn,
 ;; both read from the classpath.
 ;; Usage:
@@ -125,7 +125,13 @@
 
 (def targets
   [{:file "AGENTS.md"
-    :sections [:naming :fc-is :pitfalls :modules]
+    :sections [:naming :fc-is]
+    :ns-token "myapp" :pitfall-surface :framework}
+   {:file "dev-docs/agents/pitfalls.md"
+    :sections [:pitfalls]
+    :ns-token "myapp" :pitfall-surface :framework}
+   {:file "dev-docs/agents/maintenance.md"
+    :sections [:modules]
     :ns-token "myapp" :pitfall-surface :framework}
    {:file tmpl-path
     :sections [:naming :fc-is :pitfalls]

@@ -5,7 +5,9 @@
    died with `ClassNotFoundException: org.h2.Driver`, for every profile,
    because the alias carried no JDBC driver. Nothing caught it: smoke-check
    verified the alias *existed*, which it did."
-  (:require [clojure.string :as str]
+  (:require [babashka.fs :as fs]
+            [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [wagoe.tools.dev :as dev]))
 
@@ -106,3 +108,21 @@
             "a variable already set, PATH here, is left alone"))
       (is (= {} (dev/dotenv "/no/such/.env")))
       (finally (.delete f)))))
+
+(deftest ^:unit agent-reference-links-are-checked
+  (let [dir (fs/create-temp-dir {:prefix "agent-links-"})
+        discover (ns-resolve 'wagoe.tools.dev 'iter-agents-files)
+        check-file (ns-resolve 'wagoe.tools.dev 'check-file)
+        root-var (ns-resolve 'wagoe.tools.dev 'root-dir)]
+    (try
+      (spit (str dir "/AGENTS.md") "# Instructions")
+      (with-redefs-fn {root-var (io/file (str dir))}
+        (fn []
+          (is (= 1 (count (discover))) "references are optional in downstream projects")
+          (fs/create-dirs (str dir "/dev-docs/agents/nested"))
+          (spit (str dir "/dev-docs/agents/nested/testing.md") "[missing](missing.md)")
+          (let [files (discover)
+                broken (mapcat (comp :broken check-file) files)]
+            (is (= 2 (count files)))
+            (is (= ["missing.md"] (mapv :link broken))))))
+      (finally (fs/delete-tree dir)))))
