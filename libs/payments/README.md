@@ -11,12 +11,12 @@ PSP (Payment Service Provider) abstraction — a single `IPaymentProvider` proto
 
 **deps.edn** (recommended):
 ```clojure
-{:deps {com.wagoe/wagoe-payments {:mvn/version "1.1.2"}}}
+{:deps {com.wagoe/wagoe-payments {:mvn/version "1.2.0"}}}
 ```
 
 **Leiningen**:
 ```clojure
-[com.wagoe/wagoe-payments "1.1.2"]
+[com.wagoe/wagoe-payments "1.2.0"]
 ```
 
 ## Features

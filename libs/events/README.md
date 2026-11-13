@@ -15,7 +15,7 @@ A port is for getting an answer; this is for the other case.
 
 **deps.edn**:
 ```clojure
-{:deps {com.wagoe/wagoe-events {:mvn/version "1.1.2"}}}
+{:deps {com.wagoe/wagoe-events {:mvn/version "1.2.0"}}}
 ```
 
 ## Features
