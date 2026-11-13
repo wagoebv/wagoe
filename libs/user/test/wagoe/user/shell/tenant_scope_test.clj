@@ -4,6 +4,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [malli.core :as m]
             [wagoe.user.schema :as schema]
+            [wagoe.user.shell.http :as http]
             [wagoe.user.shell.rights-handlers :as rights-handlers]
             [wagoe.user.shell.web-handlers :as web-handlers]
             [wagoe.platform.shell.adapters.database.factory :as factory]
@@ -138,3 +139,20 @@
 (deftest ^:unit ^:security another-tenants-users-rights-are-not-found
   (is (= 404 (:status ((rights-handlers/user-rights (service (atom [])) nil)
                        {:user admin-of-a :path-params {:id (str (:id user-of-b))}})))))
+
+(deftest ^:unit ^:security roles-and-groups-take-a-platform-admin
+  ;; Roles and groups carry no tenant: a tenant's admin who edited one, or
+  ;; added a role to Everyone, changed it for every tenant (BOU-984)
+  (let [routes (into {} (mapcat (fn [[path & more]]
+                                  (if (map? (first more))
+                                    [[path (first more)]]
+                                    (for [[sub data] more] [(str path sub) data]))))
+                     (:web (http/group-routes nil nil {})))
+        status (fn [path user]
+                 (let [guard (last (:middleware (routes path)))]
+                   (:status ((guard (constantly {:status 200})) {:user user :headers {}}))))]
+    (is (contains? routes "/admin/roles/save"))
+    (doseq [path (keys routes)]
+      (testing path
+        (is (= 403 (status path admin-of-a)))
+        (is (= 200 (status path {:id (UUID/randomUUID) :role :admin})))))))

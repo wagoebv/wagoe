@@ -37,6 +37,8 @@ for what is public API, what is internal, and how deprecations are announced.
   tenant now; a recurring job is refused inside one. `wrap-handler-with-tenant-context` no longer reads the tenant from args.
 - **A realtime topic reached every tenant's subscribers** (BOU-986); `order:123` names a different order in each tenant.
   A topic message keeps to the sender's tenant now; a WebSocket gets it only if your `IJWTVerifier` returns `:tenant-id`.
+- **A tenant's admin edited roles and groups for every tenant, and saw other tenants' members** (BOU-984). The roles,
+  groups, permissions and user-rights pages take a platform admin now; roles and groups carry no tenant yet.
 - **Tenant work could run in the wrong schema** (BOU-988). Switching schema inside an open transaction, or to a schema
   that does not exist, is refused now; call `in-tenant` outside your transaction.
 - **A webhook subscription made in a tenant without `:tenant-id` received every tenant's events** (BOU-989). The API
