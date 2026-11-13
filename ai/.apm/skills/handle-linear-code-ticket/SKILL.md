@@ -75,8 +75,14 @@ If main moved and the PR is behind or conflicts, go back to step 6.
 
 ## 8. Merge and close
 
-1. Ask the user to merge: `! gh pr merge <n> --merge`. Do not merge yourself.
-2. When they say it is merged, check first, on its own:
+1. Report green CI and ask whether to merge. Merge only on an explicit yes, pinned to the commit CI passed on:
+
+```bash
+gh pr merge <n> --merge --match-head-commit <sha>
+```
+
+Without a yes, the user merges.
+2. Then check, on its own:
 
 ```bash
 gh pr view <n> --json state,mergedAt
