@@ -1,6 +1,8 @@
 /* The :admin-pilot bundle's one stylesheet, public/css/wagoe-admin.css. The
    imports keep the order the separate files loaded in. */
 @import "tailwindcss";
+/* Agent prompts, not markup: their words would compile into classes */
+@source not "../../../../ai";
 @plugin "daisyui" {
   themes: light --default, dark --prefersdark;
 }
