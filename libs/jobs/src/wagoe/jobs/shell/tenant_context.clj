@@ -284,7 +284,7 @@
      tenant-schema-provider: ITenantSchemaProvider implementation (optional, required for tenant jobs)
    
    Returns:
-     Wrapped handler (fn [job] -> result)
+     Wrapped handler (fn [args] -> result)
    
    Example:
      (def my-handler
@@ -300,12 +300,16 @@
      (ports/register-handler! registry :send-email my-handler)
    
    Notes:
-     - Wrapped handler expects job (not just args)
-     - Tenant context extracted and applied automatically
+     - Wrapped handler takes the job's args, as the worker calls it; the worker
+       runs a tenant's job in its schema (BOU-987)
      - Original handler must accept db-ctx as second arg"
-  [handler-fn db-ctx tenant-service tenant-schema-provider]
-  (fn [job]
-    (process-tenant-job! job handler-fn db-ctx tenant-service tenant-schema-provider)))
+  [handler-fn db-ctx _tenant-service _tenant-schema-provider]
+  ;; The worker calls a handler with the job's args, so the job this read its
+  ;; tenant from was the args: whoever wrote them picked the schema (BOU-987).
+  ;; The worker runs a tenant's job in that tenant itself, from the job's
+  ;; metadata; this only hands the handler the transaction it runs in.
+  (fn [args]
+    (handler-fn args (if-let [tx (db/current-transaction db-ctx)] (assoc db-ctx :tx tx) db-ctx))))
 
 (defn ^:deprecated tenant-runner
   "The worker's `:tenant-runner`: (fn [tenant-id f]) that calls `f` in one

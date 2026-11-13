@@ -213,3 +213,13 @@
                 (is (= 1 (count @tried)) what))
             (do (is (= 2 (count r)) what)
                 (is (= (set types) (set @tried)) what))))))))
+
+(deftest ^:unit ^:security a-recurring-job-is-not-scheduled-in-a-tenant
+  ;; Its ticks carry no tenant and one schedule per type would replace another
+  ;; tenant's (BOU-987)
+  (let [s (recurring/create-scheduler (backend))]
+    (is (= :configuration-error
+           (try (binding [db/*tenant-id* "t1"]
+                  (recurring/schedule-recurring! s :nightly-report "0 2 * * *"))
+                nil
+                (catch clojure.lang.ExceptionInfo e (:type (ex-data e))))))))

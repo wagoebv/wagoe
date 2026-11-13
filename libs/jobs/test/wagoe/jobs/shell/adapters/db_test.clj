@@ -8,6 +8,8 @@
             [wagoe.jobs.shell.adapters.db :as db]
             [wagoe.jobs.shell.adapters.in-memory :as mem]
             [wagoe.jobs.shell.worker :as worker]
+            [wagoe.jobs.shell.adapters.codec :as codec]
+            [wagoe.platform.database :as pdb]
             [wagoe.jobs.shell.adapters.codec-test :refer [legacy-json]]
             [support.test-db :as test-db])
   (:import [java.sql Timestamp]
@@ -307,3 +309,17 @@
           a (assoc (mk-job) :unique-key "k")]
       (is (= (:id a) (ports/enqueue-job! q :default a)))
       (is (nil? (ports/enqueue-job! q :default (assoc (mk-job) :unique-key "k")))))))
+
+(deftest ^:integration ^:security a-dead-letter-retry-keeps-the-tenant
+  ;; The store row is what a retry re-enqueues; without the tenant it ran on
+  ;; public (BOU-987)
+  (let [q     (fresh-queue)
+        store (db/create-db-job-store (:ds q))
+        job   (assoc (mk-job) :retry-count 0 :max-retries 3)]
+    (binding [pdb/*tenant-id* "t1"] (ports/enqueue-job! q :default job))
+    (is (= "t1" (get-in (ports/find-job store (:id job)) [:metadata :tenant-id])))
+    (ports/delete-job! q (:id job))
+    (ports/retry-job! store (:id job))
+    (is (= "t1" (-> (jdbc/execute-one! (:ds q) ["SELECT payload FROM job_queue WHERE id = ?" (str (:id job))])
+                    vals first codec/decode-job (get-in [:metadata :tenant-id])))
+        "the row the retry queued, outside any tenant")))

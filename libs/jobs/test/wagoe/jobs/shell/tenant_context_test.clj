@@ -303,56 +303,24 @@
 ;; Integration Tests - Handler Wrapper
 ;; =============================================================================
 
-(deftest ^:integration wrap-handler-with-tenant-context-test
-  (testing "Wrapping handler adds tenant context"
-    (let [tenant-service (create-mock-tenant-service)
-          tenant-schema-provider (create-mock-tenant-schema-provider)
-          ;; Use SQLite mock to skip schema switching in tests
-          db-ctx {:datasource (Object.)
-                  :adapter (sqlite/new-adapter)}
-          original-handler (fn [args ctx]
-                             {:success? true
-                              :result {:args args
-                                       :has-tx (contains? ctx :tx)}})
-
-          wrapped-handler (tenant-jobs/wrap-handler-with-tenant-context
-                           original-handler
-                           db-ctx
-                           tenant-service
-                           tenant-schema-provider)
-
-          job {:id (java.util.UUID/randomUUID)
-               :job-type :send-email
-               :args {:to "test@example.com"}
-               :metadata {:tenant-id "tenant-1"}}
-
-          result (wrapped-handler job)]
-
-      (is (:success? result))
-      (is (= {:to "test@example.com"} (get-in result [:result :args])))))
-
-  (testing "Wrapped handler handles errors"
-    (let [tenant-service (create-mock-tenant-service)
-          tenant-schema-provider (create-mock-tenant-schema-provider)
-          db-ctx (create-mock-db-context)
-          original-handler (fn [_args _ctx]
-                             (throw (Exception. "Test error")))
-
-          wrapped-handler (tenant-jobs/wrap-handler-with-tenant-context
-                           original-handler
-                           db-ctx
-                           tenant-service
-                           tenant-schema-provider)
-
-          job {:id (java.util.UUID/randomUUID)
-               :job-type :send-email
-               :args {}
-               :metadata {:tenant-id "tenant-1"}}
-
-          result (wrapped-handler job)]
-
-      (is (false? (:success? result)))
-      (is (some? (:error result))))))
+(deftest ^:integration ^:security wrap-handler-with-tenant-context-test
+  ;; The worker calls a handler with the job's args; the wrapper used to read
+  ;; the tenant from them, so whoever wrote the args picked the schema (BOU-987)
+  (let [seen    (atom nil)
+        wrapped (tenant-jobs/wrap-handler-with-tenant-context
+                 (fn [args _ctx] (reset! seen {:args args :tenant db/*tenant-id*}) {:success? true})
+                 {:datasource (Object.) :adapter (sqlite/new-adapter)}
+                 (create-mock-tenant-service)
+                 (create-mock-tenant-schema-provider))
+        args    {:to "test@example.com" :metadata {:tenant-id "tenant-1"}}]
+    (is (:success? (wrapped args)))
+    (is (= args (:args @seen)) "the handler gets the args as they are")
+    (is (nil? (:tenant @seen)) "a tenant named in the args is not entered")
+    (testing "a handler's exception reaches the worker, which records the failure"
+      (is (thrown? Exception ((tenant-jobs/wrap-handler-with-tenant-context
+                               (fn [_ _] (throw (Exception. "Test error")))
+                               {:datasource (Object.)} nil nil)
+                              {}))))))
 
 ;; =============================================================================
 ;; E2E Tests - Full Job Lifecycle with Tenant Context

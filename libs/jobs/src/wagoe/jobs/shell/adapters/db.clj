@@ -31,6 +31,7 @@
    - `payload` is `VARCHAR(1000000)` (`LONGTEXT` on MySQL); keep serialized
      jobs under ~1 MB."
   (:require [next.jdbc :as jdbc]
+            [wagoe.jobs.shell.bound-tenant :as bound-tenant]
             [wagoe.platform.database :as db]
             [wagoe.platform.lease :as lease]
             [wagoe.platform.core.database.constraint :as constraint]
@@ -166,17 +167,17 @@
         flag    (boolean dead-letter?)
         payload (codec/encode-job job)
         n       (::jdbc/update-count
-              (execute-one!
-               ds
-               (if (nil? dead-letter?)
-                 ["UPDATE job_store SET job_type = ?, queue = ?, status = ?,
+                 (execute-one!
+                  ds
+                  (if (nil? dead-letter?)
+                    ["UPDATE job_store SET job_type = ?, queue = ?, status = ?,
                      updated_at = ?, payload = ? WHERE id = ?"
-                  (kw-name (:job-type job)) (kw-name (:queue job))
-                  (kw-name (or (:status job) :pending)) now payload (:id job)]
-                 ["UPDATE job_store SET job_type = ?, queue = ?, status = ?,
+                     (kw-name (:job-type job)) (kw-name (:queue job))
+                     (kw-name (or (:status job) :pending)) now payload (:id job)]
+                    ["UPDATE job_store SET job_type = ?, queue = ?, status = ?,
                      dead_letter = ?, updated_at = ?, payload = ? WHERE id = ?"
-                  (kw-name (:job-type job)) (kw-name (:queue job))
-                  (kw-name (or (:status job) :pending)) flag now payload (:id job)])))]
+                     (kw-name (:job-type job)) (kw-name (:queue job))
+                     (kw-name (or (:status job) :pending)) flag now payload (:id job)])))]
     (when (zero? n)
       (execute-one!
        ds
@@ -251,8 +252,11 @@
    that skips the guard entirely: `insert-job!` with a datasource reproduces the
    exact silent dual-write this change exists to prevent. Callers use
    `ports/enqueue-in-tx!`."
-  [connectable queue-name job]
-  (let [job-id     (:id job)
+  [connectable queue-name job*]
+  (let [;; The enqueuing tenant rides along, so the worker runs it there, and
+        ;; in the store row too, which a dead-letter retry re-enqueues (BOU-987)
+        job        (bound-tenant/stamp job*)
+        job-id     (:id job)
         scheduled? (some? (:execute-at job))
         status     (if scheduled? "scheduled" "ready")
         payload    (codec/encode-job job)
