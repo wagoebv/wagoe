@@ -3,6 +3,7 @@
             [support.test-db :as test-db]
             [wagoe.events.shell.publisher :as publisher]
             [wagoe.jobs.ports :as jobs]
+            [wagoe.platform.database :as db]
             [wagoe.webhooks :as webhooks]
             [wagoe.webhooks.ports :as ports]
             [wagoe.webhooks.shell.persistence :as persistence]
@@ -164,3 +165,27 @@
             (support/run-jobs! svc js support/no-backoff)
             (is (empty? @seen) "a job enqueued before it was switched off is skipped")
             (is (= 0 (ports/dispatch! svc :orders/placed (event nil))))))))))
+
+(deftest ^:integration ^:security a-request-in-a-tenant-reaches-only-its-subscriptions
+  ;; A subscription made in a tenant without :tenant-id was the operator's and
+  ;; got every tenant's events (BOU-989)
+  (support/with-receiver (constantly {:status 200})
+    (fn [{:keys [url]}]
+      (with-service
+        (fn [{:keys [svc store]}]
+          (let [other (:subscription (subscribe! svc (str url "?t2") {:tenant-id "t2"}))
+                own   (binding [db/*tenant-id* "t1"]
+                        (:subscription (subscribe! svc (str url "?t1"))))]
+            (is (= "t1" (str (:tenant-id own))))
+            (is (= 1 (ports/dispatch! svc :orders/placed (event "t2")))
+                "t2's event reaches t2's subscription, not the one made in t1")
+            (binding [db/*tenant-id* "t1"]
+              (is (= [(:id own)] (mapv :id (ports/subscriptions svc {}))))
+              (is (nil? (ports/change-subscription! svc (:id other) {:active? false})))
+              (is (false? (ports/remove-subscription! svc (:id other)))))
+            (is (:active? (ports/find-subscription store (:id other))))
+            (testing "the operator's subscription is out of a tenant's reach, and the bound tenant wins"
+              (let [operator (:subscription (subscribe! svc (str url "?all")))]
+                (binding [db/*tenant-id* "t1"]
+                  (is (false? (ports/remove-subscription! svc (:id operator))))
+                  (is (= "t1" (:tenant-id (:subscription (subscribe! svc (str url "?x") {:tenant-id "t2"}))))))))))))))

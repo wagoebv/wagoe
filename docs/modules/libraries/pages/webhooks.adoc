@@ -46,7 +46,8 @@ The secret is returned once and stored encrypted. `:event-pattern` is a glob
 over the topic name: `*` matches any run of characters.
 
 A subscription with a `:tenant-id` receives only that tenant's events. One
-without receives every event: it belongs to the operator.
+without receives every event: it belongs to the operator. Called in a tenant,
+the API takes that tenant and reaches only its subscriptions.
 
 `change-subscription!` updates `:url`, `:event-pattern`, `:active?` and
 `:description`; `remove-subscription!` deletes one.

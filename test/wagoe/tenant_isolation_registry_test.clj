@@ -21,11 +21,12 @@
    "jobs"          {:scoped-by "a tenant job runs in its tenant's schema (:wagoe/in-tenant)"
                     :tests     {"test/wagoe/tenant_jobs_test.clj"
                                 ["a-tenant-job-reads-its-tenants-schema"]}}
-   "webhooks"      {:scoped-by "explicit tenant_id on subscriptions and deliveries"
+   "webhooks"      {:scoped-by "explicit tenant_id on subscriptions and deliveries; the API keeps a request to its tenant's"
                     :tests     {"libs/webhooks/test/wagoe/webhooks/core/delivery_test.clj"
                                 ["per-tenant-filtering"]
                                 "libs/webhooks/test/wagoe/webhooks/shell/service_test.clj"
-                                ["only-the-events-tenant-is-delivered"]}}
+                                ["only-the-events-tenant-is-delivered"
+                                 "a-request-in-a-tenant-reaches-only-its-subscriptions"]}}
    "cache"         {:scoped-by "tenant:<id>: key prefix, when the app uses create-tenant-cache"
                     :tests     {"libs/cache/test/wagoe/cache/shell/tenant_cache_test.clj"
                                 ["tenant-cache-key-test"]}}

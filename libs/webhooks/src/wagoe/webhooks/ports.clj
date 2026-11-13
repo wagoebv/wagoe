@@ -55,16 +55,16 @@
 
   (create-subscription! [this input]
     "Validate and store a subscription. `input`: `:url`, `:event-pattern`, and
-     optionally `:tenant-id`, `:description`, `:secret`. Returns
+     optionally `:tenant-id` (the bound tenant wins), `:description`, `:secret`. Returns
      `{:subscription s :secret plaintext}` — the only time the secret is
      returned — or `{:error {:type :validation-error ...}}`.")
 
   (change-subscription! [this id changes]
     "Change `:url`, `:event-pattern`, `:active?` or `:description`. Returns
-     the subscription, nil when absent, or `{:error ...}`.")
+     the subscription, nil when absent or another tenant's, or `{:error ...}`.")
 
   (remove-subscription! [this id]
-    "Delete a subscription. True when one was deleted.")
+    "Delete a subscription. True when one was deleted; another tenant's is not.")
 
   (subscriptions [this opts]
     "As `list-subscriptions`, without secrets.")

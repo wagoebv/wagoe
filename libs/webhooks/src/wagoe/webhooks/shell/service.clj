@@ -7,6 +7,7 @@
             [malli.error :as me]
             [wagoe.jobs.core.job :as job]
             [wagoe.jobs.ports :as jobs]
+            [wagoe.platform.database :as db]
             [wagoe.webhooks.core.delivery :as delivery]
             [wagoe.webhooks.core.signature :as signature]
             [wagoe.webhooks.ports :as ports]
@@ -23,6 +24,13 @@
   "How long a (subscription, event) pair is remembered, so a redelivered event
    does not enqueue a second delivery."
   (* 7 24 60 60 1000))
+
+(defn- in-reach?
+  "Whether subscription `id` is the bound tenant's, or no tenant is bound: a
+   request in a tenant reaches only its own subscriptions (BOU-989)."
+  [store id]
+  (or (nil? db/*tenant-id*)
+      (= (str db/*tenant-id*) (some-> (ports/find-subscription store id) :tenant-id str))))
 
 (defn- validation-error [message details]
   {:error {:type :validation-error :message message :details details}})
@@ -91,9 +99,9 @@
                          :addresses addresses
                          :body      body
                          :headers   (delivery/headers
-                                   args
-                                   (signature/signature-header
-                                    secret (.getEpochSecond (Instant/now)) body))}))
+                                     args
+                                     (signature/signature-header
+                                      secret (.getEpochSecond (Instant/now)) body))}))
             status   (delivery/attempt-status response attempt (:max-attempts settings))
             failure  (when-not (= :delivered status) (delivery/failure-message response))]
         (record! {:status      status
@@ -114,7 +122,10 @@
           (let [secret (or (:secret input) (crypto/generate-secret))
                 now    (Instant/now)
                 s      {:id            (str (random-uuid))
-                        :tenant-id     (:tenant-id input)
+                        ;; The bound tenant's, whatever the input says: without
+                        ;; one the row is the operator's and gets every tenant's
+                        ;; events (BOU-989)
+                        :tenant-id     (some-> (or db/*tenant-id* (:tenant-id input)) str)
                         :event-pattern (:event-pattern input)
                         :url           (:url input)
                         :secret        (crypto/encrypt key secret)
@@ -130,16 +141,19 @@
       (not (m/validate schema/SubscriptionChanges changes))
       (validation-error "Invalid changes" (me/humanize (m/explain schema/SubscriptionChanges changes)))
 
+      (not (in-reach? store id))
+      nil
+
       :else
       (or (some->> (:url changes) (invalid-target this))
           (some-> (ports/update-subscription! store id (assoc changes :updated-at (Instant/now)))
                   public-view))))
 
   (remove-subscription! [_ id]
-    (ports/delete-subscription! store id))
+    (boolean (and (in-reach? store id) (ports/delete-subscription! store id))))
 
   (subscriptions [_ opts]
-    (mapv public-view (ports/list-subscriptions store opts)))
+    (mapv public-view (ports/list-subscriptions store (cond-> opts db/*tenant-id* (assoc :tenant-id db/*tenant-id*)))))
 
   (dispatch! [this topic event]
     (let [matches  (delivery/matching-subscriptions

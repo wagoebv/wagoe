@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A webhook subscription made in a tenant without `:tenant-id` received every tenant's events** (BOU-989). The API
+  takes the bound tenant now, and acts only on that tenant's subscriptions. Nothing to change.
 - **Any signed-in user ran requests in another tenant by naming it in a header or host** (BOU-982). Such a request
   answers 403 now, and a user of a tenant runs in it; upgrade if you use `:wagoe/tenant`.
 - **A tenant's admin managed every tenant and could make themselves admin of another** (BOU-983). Tenant routes take a
