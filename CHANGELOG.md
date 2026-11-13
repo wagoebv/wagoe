@@ -31,6 +31,10 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A signed local storage URL outlived its file and its holder** (BOU-991): any expiry, and it served whatever was later
+  stored at its key. It lives 7 days at most and dies with its file; URLs issued before this are refused, so issue new ones.
+- **Tenants' named local uploads shared one key space** (BOU-991), so a 403 told one tenant another's file names. A
+  tenant's named path is stored under `.tenants/<tenant-id>/` now; files stored before keep their keys.
 - **A push token moved between tenants** (BOU-990): registering it took over another tenant's device, DELETE removed
   the user's token in every tenant, and callbacks could count in the wrong tenant. Another tenant's token now answers 409.
 - **Events lost their tenant** (BOU-985): admin events reached every tenant, a platform admin's too; handlers ran in none.

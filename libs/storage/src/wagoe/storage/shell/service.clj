@@ -9,7 +9,8 @@
             [wagoe.storage.shell.adapters.local :as local]
             [wagoe.storage.core.uploads :as uploads]
             [wagoe.storage.core.validation :as validation]
-            [wagoe.observability.logging.ports :as logging])
+            [wagoe.observability.logging.ports :as logging]
+            [clojure.string :as str])
   (:import [java.time Instant]))
 
 ;; ============================================================================
@@ -71,20 +72,44 @@
   "Record `stored` in the upload index. A file the index does not know is
    invisible to data export and retention, so when recording fails the file
    is deleted again and the upload fails."
-  [storage upload-index stored owner]
+  [storage upload-index logger stored owner]
   (when upload-index
     (try
       (ports/record-upload! upload-index (uploads/upload-record stored owner (Instant/now)))
       (catch Exception e
-        (try (ports/delete-file storage (:key stored)) (catch Exception _ nil))
+        (try (ports/delete-file storage (:key stored))
+             (catch Exception de
+               (when logger
+                 (logging/warn logger "Could not delete a file the upload index did not record"
+                               {:event ::unindexed-file-kept :key (:key stored) :error (.getMessage de)}))))
         (throw e)))))
+
+(def ^:private tenants-dir
+  "Where the local adapter keeps tenants' named paths; no caller may name it."
+  ".tenants")
+
+(defn- local? [storage]
+  (instance? wagoe.storage.shell.adapters.local.LocalFileStorage storage))
+
+(defn- reserved-path?
+  "Whether a normalized `path` names the tenants' directory (BOU-991)."
+  [path]
+  (= tenants-dir (first (some-> path (str/split #"/")))))
+
+(defn- in-tenant-dir
+  "A tenant's named `path` below `.tenants/<tenant-id>/`, under the local
+   adapter: two tenants' `invoices/a.pdf` are two files, and nobody learns or
+   occupies another tenant's names (BOU-991). S3 and GCS add a random suffix."
+  [path tenant-id]
+  (cond->> path
+    (and path tenant-id) (str tenants-dir "/" tenant-id "/")))
 
 (defn- refused-key?
   "Whether `metadata` names a key that holds a file `may-replace?` says no to (BOU-950).
    Only the local adapter writes a named key as is; S3 and GCS add a random suffix."
   [storage metadata {:keys [may-replace?]}]
   (when-let [k (and may-replace?
-                    (instance? wagoe.storage.shell.adapters.local.LocalFileStorage storage)
+                    (local? storage)
                     (local/named-storage-key metadata))]
     ;; ponytail: checked before the write, not with it; two uploads racing for one path can both pass.
     (and (ports/file-exists? storage k) (not (may-replace? k)))))
@@ -100,10 +125,11 @@
                      :content-type (:content-type file-data)}))
 
     (try
-      ;; Sanitize filename
-      (let [sanitized-metadata (-> metadata
+      (let [on-local?          (local? storage)
+            path               (validation/normalize-path (:path metadata))
+            sanitized-metadata (-> metadata
                                    (update :filename validation/sanitize-filename)
-                                   (update :path validation/normalize-path))
+                                   (assoc :path (cond-> path on-local? (in-tenant-dir (:tenant-id (:owner metadata))))))
 
             ;; Validate file
             validation-result (validation/validate-file file-data sanitized-metadata options)]
@@ -119,13 +145,17 @@
             {:success false
              :errors (:errors validation-result)})
 
+          (and on-local? (reserved-path? path))
+          {:success false
+           :errors [{:code :invalid-path :message "That path is reserved"}]}
+
           (refused-key? storage sanitized-metadata options)
           {:success false
            :errors [{:code :forbidden :message "That path holds a file you may not replace"}]}
 
           :else
           (let [result (ports/store-file storage file-data (dissoc sanitized-metadata :owner))]
-            (index-upload! storage upload-index result (:owner metadata))
+            (index-upload! storage upload-index logger result (:owner metadata))
             (when logger
               (logging/info logger "Upload file completed"
                             {:event ::upload-file-completed
@@ -282,7 +312,7 @@
                          {:event ::file-url-generated
                           :key file-key
                           :expiration-seconds expiration-seconds
-                          :url-type (if (and url (re-find #"X-Amz-" url))
+                          :url-type (if (and url (re-find #"X-Amz-|X-Goog-|signature=" url))
                                       :signed
                                       :public)}))
         url)

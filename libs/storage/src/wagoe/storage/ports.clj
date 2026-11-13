@@ -32,7 +32,8 @@
     - file-key: Unique identifier for the stored file
 
     Returns:
-    Map with :bytes, :content-type, :size, or nil if not found")
+    Map with :bytes, :content-type, :size, or nil if not found. The local
+    adapter adds :version, which its signed URLs carry as `v` (BOU-991).")
 
   (delete-file [this file-key]
     "Delete a file from storage.
