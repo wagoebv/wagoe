@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if jq -re '.tool_input.command // empty' | grep -qE '(rm\\s+(-[a-z]*r[a-z]*f|-[a-z]*f[a-z]*r)\\s+[/.]|DROP\\s+(TABLE|DATABASE|SCHEMA)|TRUNCATE\\s)'; then echo 'BLOCKED: Dangerous destructive command detected. Refusing to execute.' >&2; exit 2; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
