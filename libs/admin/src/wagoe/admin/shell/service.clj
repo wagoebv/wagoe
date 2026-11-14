@@ -819,14 +819,18 @@
         (throw (ex-info (str "No admin writer " k " is wired")
                         {:type :configuration-error :writer k})))))
 
+(defn- readonly-keys
+  "The fields a write leaves out: `:readonly-fields`, and each field whose own `:readonly` is set."
+  [entity-config]
+  (concat (:readonly-fields entity-config)
+          (keep (fn [[k field]] (when (:readonly field) k)) (:fields entity-config))))
+
 (defn- writable-data
   "`data` without the read-only fields, those a field's own `:readonly` makes
    read-only too, and the primary key. A disabled checkbox still sends its
    hidden \"false\"."
   [entity-config data]
-  (apply dissoc data (:primary-key entity-config :id)
-         (concat (:readonly-fields entity-config)
-                 (keep (fn [[k field]] (when (:readonly field) k)) (:fields entity-config)))))
+  (apply dissoc data (:primary-key entity-config :id) (readonly-keys entity-config)))
 
 (defn- written-update!
   "Update through `writer`, and with it the record's `links`, in one
@@ -911,7 +915,7 @@
         sanitized     (into {}
                             (remove (fn [[k v]]
                                       (and (nil? v) (some? (get-in entity-fields [k :default-value])))))
-                            (apply dissoc data (:readonly-fields entity-config #{})))
+                            (apply dissoc data (readonly-keys entity-config)))
         now           (Instant/now)
         id-str        (type-conversion/uuid->string (UUID/randomUUID))
         prepared      (cond-> (assoc sanitized :id id-str)
@@ -1057,6 +1061,15 @@
       (when-not (= wanted found)
         (throw (ex-info (str "Unknown " (name (:entity rel)) ": " (str/join ", " (remove found wanted)))
                         {:type :validation-error :errors {k [[:t :admin/links-unknown]]}}))))))
+
+(defn- known-fields!
+  "Throw a :validation-error on each key of `data` that is not a field of
+   `entity-config`: the write turns every key into a column, so `:tenant_id`
+   wrote the column a check read as `:tenant-id` (BOU-998)."
+  [entity-config data]
+  (when-let [unknown (seq (remove #(contains? (:fields entity-config) %) (keys data)))]
+    (throw (ex-info (str "Unknown field: " (str/join ", " (map str unknown)))
+                    {:type :validation-error :errors (zipmap unknown (repeat ["Unknown field"]))}))))
 
 (defn- links-of
   "`data` as [data links]: the record's own fields, and its `:admin/links`
@@ -1346,16 +1359,16 @@
     ;; :create-redirect-url. This check is lifted OUT of the persistence
     ;; operation so the persistence interceptor does not log a rejected
     ;; business-rule violation as a "database operation failed" error.
-    (let [entity-config (ports/get-entity-config schema-provider entity-name)]
-      (when-let [split-cfg (:split-table-update entity-config)]
-        (throw (ex-info "Cannot create split-table entity via generic admin flow"
-                        {:type :validation-error
-                         :reason :cannot-create-split-table-entity
-                         :entity-name entity-name
-                         :split-config split-cfg
-                         :create-redirect-url (:create-redirect-url entity-config)}))))
     (let [entity-config (ports/get-entity-config schema-provider entity-name)
-          [data links]  (links-of data)]
+          _             (when-let [split-cfg (:split-table-update entity-config)]
+                          (throw (ex-info "Cannot create split-table entity via generic admin flow"
+                                          {:type :validation-error
+                                           :reason :cannot-create-split-table-entity
+                                           :entity-name entity-name
+                                           :split-config split-cfg
+                                           :create-redirect-url (:create-redirect-url entity-config)})))
+          [data links]  (links-of data)
+          _             (known-fields! entity-config data)]
       (assert-links! db-ctx schema-provider entity-config links)
       (persist-interceptors/execute-persistence-operation
        :admin-create-entity
@@ -1372,10 +1385,14 @@
   (create-entity-with-children [_ entity-name data children]
     (let [entity-config (ports/get-entity-config schema-provider entity-name)
           [data links]  (links-of data)
+          _             (known-fields! entity-config data)
           _             (assert-links! db-ctx schema-provider entity-config links)
           by-entity     (assert-children-acceptable! entity-name
                                                      (nested-relationships schema-provider entity-config)
                                                      children)]
+      (doseq [[entity rows] children
+              [index row]   (map-indexed vector rows)]
+        (with-child-index entity index #(known-fields! (:entity-config (by-entity entity)) row)))
       (persist-interceptors/execute-persistence-operation
        :admin-create-entity-with-children
        {:entity (name entity-name)}
@@ -1393,6 +1410,7 @@
   (update-entity [this entity-name id data]
     (let [entity-config (ports/get-entity-config schema-provider entity-name)
           [data links]  (links-of data)
+          _             (known-fields! entity-config data)
           _             (assert-links! db-ctx schema-provider entity-config links)]
       (if-let [writer (entity-writer writers entity-config)]
         (written-update! this writer entity-config entity-name id data links)
@@ -1482,7 +1500,7 @@
                          :field field
                          :entity entity-name})))
 
-      (when (or (contains? (set (:readonly-fields entity-config)) field) (:readonly field-config))
+      (when (some #{field} (readonly-keys entity-config))
         (throw (ex-info "Cannot update readonly field"
                         {:type :readonly-field
                          :field field
@@ -1505,7 +1523,8 @@
                  primary-key (:primary-key entity-config :id)
                  ; Prepare single field update with updated-at timestamp
                  now (Instant/now)
-                 update-data {field value :updated-at now}
+                 update-data (cond-> {field value}
+                               (contains? (:fields entity-config) :updated-at) (assoc :updated-at now))
 
                  db-ready-data (prepare-values-for-db update-data)
 

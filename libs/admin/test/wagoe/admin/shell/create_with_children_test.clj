@@ -328,14 +328,11 @@
         as-a          (scoped/for-request svc sp {:user {:id (random-uuid) :role :admin :tenant-id a}})
         item          (:id (ports/create-entity as-a :tc-items {:description "ok" :tenant-id a :tc-order-id mine}))]
     (is (some? item) "their own tenant's order")
-    (testing "create, update and one field, under either spelling of the key"
-      (doseq [k [:tc-order-id :tc_order_id]]
-        (is (= ["No such record"]
-               (get-in (thrown-data #(ports/create-entity as-a :tc-items {:description "x" :tenant-id a k theirs}))
-                       [:errors :tc-order-id]))
-            (str "create " k))
-        (is (contains? (:errors (thrown-data #(ports/update-entity as-a :tc-items item {k theirs}))) :tc-order-id)
-            (str "update " k)))
+    (testing "create, update and one field"
+      (is (= ["No such record"]
+             (get-in (thrown-data #(ports/create-entity as-a :tc-items {:description "x" :tenant-id a :tc-order-id theirs}))
+                     [:errors :tc-order-id])))
+      (is (contains? (:errors (thrown-data #(ports/update-entity as-a :tc-items item {:tc-order-id theirs}))) :tc-order-id))
       (is (contains? (:errors (thrown-data #(ports/update-entity-field as-a :tc-items item :tc-order-id theirs)))
                      :tc-order-id)))
     (is (= #{mine} (set (map :tc-order-id (db/execute-query! *db* {:select [:tc_order_id] :from [:tc_items]
@@ -376,5 +373,31 @@
         mine  (:id (ports/create-entity svc :tc-customers {:name "C" :tenant-id a}))
         as-a  (scoped/for-request svc sp {:user {:id (random-uuid) :role :admin :tenant-id a}})]
     (is (= :validation-error (:type (thrown-data #(ports/update-entity as-a :tc-customers mine {:tenant_id b})))))
-    (is (= :validation-error (:type (thrown-data #(ports/create-entity as-a :tc-customers {:name "D" :tenant_id b})))))
     (is (= #{a} (set (map :tenant-id (db/execute-query! *db* {:select [:tenant_id] :from [:tc_customers]})))))))
+
+(deftest ^:integration ^:security a-key-that-is-not-a-field-is-refused-not-written
+  ;; Every key became a column: `:tenant_id` wrote `tenant_id` past a check on `:tenant-id` (BOU-998)
+  (let [{:keys [svc]} (system)
+        [a b]   [(str (random-uuid)) (str (random-uuid))]
+        order   (:id (:record (ports/create-entity-with-children svc :tc-orders {:number "O" :tenant-id a}
+                                                                 {:tc-items [{:description "first" :tenant-id a}]})))
+        errors  #(:errors (thrown-data %))]
+    (is (= {:tenant_id ["Unknown field"]} (errors #(ports/update-entity svc :tc-orders order {:tenant_id b}))) "update")
+    (is (= {:tenant_id ["Unknown field"]} (errors #(ports/create-entity svc :tc-customers {:name "C" :tenant_id b}))) "create")
+    (is (contains? (errors #(ports/create-entity svc :tc-customers {:name "C" :x/tenant-id b})) :x/tenant-id)
+        "a namespaced key, whose name the write would use")
+    (is (= {:entity :tc-items :index 1}
+           (:child (thrown-data #(ports/create-entity-with-children svc :tc-orders {:number "O-2" :tenant-id a}
+                                                                    {:tc-items [{:description "ok" :tenant-id a}
+                                                                                {:description "x" :tenant_id b}]}))))
+        "a child row, named")
+    (is (= #{a} (set (map :tenant-id (db/execute-query! *db* {:select [:tenant_id] :from [:tc_orders]})))))
+    (is (= 1 (count-rows :tc_orders)) "the refused nested create wrote no parent")
+    (is (zero? (count-rows :tc_customers)))))
+
+(deftest ^:integration one-field-is-saved-on-a-table-without-updated-at
+  ;; The single-field update always set updated_at, so it failed on a table without one
+  (let [{:keys [svc]} (system)
+        id (:id (ports/create-entity svc :tc-customers {:name "C" :tenant-id "t"}))]
+    (ports/update-entity-field svc :tc-customers id :name "D")
+    (is (= "D" (:name (ports/get-entity svc :tc-customers id))))))
