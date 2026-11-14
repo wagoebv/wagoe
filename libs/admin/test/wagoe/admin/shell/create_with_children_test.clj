@@ -347,13 +347,27 @@
         (is (contains? (:errors (thrown-data #(nested! {:tc-customer-id others} [row]))) :tc-customer-id))
         (is (= {:entity :tc-items :index 1}
                (:child (thrown-data #(nested! {:tc-customer-id ours} [row (assoc row :tc_customer_id others)])))))
-        (is (some? (nested! {:tc-customer-id ours} [(assoc row :tc-customer-id ours)])) "their own customer")))
-    (testing "a pointer set before is kept on a save that does not change it"
-      (let [stale (:id (ports/create-entity svc :tc-items {:description "stale" :tenant-id a :tc-order-id theirs}))]
-        (is (some? (ports/update-entity as-a :tc-items stale {:description "edited" :tc-order-id theirs})))))
-    (testing "a platform admin points anywhere"
-      (let [platform (scoped/for-request svc sp {:user {:id (random-uuid) :role :admin}})]
-        (is (some? (ports/update-entity platform :tc-items item {:tc-order-id theirs})))))))
+        (is (some? (nested! {:tc-customer-id ours} [(assoc row :tc-customer-id ours)])) "their own customer")))))
+
+(deftest ^:integration a-save-keeps-a-foreign-key-it-does-not-change
+  ;; A pointer set by a platform admin does not block a tenant's admin's other edits (BOU-997)
+  (let [{:keys [svc sp]} (system)
+        [a b]  [(str (random-uuid)) (str (random-uuid))]
+        theirs (:id (:record (ports/create-entity-with-children svc :tc-orders {:number "O" :tenant-id b}
+                                                                {:tc-items [{:description "first" :tenant-id b}]})))
+        stale  (:id (ports/create-entity svc :tc-items {:description "stale" :tenant-id a :tc-order-id theirs}))
+        as-a   (scoped/for-request svc sp {:user {:id (random-uuid) :role :admin :tenant-id a}})]
+    (is (some? (ports/update-entity as-a :tc-items stale {:description "edited" :tc-order-id theirs})))))
+
+(deftest ^:integration a-platform-admin-points-a-foreign-key-anywhere
+  (let [{:keys [svc sp]} (system)
+        order    #(:id (:record (ports/create-entity-with-children svc :tc-orders {:number "O" :tenant-id %}
+                                                                   {:tc-items [{:description "first" :tenant-id %}]})))
+        [a b]    [(str (random-uuid)) (str (random-uuid))]
+        [mine theirs] [(order a) (order b)]
+        item     (:id (ports/create-entity svc :tc-items {:description "x" :tenant-id a :tc-order-id mine}))
+        platform (scoped/for-request svc sp {:user {:id (random-uuid) :role :admin}})]
+    (is (some? (ports/update-entity platform :tc-items item {:tc-order-id theirs})))))
 
 (deftest ^:integration ^:security a-tenants-admin-cannot-move-a-record-by-the-columns-name
   ;; `tenant_id` reached the column past the scope check, which read `:tenant-id` (BOU-997)
