@@ -1058,6 +1058,15 @@
         (throw (ex-info (str "Unknown " (name (:entity rel)) ": " (str/join ", " (remove found wanted)))
                         {:type :validation-error :errors {k [[:t :admin/links-unknown]]}}))))))
 
+(defn- known-fields!
+  "Throw a :validation-error on each key of `data` that is not a field of
+   `entity-config`: the write turns every key into a column, so `:tenant_id`
+   wrote the column a check read as `:tenant-id` (BOU-998)."
+  [entity-config data]
+  (when-let [unknown (seq (remove #(contains? (:fields entity-config) %) (keys data)))]
+    (throw (ex-info (str "Unknown field: " (str/join ", " (map str unknown)))
+                    {:type :validation-error :errors (zipmap unknown (repeat ["Unknown field"]))}))))
+
 (defn- links-of
   "`data` as [data links]: the record's own fields, and its `:admin/links`
    with blank ids dropped, carrying its `:admin/link-scopes` as `:scopes`
@@ -1356,6 +1365,7 @@
                          :create-redirect-url (:create-redirect-url entity-config)}))))
     (let [entity-config (ports/get-entity-config schema-provider entity-name)
           [data links]  (links-of data)]
+      (known-fields! entity-config data)
       (assert-links! db-ctx schema-provider entity-config links)
       (persist-interceptors/execute-persistence-operation
        :admin-create-entity
@@ -1372,10 +1382,16 @@
   (create-entity-with-children [_ entity-name data children]
     (let [entity-config (ports/get-entity-config schema-provider entity-name)
           [data links]  (links-of data)
+          _             (known-fields! entity-config data)
           _             (assert-links! db-ctx schema-provider entity-config links)
           by-entity     (assert-children-acceptable! entity-name
                                                      (nested-relationships schema-provider entity-config)
                                                      children)]
+      (doseq [[entity rows] children
+              :let [child-config (:entity-config (by-entity entity))]
+              :when child-config
+              [index row] (map-indexed vector rows)]
+        (with-child-index entity index #(known-fields! child-config row)))
       (persist-interceptors/execute-persistence-operation
        :admin-create-entity-with-children
        {:entity (name entity-name)}
@@ -1393,6 +1409,7 @@
   (update-entity [this entity-name id data]
     (let [entity-config (ports/get-entity-config schema-provider entity-name)
           [data links]  (links-of data)
+          _             (known-fields! entity-config data)
           _             (assert-links! db-ctx schema-provider entity-config links)]
       (if-let [writer (entity-writer writers entity-config)]
         (written-update! this writer entity-config entity-name id data links)

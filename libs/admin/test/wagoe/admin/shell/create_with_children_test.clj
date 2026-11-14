@@ -378,3 +378,22 @@
     (is (= :validation-error (:type (thrown-data #(ports/update-entity as-a :tc-customers mine {:tenant_id b})))))
     (is (= :validation-error (:type (thrown-data #(ports/create-entity as-a :tc-customers {:name "D" :tenant_id b})))))
     (is (= #{a} (set (map :tenant-id (db/execute-query! *db* {:select [:tenant_id] :from [:tc_customers]})))))))
+
+(deftest ^:integration ^:security a-key-that-is-not-a-field-is-refused-not-written
+  ;; Every key became a column: `:tenant_id` wrote `tenant_id` past a check on `:tenant-id` (BOU-998)
+  (let [{:keys [svc]} (system)
+        [a b]   [(str (random-uuid)) (str (random-uuid))]
+        order   (:id (:record (ports/create-entity-with-children svc :tc-orders {:number "O" :tenant-id a}
+                                                                 {:tc-items [{:description "first" :tenant-id a}]})))
+        errors  #(:errors (thrown-data %))]
+    (is (= {:tenant_id ["Unknown field"]} (errors #(ports/update-entity svc :tc-orders order {:tenant_id b}))) "update")
+    (is (contains? (errors #(ports/create-entity svc :tc-customers {:name "C" :tenant_id b})) :tenant_id) "create")
+    (is (contains? (errors #(ports/create-entity svc :tc-customers {:name "C" :x/tenant-id b})) :x/tenant-id)
+        "a namespaced key, whose name the write would use")
+    (is (= {:entity :tc-items :index 1}
+           (:child (thrown-data #(ports/create-entity-with-children svc :tc-orders {:number "O-2" :tenant-id a}
+                                                                    {:tc-items [{:description "ok" :tenant-id a}
+                                                                                {:description "x" :tenant_id b}]}))))
+        "a child row, named")
+    (is (= #{a} (set (map :tenant-id (db/execute-query! *db* {:select [:tenant_id] :from [:tc_orders]})))))
+    (is (zero? (count-rows :tc_customers)))))

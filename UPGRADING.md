@@ -10,6 +10,17 @@ mode you'd see without it, and the fix.
 > says where it went. Before deploying, `bb doctor --env prod` also catches
 > rate limiting with no active cache (BOU-456).
 
+## 1.2.x → Unreleased
+
+### 1. The admin service refuses keys that are not fields (BOU-998)
+
+`create-entity`, `create-entity-with-children` and `update-entity` turned every
+key into a column. They now answer a `:validation-error` with `:errors {key
+["Unknown field"]}` for a key the entity's `:fields` do not name, `:tenant_id`
+for `:tenant-id` included. A form only posts its fields, so it needs no change;
+code that calls the service with snake_case or extra keys must pass the
+kebab-case field names only.
+
 ## 1.1.x → 1.2.0
 
 Mostly security. Steps 1 to 4 change what an existing app does at runtime;

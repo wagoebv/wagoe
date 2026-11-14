@@ -69,7 +69,8 @@
                                 "libs/admin/test/wagoe/admin/shell/create_with_children_test.clj"
                                 ["a-tenants-admin-creates-children-only-in-their-tenant"
                                  "a-tenants-admin-points-a-foreign-key-only-at-their-tenants-records"
-                                 "a-tenants-admin-cannot-move-a-record-by-the-columns-name"]
+                                 "a-tenants-admin-cannot-move-a-record-by-the-columns-name"
+                                 "a-key-that-is-not-a-field-is-refused-not-written"]
                                 "libs/admin/test/wagoe/admin/shell/lifecycle_events_test.clj"
                                 ["a-tenants-write-publishes-in-that-tenant"
                                  "a-platform-admins-write-publishes-in-the-rows-tenant"]}}

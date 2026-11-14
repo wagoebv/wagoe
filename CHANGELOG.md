@@ -29,6 +29,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Changed
+
+- **The admin service refuses a key that is not a field of the entity** (BOU-998), as a `:validation-error` on that
+  key; it wrote any key as a column. Pass kebab-case field names only: see `UPGRADING.md`.
+
 ### Security
 
 - **A tenant's admin could point a foreign key at, or move a record into, another tenant** (BOU-997), the latter by
