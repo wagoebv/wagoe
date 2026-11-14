@@ -331,10 +331,12 @@
     (testing "create, update and one field, under either spelling of the key"
       (doseq [k [:tc-order-id :tc_order_id]]
         (is (= ["No such record"]
-               (get-in (thrown-data #(ports/create-entity as-a :tc-items {:description "x" :tenant-id a k theirs}))
+               (get-in (thrown-data #(ports/create-entity as-a :tc-items {:description "x" :tenant-id a :tc-order-id theirs}))
                        [:errors :tc-order-id]))
+            "create")
+        (is (= :validation-error (:type (thrown-data #(ports/create-entity as-a :tc-items {:description "x" :tenant-id a k theirs}))))
             (str "create " k))
-        (is (contains? (:errors (thrown-data #(ports/update-entity as-a :tc-items item {k theirs}))) :tc-order-id)
+        (is (= :validation-error (:type (thrown-data #(ports/update-entity as-a :tc-items item {k theirs}))))
             (str "update " k)))
       (is (contains? (:errors (thrown-data #(ports/update-entity-field as-a :tc-items item :tc-order-id theirs)))
                      :tc-order-id)))
@@ -396,4 +398,12 @@
                                                                                 {:description "x" :tenant_id b}]}))))
         "a child row, named")
     (is (= #{a} (set (map :tenant-id (db/execute-query! *db* {:select [:tenant_id] :from [:tc_orders]})))))
+    (is (= 1 (count-rows :tc_orders)) "the refused nested create wrote no parent")
     (is (zero? (count-rows :tc_customers)))))
+
+(deftest ^:integration one-field-is-saved-on-a-table-without-updated-at
+  ;; The single-field update always set updated_at, so it failed on a table without one
+  (let [{:keys [svc]} (system)
+        id (:id (ports/create-entity svc :tc-customers {:name "C" :tenant-id "t"}))]
+    (ports/update-entity-field svc :tc-customers id :name "D")
+    (is (= "D" (:name (ports/get-entity svc :tc-customers id))))))

@@ -210,7 +210,8 @@
        {:id uuid :email \"new@example.com\" :created-at instant ...}
 
      Throws:
-       - ExceptionInfo with :type :validation-error for invalid data
+       - ExceptionInfo with :type :validation-error for invalid data, and with
+         :errors {key [\"Unknown field\"]} for a key that is not a field (BOU-998)
        - ExceptionInfo with :type :entity-not-found if entity doesn't exist
        - ExceptionInfo with :type :duplicate-key for unique constraint violations
 
@@ -229,7 +230,8 @@
 
      Throws :validation-error with :too-few {child-entity {:min :count :label}}
      when a has-many with a :min gets fewer rows, and with :child {:entity
-     :index} when the database refuses a row. Nothing is written then.")
+     :index} when the database refuses a row or a row names a key that is not
+     a field. Nothing is written then.")
 
   (update-entity [this entity-name id data]
     "Update existing entity record with validation.

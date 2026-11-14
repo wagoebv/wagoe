@@ -5,7 +5,6 @@
    is refused. Built per request around the shared service, so every list the
    handlers ask for, a foreign key's options included, is scoped."
   (:require [wagoe.core.http.access :as access]
-            [wagoe.core.utils.case-conversion :as case-conversion]
             [wagoe.admin.core.display :as display]
             [wagoe.admin.core.permissions :as permissions]
             [wagoe.admin.ports :as ports]
@@ -102,12 +101,6 @@
                   (some->> (link-scope schema-provider user rel) (vector field)))))
         (display/belongs-to-fields (ports/get-entity-config schema-provider entity-name))))
 
-(defn- canonical
-  "`data` with each plain key as the inner service writes it: `:tenant_id` and
-   `:tenant-id` name one column, so the checks read what is written (BOU-997)."
-  [data]
-  (update-keys data #(if (namespace %) % (keyword (case-conversion/snake-case->kebab-case-string (name %))))))
-
 (defn- targets-readable!
   "Throw a :validation-error on the field unless each belongs-to value in `data`
    that differs from `before` names a record `user` may read: a foreign key
@@ -190,14 +183,11 @@
         rows)))
 
   (create-entity [_ entity-name data]
-    (let [data (canonical data)]
-      (checked! inner schema-provider user entity-name data)
-      (ports/create-entity inner entity-name (with-link-scopes schema-provider user entity-name data))))
+    (checked! inner schema-provider user entity-name data)
+    (ports/create-entity inner entity-name (with-link-scopes schema-provider user entity-name data)))
 
   (create-entity-with-children [_ entity-name data children]
-    (let [data     (canonical data)
-          children (update-vals children #(mapv canonical %))
-          nested   (set (map :entity (:has-many (ports/get-entity-config schema-provider entity-name))))]
+    (let [nested (set (map :entity (:has-many (ports/get-entity-config schema-provider entity-name))))]
       (checked! inner schema-provider user entity-name data)
       ;; Each row against its own entity's scopes: a child was created in any tenant (BOU-992).
       ;; A child the parent does not create is left to the inner service to refuse.
@@ -208,8 +198,7 @@
       (ports/create-entity-with-children inner entity-name (with-link-scopes schema-provider user entity-name data) children)))
 
   (update-entity [_ entity-name id data]
-    (let [data   (canonical data)
-          record (stored inner schema-provider user entity-name id)]
+    (let [record (stored inner schema-provider user entity-name id)]
       (checked! inner schema-provider user entity-name data record)
       (ports/update-entity inner entity-name id (with-link-scopes schema-provider user entity-name data))))
 

@@ -17,9 +17,10 @@ mode you'd see without it, and the fix.
 `create-entity`, `create-entity-with-children` and `update-entity` turned every
 key into a column. They now answer a `:validation-error` with `:errors {key
 ["Unknown field"]}` for a key the entity's `:fields` do not name, `:tenant_id`
-for `:tenant-id` included. A form only posts its fields, so it needs no change;
-code that calls the service with snake_case or extra keys must pass the
-kebab-case field names only.
+for `:tenant-id` included, also for an entity with a `:writer`, before the
+writer sees the data. A form only posts its fields, so it needs no change; code
+that calls the service with snake_case or extra keys must pass the kebab-case
+field names only.
 
 ## 1.1.x → 1.2.0
 
