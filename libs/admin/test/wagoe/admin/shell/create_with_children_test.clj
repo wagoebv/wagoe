@@ -26,7 +26,7 @@
    :label "Lines" :fields [:description] :editable true :on-delete :cascade :min 1})
 
 (def ^:private config
-  {:entity-discovery {:mode :allowlist :allowlist #{:nc-invoices :nc-lines :nc-drafts :tc-orders :tc-items}}
+  {:entity-discovery {:mode :allowlist :allowlist #{:nc-invoices :nc-lines :nc-drafts :tc-orders :tc-items :tc-customers}}
    :entities         {:nc-invoices {:label "Invoices" :has-many [lines-rel]}
                       :nc-lines    {:label "Line"}
                       ;; The same table, without a :min: today's flow.
@@ -34,8 +34,9 @@
                                     :has-many [(dissoc lines-rel :min)]}
                       :tc-orders   {:label "Orders" :scope {:tenant-id :tenant-id}
                                     :has-many [{:entity :tc-items :table :tc_items :foreign-key :tc-order-id
-                                                :label "Items" :fields [:description :tenant-id] :editable true :min 1}]}
-                      :tc-items    {:label "Item" :scope {:tenant-id :tenant-id}}}
+                                                :label "Items" :fields [:description :tenant-id :tc-customer-id] :editable true :min 1}]}
+                      :tc-items    {:label "Item" :scope {:tenant-id :tenant-id}}
+                      :tc-customers {:label "Customers" :scope {:tenant-id :tenant-id}}}
    :pagination       {:default-page-size 20 :max-page-size 200}})
 
 (def ^:private ^:dynamic *db* nil)
@@ -51,13 +52,17 @@
                                                            description VARCHAR(50) NOT NULL,
                                                            qty INT DEFAULT 1 NOT NULL,
                                                            CONSTRAINT uq_nc_lines UNIQUE (nc_invoice_id, description))"})
-      (db/execute-update! ctx {:raw "CREATE TABLE tc_orders (id UUID PRIMARY KEY, number VARCHAR(20) NOT NULL, tenant_id VARCHAR(36))"})
+      (db/execute-update! ctx {:raw "CREATE TABLE tc_customers (id UUID PRIMARY KEY, name VARCHAR(20) NOT NULL, tenant_id VARCHAR(36))"})
+      (db/execute-update! ctx {:raw "CREATE TABLE tc_orders (id UUID PRIMARY KEY, number VARCHAR(20) NOT NULL, tenant_id VARCHAR(36),
+                                                            tc_customer_id UUID REFERENCES tc_customers(id))"})
       (db/execute-update! ctx {:raw "CREATE TABLE tc_items (id UUID PRIMARY KEY, tc_order_id UUID NOT NULL REFERENCES tc_orders(id),
-                                                           description VARCHAR(50) NOT NULL, tenant_id VARCHAR(36))"})
+                                                           description VARCHAR(50) NOT NULL, tenant_id VARCHAR(36),
+                                                           tc_customer_id UUID REFERENCES tc_customers(id))"})
       (try (binding [*db* ctx] (f))
            (finally
              (db/execute-update! ctx {:raw "DROP TABLE tc_items"})
              (db/execute-update! ctx {:raw "DROP TABLE tc_orders"})
+             (db/execute-update! ctx {:raw "DROP TABLE tc_customers"})
              (db/execute-update! ctx {:raw "DROP TABLE nc_lines"})
              (db/execute-update! ctx {:raw "DROP TABLE nc_invoices"})
              (db-factory/close-db-context! ctx))))))
@@ -66,6 +71,7 @@
   (fn [f]
     (db/execute-update! *db* {:raw "DELETE FROM tc_items"})
     (db/execute-update! *db* {:raw "DELETE FROM tc_orders"})
+    (db/execute-update! *db* {:raw "DELETE FROM tc_customers"})
     (db/execute-update! *db* {:raw "DELETE FROM nc_lines"})
     (db/execute-update! *db* {:raw "DELETE FROM nc_invoices"})
     (f)))
@@ -309,3 +315,66 @@
         "the refusal names the row, so the form marks it")
     (create! {:description "x" :tenant-id a})
     (is (= 1 (count-rows :tc_items)))))
+
+(deftest ^:integration ^:security a-tenants-admin-points-a-foreign-key-only-at-their-tenants-records
+  ;; A belongs-to value was not checked: an item of A's hung under B's order (BOU-997)
+  (let [{:keys [svc sp]} (system)
+        [a b]         [(str (random-uuid)) (str (random-uuid))]
+        order         #(:id (:record (ports/create-entity-with-children svc :tc-orders {:number "O" :tenant-id %}
+                                                                        {:tc-items [{:description "first" :tenant-id %}]})))
+        customer      #(:id (ports/create-entity svc :tc-customers {:name "C" :tenant-id %}))
+        [mine theirs] [(order a) (order b)]
+        [ours others] [(customer a) (customer b)]
+        as-a          (scoped/for-request svc sp {:user {:id (random-uuid) :role :admin :tenant-id a}})
+        item          (:id (ports/create-entity as-a :tc-items {:description "ok" :tenant-id a :tc-order-id mine}))]
+    (is (some? item) "their own tenant's order")
+    (testing "create, update and one field, under either spelling of the key"
+      (doseq [k [:tc-order-id :tc_order_id]]
+        (is (= ["No such record"]
+               (get-in (thrown-data #(ports/create-entity as-a :tc-items {:description "x" :tenant-id a k theirs}))
+                       [:errors :tc-order-id]))
+            (str "create " k))
+        (is (contains? (:errors (thrown-data #(ports/update-entity as-a :tc-items item {k theirs}))) :tc-order-id)
+            (str "update " k)))
+      (is (contains? (:errors (thrown-data #(ports/update-entity-field as-a :tc-items item :tc-order-id theirs)))
+                     :tc-order-id)))
+    (is (= #{mine} (set (map :tc-order-id (db/execute-query! *db* {:select [:tc_order_id] :from [:tc_items]
+                                                                   :where [:= :tenant_id a]})))))
+    (testing "a nested create, on the parent and on a child row"
+      (let [nested! #(ports/create-entity-with-children as-a :tc-orders (merge {:number "O-2" :tenant-id a} %1)
+                                                        {:tc-items %2})
+            row     {:description "x" :tenant-id a}]
+        (is (contains? (:errors (thrown-data #(nested! {:tc-customer-id others} [row]))) :tc-customer-id))
+        (is (= {:entity :tc-items :index 1}
+               (:child (thrown-data #(nested! {:tc-customer-id ours} [row (assoc row :tc_customer_id others)])))))
+        (is (some? (nested! {:tc-customer-id ours} [(assoc row :tc-customer-id ours)])) "their own customer")))))
+
+(deftest ^:integration a-save-keeps-a-foreign-key-it-does-not-change
+  ;; A pointer set by a platform admin does not block a tenant's admin's other edits (BOU-997)
+  (let [{:keys [svc sp]} (system)
+        [a b]  [(str (random-uuid)) (str (random-uuid))]
+        theirs (:id (:record (ports/create-entity-with-children svc :tc-orders {:number "O" :tenant-id b}
+                                                                {:tc-items [{:description "first" :tenant-id b}]})))
+        stale  (:id (ports/create-entity svc :tc-items {:description "stale" :tenant-id a :tc-order-id theirs}))
+        as-a   (scoped/for-request svc sp {:user {:id (random-uuid) :role :admin :tenant-id a}})]
+    (is (some? (ports/update-entity as-a :tc-items stale {:description "edited" :tc-order-id theirs})))))
+
+(deftest ^:integration a-platform-admin-points-a-foreign-key-anywhere
+  (let [{:keys [svc sp]} (system)
+        order    #(:id (:record (ports/create-entity-with-children svc :tc-orders {:number "O" :tenant-id %}
+                                                                   {:tc-items [{:description "first" :tenant-id %}]})))
+        [a b]    [(str (random-uuid)) (str (random-uuid))]
+        [mine theirs] [(order a) (order b)]
+        item     (:id (ports/create-entity svc :tc-items {:description "x" :tenant-id a :tc-order-id mine}))
+        platform (scoped/for-request svc sp {:user {:id (random-uuid) :role :admin}})]
+    (is (some? (ports/update-entity platform :tc-items item {:tc-order-id theirs})))))
+
+(deftest ^:integration ^:security a-tenants-admin-cannot-move-a-record-by-the-columns-name
+  ;; `tenant_id` reached the column past the scope check, which read `:tenant-id` (BOU-997)
+  (let [{:keys [svc sp]} (system)
+        [a b] [(str (random-uuid)) (str (random-uuid))]
+        mine  (:id (ports/create-entity svc :tc-customers {:name "C" :tenant-id a}))
+        as-a  (scoped/for-request svc sp {:user {:id (random-uuid) :role :admin :tenant-id a}})]
+    (is (= :validation-error (:type (thrown-data #(ports/update-entity as-a :tc-customers mine {:tenant_id b})))))
+    (is (= :validation-error (:type (thrown-data #(ports/create-entity as-a :tc-customers {:name "D" :tenant_id b})))))
+    (is (= #{a} (set (map :tenant-id (db/execute-query! *db* {:select [:tenant_id] :from [:tc_customers]})))))))

@@ -431,7 +431,7 @@
                 :errors {field ["Field is required"]}}
                e))))
 
-(defn- no-such-record
+(defn no-such-record
   "The :validation-error for a reference to a missing row, on `field` if known."
   [field e]
   (ex-info (if field (str "No such record: " (name field)) "A referenced record does not exist")

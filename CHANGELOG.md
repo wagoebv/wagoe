@@ -29,6 +29,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Security
+
+- **A tenant's admin could point a foreign key at, or move a record into, another tenant** (BOU-997), the latter by
+  sending `tenant_id` for `tenant-id`. Both are refused now, as a field error.
+
 ## [1.2.0] — 2026-11-13
 
 ### Security

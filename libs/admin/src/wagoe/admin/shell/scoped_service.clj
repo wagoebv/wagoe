@@ -5,6 +5,7 @@
    is refused. Built per request around the shared service, so every list the
    handlers ask for, a foreign key's options included, is scoped."
   (:require [wagoe.core.http.access :as access]
+            [wagoe.core.utils.case-conversion :as case-conversion]
             [wagoe.admin.core.display :as display]
             [wagoe.admin.core.permissions :as permissions]
             [wagoe.admin.ports :as ports]
@@ -101,6 +102,36 @@
                   (some->> (link-scope schema-provider user rel) (vector field)))))
         (display/belongs-to-fields (ports/get-entity-config schema-provider entity-name))))
 
+(defn- canonical
+  "`data` with each plain key as the inner service writes it: `:tenant_id` and
+   `:tenant-id` name one column, so the checks read what is written (BOU-997)."
+  [data]
+  (update-keys data #(if (namespace %) % (keyword (case-conversion/snake-case->kebab-case-string (name %))))))
+
+(defn- targets-readable!
+  "Throw a :validation-error on the field unless each belongs-to value in `data`
+   that differs from `before` names a record `user` may read: a foreign key
+   into another tenant (BOU-997). A target the admin does not expose is not checked."
+  [inner schema-provider user entity-name data & [before]]
+  ;; ponytail: one query per field and row; batch per field if wide nested creates get slow
+  (doseq [[field rel] (display/belongs-to-fields (ports/get-entity-config schema-provider entity-name))
+          :let [id (get data field)]
+          ;; The stored record last: it is read only when a query follows anyway
+          :when (and (some? id)
+                     (ports/validate-entity-exists schema-provider (:entity rel))
+                     (link-scope schema-provider user rel)
+                     (not (and before (access/same-id? id (get @before field)))))]
+    (try (inside! inner schema-provider user (:entity rel) :read [id])
+         (catch clojure.lang.ExceptionInfo e
+           (throw (if (= :not-found (:type (ex-data e))) (service/no-such-record field e) e))))))
+
+(defn- checked!
+  "Throw unless `data`, written over `before` (a delay of the stored record) or
+   created, stays inside `user`'s write scopes and points only at what they may read."
+  [inner schema-provider user entity-name data & [before]]
+  (writable! schema-provider user entity-name (if before (delay (merge @before data)) data))
+  (targets-readable! inner schema-provider user entity-name data before))
+
 (defn- with-link-scopes
   "`data` with the scopes its `:admin/links` must keep to: a link to a record
    the user may not read is neither added nor removed."
@@ -159,28 +190,32 @@
         rows)))
 
   (create-entity [_ entity-name data]
-    (writable! schema-provider user entity-name data)
-    (ports/create-entity inner entity-name (with-link-scopes schema-provider user entity-name data)))
+    (let [data (canonical data)]
+      (checked! inner schema-provider user entity-name data)
+      (ports/create-entity inner entity-name (with-link-scopes schema-provider user entity-name data))))
 
   (create-entity-with-children [_ entity-name data children]
-    (writable! schema-provider user entity-name data)
-    ;; Each row against its own entity's scopes: a child was created in any tenant (BOU-992).
-    ;; A child the parent does not create is left to the inner service to refuse.
-    (let [nested (set (map :entity (:has-many (ports/get-entity-config schema-provider entity-name))))]
+    (let [data     (canonical data)
+          children (update-vals children #(mapv canonical %))
+          nested   (set (map :entity (:has-many (ports/get-entity-config schema-provider entity-name))))]
+      (checked! inner schema-provider user entity-name data)
+      ;; Each row against its own entity's scopes: a child was created in any tenant (BOU-992).
+      ;; A child the parent does not create is left to the inner service to refuse.
       (doseq [[child rows] children
               :when (nested child)
               [index row] (map-indexed vector rows)]
-        (service/with-child-index child index #(writable! schema-provider user child row))))
-    (ports/create-entity-with-children inner entity-name (with-link-scopes schema-provider user entity-name data) children))
+        (service/with-child-index child index #(checked! inner schema-provider user child row)))
+      (ports/create-entity-with-children inner entity-name (with-link-scopes schema-provider user entity-name data) children)))
 
   (update-entity [_ entity-name id data]
-    (let [record (stored inner schema-provider user entity-name id)]
-      (writable! schema-provider user entity-name (delay (merge @record data))))
-    (ports/update-entity inner entity-name id (with-link-scopes schema-provider user entity-name data)))
+    (let [data   (canonical data)
+          record (stored inner schema-provider user entity-name id)]
+      (checked! inner schema-provider user entity-name data record)
+      (ports/update-entity inner entity-name id (with-link-scopes schema-provider user entity-name data))))
 
   (update-entity-field [_ entity-name id field value]
     (let [record (stored inner schema-provider user entity-name id)]
-      (writable! schema-provider user entity-name (delay (assoc @record field value))))
+      (checked! inner schema-provider user entity-name {field value} record))
     (ports/update-entity-field inner entity-name id field value))
 
   (delete-entity [_ entity-name id]
