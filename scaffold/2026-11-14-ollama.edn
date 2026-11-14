@@ -1,0 +1,242 @@
+{:date "2026-11-14",
+ :git-sha "b9d296accff1cc193f9e9164a6ac335bf5f1d901",
+ :provider "ollama",
+ :model "qwen2.5-coder:7b",
+ :label "Ollama",
+ :status :ran,
+ :prompts
+ [{:generated? true,
+   :steps
+   {:generate {:status :pass, :ms 62880},
+    :integrate {:status :pass, :ms 190},
+    :compiles {:status :pass, :ms 6379},
+    :tests {:status :pass, :ms 14768},
+    :check-fcis {:status :pass, :ms 167},
+    :check-deps
+    {:status :skipped,
+     :reason
+     "check:deps is monorepo-only; a generated project has no libs/"},
+    :migrate {:status :pass, :ms 7016},
+    :boot {:status :pass, :ms 13879}},
+   :duration-ms 107392,
+   :module "product",
+   :prompt "product module with name, price, stock",
+   :id :product,
+   :expectations
+   [{:id :no-protocol-interop, :pass? true, :hits []}
+    {:id :no-request-identity, :pass? true, :hits []}
+    {:id :fields, :pass? true, :missing []}],
+   :files
+   ["migrations/20261114114540-create-products.down.sql"
+    "migrations/20261114114540-create-products.up.sql"
+    "resources/conf/dev/admin/products.edn"
+    "resources/conf/dev/config.edn"
+    "resources/conf/test/admin/products.edn"
+    "resources/conf/test/config.edn"
+    "resources/seeds/dev.edn"
+    "src/eval_app/product/core/product.clj"
+    "src/eval_app/product/core/ui.clj"
+    "src/eval_app/product/ports.clj"
+    "src/eval_app/product/schema.clj"
+    "src/eval_app/product/shell/http.clj"
+    "src/eval_app/product/shell/module_wiring.clj"
+    "src/eval_app/product/shell/persistence.clj"
+    "src/eval_app/product/shell/service.clj"
+    "src/eval_app/product/shell/web_handlers.clj"
+    "test/eval_app/product/core/product_test.clj"
+    "test/eval_app/product/shell/product_repository_test.clj"
+    "test/eval_app/product/shell/service_test.clj"],
+   :edits 0,
+   :mergeable? true,
+   :tokens nil}
+  {:failure
+   {:step :generate,
+    :log
+    "\n[1m❆ Wagoe AI Scaffolder — Natural Language Module Generation[0m\n\n[2mParsing: invoice module: number, customer, line items, total in cents, due date, status draft→sent→paid[0m\n\n11:46:26.030 INFO  [main] n.fortuna.ical4j.util.Configurator - ical4j.properties not found.\n11:46:29.776 INFO  [main] wagoe.config - Loading configuration {:profile :dev, :path conf/dev/config.edn}\n11:46:29.801 INFO  [main] wagoe.ai.shell.service - ai scaffold-from-description {:description invoice module: number, customer, line items, total in cents, due date, status draft→sent→paid}\n\n[36m┌─ Summary ─────────────────────────────────────────────┐[0m\n[36m│[0m Module:  [1minvoice[0m\n[36m│[0m Entity:  [1mInvoice[0m\n[36m│[0m Fields:\n[36m│[0m   number         string     (required, unique)\n[36m│[0m   customer       string     (required)\n[36m│[0m   total-in-cents int        (required)\n[36m│[0m   due-date       date       (required)\n[36m│[0m   status         enum       (required)\n[36m│[0m Workflow:  status: draft > sent > paid\n[36m│[0m Interfaces:  HTTP [32m✓[0m  Web UI [32m✓[0m\n[36m│[0m Public API:  [31m✗[0m\n[36m└───────────────────────────────────────────────────────┘[0m\n\n[36m┌─ Summary ─────────────────────────────────────────────┐[0m\n[36m│[0m Module:  [1minvoice[0m\n[36m│[0m Entity:  [1mInvoiceLineItem[0m\n[36m│[0m Fields:\n[36m│[0m   description    string     (required)\n[36m│[0m   quantity       int        (required)\n[36m│[0m   price-per-unit int        (required)\n[36m│[0m belongs to Invoice\n[36m│[0m Interfaces:  HTTP [32m✓[0m  Web UI [32m✓[0m\n[36m│[0m Public API:  [31m✗[0m\n[36m└───────────────────────────────────────────────────────┘[0m\n\n[2mCommand: bb scaffold generate --module-name invoice --entity Invoice --field number:string:required:unique --field customer:string:required --field total-in-cents:int:required --field due-date:date:required --field status:enum:values=draft,sent,paid:required --workflow 'status:draft>sent>paid'[0m\n[2mCommand: bb scaffold entity --module-name invoice --entity InvoiceLineItem --belongs-to Invoice --field description:string:required --field quantity:int:required --field price-per-unit:int:required[0m\n\n\n[1mRunning scaffolder...[0m\n\n11:47:20.030 INFO  [main] n.fortuna.ical4j.util.Configurator - ical4j.properties not found.\n11:47:23.780 INFO  [main] wagoe.scaffolder.shell.cli-entry - Starting Wagoe Scaffolder CLI {:args (generate --module-name invoice --entity Invoice --field number:string:required:unique --field customer:string:required --field total-in-cents:int:required --field due-date:date:required --field status:enum:values=draft,sent,paid:required --workflow status:draft>sent>paid --base-ns eval-app)}\nErrors:\n  - Generation failed: Invalid module generation request: {:entities [[\"Invoice's workflow makes the field status: drop the --field of that name\"]]}\n[31mScaffolder exited with code 1[0m"},
+   :generated? false,
+   :steps
+   {:generate
+    {:status :fail,
+     :ms 60295,
+     :exit 1,
+     :log
+     "\n[1m❆ Wagoe AI Scaffolder — Natural Language Module Generation[0m\n\n[2mParsing: invoice module: number, customer, line items, total in cents, due date, status draft→sent→paid[0m\n\n11:46:26.030 INFO  [main] n.fortuna.ical4j.util.Configurator - ical4j.properties not found.\n11:46:29.776 INFO  [main] wagoe.config - Loading configuration {:profile :dev, :path conf/dev/config.edn}\n11:46:29.801 INFO  [main] wagoe.ai.shell.service - ai scaffold-from-description {:description invoice module: number, customer, line items, total in cents, due date, status draft→sent→paid}\n\n[36m┌─ Summary ─────────────────────────────────────────────┐[0m\n[36m│[0m Module:  [1minvoice[0m\n[36m│[0m Entity:  [1mInvoice[0m\n[36m│[0m Fields:\n[36m│[0m   number         string     (required, unique)\n[36m│[0m   customer       string     (required)\n[36m│[0m   total-in-cents int        (required)\n[36m│[0m   due-date       date       (required)\n[36m│[0m   status         enum       (required)\n[36m│[0m Workflow:  status: draft > sent > paid\n[36m│[0m Interfaces:  HTTP [32m✓[0m  Web UI [32m✓[0m\n[36m│[0m Public API:  [31m✗[0m\n[36m└───────────────────────────────────────────────────────┘[0m\n\n[36m┌─ Summary ─────────────────────────────────────────────┐[0m\n[36m│[0m Module:  [1minvoice[0m\n[36m│[0m Entity:  [1mInvoiceLineItem[0m\n[36m│[0m Fields:\n[36m│[0m   description    string     (required)\n[36m│[0m   quantity       int        (required)\n[36m│[0m   price-per-unit int        (required)\n[36m│[0m belongs to Invoice\n[36m│[0m Interfaces:  HTTP [32m✓[0m  Web UI [32m✓[0m\n[36m│[0m Public API:  [31m✗[0m\n[36m└───────────────────────────────────────────────────────┘[0m\n\n[2mCommand: bb scaffold generate --module-name invoice --entity Invoice --field number:string:required:unique --field customer:string:required --field total-in-cents:int:required --field due-date:date:required --field status:enum:values=draft,sent,paid:required --workflow 'status:draft>sent>paid'[0m\n[2mCommand: bb scaffold entity --module-name invoice --entity InvoiceLineItem --belongs-to Invoice --field description:string:required --field quantity:int:required --field price-per-unit:int:required[0m\n\n\n[1mRunning scaffolder...[0m\n\n11:47:20.030 INFO  [main] n.fortuna.ical4j.util.Configurator - ical4j.properties not found.\n11:47:23.780 INFO  [main] wagoe.scaffolder.shell.cli-entry - Starting Wagoe Scaffolder CLI {:args (generate --module-name invoice --entity Invoice --field number:string:required:unique --field customer:string:required --field total-in-cents:int:required --field due-date:date:required --field status:enum:values=draft,sent,paid:required --workflow status:draft>sent>paid --base-ns eval-app)}\nErrors:\n  - Generation failed: Invalid module generation request: {:entities [[\"Invoice's workflow makes the field status: drop the --field of that name\"]]}\n[31mScaffolder exited with code 1[0m"},
+    :integrate
+    {:status :fail, :log "scaffold ai wrote no module under src/"}},
+   :duration-ms 60516,
+   :module nil,
+   :prompt
+   "invoice module: number, customer, line items, total in cents, due date, status draft→sent→paid",
+   :id :invoice,
+   :edits nil,
+   :mergeable? false,
+   :tokens nil}
+  {:generated? true,
+   :steps
+   {:generate {:status :pass, :ms 39361},
+    :integrate {:status :pass, :ms 188},
+    :compiles {:status :pass, :ms 6758},
+    :tests {:status :pass, :ms 14815},
+    :check-fcis {:status :pass, :ms 177},
+    :check-deps
+    {:status :skipped,
+     :reason
+     "check:deps is monorepo-only; a generated project has no libs/"},
+    :migrate {:status :pass, :ms 7210},
+    :boot {:status :pass, :ms 13613}},
+   :duration-ms 82349,
+   :module "order",
+   :prompt
+   "order module: an order has a reference and a placed-at time, and has many order lines, at least one; each line has a product name and a quantity",
+   :id :order,
+   :expectations
+   [{:id :no-protocol-interop, :pass? true, :hits []}
+    {:id :no-request-identity, :pass? true, :hits []}
+    {:id :has-many, :pass? true}
+    {:id :min-one, :pass? true}],
+   :files
+   ["migrations/20261114114800-create-orders.down.sql"
+    "migrations/20261114114800-create-orders.up.sql"
+    "migrations/20261114114804-create-order-lines.down.sql"
+    "migrations/20261114114804-create-order-lines.up.sql"
+    "resources/conf/dev/admin/order-lines.edn"
+    "resources/conf/dev/admin/orders.edn"
+    "resources/conf/dev/config.edn"
+    "resources/conf/test/admin/order-lines.edn"
+    "resources/conf/test/admin/orders.edn"
+    "resources/conf/test/config.edn"
+    "resources/seeds/dev.edn"
+    "src/eval_app/order/core/order.clj"
+    "src/eval_app/order/core/order_line.clj"
+    "src/eval_app/order/core/order_line_ui.clj"
+    "src/eval_app/order/core/ui.clj"
+    "src/eval_app/order/ports.clj"
+    "src/eval_app/order/schema.clj"
+    "src/eval_app/order/shell/http.clj"
+    "src/eval_app/order/shell/module_wiring.clj"
+    "src/eval_app/order/shell/order_line_http.clj"
+    "src/eval_app/order/shell/order_line_persistence.clj"
+    "src/eval_app/order/shell/order_line_service.clj"
+    "src/eval_app/order/shell/order_line_web_handlers.clj"
+    "src/eval_app/order/shell/persistence.clj"
+    "src/eval_app/order/shell/service.clj"
+    "src/eval_app/order/shell/web_handlers.clj"
+    "test/eval_app/order/core/order_line_test.clj"
+    "test/eval_app/order/core/order_test.clj"
+    "test/eval_app/order/shell/order_line_repository_test.clj"
+    "test/eval_app/order/shell/order_line_service_test.clj"
+    "test/eval_app/order/shell/order_repository_test.clj"
+    "test/eval_app/order/shell/service_test.clj"],
+   :edits 0,
+   :mergeable? true,
+   :tokens nil}
+  {:failure {:expectation :storage-port, :repair-diff ""},
+   :generated? true,
+   :steps
+   {:generate {:status :pass, :ms 26727},
+    :integrate {:status :pass, :ms 181},
+    :compiles {:status :pass, :ms 5867},
+    :tests {:status :pass, :ms 13763},
+    :check-fcis {:status :pass, :ms 161},
+    :check-deps
+    {:status :skipped,
+     :reason
+     "check:deps is monorepo-only; a generated project has no libs/"},
+    :migrate {:status :pass, :ms 6021},
+    :boot {:status :pass, :ms 12429}},
+   :duration-ms 70258,
+   :module "document",
+   :before-repair
+   {:steps
+    {:compiles {:status :pass, :ms 5867},
+     :tests {:status :pass, :ms 13763},
+     :check-fcis {:status :pass, :ms 161},
+     :check-deps
+     {:status :skipped,
+      :reason
+      "check:deps is monorepo-only; a generated project has no libs/"},
+     :migrate {:status :pass, :ms 6021},
+     :boot {:status :pass, :ms 12429}},
+    :expectations
+    [{:id :no-protocol-interop, :pass? true, :hits []}
+     {:id :no-request-identity, :pass? true, :hits []}
+     {:id :fields, :pass? true, :missing []}
+     {:id :storage-port, :pass? false}]},
+   :prompt
+   "document module with a title, a description and an uploaded attachment file stored with wagoe-storage",
+   :id :document,
+   :expectations
+   [{:id :no-protocol-interop, :pass? true, :hits []}
+    {:id :no-request-identity, :pass? true, :hits []}
+    {:id :fields, :pass? true, :missing []}
+    {:id :storage-port, :pass? false}],
+   :files
+   ["migrations/20261114114914-create-documents.down.sql"
+    "migrations/20261114114914-create-documents.up.sql"
+    "resources/conf/dev/admin/documents.edn"
+    "resources/conf/dev/config.edn"
+    "resources/conf/test/admin/documents.edn"
+    "resources/conf/test/config.edn"
+    "resources/seeds/dev.edn"
+    "src/eval_app/document/core/document.clj"
+    "src/eval_app/document/core/ui.clj"
+    "src/eval_app/document/ports.clj"
+    "src/eval_app/document/schema.clj"
+    "src/eval_app/document/shell/http.clj"
+    "src/eval_app/document/shell/module_wiring.clj"
+    "src/eval_app/document/shell/persistence.clj"
+    "src/eval_app/document/shell/service.clj"
+    "src/eval_app/document/shell/web_handlers.clj"
+    "test/eval_app/document/core/document_test.clj"
+    "test/eval_app/document/shell/document_repository_test.clj"
+    "test/eval_app/document/shell/service_test.clj"],
+   :edits nil,
+   :mergeable? false,
+   :tokens nil}
+  {:generated? true,
+   :steps
+   {:generate {:status :pass, :ms 32850},
+    :integrate {:status :pass, :ms 182},
+    :compiles {:status :pass, :ms 5971},
+    :tests {:status :pass, :ms 13300},
+    :check-fcis {:status :pass, :ms 156},
+    :check-deps
+    {:status :skipped,
+     :reason
+     "check:deps is monorepo-only; a generated project has no libs/"},
+    :migrate {:status :pass, :ms 6186},
+    :boot {:status :pass, :ms 12175}},
+   :duration-ms 71035,
+   :module "klant",
+   :prompt
+   "klantmodule met naam, e-mailadres, telefoonnummer en een vlag of de klant actief is",
+   :id :klant,
+   :expectations
+   [{:id :no-protocol-interop, :pass? true, :hits []}
+    {:id :no-request-identity, :pass? true, :hits []}
+    {:id :email, :pass? true}
+    {:id :phone, :pass? true}],
+   :files
+   ["migrations/20261114115030-create-klants.down.sql"
+    "migrations/20261114115030-create-klants.up.sql"
+    "resources/conf/dev/admin/klants.edn"
+    "resources/conf/dev/config.edn"
+    "resources/conf/test/admin/klants.edn"
+    "resources/conf/test/config.edn"
+    "resources/seeds/dev.edn"
+    "src/eval_app/klant/core/klant.clj"
+    "src/eval_app/klant/core/ui.clj"
+    "src/eval_app/klant/ports.clj"
+    "src/eval_app/klant/schema.clj"
+    "src/eval_app/klant/shell/http.clj"
+    "src/eval_app/klant/shell/module_wiring.clj"
+    "src/eval_app/klant/shell/persistence.clj"
+    "src/eval_app/klant/shell/service.clj"
+    "src/eval_app/klant/shell/web_handlers.clj"
+    "test/eval_app/klant/core/klant_test.clj"
+    "test/eval_app/klant/shell/klant_repository_test.clj"
+    "test/eval_app/klant/shell/service_test.clj"],
+   :edits 0,
+   :mergeable? true,
+   :tokens nil}],
+ :summary {:mergeable 3, :of 5, :median-edits 0}}
