@@ -53,7 +53,8 @@ An entity that maps `:tenant-id` under `:scope` is also kept to the caller's ten
 sees only their tenant's records, and another tenant's is not found (BOU-954; `users.edn` maps it).
 Read opens the detail page; without write it renders read-only. Many-to-many titles are scoped by the linked
 entity's read, and a save keeps the links the user could not see.
-A belongs-to value must name a record the user may read, else the save fails on that field (BOU-997).
+A belongs-to value must name a record the user may read, else the save fails on that field; an unchanged one
+and one into an entity the admin does not expose are not checked (BOU-997).
 `:require-role` is deprecated and enforces nothing (outside `:off` it logs a warning); `wagoe add admin` and `bb setup` no longer write it.
 Moving an app to `:enforce`: `docs/modules/guides/pages/authorization.adoc`.
 Granting entity access as an administrator: `docs/modules/guides/pages/managing-access.adoc`.

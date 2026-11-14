@@ -153,7 +153,7 @@
               (form-with [(support/refusal-message request e)])
 
               (= (:type error-data) :validation-error)
-              (form-with (get-in error-data [:errors field] ["Validation failed"]))
+              (assoc (form-with (get-in error-data [:errors field] ["Validation failed"])) :status 422)
 
               :else (throw e)))))))))
 
