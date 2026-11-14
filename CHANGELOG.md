@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **Creating a user told a tenant's admin that an email existed in another tenant** (BOU-995). The identity is invited
+  instead, with the same answer, and joins by accepting at sign-in. See `UPGRADING.md`.
 - **A tenant's admin could point a foreign key at, or move a record into, another tenant** (BOU-997), the latter by
   sending `tenant_id` for `tenant-id`. Both are refused now, as a field error.
 

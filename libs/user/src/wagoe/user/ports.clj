@@ -409,6 +409,24 @@
   ;; Throws :user-not-found, :account-locked (with :retry-after),
   ;; :invalid-current-password, :password-policy-violation.
 
+(defprotocol ITenantMembers
+  (tenant-ids [this user])
+  ;; The tenants `user` belongs to, as id strings: their own (`:tenant-id`) and
+  ;; those they are an active member of (BOU-995). Without the tenant module,
+  ;; their own only.
+
+  (tenants [this user])
+  ;; Those tenants as {:id :slug :name}, for the choice at sign-in; :slug and
+  ;; :name are nil when the tenant module is off.
+
+  (invitations [this user])
+  ;; The tenants `user` is invited to and has not yet accepted, as
+  ;; {:id membership-id :tenant-id :slug :name}.
+
+  (accept-invitation [this user membership-id]))
+  ;; Accept one of `user`'s own invitations. Throws :forbidden for another's,
+  ;; :not-found or :validation-error as the membership service does.
+
 (defprotocol IUserDeletion
   (delete-user [this user-id])
   ;; Soft delete: sets :deleted-at, hiding the user from lists and reads, and
@@ -627,7 +645,7 @@
 (defprotocol ILoginLayout
   (login-page [this title body opts]))
   ;; The whole page around Wagoe's sign-in forms: login, MFA, registration.
-  ;; opts: :page (:login, :mfa, :oidc-mfa, :oidc-continue, :register,
+  ;; opts: :page (:login, :mfa, :oidc-mfa, :oidc-continue, :choose-tenant, :register,
   ;; :mfa-enrolment), :request,
   ;; :user, :flash, :return-to, :logo-url. Returns Hiccup for the full page.
 

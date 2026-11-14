@@ -49,6 +49,20 @@
    :user-agent user-agent
    :result :success})
 
+(defn tenant-invitation-audit-entry
+  "Audit entry for `target-user` invited to `tenant-id` (BOU-995): an update,
+   since the action check knows no invitation."
+  [{:keys [actor-id actor-email ip-address user-agent]} target-user tenant-id]
+  {:action :update
+   :actor-id actor-id
+   :actor-email actor-email
+   :target-user-id (:id target-user)
+   :target-user-email (:email target-user)
+   :changes {:invited-to-tenant (str tenant-id)}
+   :ip-address ip-address
+   :user-agent user-agent
+   :result :success})
+
 (defn update-user-audit-entry
   "Create audit log entry for user update.
    

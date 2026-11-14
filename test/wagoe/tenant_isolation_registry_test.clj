@@ -12,7 +12,8 @@
                     :tests     {"libs/tenant/test/wagoe/tenant/shell/membership_http_test.clj"
                                 ["a-tenant-admin-cannot-reach-another-tenants-memberships" "changing-memberships-takes-a-tenant-admin"]
                                 "libs/tenant/test/wagoe/tenant/shell/tenant_scope_test.clj"
-                                ["a-caller-outside-the-chosen-tenant-is-refused" "a-user-of-a-tenant-gets-no-public-schema"]
+                                ["a-caller-outside-the-chosen-tenant-is-refused" "a-user-of-a-tenant-gets-no-public-schema"
+                                 "a-tenant-left-since-it-was-chosen-is-forgotten"]
                                 "libs/tenant/test/wagoe/tenant/shell/tenant_middleware_test.clj"
                                 ["a-suspended-tenant-does-not-serve"]
                                 "libs/tenant/test/wagoe/tenant/shell/invite_service_test.clj"
@@ -47,7 +48,7 @@
                                  "only-a-platform-admin-writes-documents"]
                                 "libs/search/test/wagoe/search/shell/http_test.clj"
                                 ["a-tenants-admin-sees-no-count-across-tenants"]}}
-   "user"          {:scoped-by "users.tenant_id; listings and routes by user id forced to the caller's tenant; roles and groups, which carry no tenant, take a platform admin"
+   "user"          {:scoped-by "users.tenant_id and active memberships; listings and routes by user id forced to the caller's tenant; a user in several tenants is changed by no tenant's admin; roles and groups, which carry no tenant, take a platform admin"
                     :tests     {"libs/user/test/wagoe/user/shell/authz_negative_security_test.clj"
                                 ["require-tenant-member-denies-non-member"]
                                 "libs/user/test/wagoe/user/shell/tenant_scope_test.clj"
@@ -56,9 +57,13 @@
                                  "a-bulk-action-skips-another-tenants-users"
                                  "a-tenants-admin-creates-users-in-their-tenant"
                                  "another-tenants-users-rights-are-not-found"
-                                 "roles-and-groups-take-a-platform-admin"
-                                 "creating-a-user-tells-that-an-email-exists-in-another-tenant"]}
-                    :gaps      ["BOU-995"]}
+                                 "roles-and-groups-take-a-platform-admin"]
+                                "libs/user/test/wagoe/user/shell/tenant_members_test.clj"
+                                ["creating-a-user-answers-the-same-whether-the-email-exists-in-another-tenant"
+                                 "a-tenant-is-joined-only-by-accepting-ones-own-invitation"
+                                 "no-tenants-admin-changes-a-user-in-another-tenant-too"
+                                 "a-member-from-another-tenant-is-seen-but-not-changed"
+                                 "a-tenant-is-chosen-only-among-ones-own"]}}
    "audience"      {:scoped-by "segments span every tenant, so only a platform admin reaches them"
                     :tests     {"libs/audience/test/wagoe/audience/shell/http_test.clj"
                                 ["a-tenants-admin-gets-no-audience"]}}

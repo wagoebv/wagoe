@@ -922,7 +922,7 @@
                        :created-at (Instant/now) :expires-at (Instant/now)}]))
             out (logged #((web-handlers/user-sessions-page-handler svc {})
                           {:path-params {:id (str (:id user))}}))]
-        (is (str/includes? out "Sessions retrieved") "the log was not captured")
+        (is (str/includes? out "HTML response created") "the log was not captured")
         (is (not (str/includes? out token)))))))
 
 (deftest ^:unit profile-edits-send-only-the-edited-fields

@@ -915,6 +915,14 @@
       :mfa-enrolment-required  (errors/response 403 :mfa-enrolment-required message opts)
       (errors/response 401 :unauthorized "Invalid email or password" opts))))
 
+(defn- several-tenants
+  "`user`'s tenants as {:id :slug :name}, when they belong to more than one."
+  [context user]
+  (let [svc (get-in context [:system :user-service])]
+    (when (satisfies? ports/ITenantMembers svc)
+      (let [ts (ports/tenants svc user)]
+        (when (< 1 (count ts)) (vec ts))))))
+
 (def format-session-creation-response
   "200 with the session, 200 with requiresMfa when a second factor is still
    needed, otherwise the error from `login-refusal`."
@@ -937,9 +945,12 @@
                 (:authenticated auth-result)
                 (-> context
                     (assoc :response {:status 200
-                                      :body (-> (schema/user-specific-kebab->camel auth-result)
-                                                (update :user schema/with-camel-twins)
-                                                (update :session schema/with-camel-twins))})
+                                      :body (let [tenants (several-tenants context (:user auth-result))]
+                                              (cond-> (-> (schema/user-specific-kebab->camel auth-result)
+                                                          (update :user schema/with-camel-twins)
+                                                          (update :session schema/with-camel-twins))
+                                                ;; Which tenant to name in X-Tenant-Id, for one in several (BOU-995)
+                                                tenants (assoc :tenants tenants)))})
                     (ctx/add-breadcrumb :operation :session-create-formatted
                                         {:user-id (get-in auth-result [:user :id])}))
 

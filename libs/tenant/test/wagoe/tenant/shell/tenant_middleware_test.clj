@@ -218,6 +218,18 @@
       (is (= 200 (:status response)))
       (is (= tenant-id (get-in response [:body :tenant :id]))))))
 
+(deftest ^:unit the-tenant-chosen-at-sign-in-is-the-requests
+  ;; Over the user's own tenant, under a header (BOU-995); the scope gate still checks membership
+  (let [handler (tenant-mw/wrap-tenant-resolution simple-handler (create-mock-tenant-service))
+        request {:server-name "myapp.com" :uri "/web/admin" :request-method :get
+                 :cookies {"wagoe-tenant" {:value (str (:id test-tenant-2))}}
+                 :user {:id (random-uuid) :tenant-id (:id test-tenant-1)}}]
+    (is (= (:id test-tenant-2) (get-in (handler request) [:body :tenant :id])))
+    (is (= (:id test-tenant-1)
+           (get-in (handler (assoc request :headers {"x-tenant-id" (str (:id test-tenant-1))})) [:body :tenant :id])))
+    (is (= (:id test-tenant-1) (get-in (handler (assoc-in request [:cookies "wagoe-tenant" :value] "")) [:body :tenant :id]))
+        "a cleared cookie names nothing")))
+
 (deftest ^:unit wrap-tenant-resolution-priority-test
   (testing "subdomain takes priority over JWT"
     (let [tenant-service (create-mock-tenant-service)

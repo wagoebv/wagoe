@@ -554,7 +554,10 @@
                         ;; Its own condition too: nil means users of no tenant, and an id is
                         ;; matched whole, not as the contains a string gets (BOU-948).
                         (contains? options :filter-tenant-id)
-                        (conj [:= :u.tenant_id (type-conversion/uuid->string (:filter-tenant-id options))])
+                        (conj (let [own [:= :u.tenant_id (type-conversion/uuid->string (:filter-tenant-id options))]]
+                                (if-let [ids (seq (:filter-tenant-member-ids options))]
+                                  [:or own [:in :a.id (mapv type-conversion/uuid->string ids)]]
+                                  own)))
 
                         ;; Matched whole, as db->role reads it: "admin" or no role (BOU-924).
                         (:filter-role options)

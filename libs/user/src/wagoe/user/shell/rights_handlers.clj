@@ -427,7 +427,7 @@
                     :let [u (if-let [id (parse-uuid s)]
                               (ports/get-user-by-id user-service id)
                               (ports/get-user-by-email user-service s))]]
-                [s (when (tenant-scope/reaches? request u) u)])]
+                [s (when (tenant-scope/reaches? request (tenant-scope/with-tenants user-service u)) u)])]
     [(distinct (keep second found)) (keep (fn [[s u]] (when-not u s)) found)]))
 
 (defn grant-bulk

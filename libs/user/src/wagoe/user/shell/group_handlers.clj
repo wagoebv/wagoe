@@ -223,7 +223,7 @@
                (ports/get-user-by-id user-service user-id)
                (some->> (form request "email") not-empty (ports/get-user-by-email user-service)))]
     ;; Another tenant's user is as unknown here as in the lookup (BOU-948)
-    (or (when (and user (tenant-scope/lists? request user)) (:id user))
+    (or (when (and user (tenant-scope/lists? request (tenant-scope/with-tenants user-service user))) (:id user))
         (throw (ex-info "No such user" {:type :not-found :field :email})))))
 
 (defn form-expiry

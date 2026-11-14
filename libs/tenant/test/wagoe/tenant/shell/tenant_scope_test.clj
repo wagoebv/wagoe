@@ -32,3 +32,11 @@
   (is (= 200 (status {:id 1 :role :user} nil)))
   (testing "a caller who is not signed in is left to the route's authentication"
     (is (= 200 (status nil tenant-b)))))
+
+(deftest ^:unit ^:security a-tenant-left-since-it-was-chosen-is-forgotten
+  ;; The wagoe-tenant cookie named it, and every request 403'd, logout too (BOU-995)
+  (let [refused (gate {:uri "/web/logout" :request-method :post
+                       :user {:id 1 :role :user :tenant-id tenant-a} :tenant {:id tenant-b}
+                       :cookies {"wagoe-tenant" {:value (str tenant-b)}}})]
+    (is (= 403 (:status refused)))
+    (is (= 0 (get-in refused [:cookies "wagoe-tenant" :max-age])))))
