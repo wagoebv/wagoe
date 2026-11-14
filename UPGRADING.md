@@ -10,20 +10,133 @@ mode you'd see without it, and the fix.
 > says where it went. Before deploying, `bb doctor --env prod` also catches
 > rate limiting with no active cache (BOU-456).
 
-## Unreleased
+## 1.1.x → 1.2.0
 
-### `wagoe-platform-sql` (BOU-871)
+Mostly security. Steps 1 to 4 change what an existing app does at runtime;
+read them before you deploy.
 
-Nothing to do: `wagoe-platform` depends on it, and the namespaces kept their names.
-Depend on `com.wagoe/wagoe-platform-sql` instead of platform when you want Wagoe's
-database layer without Jetty, Reitit and Muuntaja.
+### 1. Inline scripts stop running (BOU-898)
 
-### `sync-tenant-schemas!` runs the tenant migrations (BOU-941)
+The CSP's `script-src` is `'self'` now. An inline `<script>`, an `onclick` or an
+`hx-on` attribute in your own pages no longer runs, and the browser console
+reports a CSP violation. Move the code to a `.js` file, or set your own CSP.
 
-It used to copy a fixed list of tables (`contractors`, `invoices`, …) from
-`public` into each tenant schema. It now runs `migrations-tenant/`, as
-provisioning and boot do. If your tenant tables came from that list, move their
-DDL into `resources/migrations-tenant/`. The result has `:errors` instead of `:tables`.
+### 2. Multi-tenant apps (`:wagoe/tenant`)
+
+Tenants were not kept apart in several places; 1.2.0 closes them. Most of it
+needs no change, but these do:
+
+- A request that names another tenant in a header or host answers 403. Tenant
+  routes take a platform admin, and membership routes an admin of that tenant
+  (BOU-982, BOU-983).
+- Add `:scope {:tenant-id :tenant-id}` to your `admin/users.edn` (BOU-954).
+- Mark a search index that holds no tenant's data `:global? true`, or a tenant's
+  caller gets 403. Search writes and audiences take a platform admin (BOU-948,
+  BOU-954).
+- The roles, groups, permissions and user-rights pages take a platform admin.
+  Roles and groups carry no tenant yet (BOU-984).
+- Bind an invite with `:accepted-by-email`, and check `:tenant-id` after
+  `get-external-invite` and `revoke-external-invite` (BOU-992).
+- Call `in-tenant` outside your transaction. Switching schema inside an open
+  transaction, or to a schema that does not exist, is refused (BOU-988).
+- A recurring job is refused inside a tenant, and
+  `wrap-handler-with-tenant-context` no longer reads the tenant from the job's
+  args (BOU-987).
+- An event handler runs in its event's tenant. A push of no tenant needs
+  `:all-tenants? true` to reach every tenant's devices (BOU-985).
+- A realtime topic message keeps to the sender's tenant. A WebSocket gets it only
+  if your `IJWTVerifier` returns `:tenant-id` (BOU-986).
+- Push devices registered before 1.2.0 have no tenant; re-register them
+  (BOU-946). A token already in two tenants answers 409 when it registers again;
+  find those as `libs/push/AGENTS.md` shows and delete one row (BOU-994). A
+  custom device store implements `wagoe.push.ports/IDeviceRemoval`, or a DELETE
+  that would reach another tenant answers 409 (BOU-990).
+- `sync-tenant-schemas!` used to copy a fixed list of tables (`contractors`,
+  `invoices`, …) from `public` into each tenant schema. It now runs
+  `migrations-tenant/`, as provisioning and boot do. If your tenant tables came
+  from that list, move their DDL into `resources/migrations-tenant/`. The result
+  has `:errors` instead of `:tables` (BOU-941).
+
+### 3. Turn on CSRF in an existing app (BOU-940, BOU-951)
+
+`wagoe new` and `bb setup` now write CSRF protection and rate limiting on. An
+existing app keeps its config, and the boot warns while CSRF is off. Set:
+
+```clojure
+:wagoe/http {:security {:csrf {:enabled? true}}}
+```
+
+In prod, rate limiting needs Redis. A `/web` write with a bearer token and no
+session cookie skips the check, so API-style clients of `/web` no longer need a
+page's token (BOU-952).
+
+### 4. Storage with `:expose-http? true` (BOU-945, BOU-950, BOU-991)
+
+- Download, delete and URL check the upload index: its tenant, its uploader, or
+  a platform admin.
+- An upload to a named `path` that already holds another user's file is refused.
+- A signed local URL lives 7 days at most and dies with its file. URLs issued
+  before 1.2.0 are refused; issue new ones.
+- A tenant's named path is stored under `.tenants/<tenant-id>/`. Files stored
+  before keep their keys.
+
+### 5. Dependencies you got through search or jobs (BOU-869, BOU-931, BOU-932)
+
+Without these, the app fails at boot with `Could not locate …` for a namespace
+you used to get for free.
+
+- `wagoe-search` no longer brings `wagoe-admin`, `wagoe-shared-ui` or
+  `wagoe-platform`. Declare `wagoe-email` (always on) and whichever of
+  `wagoe-admin`, `wagoe-user`, `wagoe-shared-ui` and `wagoe-platform` you used.
+  Search's admin pages mount only when `wagoe-shared-ui` is on the classpath.
+- `wagoe-jobs` no longer brings `wagoe-tenant`. Declare it if you use it.
+  Tenant's `:wagoe/in-tenant` runs a tenant's job now;
+  `wagoe.jobs.shell.tenant-context/tenant-runner` and
+  `:wagoe/job-tenant-runner` are deprecated.
+- `wagoe-platform` depends on the new `com.wagoe/wagoe-platform-sql`, and the
+  namespaces kept their names, so nothing to do there. Depend on
+  `wagoe-platform-sql` instead of platform when you want Wagoe's database layer
+  without Jetty, Reitit and Muuntaja (BOU-871).
+
+### 6. Plaintext secrets fail `bb doctor` (BOU-942)
+
+Outside the test profile, a plaintext secret in `config.edn` fails `bb doctor`.
+Move each one it names to `#secret` or `#env`. A key holds a secret when its last
+word says so (`:db-password`, `:stripe-api-key`), the same rule log redaction
+and the devtools use (BOU-973).
+
+### 7. `bb check:fcis` is stricter
+
+It fails on:
+
+- `honey.sql` in `core/` or `ports`. Build the query in the shell, or list the
+  file under `:allow-sql` in `.wagoe/check-fcis.edn` (BOU-874).
+- A core namespace requiring a shell namespace named `…shell.core`, `.schema`
+  or `.ports`. Move that call to the shell (BOU-964).
+
+It warns, and fails from 2.0, on `println`, `pprint`, `tap>` and the other
+printers, and on clock or random reads (`(java.util.Date.)`, `System/nanoTime`,
+`rand`, `random-uuid`, …) in `core/` (BOU-957, BOU-963, BOU-968). Return the
+string or read the value in the shell and pass it in. To exempt a namespace,
+mark it `^:wagoe/allow-print` or `^:wagoe/allow-clock`, or add an entry with an
+`:ns` and a `:why` under `:allow-print` or `:allow-clock` in
+`.wagoe/check-fcis.edn` (BOU-961).
+
+### 8. Code changes
+
+- A custom group repository needs `wagoe.user.ports/IExpiredAccess`, so each
+  group expires in its own transaction (BOU-965).
+- A custom `IUserDataSource` should implement
+  `wagoe.audience.ports/IUserQuery`; `query-users-sql` is deprecated and goes
+  in 2.0 (BOU-875).
+- The 1-arity `wagoe.core.interceptor-context/record-start-time` and
+  `record-end-time` are deprecated. Pass `(System/nanoTime)` as the second
+  argument (BOU-963).
+- The 0-arity `wagoe.platform.database/current-transaction` is deprecated.
+  Pass the context or datasource you write through (BOU-971).
+- Scaffolded repositories now return the schema's types. In a module generated
+  before 1.2.0, copy `->entity` and what it calls from a fresh `bb scaffold`
+  (BOU-877).
 
 ## 1.0.x → 1.1.0
 
