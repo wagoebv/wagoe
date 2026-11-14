@@ -23,6 +23,8 @@
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.lockout :as lockout]
             [wagoe.user.ports :as ports]
+            [wagoe.tenant.core.membership :as membership-core]
+            [wagoe.tenant.ports :as tenant-ports]
             [wagoe.platform.core.database.constraint :as constraint]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.client-ip :as client-ip]
@@ -309,7 +311,53 @@
    :metrics-emitter (:metrics-emitter user-service)
    :error-reporter  (:error-reporter user-service)})
 
+(defn- tenant-ids-of
+  "`user`'s tenants as id strings: their own, and with `memberships` (the tenant
+   module's repository, or nil) those they are an active member of (BOU-995)."
+  [memberships user]
+  (cond-> (if (:tenant-id user) #{(str (:tenant-id user))} #{})
+    (and memberships (:id user))
+    (into (comp (filter #(= :active (keyword (:status %)))) (map (comp str :tenant-id)))
+          (tenant-ports/find-memberships-by-user memberships (:id user)))))
+
+(defn- join-tenant!
+  "When `user-data` names a tenant and the email of an identity outside it: the
+   identity joins that tenant, and the caller gets what a new user's creation
+   returns, so it learns nothing of other tenants (BOU-995). Its password and
+   name stay as they are. Nil otherwise."
+  [memberships existing user-data]
+  (let [tenant-id (:tenant-id user-data)]
+    (when (and memberships existing tenant-id
+               (not (contains? (tenant-ids-of memberships existing) (str tenant-id))))
+      ;; Hashed and dropped: a creation hashes, so a join must take as long
+      (some-> (:password user-data) auth-shell/hash-password)
+      ;; ponytail: a concurrent join of the same identity hits the unique key and fails
+      (tenant-ports/create-membership memberships
+                                      (membership-core/prepare-active-membership*
+                                       (generate-user-id) (:id existing) tenant-id
+                                       (if (= :admin (:role user-data)) :admin :member)
+                                       (current-timestamp)))
+      (-> (select-keys user-data [:email :name :role :tenant-id])
+          (assoc :id (:id existing) :active true)))))
+
+(defn- tenant-member-ids
+  "The ids of tenant `t`'s active members, for a listing of that tenant."
+  [memberships t]
+  ;; ponytail: one read of up to 10000 members; page through when a tenant has more
+  (mapv :user-id (tenant-ports/find-memberships-by-tenant memberships t {:status :active :limit 10000})))
+
 (defrecord UserService [user-repository session-repository audit-repository validation-config auth-service]
+
+  ports/ITenantMembers
+  (tenant-ids [this user]
+    (tenant-ids-of (:memberships this) user))
+
+  (tenants [this user]
+    (let [repo (:tenants this)]
+      (sort-by (juxt :name :id)
+               (for [id (tenant-ids-of (:memberships this) user)
+                     :let [t (when repo (tenant-ports/find-tenant-by-id repo (parse-uuid id)))]]
+                 {:id id :slug (:slug t) :name (:name t)}))))
 
   ports/IUserService
 
@@ -354,41 +402,43 @@
                                                        (:violations password-validation))
                                          :violations (:violations password-validation)})))
 
-                      ;; 3. Check business rules using pure core function
+                      ;; 3. Check business rules using pure core function. An identity
+                      ;; another tenant holds joins this one instead (BOU-995).
                       (let [existing-user (.find-user-by-email user-repository (:email user-data))
                             uniqueness-result (user-core/check-duplicate-user-decision user-data existing-user)]
-                        (when (= :reject (:decision uniqueness-result))
-                          (throw (ex-info "User already exists"
-                                          {:type :user-exists
-                                           :message (:message uniqueness-result)}))))
+                        (if (= :reject (:decision uniqueness-result))
+                          (or (join-tenant! (:memberships this) existing-user user-data)
+                              (throw (ex-info "User already exists"
+                                              {:type :user-exists
+                                               :message (:message uniqueness-result)})))
 
-                      ;; 4. Hash password using auth service (shell layer I/O)
-                      (let [password-hash (when (:password user-data)
-                                            (auth-shell/hash-password (:password user-data)))
-                            user-data-with-hash (if password-hash
-                                                  (-> user-data
-                                                      (assoc :password-hash password-hash)
-                                                      (dissoc :password))
-                                                  user-data)
-                            ;; 5. Persist using impure shell persistence layer
-                            prepared-user (user-core/prepare-user-for-creation user-data-with-hash (current-timestamp) (generate-user-id))
-                            created-user (.create-user user-repository prepared-user)]
+                          ;; 4. Hash password using auth service (shell layer I/O)
+                          (let [password-hash (when (:password user-data)
+                                                (auth-shell/hash-password (:password user-data)))
+                                user-data-with-hash (if password-hash
+                                                      (-> user-data
+                                                          (assoc :password-hash password-hash)
+                                                          (dissoc :password))
+                                                      user-data)
+                                ;; 5. Persist using impure shell persistence layer
+                                prepared-user (user-core/prepare-user-for-creation user-data-with-hash (current-timestamp) (generate-user-id))
+                                created-user (.create-user user-repository prepared-user)]
 
-                        ;; 6. Create audit log entry for user creation
-                        (try
-                          (.create-audit-log audit-repository
-                                             (audit-core/create-user-audit-entry
-                                              nil  ; actor-id (nil for self-registration, or actor from context)
-                                              "system"  ; actor-email (system or actual actor)
-                                              created-user
-                                              nil  ; ip-address (extract from request context if available)
-                                              nil)) ; user-agent (extract from request context if available)
-                          (catch Exception e
-                            ;; Log audit failure but don't fail the operation
-                            (warn-audit-failed e)))
+                            ;; 6. Create audit log entry for user creation
+                            (try
+                              (.create-audit-log audit-repository
+                                                 (audit-core/create-user-audit-entry
+                                                  nil  ; actor-id (nil for self-registration, or actor from context)
+                                                  "system"  ; actor-email (system or actual actor)
+                                                  created-user
+                                                  nil  ; ip-address (extract from request context if available)
+                                                  nil)) ; user-agent (extract from request context if available)
+                              (catch Exception e
+                                ;; Log audit failure but don't fail the operation
+                                (warn-audit-failed e)))
 
-                        ;; Remove sensitive data before returning
-                        (dissoc created-user :password-hash))))
+                            ;; Remove sensitive data before returning
+                            (dissoc created-user :password-hash))))))
                   (observability this))]
       result))
 
@@ -625,6 +675,11 @@
      {:options options}
      (fn [{:keys [params]}]
        (let [{:keys [options]} params
+             memberships (:memberships this)
+             ;; A tenant's listing holds its members too, whose own tenant is another (BOU-995)
+             options (cond-> options
+                       (and memberships (some? (:filter-tenant-id options)))
+                       (assoc :filter-tenant-member-ids (tenant-member-ids memberships (:filter-tenant-id options))))
              result (.find-users user-repository options)
              users (:users result)
              total-count (:total-count result)

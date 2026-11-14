@@ -96,14 +96,16 @@
 
 (defn- tenant-identifiers
   "Where the request may name its tenant, first first: the subdomain (always a
-   slug), a JWT claim, the X-Tenant-Slug/X-Tenant-Id header, then the signed-in
-   user's own tenant. The user's comes last so a tenant named by header still
-   reaches the scope gate, which refuses it or admits a member (BOU-982)."
+   slug), a JWT claim, the X-Tenant-Slug/X-Tenant-Id header, the tenant chosen
+   at sign-in (the wagoe-tenant cookie, BOU-995), then the signed-in user's own
+   tenant. The user's comes last so a tenant named otherwise still reaches the
+   scope gate, which refuses it or admits a member (BOU-982)."
   [request]
   (keep identity
         [(as-identifier (extract-subdomain request) :slug)
          (as-identifier (extract-jwt-tenant request))
          (as-identifier (extract-header-tenant request))
+         (as-identifier (not-empty (get-in request [:cookies "wagoe-tenant" :value])))
          (as-identifier (some-> (get-in request [:user :tenant-id]) str))]))
 
 ;; =============================================================================

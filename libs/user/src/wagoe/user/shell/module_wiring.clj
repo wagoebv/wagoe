@@ -150,7 +150,7 @@
 
 (defmethod ig/init-key :wagoe/user-service
   [_ {:keys [user-repository session-repository audit-repository validation-config auth-service
-             logger metrics-emitter error-reporter]}]
+             logger metrics-emitter error-reporter memberships tenants]}]
   (log/info "Initializing user service")
   (require-protocols! "user repository" user-repository
                       {"ILoginAttempts" [ports/ILoginAttempts ['claim-login-attempts 'release-login-attempt]]
@@ -163,7 +163,10 @@
                  user-repository session-repository audit-repository validation-config auth-service
                  {:logger          logger
                   :metrics-emitter metrics-emitter
-                  :error-reporter  error-reporter})]
+                  :error-reporter  error-reporter
+                  ;; The tenant module's, when it is on: a tenant's users are its members too (BOU-995)
+                  :memberships     (first memberships)
+                  :tenants         (first tenants)})]
     (log/info "User service initialized")
     service))
 
@@ -293,9 +296,9 @@
    (assoc opts :secret (or (:state-secret settings) (user-auth/get-jwt-secret)))))
 
 (defmethod ig/init-key :wagoe/user-oidc-routes
-  [_ {:keys [oidc config hooks]}]
+  [_ {:keys [oidc config hooks user-service]}]
   (require 'wagoe.user.shell.http)
-  ((ns-resolve 'wagoe.user.shell.http 'oidc-routes) oidc (landing/with-hooks config hooks)))
+  ((ns-resolve 'wagoe.user.shell.http 'oidc-routes) oidc (landing/with-hooks config hooks) user-service))
 
 ;; =============================================================================
 ;; Groups
@@ -413,7 +416,9 @@
                                :auth-service       (ig/ref :wagoe/auth-service)
                                :logger             (ig/ref :wagoe/logging)
                                :metrics-emitter    (ig/ref :wagoe/metrics)
-                               :error-reporter     (ig/ref :wagoe/error-reporting)}
+                               :error-reporter     (ig/ref :wagoe/error-reporting)
+                               :memberships        (ig/refset :wagoe/membership-repository)
+                               :tenants            (ig/refset :wagoe/tenant-repository)}
     :wagoe/user-routes        {:user-service (ig/ref :wagoe/user-service)
                                :mfa-service  (ig/ref :wagoe/mfa-service)
                                :email-sender (ig/ref :wagoe/email)
@@ -499,9 +504,10 @@
                                            :auth-service        (ig/ref :wagoe/auth-service)
                                            :audit-repository    (ig/ref :wagoe/audit-repository)
                                            :identity-repository (ig/ref :wagoe/user-identity-repository)}
-                  :wagoe/user-oidc-routes {:oidc   (ig/ref :wagoe/user-oidc)
-                                           :hooks  (ig/ref :wagoe/auth-hooks)
-                                           :config config})
+                  :wagoe/user-oidc-routes {:oidc         (ig/ref :wagoe/user-oidc)
+                                           :hooks        (ig/ref :wagoe/auth-hooks)
+                                           :user-service (ig/ref :wagoe/user-service)
+                                           :config       config})
           (update :routes conj (ig/ref :wagoe/user-oidc-routes)))
 
       ;; Without jobs, expired rows stay, giving nothing

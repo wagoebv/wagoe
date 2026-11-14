@@ -12,7 +12,17 @@ mode you'd see without it, and the fix.
 
 ## 1.2.x → Unreleased
 
-### 1. The admin service refuses keys that are not fields (BOU-998)
+### 1. One identity in several tenants (BOU-995)
+
+With `:wagoe/tenant` on, creating a user with an email another tenant already
+has adds that person to your tenant instead of answering 409 (API) or "already
+exists" (form). Their password and name stay theirs: tell them, since the
+password you typed is not used. Such a user, in more than one tenant, can no
+longer be edited, deactivated or deleted by a tenant's admin (403); a platform
+admin can. At sign-in they choose a tenant (`/web/choose-tenant`); API clients
+read `tenants` from the login answer and send `X-Tenant-Id`.
+
+### 2. The admin service refuses keys that are not fields (BOU-998)
 
 `create-entity`, `create-entity-with-children` and `update-entity` turned every
 key into a column. They now answer a `:validation-error` with `:errors {key

@@ -425,6 +425,25 @@ so two of them deleting the same rows is that DELETE twice.
 A revoked session is pruned on the same terms as any other: revoking hides it,
 expiry plus retention removes it.
 
+## One identity, several tenants
+
+BOU-995. `auth_users` holds one identity per email; a user is in their own
+tenant (`users.tenant_id`) and in each tenant of an active `tenant_memberships`
+row. With the tenant module on, the user service gets the membership and tenant
+repositories (`:memberships`, `:tenants`) and implements `ITenantMembers`.
+
+- Creating a user in a tenant with the email of an identity outside it adds an
+  active membership and answers as a new user's creation does; the identity's
+  password and name stay. Within one tenant a taken email is still `:user-exists`.
+- A tenant's listing holds its members too (`:filter-tenant-member-ids`).
+- A user in more than one tenant is changed (name, email, password, status,
+  delete) by no tenant's admin: `tenant-scope/wrap-target-user` answers 403 and
+  bulk actions skip them. Only they or a platform admin do; a tenant's admin
+  manages the membership.
+- Signing in, someone in several tenants goes to `/web/choose-tenant`, which
+  sets the `wagoe-tenant` cookie the tenant middleware reads; sign-in and logout
+  clear it. The API login answers `tenants` for them; send one as `X-Tenant-Id`.
+
 ## Groups, roles and assignments
 
 ADR-041 §2–3. `:wagoe/user-group-service` implements `IUserGroupService`. An

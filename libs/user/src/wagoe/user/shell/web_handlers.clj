@@ -411,6 +411,22 @@
 (defn- session-cookie [config session-token]
   {:value session-token :http-only true :secure (secure-cookies? config) :same-site :strict :path "/"})
 
+(def ^:private tenant-cookie
+  "The tenant chosen at sign-in, which the tenant middleware reads (BOU-995).
+   A name only: the scope gate still checks the caller belongs to it."
+  "wagoe-tenant")
+
+(def ^:private tenant-cookie-cleared {:value "" :max-age 0 :path "/"})
+
+(defn- after-sign-in
+  "Where `user` goes after signing in: to the choice of tenant first when they
+   belong to several (BOU-995), else to `location`."
+  [user-service user location]
+  (if (and (satisfies? user-ports/ITenantMembers user-service)
+           (< 1 (count (user-ports/tenant-ids user-service user))))
+    (str "/web/choose-tenant?return-to=" (java.net.URLEncoder/encode (str location) "UTF-8"))
+    location))
+
 (def ^:private enrolment-cookie "mfa-enrolment")
 
 (defn- enrolment-ticket-cookie [config value]
@@ -473,7 +489,8 @@
           (let [auth-result (user-ports/authenticate-user user-service validated-data)
                 user (:user auth-result)
                 return-to (when (:authenticated auth-result)
-                            (safe-return-url raw-return-to (landing-path config user request)))]
+                            (after-sign-in user-service user
+                                           (safe-return-url raw-return-to (landing-path config user request))))]
             (log/info "Login attempt" {:email (:email validated-data)
                                        :authenticated (:authenticated auth-result)
                                        :result-keys (keys auth-result)
@@ -496,6 +513,8 @@
                            :user-role (:role user)})
                   ;; Set session-token cookie and redirect to original URL or default
                 (-> (response/redirect return-to)
+                    ;; The previous sign-in's choice of tenant is not this one's
+                    (assoc-in [:cookies tenant-cookie] tenant-cookie-cleared)
                     (assoc-in [:cookies "session-token"]
                               (cond-> (session-cookie config session-token)
                                   ;; Only set max-age if remember-me is checked
@@ -575,7 +594,8 @@
             (log/error e "Error during logout"))))
       (-> (response/redirect "/")
           (assoc :cookies {"session-token"
-                           {:value "" :max-age 0 :path "/"}})))))
+                           {:value "" :max-age 0 :path "/"}
+                           tenant-cookie tenant-cookie-cleared})))))
 
 ;; =============================================================================
 ;; Second-factor setup before signing in
@@ -699,14 +719,16 @@
 
 (defn- oidc-signed-in
   "Set the session cookie exactly as password login does, and move on."
-  [request config {:keys [user session return-to]}]
-  (let [location (safe-return-url return-to (landing-path config user request))]
+  [request config user-service {:keys [user session return-to]}]
+  (let [location (cond->> (safe-return-url return-to (landing-path config user request))
+                   user-service (after-sign-in user-service user))]
     (-> (html-response request (user-ui/oidc-continue-page location (sign-in-opts config request)) 200
                        {"Refresh" (str "0;url=" location)})
         (assoc-in [:cookies "session-token"] (session-cookie config (:session-token session)))
+        (assoc-in [:cookies tenant-cookie] tenant-cookie-cleared)
         clear-oidc-cookies)))
 
-(defn- oidc-outcome [request config result]
+(defn- oidc-outcome [request config result & [user-service]]
   (cond
     (:error result)
     (oidc-failure request config (:error result))
@@ -719,7 +741,7 @@
                   (assoc (oidc-cookie config (get-in result [:ok :cookie])) :same-site :strict)))
 
     :else
-    (oidc-signed-in request config (:ok result))))
+    (oidc-signed-in request config user-service (:ok result))))
 
 (defn oidc-start-handler
   "GET /web/auth/oidc/:provider/start - send the browser to the provider."
@@ -735,7 +757,7 @@
 
 (defn oidc-callback-handler
   "GET /web/auth/oidc/:provider/callback - finish the sign-in."
-  [oidc-client config]
+  [oidc-client config & [user-service]]
   (fn [request]
     (try
       (oidc-outcome request config
@@ -743,13 +765,14 @@
                                    (get-in request [:path-params :provider])
                                    (:query-params request)
                                    (get-in request [:cookies oidc-pending-cookie :value])
-                                   (login-context request)))
+                                   (login-context request))
+                    user-service)
       (catch Exception e
         (server-error-page request e "OIDC callback error")))))
 
 (defn oidc-mfa-handler
   "POST /web/auth/oidc/mfa - the second factor after a provider sign-in."
-  [oidc-client config]
+  [oidc-client config & [user-service]]
   (fn [request]
     (try
       (let [result (oidc/complete-mfa oidc-client
@@ -761,9 +784,34 @@
                          (user-ui/oidc-mfa-page {:mfa-code [[:t :user/oidc-mfa-invalid]]}
                                                 (sign-in-opts config request))
                          401)
-          (oidc-outcome request config result)))
+          (oidc-outcome request config result user-service)))
       (catch Exception e
         (server-error-page request e "OIDC MFA error")))))
+
+(defn choose-tenant-page-handler
+  "GET /web/choose-tenant - which of their tenants a signed-in user works in (BOU-995)."
+  [user-service config]
+  (fn [request]
+    (let [user (:user request)]
+      (html-response request
+                     (user-ui/tenant-choice-page
+                      (user-ports/tenants user-service user)
+                      (safe-return-url (get-in request [:query-params "return-to"]) (landing-path config user request))
+                      (sign-in-opts config request))))))
+
+(defn choose-tenant-submit-handler
+  "POST /web/choose-tenant - remember the tenant chosen, one the user belongs to."
+  [user-service config]
+  (fn [request]
+    (let [user      (:user request)
+          tenant-id (str (get-in request [:form-params "tenant-id"]))]
+      (if (contains? (user-ports/tenant-ids user-service user) tenant-id)
+        (-> (response/redirect (safe-return-url (get-in request [:form-params "return-to"])
+                                                (landing-path config user request))
+                               :see-other)
+            (assoc-in [:cookies tenant-cookie] (session-cookie config tenant-id)))
+        (access/forbidden-response "Not a member of this tenant" request
+                                   (access/correlation-id request (str (random-uuid))))))))
 
 (defn register-page-handler
   "GET /web/register - render self-service registration page."
@@ -925,8 +973,11 @@
                           (nil? ids-param) []
                           (sequential? ids-param) ids-param
                           :else [ids-param])
-            ;; Unreachable or missing users are dropped here (BOU-953)
-            ids         (filterv #(tenant-scope/reachable-user user-service request (UUID/fromString %)) ids)
+            ;; Unreachable or missing users are dropped here (BOU-953), and those
+            ;; shared with another tenant, whom every action here changes (BOU-995)
+            ids         (filterv #(when-let [u (tenant-scope/reachable-user user-service request (UUID/fromString %))]
+                                    (not (tenant-scope/shared? request u)))
+                                 ids)
             _           (log/info "Bulk user operation" {:action action
                                                          :ids-count (count ids)})
             ;; Merge query params from URL and hidden form fields to

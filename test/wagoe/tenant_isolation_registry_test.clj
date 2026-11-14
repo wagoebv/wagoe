@@ -47,7 +47,7 @@
                                  "only-a-platform-admin-writes-documents"]
                                 "libs/search/test/wagoe/search/shell/http_test.clj"
                                 ["a-tenants-admin-sees-no-count-across-tenants"]}}
-   "user"          {:scoped-by "users.tenant_id; listings and routes by user id forced to the caller's tenant; roles and groups, which carry no tenant, take a platform admin"
+   "user"          {:scoped-by "users.tenant_id and active memberships; listings and routes by user id forced to the caller's tenant; a user in several tenants is changed by no tenant's admin; roles and groups, which carry no tenant, take a platform admin"
                     :tests     {"libs/user/test/wagoe/user/shell/authz_negative_security_test.clj"
                                 ["require-tenant-member-denies-non-member"]
                                 "libs/user/test/wagoe/user/shell/tenant_scope_test.clj"
@@ -56,9 +56,11 @@
                                  "a-bulk-action-skips-another-tenants-users"
                                  "a-tenants-admin-creates-users-in-their-tenant"
                                  "another-tenants-users-rights-are-not-found"
-                                 "roles-and-groups-take-a-platform-admin"
-                                 "creating-a-user-tells-that-an-email-exists-in-another-tenant"]}
-                    :gaps      ["BOU-995"]}
+                                 "roles-and-groups-take-a-platform-admin"]
+                                "libs/user/test/wagoe/user/shell/tenant_members_test.clj"
+                                ["creating-a-user-answers-the-same-whether-the-email-exists-in-another-tenant"
+                                 "no-tenants-admin-changes-a-user-shared-with-another-tenant"
+                                 "a-tenant-is-chosen-only-among-ones-own"]}}
    "audience"      {:scoped-by "segments span every tenant, so only a platform admin reaches them"
                     :tests     {"libs/audience/test/wagoe/audience/shell/http_test.clj"
                                 ["a-tenants-admin-gets-no-audience"]}}

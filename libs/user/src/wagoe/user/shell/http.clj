@@ -349,7 +349,7 @@
 
 (def ^:private login-responses
   "What POST /auth/login and POST /sessions answer (BOU-691)."
-  {200 {:description "Signed in: sessionToken, jwtToken, user and session. In user and session, read the camelCase keys: their kebab-case twins are deprecated. With requiresMfa true instead, the password was right; repeat the request with mfaCode."}
+  {200 {:description "Signed in: sessionToken, jwtToken, user and session. In user and session, read the camelCase keys: their kebab-case twins are deprecated. For a user in more than one tenant, tenants lists them ({id, slug, name}); send the one to work in as X-Tenant-Id. With requiresMfa true instead, the password was right; repeat the request with mfaCode."}
    400 {:description "Malformed body."}
    401 {:description "Wrong email or password (type unauthorized, the same body whether or not the account exists), or a wrong mfaCode (type mfa-verification-failed)."}
    403 {:description "MFA is required but the user has not enrolled (type mfa-enrolment-required)."}
@@ -573,6 +573,14 @@
         :post {:middleware [auth-middleware]
                :handler    (web-handlers/logout-handler user-service config)
                :summary    "Logout current user"}}]
+      ["/choose-tenant"
+       {:no-doc true
+        :authorization :signed-in
+        :middleware [auth-middleware]
+        :get  {:handler (web-handlers/choose-tenant-page-handler user-service config)
+               :summary "Choose which tenant to work in"}
+        :post {:handler (web-handlers/choose-tenant-submit-handler user-service config)
+               :summary "Remember the tenant chosen"}}]
       (when-let [handler (landing/dashboard-handler config)]
         ["/dashboard"
          {:no-doc     true
@@ -763,12 +771,12 @@
   "OpenID Connect sign-in, mounted under /web. Public: the provider's redirect
    arrives before a session exists, and the sealed cookie is what ties each
    step to the one before."
-  [oidc-client config]
+  [oidc-client config & [user-service]]
   {:api    []
    :web    [["/auth/oidc/mfa"
              {:no-doc true
               :public true
-              :post   {:handler (web-handlers/oidc-mfa-handler oidc-client config)
+              :post   {:handler (web-handlers/oidc-mfa-handler oidc-client config user-service)
                        :summary "Second factor after an OIDC sign-in"}}]
             ["/auth/oidc/:provider/start"
              {:no-doc true
@@ -778,7 +786,7 @@
             ["/auth/oidc/:provider/callback"
              {:no-doc true
               :public true
-              :get    {:handler (web-handlers/oidc-callback-handler oidc-client config)
+              :get    {:handler (web-handlers/oidc-callback-handler oidc-client config user-service)
                        :summary "OIDC redirect back from the provider"}}]]
    :static []})
 

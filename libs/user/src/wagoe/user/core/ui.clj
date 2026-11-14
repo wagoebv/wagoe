@@ -707,6 +707,24 @@
         [:a.button.secondary {:href "/web/login"} [:t :common/button-cancel]]]]]]]
    opts))
 
+(defn tenant-choice-page
+  "Which tenant to sign in to, for someone in several (BOU-995). `tenants` are
+   {:id :slug :name}; each is a button that posts its id back with `return-to`."
+  [tenants return-to opts]
+  (auth-page
+   [:t :user/choose-tenant-title]
+   :choose-tenant
+   :div.auth-page
+   :user/choose-tenant-subtitle
+   [(into [:div.tenant-choices]
+          (for [{:keys [id slug name]} tenants]
+            [:form {:method "post" :action "/web/choose-tenant"}
+             (csrf/hidden-field)
+             [:input {:type "hidden" :name "tenant-id" :value id}]
+             [:input {:type "hidden" :name "return-to" :value return-to}]
+             [:button.button.button-primary {:type "submit"} (or name slug id)]]))]
+   opts))
+
 (defn oidc-continue-page
   "Body of the answer to a provider callback that signed someone in; the
    handler's Refresh header moves the browser on."

@@ -151,6 +151,8 @@
  :user/page-create-account-title "Account aanmaken"
  :user/register-email-unavailable "Met dit e-mailadres kun je je niet registreren. Is het van jou, log dan in."
  :user/register-error-generic "Registreren is mislukt. Probeer het later opnieuw."
+ :user/choose-tenant-title           "Kies een tenant"
+ :user/choose-tenant-subtitle        "Je account hoort bij meer dan één. In welke wil je werken?"
  :user/error-email-taken              "Er bestaat al een gebruiker met dit e-mailadres"
  :user/error-email-domain             "Dit e-maildomein is niet toegestaan"
  :user/error-email-admin-domain       "Beheerders hebben een e-mailadres op een goedgekeurd domein nodig"
