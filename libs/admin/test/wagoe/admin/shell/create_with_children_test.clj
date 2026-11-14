@@ -309,3 +309,23 @@
         "the refusal names the row, so the form marks it")
     (create! {:description "x" :tenant-id a})
     (is (= 1 (count-rows :tc_items)))))
+
+(deftest ^:integration ^:security a-tenants-admin-points-a-foreign-key-only-at-their-tenants-records
+  ;; A belongs-to value was not checked: an item of A's hung under B's order (BOU-997)
+  (let [{:keys [svc sp]} (system)
+        [a b]   [(str (random-uuid)) (str (random-uuid))]
+        order   #(:id (:record (ports/create-entity-with-children svc :tc-orders {:number "O" :tenant-id %}
+                                                                  {:tc-items [{:description "first" :tenant-id %}]})))
+        [mine theirs] [(order a) (order b)]
+        as-a    (scoped/for-request svc sp {:user {:id (random-uuid) :role :admin :tenant-id a}})
+        errors  #(:errors (thrown-data %))
+        item    (:id (ports/create-entity as-a :tc-items {:description "ok" :tenant-id a :tc-order-id mine}))]
+    (is (some? item) "their own tenant's order")
+    (is (contains? (errors #(ports/create-entity as-a :tc-items {:description "x" :tenant-id a :tc-order-id theirs}))
+                   :tc-order-id)
+        "create")
+    (is (contains? (errors #(ports/update-entity as-a :tc-items item {:tc-order-id theirs})) :tc-order-id) "update")
+    (is (contains? (errors #(ports/update-entity-field as-a :tc-items item :tc-order-id theirs)) :tc-order-id)
+        "update one field")
+    (is (= #{mine} (set (map :tc-order-id (db/execute-query! *db* {:select [:tc_order_id] :from [:tc_items]
+                                                                   :where [:= :tenant_id a]})))))))

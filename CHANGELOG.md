@@ -29,6 +29,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Security
+
+- **An admin foreign key could name another tenant's record** (BOU-997). A belongs-to value outside the caller's read
+  scope is now a field error on create and update.
+
 ## [1.2.0] — 2026-11-13
 
 ### Security

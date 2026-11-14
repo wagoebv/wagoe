@@ -101,6 +101,19 @@
                   (some->> (link-scope schema-provider user rel) (vector field)))))
         (display/belongs-to-fields (ports/get-entity-config schema-provider entity-name))))
 
+(defn- targets-readable!
+  "Throw a :validation-error on the field unless each belongs-to value in `data`
+   names a record `user` may read: a foreign key into another tenant (BOU-997)."
+  [inner schema-provider user entity-name data]
+  (doseq [[field rel] (display/belongs-to-fields (ports/get-entity-config schema-provider entity-name))
+          :let [id (get data field)]
+          :when (and (some? id) (ports/validate-entity-exists schema-provider (:entity rel)))]
+    (try (inside! inner schema-provider user (:entity rel) :read [id])
+         (catch clojure.lang.ExceptionInfo e
+           (if (= :not-found (:type (ex-data e)))
+             (throw (ex-info "Not found" {:type :validation-error :entity entity-name :errors {field ["Not found"]}}))
+             (throw e))))))
+
 (defn- with-link-scopes
   "`data` with the scopes its `:admin/links` must keep to: a link to a record
    the user may not read is neither added nor removed."
@@ -160,27 +173,32 @@
 
   (create-entity [_ entity-name data]
     (writable! schema-provider user entity-name data)
+    (targets-readable! inner schema-provider user entity-name data)
     (ports/create-entity inner entity-name (with-link-scopes schema-provider user entity-name data)))
 
   (create-entity-with-children [_ entity-name data children]
     (writable! schema-provider user entity-name data)
+    (targets-readable! inner schema-provider user entity-name data)
     ;; Each row against its own entity's scopes: a child was created in any tenant (BOU-992).
     ;; A child the parent does not create is left to the inner service to refuse.
     (let [nested (set (map :entity (:has-many (ports/get-entity-config schema-provider entity-name))))]
       (doseq [[child rows] children
               :when (nested child)
               [index row] (map-indexed vector rows)]
-        (service/with-child-index child index #(writable! schema-provider user child row))))
+        (service/with-child-index child index #(do (writable! schema-provider user child row)
+                                                   (targets-readable! inner schema-provider user child row)))))
     (ports/create-entity-with-children inner entity-name (with-link-scopes schema-provider user entity-name data) children))
 
   (update-entity [_ entity-name id data]
     (let [record (stored inner schema-provider user entity-name id)]
       (writable! schema-provider user entity-name (delay (merge @record data))))
+    (targets-readable! inner schema-provider user entity-name data)
     (ports/update-entity inner entity-name id (with-link-scopes schema-provider user entity-name data)))
 
   (update-entity-field [_ entity-name id field value]
     (let [record (stored inner schema-provider user entity-name id)]
       (writable! schema-provider user entity-name (delay (assoc @record field value))))
+    (targets-readable! inner schema-provider user entity-name {field value})
     (ports/update-entity-field inner entity-name id field value))
 
   (delete-entity [_ entity-name id]
