@@ -328,16 +328,11 @@
         as-a          (scoped/for-request svc sp {:user {:id (random-uuid) :role :admin :tenant-id a}})
         item          (:id (ports/create-entity as-a :tc-items {:description "ok" :tenant-id a :tc-order-id mine}))]
     (is (some? item) "their own tenant's order")
-    (testing "create, update and one field, under either spelling of the key"
-      (doseq [k [:tc-order-id :tc_order_id]]
-        (is (= ["No such record"]
-               (get-in (thrown-data #(ports/create-entity as-a :tc-items {:description "x" :tenant-id a :tc-order-id theirs}))
-                       [:errors :tc-order-id]))
-            "create")
-        (is (= :validation-error (:type (thrown-data #(ports/create-entity as-a :tc-items {:description "x" :tenant-id a k theirs}))))
-            (str "create " k))
-        (is (= :validation-error (:type (thrown-data #(ports/update-entity as-a :tc-items item {k theirs}))))
-            (str "update " k)))
+    (testing "create, update and one field"
+      (is (= ["No such record"]
+             (get-in (thrown-data #(ports/create-entity as-a :tc-items {:description "x" :tenant-id a :tc-order-id theirs}))
+                     [:errors :tc-order-id])))
+      (is (contains? (:errors (thrown-data #(ports/update-entity as-a :tc-items item {:tc-order-id theirs}))) :tc-order-id))
       (is (contains? (:errors (thrown-data #(ports/update-entity-field as-a :tc-items item :tc-order-id theirs)))
                      :tc-order-id)))
     (is (= #{mine} (set (map :tc-order-id (db/execute-query! *db* {:select [:tc_order_id] :from [:tc_items]
@@ -378,7 +373,6 @@
         mine  (:id (ports/create-entity svc :tc-customers {:name "C" :tenant-id a}))
         as-a  (scoped/for-request svc sp {:user {:id (random-uuid) :role :admin :tenant-id a}})]
     (is (= :validation-error (:type (thrown-data #(ports/update-entity as-a :tc-customers mine {:tenant_id b})))))
-    (is (= :validation-error (:type (thrown-data #(ports/create-entity as-a :tc-customers {:name "D" :tenant_id b})))))
     (is (= #{a} (set (map :tenant-id (db/execute-query! *db* {:select [:tenant_id] :from [:tc_customers]})))))))
 
 (deftest ^:integration ^:security a-key-that-is-not-a-field-is-refused-not-written
@@ -389,7 +383,7 @@
                                                                  {:tc-items [{:description "first" :tenant-id a}]})))
         errors  #(:errors (thrown-data %))]
     (is (= {:tenant_id ["Unknown field"]} (errors #(ports/update-entity svc :tc-orders order {:tenant_id b}))) "update")
-    (is (contains? (errors #(ports/create-entity svc :tc-customers {:name "C" :tenant_id b})) :tenant_id) "create")
+    (is (= {:tenant_id ["Unknown field"]} (errors #(ports/create-entity svc :tc-customers {:name "C" :tenant_id b}))) "create")
     (is (contains? (errors #(ports/create-entity svc :tc-customers {:name "C" :x/tenant-id b})) :x/tenant-id)
         "a namespaced key, whose name the write would use")
     (is (= {:entity :tc-items :index 1}

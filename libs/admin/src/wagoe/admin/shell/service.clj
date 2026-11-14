@@ -1367,8 +1367,8 @@
                                            :entity-name entity-name
                                            :split-config split-cfg
                                            :create-redirect-url (:create-redirect-url entity-config)})))
-          [data links]  (links-of data)]
-      (known-fields! entity-config data)
+          [data links]  (links-of data)
+          _             (known-fields! entity-config data)]
       (assert-links! db-ctx schema-provider entity-config links)
       (persist-interceptors/execute-persistence-operation
        :admin-create-entity
@@ -1391,10 +1391,8 @@
                                                      (nested-relationships schema-provider entity-config)
                                                      children)]
       (doseq [[entity rows] children
-              :let [child-config (:entity-config (by-entity entity))]
-              :when child-config
-              [index row] (map-indexed vector rows)]
-        (with-child-index entity index #(known-fields! child-config row)))
+              [index row]   (map-indexed vector rows)]
+        (with-child-index entity index #(known-fields! (:entity-config (by-entity entity)) row)))
       (persist-interceptors/execute-persistence-operation
        :admin-create-entity-with-children
        {:entity (name entity-name)}
@@ -1502,7 +1500,7 @@
                          :field field
                          :entity entity-name})))
 
-      (when (or (contains? (set (:readonly-fields entity-config)) field) (:readonly field-config))
+      (when (some #{field} (readonly-keys entity-config))
         (throw (ex-info "Cannot update readonly field"
                         {:type :readonly-field
                          :field field
