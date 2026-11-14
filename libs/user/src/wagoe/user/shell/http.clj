@@ -642,7 +642,8 @@
       ["/users/:id/sessions"
        {:no-doc     true
         :authorization :self
-        :middleware [auth-middleware target-user]
+        ;; Their sessions in another tenant are not this one's to see (BOU-995)
+        :middleware [auth-middleware (tenant-scope/wrap-target-user user-service {:sessions? true})]
         :get {:handler (web-handlers/user-sessions-page-handler user-service config)
               ;; The handler reads the :id path param, so a non-admin must
               ;; not view another user's sessions (IDOR) — own or admin only.

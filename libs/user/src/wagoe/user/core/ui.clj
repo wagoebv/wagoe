@@ -707,22 +707,32 @@
         [:a.button.secondary {:href "/web/login"} [:t :common/button-cancel]]]]]]]
    opts))
 
+(defn- tenant-choice
+  "A button that posts tenant `id` back with `return-to`, accepting
+   `invitation-id` first when there is one."
+  [{:keys [id slug name]} invitation-id label return-to]
+  [:form {:method "post" :action "/web/choose-tenant"}
+   (csrf/hidden-field)
+   [:input {:type "hidden" :name "tenant-id" :value id}]
+   (when invitation-id [:input {:type "hidden" :name "invitation-id" :value invitation-id}])
+   [:input {:type "hidden" :name "return-to" :value return-to}]
+   [:button.button.button-primary {:type "submit"} label (or name slug id)]])
+
 (defn tenant-choice-page
-  "Which tenant to sign in to, for someone in several (BOU-995). `tenants` are
-   {:id :slug :name}; each is a button that posts its id back with `return-to`."
-  [tenants return-to opts]
+  "Which tenant to sign in to, for someone in several, and the tenants they are
+   invited to, each joined by choosing it (BOU-995). `tenants` are
+   {:id :slug :name}; `invitations` {:id membership-id :tenant-id :slug :name}."
+  [tenants invitations return-to opts]
   (auth-page
    [:t :user/choose-tenant-title]
    :choose-tenant
    :div.auth-page
    :user/choose-tenant-subtitle
    [(into [:div.tenant-choices]
-          (for [{:keys [id slug name]} tenants]
-            [:form {:method "post" :action "/web/choose-tenant"}
-             (csrf/hidden-field)
-             [:input {:type "hidden" :name "tenant-id" :value id}]
-             [:input {:type "hidden" :name "return-to" :value return-to}]
-             [:button.button.button-primary {:type "submit"} (or name slug id)]]))]
+          (concat
+           (for [t tenants] (tenant-choice t nil nil return-to))
+           (for [i invitations]
+             (tenant-choice (assoc i :id (:tenant-id i)) (:id i) [:t :user/choose-tenant-accept] return-to))))]
    opts))
 
 (defn oidc-continue-page

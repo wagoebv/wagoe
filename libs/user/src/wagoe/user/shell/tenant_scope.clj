@@ -25,7 +25,7 @@
   (boolean (and user (or (access/same-id? (:id user) (get-in request [:user :id]))
                          (lists? request user)))))
 
-(defn- with-tenants
+(defn with-tenants
   "`user` with the `:tenant-ids` they belong to, when `user-service` knows them."
   [user-service user]
   (cond-> user
@@ -39,11 +39,12 @@
     (when (reaches? request user) user)))
 
 (defn shared?
-  "Whether `request` may not change `user`'s name, email, password or status:
-   they belong to more than one tenant, and the caller is neither them nor a
-   platform admin. A tenant's admin then manages only their membership (BOU-995)."
+  "Whether `request` may not change `user`, nor see their sessions: they are in
+   a tenant besides their own (or in one without having one), and the caller is
+   neither them nor a platform admin. The user service refuses the same changes;
+   a tenant's admin manages only the membership (BOU-995)."
   [request user]
-  (and (< 1 (count (:tenant-ids user)))
+  (and (boolean (seq (disj (set (:tenant-ids user)) (some-> (:tenant-id user) str))))
        (not (access/same-id? (:id user) (get-in request [:user :id])))
        (not (access/platform-admin? (:user request)))))
 
@@ -64,18 +65,20 @@
 (defn wrap-target-user
   "Middleware for a route whose `:id` names a user: a user `request` may not
    reach answers 404, as one that does not exist, and a change to a user
-   `shared?` with another tenant 403. A caller who reaches everyone is not
+   `shared?` with another tenant 403, a read too with `{:sessions? true}`. A caller who reaches everyone is not
    checked, so a soft-deleted user, whom no lookup finds, can still be erased."
-  [user-service]
+  [user-service & [opts]]
   (fn [handler]
     (fn [request]
-      (let [id     (parse-uuid (str (get-in request [:path-params :id])))
-            target (when (and id (not (reaches-everyone? request)))
-                     (reachable-user user-service request id))
-            refuse #(access/refusal-response %1 %2 %3 (access/correlation-id request (str (random-uuid))))]
+      (let [id         (parse-uuid (str (get-in request [:path-params :id])))
+            everyone?  (reaches-everyone? request)
+            target     (when (and id (not everyone?))
+                         (reachable-user user-service request id))
+            refuse     #(access/refusal-response %1 %2 %3 (access/correlation-id request (str (random-uuid))))]
         (cond
-          (or (nil? id) (reaches-everyone? request)) (handler request)
+          (or (nil? id) everyone?) (handler request)
           (nil? target) (refuse 404 "not-found" "User not found")
-          (and (not (safe-methods (:request-method request))) (shared? request target))
+          (and (or (not (safe-methods (:request-method request))) (:sessions? opts))
+               (shared? request target))
           (refuse 403 "forbidden" "This user belongs to another tenant too")
           :else (handler request))))))

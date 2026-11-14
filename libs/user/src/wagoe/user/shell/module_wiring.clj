@@ -417,8 +417,8 @@
                                :logger             (ig/ref :wagoe/logging)
                                :metrics-emitter    (ig/ref :wagoe/metrics)
                                :error-reporter     (ig/ref :wagoe/error-reporting)
-                               :memberships        (ig/refset :wagoe/membership-repository)
-                               :tenants            (ig/refset :wagoe/tenant-repository)}
+                               :memberships        (ig/refset :wagoe/membership-service)
+                               :tenants            (ig/refset :wagoe/tenant-service)}
     :wagoe/user-routes        {:user-service (ig/ref :wagoe/user-service)
                                :mfa-service  (ig/ref :wagoe/mfa-service)
                                :email-sender (ig/ref :wagoe/email)

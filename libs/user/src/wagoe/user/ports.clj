@@ -415,9 +415,17 @@
   ;; those they are an active member of (BOU-995). Without the tenant module,
   ;; their own only.
 
-  (tenants [this user]))
+  (tenants [this user])
   ;; Those tenants as {:id :slug :name}, for the choice at sign-in; :slug and
   ;; :name are nil when the tenant module is off.
+
+  (invitations [this user])
+  ;; The tenants `user` is invited to and has not yet accepted, as
+  ;; {:id membership-id :tenant-id :slug :name}.
+
+  (accept-invitation [this user membership-id]))
+  ;; Accept one of `user`'s own invitations. Throws :forbidden for another's,
+  ;; :not-found or :validation-error as the membership service does.
 
 (defprotocol IUserDeletion
   (delete-user [this user-id])

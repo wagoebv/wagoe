@@ -49,6 +49,11 @@
   "Its own protocol, as ITenantMembershipRepository is stable."
   (delete-membership [this membership-id]))
 
+(defprotocol ITenantMembershipsOfUser
+  "Its own protocol, as ITenantMembershipService is stable (BOU-995)."
+  (memberships-of-user [this user-id]
+    "Every membership of `user-id`, in any status, in every tenant."))
+
 (defprotocol ITenantMembershipService
   (invite-user           [this tenant-id user-id role])
   (bootstrap-open?       [this tenant-id])

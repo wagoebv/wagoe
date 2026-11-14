@@ -15,6 +15,17 @@
                      (= :active (:status %))))))
 
 (defrecord MembershipService [membership-repository logger metrics-emitter error-reporter]
+  ports/ITenantMembershipsOfUser
+  (memberships-of-user [_ user-id]
+    (service-interceptors/execute-service-operation
+     :memberships-of-user
+     {:user-id user-id}
+     (fn [{:keys [params]}]
+       (ports/find-memberships-by-user membership-repository (:user-id params)))
+     {:logger          logger
+      :metrics-emitter metrics-emitter
+      :error-reporter  error-reporter}))
+
   ports/ITenantMembershipService
 
   (invite-user [_ tenant-id user-id role]

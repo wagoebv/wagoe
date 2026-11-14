@@ -12,7 +12,8 @@
                     :tests     {"libs/tenant/test/wagoe/tenant/shell/membership_http_test.clj"
                                 ["a-tenant-admin-cannot-reach-another-tenants-memberships" "changing-memberships-takes-a-tenant-admin"]
                                 "libs/tenant/test/wagoe/tenant/shell/tenant_scope_test.clj"
-                                ["a-caller-outside-the-chosen-tenant-is-refused" "a-user-of-a-tenant-gets-no-public-schema"]
+                                ["a-caller-outside-the-chosen-tenant-is-refused" "a-user-of-a-tenant-gets-no-public-schema"
+                                 "a-tenant-left-since-it-was-chosen-is-forgotten"]
                                 "libs/tenant/test/wagoe/tenant/shell/tenant_middleware_test.clj"
                                 ["a-suspended-tenant-does-not-serve"]
                                 "libs/tenant/test/wagoe/tenant/shell/invite_service_test.clj"
@@ -59,7 +60,9 @@
                                  "roles-and-groups-take-a-platform-admin"]
                                 "libs/user/test/wagoe/user/shell/tenant_members_test.clj"
                                 ["creating-a-user-answers-the-same-whether-the-email-exists-in-another-tenant"
-                                 "no-tenants-admin-changes-a-user-shared-with-another-tenant"
+                                 "a-tenant-is-joined-only-by-accepting-ones-own-invitation"
+                                 "no-tenants-admin-changes-a-user-in-another-tenant-too"
+                                 "a-member-from-another-tenant-is-seen-but-not-changed"
                                  "a-tenant-is-chosen-only-among-ones-own"]}}
    "audience"      {:scoped-by "segments span every tenant, so only a platform admin reaches them"
                     :tests     {"libs/audience/test/wagoe/audience/shell/http_test.clj"

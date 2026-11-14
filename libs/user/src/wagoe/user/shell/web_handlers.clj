@@ -420,10 +420,13 @@
 
 (defn- after-sign-in
   "Where `user` goes after signing in: to the choice of tenant first when they
-   belong to several (BOU-995), else to `location`."
+   belong to several or are invited to one (BOU-995), else to `location`. A
+   platform admin reaches every tenant and is not asked."
   [user-service user location]
   (if (and (satisfies? user-ports/ITenantMembers user-service)
-           (< 1 (count (user-ports/tenant-ids user-service user))))
+           (not (access/platform-admin? user))
+           (or (< 1 (count (user-ports/tenant-ids user-service user)))
+               (seq (user-ports/invitations user-service user))))
     (str "/web/choose-tenant?return-to=" (java.net.URLEncoder/encode (str location) "UTF-8"))
     location))
 
@@ -796,15 +799,19 @@
       (html-response request
                      (user-ui/tenant-choice-page
                       (user-ports/tenants user-service user)
+                      (user-ports/invitations user-service user)
                       (safe-return-url (get-in request [:query-params "return-to"]) (landing-path config user request))
                       (sign-in-opts config request))))))
 
 (defn choose-tenant-submit-handler
-  "POST /web/choose-tenant - remember the tenant chosen, one the user belongs to."
+  "POST /web/choose-tenant - remember the tenant chosen, one the user belongs to,
+   accepting first the invitation `invitation-id` names when it is theirs."
   [user-service config]
   (fn [request]
-    (let [user      (:user request)
-          tenant-id (str (get-in request [:form-params "tenant-id"]))]
+    (let [user          (:user request)
+          invitation-id (some-> (get-in request [:form-params "invitation-id"]) parse-uuid)
+          _             (when invitation-id (user-ports/accept-invitation user-service user invitation-id))
+          tenant-id     (str (get-in request [:form-params "tenant-id"]))]
       (if (contains? (user-ports/tenant-ids user-service user) tenant-id)
         (-> (response/redirect (safe-return-url (get-in request [:form-params "return-to"])
                                                 (landing-path config user request))
@@ -922,7 +929,8 @@
                                                  "Your account has been created successfully. "
                                                  "Take a moment to review your profile and set up "
                                                  "Multi-Factor Authentication for enhanced security.")})
-                    (assoc-in [:cookies "session-token"] (session-cookie config session-token))))
+                    (assoc-in [:cookies "session-token"] (session-cookie config session-token))
+                    (assoc-in [:cookies tenant-cookie] tenant-cookie-cleared)))
               (if (enrolment-needed? auth-result)
                 (start-enrolment config auth-result raw-return-to)
                 (response/redirect "/web/login"))))
@@ -1194,11 +1202,9 @@
   (fn [request]
     (try
       (let [user-id (get-in request [:path-params :id])
-            _ (log/info "Sessions page handler - user-id:" user-id "path-params:" (:path-params request) "uri:" (:uri request))
             uuid (UUID/fromString user-id)
             user (user-ports/get-user-by-id user-service uuid)
             sessions (user-ports/get-user-sessions user-service uuid)
-            _ (log/info "Sessions retrieved:" {:count (count sessions)})
             current-session-id (get-in request [:session :id])
             opts {:user (:user request)
                   :account-recovery? (account-recovery-allowed? (:user request) user-id)

@@ -23,7 +23,6 @@
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.lockout :as lockout]
             [wagoe.user.ports :as ports]
-            [wagoe.tenant.core.membership :as membership-core]
             [wagoe.tenant.ports :as tenant-ports]
             [wagoe.platform.core.database.constraint :as constraint]
             [wagoe.platform.core.http.access :as access]
@@ -250,12 +249,46 @@
   (or (.find-user-by-id user-repository user-id)
       (throw (ex-info "User not found" {:type :user-not-found :user-id user-id}))))
 
+(defn- memberships-of
+  "Every membership of `user`, in any status, when the tenant module is on."
+  [memberships user]
+  (when (and (satisfies? tenant-ports/ITenantMembershipsOfUser memberships) (:id user))
+    (tenant-ports/memberships-of-user memberships (:id user))))
+
+(defn- tenant-ids-of
+  "`user`'s tenants as id strings: their own, and those they are an active
+   member of (BOU-995)."
+  [memberships user]
+  (into (if (:tenant-id user) #{(str (:tenant-id user))} #{})
+        (comp (filter #(= :active (keyword (:status %)))) (map (comp str :tenant-id)))
+        (memberships-of memberships user)))
+
+(defn- in-another-tenant?
+  "Whether `user` is in a tenant besides their own, or in one without having
+   one: no tenant's admin then changes them (BOU-995)."
+  [memberships user]
+  (boolean (seq (disj (tenant-ids-of memberships user) (some-> (:tenant-id user) str)))))
+
+(defn- assert-may-change!
+  "Throw :forbidden when the request's actor is neither `user-id` nor a platform
+   admin and `user-id` names someone in another tenant too (BOU-995). Without an
+   actor (the CLI, a job) it is allowed, as `check-admin-change!` allows."
+  [{:keys [user-repository memberships]} user-id]
+  (when-let [actor-id (:actor-id *audit-context*)]
+    (when-not (access/same-id? actor-id user-id)
+      (when-let [target (.find-user-by-id user-repository user-id)]
+        (when (and (in-another-tenant? memberships target)
+                   (not (access/platform-admin? (.find-user-by-id user-repository actor-id))))
+          (throw (ex-info "This user belongs to another tenant too"
+                          {:type :forbidden :user-id user-id})))))))
+
 (defn- delete-users!
   "Delete `user-ids`, soft unless `permanent?`, in one transaction: all of
    them or, when the admin guard refuses the set or a reference blocks one,
    none. Returns the users deleted."
-  [{:keys [user-repository session-repository audit-repository]} user-ids permanent?]
+  [{:keys [user-repository session-repository audit-repository] :as svc} user-ids permanent?]
   (let [user-ids (vec (distinct user-ids))
+        _        (run! #(assert-may-change! svc %) user-ids)
         ;; Read under the lock, so the guard judges the roles as they stand.
         ;; find-user-by-id skips a soft-deleted user, whom erasure still
         ;; removes, unaudited as before; no longer an admin, it needs no guard.
@@ -311,40 +344,45 @@
    :metrics-emitter (:metrics-emitter user-service)
    :error-reporter  (:error-reporter user-service)})
 
-(defn- tenant-ids-of
-  "`user`'s tenants as id strings: their own, and with `memberships` (the tenant
-   module's repository, or nil) those they are an active member of (BOU-995)."
-  [memberships user]
-  (cond-> (if (:tenant-id user) #{(str (:tenant-id user))} #{})
-    (and memberships (:id user))
-    (into (comp (filter #(= :active (keyword (:status %)))) (map (comp str :tenant-id)))
-          (tenant-ports/find-memberships-by-user memberships (:id user)))))
+(defn- creation-answer
+  "What creating `user-data` as `id` returns: a new user's shape, so that an
+   invitation is not told apart from a creation (BOU-995)."
+  [user-data id]
+  (dissoc (user-core/prepare-user-for-creation user-data (current-timestamp) id) :password-hash))
 
-(defn- join-tenant!
-  "When `user-data` names a tenant and the email of an identity outside it: the
-   identity joins that tenant, and the caller gets what a new user's creation
-   returns, so it learns nothing of other tenants (BOU-995). Its password and
-   name stay as they are. Nil otherwise."
-  [memberships existing user-data]
-  (let [tenant-id (:tenant-id user-data)]
-    (when (and memberships existing tenant-id
-               (not (contains? (tenant-ids-of memberships existing) (str tenant-id))))
-      ;; Hashed and dropped: a creation hashes, so a join must take as long
+(defn- invite-to-tenant!
+  "When `user-data` names a tenant and the email of an identity in no state of
+   it: the identity is invited (an :invited membership they accept at sign-in)
+   and the caller gets what a creation returns, learning nothing of other
+   tenants (BOU-995). Nil when the identity is already this tenant's."
+  [{:keys [memberships audit-repository]} existing user-data]
+  (let [t (:tenant-id user-data)]
+    (when (and memberships existing t
+               (not (access/same-id? (:tenant-id existing) t))
+               (not-any? #(access/same-id? (:tenant-id %) t) (memberships-of memberships existing)))
+      ;; Hashed and dropped: a creation hashes, so an invitation must take as long
       (some-> (:password user-data) auth-shell/hash-password)
-      ;; ponytail: a concurrent join of the same identity hits the unique key and fails
-      (tenant-ports/create-membership memberships
-                                      (membership-core/prepare-active-membership*
-                                       (generate-user-id) (:id existing) tenant-id
-                                       (if (= :admin (:role user-data)) :admin :member)
-                                       (current-timestamp)))
-      (-> (select-keys user-data [:email :name :role :tenant-id])
-          (assoc :id (:id existing) :active true)))))
+      ;; ponytail: a concurrent invitation of the same identity fails on the unique key (:conflict)
+      (tenant-ports/invite-user memberships t (:id existing) (if (= :admin (:role user-data)) :admin :member))
+      (try (.create-audit-log audit-repository
+                              (audit-core/tenant-invitation-audit-entry (effective-audit-context {}) existing t))
+           (catch Exception e (warn-audit-failed e)))
+      (creation-answer user-data (:id existing)))))
 
 (defn- tenant-member-ids
   "The ids of tenant `t`'s active members, for a listing of that tenant."
   [memberships t]
   ;; ponytail: one read of up to 10000 members; page through when a tenant has more
-  (mapv :user-id (tenant-ports/find-memberships-by-tenant memberships t {:status :active :limit 10000})))
+  (let [ids (mapv :user-id (tenant-ports/list-tenant-members memberships t {:status :active :limit 10000}))]
+    (when (= 10000 (count ids))
+      (log/warn "Tenant listing holds only its first 10000 members" {:tenant-id t}))
+    ids))
+
+(defn- tenant-of
+  "Tenant `id` as {:id :slug :name}, the name and slug read when `tenants` is there."
+  [tenants id]
+  (let [t (when tenants (tenant-ports/get-tenant tenants (parse-uuid (str id))))]
+    {:id (str id) :slug (:slug t) :name (:name t)}))
 
 (defrecord UserService [user-repository session-repository audit-repository validation-config auth-service]
 
@@ -353,11 +391,19 @@
     (tenant-ids-of (:memberships this) user))
 
   (tenants [this user]
-    (let [repo (:tenants this)]
-      (sort-by (juxt :name :id)
-               (for [id (tenant-ids-of (:memberships this) user)
-                     :let [t (when repo (tenant-ports/find-tenant-by-id repo (parse-uuid id)))]]
-                 {:id id :slug (:slug t) :name (:name t)}))))
+    (sort-by (juxt :name :id) (map #(tenant-of (:tenants this) %) (tenant-ids-of (:memberships this) user))))
+
+  (invitations [this user]
+    (vec (for [m (memberships-of (:memberships this) user)
+               :when (= :invited (keyword (:status m)))]
+           (assoc (tenant-of (:tenants this) (:tenant-id m)) :id (str (:id m)) :tenant-id (str (:tenant-id m))))))
+
+  (accept-invitation [this user membership-id]
+    (let [memberships (:memberships this)
+          m           (tenant-ports/get-membership memberships membership-id)]
+      (when-not (access/same-id? (:user-id m) (:id user))
+        (throw (ex-info "Not your invitation" {:type :forbidden})))
+      (tenant-ports/accept-invitation memberships membership-id)))
 
   ports/IUserService
 
@@ -407,7 +453,7 @@
                       (let [existing-user (.find-user-by-email user-repository (:email user-data))
                             uniqueness-result (user-core/check-duplicate-user-decision user-data existing-user)]
                         (if (= :reject (:decision uniqueness-result))
-                          (or (join-tenant! (:memberships this) existing-user user-data)
+                          (or (invite-to-tenant! this existing-user user-data)
                               (throw (ex-info "User already exists"
                                               {:type :user-exists
                                                :message (:message uniqueness-result)})))
@@ -696,6 +742,7 @@
       :user-id (:id user-entity)}
      (fn [{:keys [params]}]
        (let [input (user-core/normalize-role (:user-entity params))
+             _ (assert-may-change! this (:id input))
              ;; Get old user data for audit trail (before update)
              old-user (.find-user-by-id user-repository (:id input))
              ;; Without a bound actor, "system": not the user, or a
@@ -757,6 +804,7 @@
      {:user-id user-id}
      (fn [{:keys [params]}]
        (let [user-id (:user-id params)
+             _ (assert-may-change! this user-id)
              ;; :active only, never :deleted-at: a deactivated user stays
              ;; listed and can be reactivated (BOU-681). Only that column is
              ;; written, so a concurrent password or MFA change is not undone.
@@ -942,6 +990,7 @@
      {:user-id user-id :keep-session-id keep-session-id}
      (fn [{:keys [params]}]
        (let [{:keys [user-id keep-session-id]} params
+             _ (assert-may-change! this user-id)
              ;; An admin's own session is not the target's to keep.
              ids  (when keep-session-id (map :id (.find-sessions-by-user session-repository user-id)))
              kept (some #{keep-session-id} ids)

@@ -35,9 +35,13 @@
     (if (and (get-in request [:user :id]) (not (access/in-tenant-scope? request)))
       ;; Encoded here, as the tenant middleware's refusals are: this may sit
       ;; outside content negotiation
-      {:status  403
-       :headers {"Content-Type" "application/json"}
-       :body    (json/generate-string
-                 (errors/body :forbidden "Not a member of this tenant"
-                              {:correlation-id (:correlation-id request)}))}
+      (cond-> {:status  403
+               :headers {"Content-Type" "application/json"}
+               :body    (json/generate-string
+                         (errors/body :forbidden "Not a member of this tenant"
+                                      {:correlation-id (:correlation-id request)}))}
+        ;; A tenant chosen at sign-in they have since left: forget it, so the
+        ;; next request falls back to their own tenant (BOU-995)
+        (get-in request [:cookies "wagoe-tenant"])
+        (assoc :cookies {"wagoe-tenant" {:value "" :max-age 0 :path "/"}}))
       (handler request))))

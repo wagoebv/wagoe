@@ -945,12 +945,12 @@
                 (:authenticated auth-result)
                 (-> context
                     (assoc :response {:status 200
-                                      :body (cond-> (-> (schema/user-specific-kebab->camel auth-result)
-                                                        (update :user schema/with-camel-twins)
-                                                        (update :session schema/with-camel-twins))
-                                              ;; Which tenant to name in X-Tenant-Id, for one in several (BOU-995)
-                                              (several-tenants context (:user auth-result))
-                                              (assoc :tenants (several-tenants context (:user auth-result))))})
+                                      :body (let [tenants (several-tenants context (:user auth-result))]
+                                              (cond-> (-> (schema/user-specific-kebab->camel auth-result)
+                                                          (update :user schema/with-camel-twins)
+                                                          (update :session schema/with-camel-twins))
+                                                ;; Which tenant to name in X-Tenant-Id, for one in several (BOU-995)
+                                                tenants (assoc :tenants tenants)))})
                     (ctx/add-breadcrumb :operation :session-create-formatted
                                         {:user-id (get-in auth-result [:user :id])}))
 
