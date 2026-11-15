@@ -47,7 +47,7 @@
                                  "only-a-platform-admin-writes-documents"]
                                 "libs/search/test/wagoe/search/shell/http_test.clj"
                                 ["a-tenants-admin-sees-no-count-across-tenants"]}}
-   "user"          {:scoped-by "users.tenant_id; listings and routes by user id forced to the caller's tenant; roles and groups, which carry no tenant, take a platform admin"
+   "user"          {:scoped-by "users.tenant_id, one account per tenant with its email unique there; listings and routes by user id forced to the caller's tenant; roles and groups, which carry no tenant, take a platform admin"
                     :tests     {"libs/user/test/wagoe/user/shell/authz_negative_security_test.clj"
                                 ["require-tenant-member-denies-non-member"]
                                 "libs/user/test/wagoe/user/shell/tenant_scope_test.clj"
@@ -56,9 +56,21 @@
                                  "a-bulk-action-skips-another-tenants-users"
                                  "a-tenants-admin-creates-users-in-their-tenant"
                                  "another-tenants-users-rights-are-not-found"
-                                 "roles-and-groups-take-a-platform-admin"
-                                 "creating-a-user-tells-that-an-email-exists-in-another-tenant"]}
-                    :gaps      ["BOU-995"]}
+                                 "roles-and-groups-take-a-platform-admin"]
+                                "libs/user/test/wagoe/user/shell/tenant_accounts_test.clj"
+                                ["creating-a-user-answers-the-same-whether-the-email-exists-in-another-tenant"
+                                 "an-email-is-unique-per-tenant"
+                                 "sign-in-finds-the-account-of-the-tenant-or-of-the-password"
+                                 "a-wrong-password-gives-no-choice-and-tells-nothing"
+                                 "a-lookup-by-email-names-the-callers-tenants-account"
+                                 "a-right-password-does-not-count-against-the-other-accounts"
+                                 "a-failed-sign-in-on-an-email-of-several-accounts-is-audited"
+                                 "an-email-change-is-checked-in-its-tenant-only"
+                                 "a-lookup-by-email-of-several-accounts-is-none"]
+                                "libs/user/test/wagoe/user/shell/oidc_flow_test.clj"
+                                ["a-provider-sign-in-makes-no-account-in-a-tenant"
+                                 "a-provider-sign-in-takes-no-account-when-the-email-has-several"
+                                 "a-linked-identity-opens-no-account-of-another-tenant"]}}
    "audience"      {:scoped-by "segments span every tenant, so only a platform admin reaches them"
                     :tests     {"libs/audience/test/wagoe/audience/shell/http_test.clj"
                                 ["a-tenants-admin-gets-no-audience"]}}

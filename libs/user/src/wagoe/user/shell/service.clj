@@ -23,6 +23,7 @@
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.lockout :as lockout]
             [wagoe.user.ports :as ports]
+            [wagoe.tenant.ports :as tenant-ports]
             [wagoe.platform.core.database.constraint :as constraint]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.client-ip :as client-ip]
@@ -309,6 +310,16 @@
    :metrics-emitter (:metrics-emitter user-service)
    :error-reporter  (:error-reporter user-service)})
 
+(defn- tenant-of
+  "Tenant `id` as {:id :name :slug}, for the choice at sign-in; nil `id` is no
+   tenant. Name and slug are read when the tenant service is there."
+  [tenants id]
+  (let [t (when (and tenants id)
+            ;; A deleted tenant's account is still an account: shown by its id
+            (try (tenant-ports/get-tenant tenants (parse-uuid (str id)))
+                 (catch clojure.lang.ExceptionInfo _ nil)))]
+    {:id (some-> id str) :name (:name t) :slug (:slug t)}))
+
 (defrecord UserService [user-repository session-repository audit-repository validation-config auth-service]
 
   ports/IUserService
@@ -355,7 +366,7 @@
                                          :violations (:violations password-validation)})))
 
                       ;; 3. Check business rules using pure core function
-                      (let [existing-user (.find-user-by-email user-repository (:email user-data))
+                      (let [existing-user (auth-shell/account-in-tenant user-repository (:tenant-id user-data) (:email user-data))
                             uniqueness-result (user-core/check-duplicate-user-decision user-data existing-user)]
                         (when (= :reject (:decision uniqueness-result))
                           (throw (ex-info "User already exists"
@@ -410,11 +421,14 @@
        (let [service (if tx-context
                        (tx-bind-user-service this tx-context)
                        this)]
-         (if-let [existing-user (.find-user-by-email (:user-repository service) (:email user-data))]
+         (if-let [existing-user (auth-shell/account-in-tenant (:user-repository service) (:tenant-id user-data) (:email user-data))]
            (let [auth-result (.authenticate-user ^wagoe.user.ports.IUserService service
                                                  (merge {:email (:email user-data)
                                                          :password (:password user-data)
-                                                         :remember false}
+                                                         :remember false
+                                                         ;; That account, of the tenant it was found in
+                                                         :tenant-given? true
+                                                         :tenant-id (:tenant-id user-data)}
                                                         login-context))]
              (if (:authenticated auth-result)
                {:mode :authenticated
@@ -429,7 +443,9 @@
                  auth-result (.authenticate-user ^wagoe.user.ports.IUserService service
                                                  (merge {:email (:email user-data)
                                                          :password (:password user-data)
-                                                         :remember false}
+                                                         :remember false
+                                                         :tenant-given? true
+                                                         :tenant-id (:tenant-id user-data)}
                                                         login-context))]
              (when (= :mfa-enrolment-required (:reason auth-result))
                (throw (ex-info (:message auth-result)
@@ -457,11 +473,17 @@
              login-context (cond-> {:ip-address ip-address
                                     :user-agent user-agent
                                     :mfa-code mfa-code}
-                             registration? (assoc :registration? true))
+                             registration? (assoc :registration? true)
+                             ;; One tenant's account, named by the URL or chosen (BOU-995)
+                             (:tenant-given? user-credentials)
+                             (assoc :tenant-given? true
+                                    :tenant-id (some-> (:tenant-id user-credentials) str parse-uuid)))
 
              ;; Service-level lockout gate: look up user and check lockout BEFORE
              ;; delegating to auth-shell, providing belt-and-suspenders enforcement.
-             existing-user (.find-user-by-email user-repository email)
+             ;; Only for one account: with several, auth-shell judges each.
+             accounts      (when (string? email) (auth-shell/login-accounts user-repository email login-context))
+             existing-user (when (= 1 (count accounts)) (first accounts))
              current-time (current-timestamp)
              lockout-check (when existing-user
                              (auth-core/should-allow-login-attempt?
@@ -495,7 +517,7 @@
                               auth-service
                               email
                               password
-                              login-context)]
+                              (assoc login-context :accounts accounts))]
 
              ;; Transform auth-service result to match expected format
              (cond
@@ -524,19 +546,13 @@
 
                ;; Authentication failed
                :else
-               (let [user-for-audit (or existing-user
-                                        (.find-user-by-email user-repository email))
-                     audit-entry (when user-for-audit
-                                   (audit-core/login-audit-entry
-                                    (:id user-for-audit)
-                                    (:email user-for-audit)
-                                    ip-address
-                                    user-agent
-                                    false
-                                    (or (get-in auth-result [:error :message])
-                                        "Authentication failed")))]
-                 (when audit-entry
-                   (.create-audit-log audit-repository audit-entry))
+               (let [;; Each account of the email the sign-in could have opened (BOU-995)
+                     audited accounts]
+                 (doseq [u audited]
+                   (.create-audit-log audit-repository
+                                      (audit-core/login-audit-entry
+                                       (:id u) (:email u) ip-address user-agent false
+                                       (or (get-in auth-result [:error :message]) "Authentication failed"))))
                  ;; The public shape is unchanged. auth-shell moved to the
                  ;; ADR-036 §3 return — {:error {:type … :message …}} — and this
                  ;; is the layer that flattens it, so `login` keeps answering
@@ -546,6 +562,9 @@
                           :reason (get-in auth-result [:error :type])
                           :message (get-in auth-result [:error :message])
                           :retry-after (get-in auth-result [:error :retry-after])}
+                   ;; Only a right password gets a choice: the tenants it opens (BOU-995)
+                   (:tenant-ids auth-result)
+                   (assoc :tenants (mapv #(tenant-of (:tenants this) %) (:tenant-ids auth-result)))
                    ;; Only a right password gets here with a user: one to enrol.
                    (:user auth-result) (assoc :user (:user auth-result)
                                               :password-fingerprint (:password-fingerprint auth-result)))))))))
@@ -613,10 +632,9 @@
      {:email email}
      (fn [{:keys [params]}]
        (let [{:keys [email]} params
-             user (.find-user-by-email user-repository email)]
-         ;; Remove sensitive data before returning
-         (when user
-           (dissoc user :password-hash))))
+             ;; Deprecated: nil when the email has accounts in several tenants (BOU-995)
+             user (user-core/sole (auth-shell/accounts-of user-repository email))]
+         (some-> user user-core/without-credentials)))
      (observability this)))
 
   (list-users [this options]
@@ -666,7 +684,7 @@
          ;; checked first, in the shape the platform gives a named one; a form
          ;; shows it on its field (BOU-673). The constraint stays the backstop.
          (when-let [other (when (and old-user (not= (:email merged) (:email old-user)))
-                            (.find-user-by-email user-repository (:email merged)))]
+                            (auth-shell/account-in-tenant user-repository (:tenant-id old-user) (:email merged)))]
            (when (not= (:id other) (:id input))
              (throw (ex-info "Another record already has this email"
                              {:type :conflict :constraint :unique :field :email}))))
@@ -862,6 +880,13 @@
             (audit-quietly! audit-repository audit-core/mfa-reset-audit-entry user-id (:email user))
             true)
         false)))
+
+  ports/ITenantAccountLookup
+  (get-users-by-email [_ email]
+    (mapv user-core/without-credentials (auth-shell/accounts-of user-repository email)))
+
+  (get-user-by-tenant-and-email [_ tenant-id email]
+    (some-> (auth-shell/account-in-tenant user-repository tenant-id email) user-core/without-credentials))
 
   ports/IUserDeletion
   (delete-user [this user-id]

@@ -32,7 +32,8 @@
    - GET    /docs/*               - Documentation
 
    All observability is handled automatically by interceptors."
-  (:require [wagoe.core.interceptor :as interceptor]
+  (:require [wagoe.user.schema :as user-schema]
+            [wagoe.core.interceptor :as interceptor]
             [wagoe.core.interceptor-context :as interceptor-context]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
@@ -343,6 +344,8 @@
    [:email :string]
    [:password :string]
    [:mfaCode {:optional true} :string]
+   ;; The tenant to sign in to, among those a 409 listed (BOU-995)
+   [:tenantId {:optional true} [:maybe [:re user-schema/tenant-id-or-blank]]]
    [:deviceInfo {:optional true} [:map
                                   [:userAgent {:optional true} :string]
                                   [:ipAddress {:optional true} :string]]]])
@@ -353,6 +356,7 @@
    400 {:description "Malformed body."}
    401 {:description "Wrong email or password (type unauthorized, the same body whether or not the account exists), or a wrong mfaCode (type mfa-verification-failed)."}
    403 {:description "MFA is required but the user has not enrolled (type mfa-enrolment-required)."}
+   409 {:description "The email and password open accounts in more than one tenant (type tenant-choice-required); tenants lists them ({id, slug, name}, id null for no tenant). Repeat the request with tenantId, or sign in on the tenant's own URL."}
    429 {:description "Account locked after repeated failures (type account-locked). Retry-After gives the seconds to wait."}})
 
 (defn api-routes

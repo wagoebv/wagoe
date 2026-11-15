@@ -186,6 +186,41 @@
    "user_roles"         user-schema/UserRole
    "user_group_roles"   user-schema/UserGroupRole})
 
+(defn- backfill-account-tenants!
+  "Give each auth_users row its profile's tenant, for rows made before the
+   column (BOU-995). Rows of no tenant stay NULL."
+  [ctx]
+  ;; A read first: the UPDATE would take row locks at every boot for nothing
+  (when (db/execute-one! ctx {:select [1] :from [[:auth_users :a]] :join [[:users :u] [:= :u.id :a.id]]
+                              :where [:and [:is :a.tenant_id nil] [:not= :u.tenant_id nil]] :limit 1})
+    (db/execute-ddl! ctx (str "UPDATE auth_users SET tenant_id = "
+                              "(SELECT u.tenant_id FROM users u WHERE u.id = auth_users.id) "
+                              "WHERE tenant_id IS NULL AND EXISTS "
+                              "(SELECT 1 FROM users u WHERE u.id = auth_users.id AND u.tenant_id IS NOT NULL)"))))
+
+(defn- tenant-email-key!
+  "Make an email unique per tenant instead of everywhere (BOU-995). Only where
+   tenants run: PostgreSQL (and H2, which tests let run them). On PostgreSQL the
+   accounts of no tenant keep a unique email of their own; NULLs are distinct in
+   a unique index. SQLite and MySQL have no tenants, so every tenant_id is NULL
+   and the email key they have says the same."
+  [ctx]
+  (case (protocols/engine (:adapter ctx))
+    ;; Only while the old key is there: an ALTER locks the table even when it
+    ;; would do nothing, and this runs at every boot (BOU-616)
+    :postgresql (when (db/execute-one! ctx {:select [1] :from [:pg_constraint]
+                                            :where [:= :conname "uk_auth_users_email"]})
+                  (db/create-index-if-not-exists! ctx "uk_auth_users_tenant_email" :auth_users
+                                                  [:tenant_id :email] {:unique? true})
+                  (db/execute-ddl! ctx (str "CREATE UNIQUE INDEX IF NOT EXISTS uk_auth_users_email_no_tenant "
+                                            "ON auth_users (email) WHERE tenant_id IS NULL"))
+                  (db/execute-ddl! ctx "ALTER TABLE auth_users DROP CONSTRAINT IF EXISTS uk_auth_users_email"))
+    ;; ponytail: H2 lets two accounts of no tenant share an email; register-user still refuses it
+    :h2         (do (db/create-index-if-not-exists! ctx "uk_auth_users_tenant_email" :auth_users
+                                                    [:tenant_id :email] {:unique? true})
+                    (db/execute-ddl! ctx "ALTER TABLE auth_users DROP CONSTRAINT IF EXISTS uk_auth_users_email"))
+    nil))
+
 (defn initialize-user-schema!
   "Initialize database schema for user entities using Malli schema definitions.
 
@@ -224,6 +259,8 @@
   (log/info "Initializing user schema from Malli definitions (split-table architecture)")
 
   (db/initialize-tables-from-schemas! ctx tables)
+  (backfill-account-tenants! ctx)
+  (tenant-email-key! ctx)
   (db/create-index-if-not-exists! ctx "uk_user_identities_issuer_subject" :user_identities
                                   [:issuer :subject] {:unique? true})
   (db/create-index-if-not-exists! ctx "uk_user_group_members_group_user" :user_group_members
@@ -435,6 +472,47 @@
    :role       :u.role
    :last-login :u.last_login})
 
+(def ^:private user-columns
+  "The columns an account is read with: auth_users joined with its profile."
+  [:a.id
+   :a.email
+   :a.password_hash
+   :a.active
+   :a.mfa_enabled
+   :a.mfa_secret
+   :a.mfa_backup_codes
+   :a.mfa_backup_codes_used
+   :a.mfa_enabled_at
+   :a.mfa_reset_at
+   :a.failed_login_count
+   :a.lockout_until
+   :a.created_at
+   :a.updated_at
+   :a.deleted_at
+   :a.tenant_id
+   :u.name
+   :u.role
+   :u.avatar_url
+   :u.login_count
+   :u.last_login
+   :u.date_format
+   :u.time_format
+   :u.notifications_email
+   :u.notifications_push
+   :u.notifications_sms
+   :u.theme
+   :u.language
+   :u.timezone])
+
+(defn- find-accounts
+  "The live accounts `where` names (on auth_users `a` joined with users `u`)."
+  [ctx where]
+  (mapv #(db->user-entity ctx %)
+        (db/execute-query! ctx {:select user-columns
+                                :from   [[:auth_users :a]]
+                                :join   [[:users :u] [:= :a.id :u.id]]
+                                :where  [:and where [:is :a.deleted_at nil]]})))
+
 (defrecord DatabaseUserRepository [ctx]
   ports/IUserRepository
 
@@ -445,35 +523,7 @@
      {:user-id user-id}
      (fn [{:keys [params]}]
        (let [user-id (:user-id params)
-             query {:select [:a.id
-                             :a.email
-                             :a.password_hash
-                             :a.active
-                             :a.mfa_enabled
-                             :a.mfa_secret
-                             :a.mfa_backup_codes
-                             :a.mfa_backup_codes_used
-                             :a.mfa_enabled_at
-                             :a.mfa_reset_at
-                             :a.failed_login_count
-                             :a.lockout_until
-                             :a.created_at
-                             :a.updated_at
-                             :a.deleted_at
-                             :u.tenant_id
-                             :u.name
-                             :u.role
-                             :u.avatar_url
-                             :u.login_count
-                             :u.last_login
-                             :u.date_format
-                             :u.time_format
-                             :u.notifications_email
-                             :u.notifications_push
-                             :u.notifications_sms
-                             :u.theme
-                             :u.language
-                             :u.timezone]
+             query {:select user-columns
                     :from [[:auth_users :a]]
                     :join [[:users :u] [:= :a.id :u.id]]
                     :where [:and
@@ -490,35 +540,7 @@
      {:email email}
      (fn [{:keys [params]}]
        (let [email (:email params)
-             query {:select [:a.id
-                             :a.email
-                             :a.password_hash
-                             :a.active
-                             :a.mfa_enabled
-                             :a.mfa_secret
-                             :a.mfa_backup_codes
-                             :a.mfa_backup_codes_used
-                             :a.mfa_enabled_at
-                             :a.mfa_reset_at
-                             :a.failed_login_count
-                             :a.lockout_until
-                             :a.created_at
-                             :a.updated_at
-                             :a.deleted_at
-                             :u.tenant_id
-                             :u.name
-                             :u.role
-                             :u.avatar_url
-                             :u.login_count
-                             :u.last_login
-                             :u.date_format
-                             :u.time_format
-                             :u.notifications_email
-                             :u.notifications_push
-                             :u.notifications_sms
-                             :u.theme
-                             :u.language
-                             :u.timezone]
+             query {:select user-columns
                     :from [[:auth_users :a]]
                     :join [[:users :u] [:= :a.id :u.id]]
                     :where [:and
@@ -650,7 +672,7 @@
 
              ;; Split into auth and profile fields
              auth-fields (select-keys user-with-metadata
-                                      [:id :email :password-hash :active
+                                      [:id :tenant-id :email :password-hash :active
                                        :mfa-enabled :mfa-secret :mfa-backup-codes
                                        :mfa-backup-codes-used :mfa-enabled-at :mfa-reset-at
                                        :failed-login-count :lockout-until
@@ -671,6 +693,7 @@
            ;; 1. Insert into auth_users first (establishes the ID)
            (let [db-auth (-> auth-fields
                              (update :id type-conversion/uuid->string)
+                             (update :tenant-id type-conversion/uuid->string)
                              (update :active #(protocols/boolean->db adapter %))
                              (update :mfa-backup-codes #(when % (cheshire.core/generate-string %)))
                              (update :mfa-backup-codes-used #(when % (cheshire.core/generate-string %)))
@@ -683,6 +706,7 @@
                                                :mfa-reset-at :mfa_reset_at
                                                :failed-login-count :failed_login_count
                                                :lockout-until :lockout_until
+                                               :tenant-id :tenant_id
                                                :created-at :created_at
                                                :updated-at :updated_at
                                                :deleted-at :deleted_at}))
@@ -731,7 +755,7 @@
              adapter (:adapter ctx)
 
              ;; Define which fields belong to each table
-             auth-field-keys #{:email :password-hash :active :mfa-enabled :mfa-secret
+             auth-field-keys #{:tenant-id :email :password-hash :active :mfa-enabled :mfa-secret
                                :mfa-backup-codes :mfa-backup-codes-used :mfa-enabled-at :mfa-reset-at
                                :failed-login-count :lockout-until :updated-at :deleted-at}
 
@@ -756,6 +780,7 @@
              (when has-auth-updates?
                (let [db-auth (-> auth-updates
                                  (update-present :active #(when (some? %) (protocols/boolean->db adapter %)))
+                                 (update-present :tenant-id type-conversion/uuid->string)
                                  (update-present :mfa-backup-codes #(when % (cheshire.core/generate-string %)))
                                  (update-present :mfa-backup-codes-used #(when % (cheshire.core/generate-string %)))
                                  (set/rename-keys {:password-hash :password_hash
@@ -767,6 +792,7 @@
                                                    :mfa-reset-at :mfa_reset_at
                                                    :failed-login-count :failed_login_count
                                                    :lockout-until :lockout_until
+                                                   :tenant-id :tenant_id
                                                    :updated-at :updated_at
                                                    :deleted-at :deleted_at}))
                      query {:update :auth_users
@@ -806,6 +832,7 @@
              has-auth-updates?
              (let [db-auth (-> auth-updates
                                (update-present :active #(when (some? %) (protocols/boolean->db adapter %)))
+                               (update-present :tenant-id type-conversion/uuid->string)
                                (update-present :mfa-backup-codes #(when % (cheshire.core/generate-string %)))
                                (update-present :mfa-backup-codes-used #(when % (cheshire.core/generate-string %)))
                                (set/rename-keys {:password-hash :password_hash
@@ -817,6 +844,7 @@
                                                  :mfa-reset-at :mfa_reset_at
                                                  :failed-login-count :failed_login_count
                                                  :lockout-until :lockout_until
+                                                 :tenant-id :tenant_id
                                                  :updated-at :updated_at
                                                  :deleted-at :deleted_at}))
                    query {:update :auth_users
@@ -915,6 +943,27 @@
 
              ;; Return true if we deleted at least the auth record
              (> auth-affected 0)))))
+     {:db-ctx ctx}))
+
+  ports/ITenantAccounts
+  (find-user-by-tenant-and-email [_ tenant-id email]
+    (persistence-interceptors/execute-persistence-operation
+     :find-user-by-tenant-and-email
+     {:tenant-id tenant-id :email email}
+     (fn [{:keys [params]}]
+       (let [{:keys [tenant-id email]} params]
+         (first (find-accounts ctx [:and [:= :a.email email]
+                                    (if tenant-id
+                                      [:= :a.tenant_id (type-conversion/uuid->string tenant-id)]
+                                      [:is :a.tenant_id nil])]))))
+     {:db-ctx ctx}))
+
+  (find-users-by-email [_ email]
+    (persistence-interceptors/execute-persistence-operation
+     :find-users-by-email
+     {:email email}
+     (fn [{:keys [params]}]
+       (find-accounts ctx [:= :a.email (:email params)]))
      {:db-ctx ctx}))
 
   ports/ILoginAttempts

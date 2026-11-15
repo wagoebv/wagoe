@@ -7,7 +7,8 @@
 
    Every step returns {:ok …} or {:error {:type :oidc/… :message …}}; only a
    bad configuration throws, at boot."
-  (:require [wagoe.core.utils.text :as text]
+  (:require [wagoe.user.core.user :as user-core]
+            [wagoe.core.utils.text :as text]
             [buddy.core.codecs :as codecs]
             [buddy.core.keys :as keys]
             [buddy.sign.jws :as jws]
@@ -225,33 +226,54 @@
             :session   session
             :return-to (:return-to sign-in)}})))
 
+(defn- email-accounts
+  "What `emails` find for a provider's sign-in: tenant `t`'s account, else the
+   only account of the email, and whether some email had several (BOU-995)."
+  [user-repository t emails]
+  (if t
+    {:user (some #(auth/account-in-tenant user-repository t %) emails)}
+    (let [found (map #(auth/accounts-of user-repository %) emails)]
+      {:user (some user-core/sole found) :several? (boolean (some next found))})))
+
+(defn- refused?
+  "Whether a provider's sign-in takes no account: the linked one is another
+   tenant's, or no account was found and the email has several (BOU-995)."
+  [linked t email-user several?]
+  (boolean (or (and linked t (not= (str t) (str (:tenant-id linked))))
+               (and (nil? linked) (nil? email-user) several?))))
+
 (defn- account
-  "The account for verified `claims`, created when the provider allows it.
+  "The account for verified `claims`, created when the provider allows it, of
+   no tenant: a header or host never puts a new account in a tenant (BOU-995).
    Returns {:ok {:user u :link? bool}} or an error."
   [client p claims login-context]
   (let [{:keys [user-repository]} (:auth-service client)
         repo   (:identity-repository client)
         found  (ports/find-identity repo (:iss claims) (:sub claims))
         linked (when found (ports/find-user-by-id user-repository (:user-id found)))
-        email  (oidc/verified-email claims p)]
+        email  (oidc/verified-email claims p)
+        ;; Signing in on one tenant's URL opens that tenant's account only (BOU-995)
+        t      (:tenant-id login-context)]
     ;; A link to a user who is gone would refuse this subject for good: drop it
     ;; and resolve as if it had never been made.
     (when (and found (nil? linked))
       (log/warn "Dropping OIDC link to a missing user" {:user-id (:user-id found) :provider (:id p)})
       (ports/unlink-identity repo (:iss claims) (:sub claims)))
-    (let [email-user (when (and email (nil? linked))
-                       ;; Emails are stored as registered; try the provider's casing first.
-                       (some #(ports/find-user-by-email user-repository %)
-                             (distinct [(:email claims) email])))
-          decision   (oidc/resolve-account
-                      {:linked-user        linked
-                       :email-user         email-user
-                       :email-user-linked? (boolean
-                                            (when email-user
-                                              (some #(= (:iss claims) (:issuer %))
-                                                    (ports/find-identities-by-user repo (:id email-user)))))
-                       :claims             claims
-                       :provider           p})]
+    (let [;; Emails are stored as registered; try the provider's casing first.
+          {email-user :user several? :several?}
+          (when (and email (nil? linked))
+            (email-accounts user-repository t (distinct [(:email claims) email])))
+          decision   (if (refused? linked t email-user several?)
+                       {:error {:type :oidc/no-account :message "No account matches this sign-in"}}
+                       (oidc/resolve-account
+                        {:linked-user        linked
+                         :email-user         email-user
+                         :email-user-linked? (boolean
+                                              (when email-user
+                                                (some #(= (:iss claims) (:issuer %))
+                                                      (ports/find-identities-by-user repo (:id email-user)))))
+                         :claims             claims
+                         :provider           p}))]
       (case (:action decision)
         :login {:ok {:user (:user decision) :link? false}}
         :link  {:ok {:user (:user decision) :link? true}}

@@ -838,7 +838,9 @@
    :enter (fn [context]
             (let [input-data (get-in context [:request :parameters :body])
                   {:keys [email password]} input-data]
-              (if (and email password)
+              (if (and email password
+                       ;; A UUID or blank: anything else is no tenant's id (BOU-995)
+                       (re-matches schema/tenant-id-or-blank (str (:tenantId input-data))))
                 (-> context
                     (assoc :raw-session-data input-data)
                     (ctx/add-breadcrumb :operation :session-create-validation-success
@@ -863,7 +865,10 @@
                                         ;; Not deviceInfo.ipAddress: the caller writes that. Nil when
                                         ;; unresolved, so an IP-based MFA hook can refuse it.
                                         :ip-address (client-ip/request-ip (:request context))}
-                                 (:mfaCode body) (assoc :mfa-code (:mfaCode body)))]
+                                 (:mfaCode body) (assoc :mfa-code (:mfaCode body))
+                                 (contains? body :tenantId) (assoc :tenant-id (:tenantId body)))
+                  ;; The tenant the URL names, else the one chosen (BOU-995)
+                  session-data (tenant-scope/sign-in-tenant (:request context) session-data)]
               (-> context
                   (assoc :session-data session-data)
                   (ctx/add-breadcrumb :operation :session-create-transform-complete
@@ -906,10 +911,12 @@
    password and an inactive account get the same 401; a lockout, which does
    reveal the account, a 429. Only a lockout carries :retry-after, whatever
    its :reason says."
-  [{:keys [reason message retry-after]} correlation-id]
+  [{:keys [reason message retry-after tenants]} correlation-id]
   (let [opts {:correlation-id correlation-id}]
     (case (if retry-after :account-locked reason)
       :account-locked          (lockout-response retry-after opts)
+      ;; Only a right password gets here: the tenants it opens (BOU-995)
+      :tenant-choice-required  (assoc-in (errors/response 409 :tenant-choice-required message opts) [:body :tenants] tenants)
       :validation-error        (errors/response 400 :validation-error message opts)
       :mfa-verification-failed (errors/response 401 :mfa-verification-failed "Invalid MFA code" opts)
       :mfa-enrolment-required  (errors/response 403 :mfa-enrolment-required message opts)

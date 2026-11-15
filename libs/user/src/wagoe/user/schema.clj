@@ -55,6 +55,8 @@
    - Profile data lives in tenant_<slug>.users (isolated)"
   (-> [:map {:title "Auth User"}
        [:id :uuid]
+       ;; The account's tenant, as on its profile: email is unique per tenant (BOU-995)
+       [:tenant-id {:optional true} [:maybe :uuid]]
        [:email [:re {:error/message "Invalid email format"} email-regex]]
        [:password-hash :string]
        [:active :boolean]
@@ -303,6 +305,10 @@
       (into user-preferences-flat-fields)
       (into user-date-time-preferences-flat-fields)))
 
+(def tenant-id-or-blank
+  "A tenant id as a sign-in names it: a UUID, or blank for no tenant (BOU-995)."
+  #"^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
 (def LoginRequest
   "Schema for login API requests."
   [:map {:title "Login Request"
@@ -311,6 +317,8 @@
    [:password [:string {:min 8 :max 255 :error/message "Password must be at least 8 characters"}]]
    [:remember {:optional true} :boolean]
    [:mfa-code {:optional true} [:maybe :string]] ; 6-digit TOTP code or backup code
+   ;; The tenant chosen among the accounts that email and password open (BOU-995)
+   [:tenant-id {:optional true} [:maybe [:re {:error/message "Invalid tenant"} tenant-id-or-blank]]]
    [:ip-address {:optional true} [:maybe :string]]
    [:user-agent {:optional true} [:maybe :string]]])
 

@@ -150,7 +150,7 @@
 
 (defmethod ig/init-key :wagoe/user-service
   [_ {:keys [user-repository session-repository audit-repository validation-config auth-service
-             logger metrics-emitter error-reporter]}]
+             logger metrics-emitter error-reporter tenants]}]
   (log/info "Initializing user service")
   (require-protocols! "user repository" user-repository
                       {"ILoginAttempts" [ports/ILoginAttempts ['claim-login-attempts 'release-login-attempt]]
@@ -163,7 +163,9 @@
                  user-repository session-repository audit-repository validation-config auth-service
                  {:logger          logger
                   :metrics-emitter metrics-emitter
-                  :error-reporter  error-reporter})]
+                  :error-reporter  error-reporter
+                  ;; The tenant module's, when on: names the tenants a sign-in chooses among (BOU-995)
+                  :tenants         (first tenants)})]
     (log/info "User service initialized")
     service))
 
@@ -413,7 +415,8 @@
                                :auth-service       (ig/ref :wagoe/auth-service)
                                :logger             (ig/ref :wagoe/logging)
                                :metrics-emitter    (ig/ref :wagoe/metrics)
-                               :error-reporter     (ig/ref :wagoe/error-reporting)}
+                               :error-reporter     (ig/ref :wagoe/error-reporting)
+                               :tenants            (ig/refset :wagoe/tenant-service)}
     :wagoe/user-routes        {:user-service (ig/ref :wagoe/user-service)
                                :mfa-service  (ig/ref :wagoe/mfa-service)
                                :email-sender (ig/ref :wagoe/email)

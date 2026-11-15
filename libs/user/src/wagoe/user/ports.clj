@@ -49,6 +49,14 @@
 ;; IUserService are stable, so what they gained after 1.0 is a protocol of its
 ;; own; the user service checks for each when it starts (Convention 5).
 
+(defprotocol ITenantAccounts
+  "Accounts by email, now that an email is unique per tenant (BOU-995). Its own
+   protocol, as IUserRepository is stable."
+  (find-user-by-tenant-and-email [this tenant-id email]
+    "The account of `email` in tenant `tenant-id`, nil meaning no tenant; nil when none.")
+  (find-users-by-email [this email]
+    "Every account of `email`, in any tenant."))
+
 (defprotocol ILoginAttempts
   (claim-login-attempts [this user-id n lockout])
   ;; lockout {:max-attempts m :until inst :now inst}. Unless the account is
@@ -336,7 +344,9 @@
   ;; Returns the user without :password-hash, or nil. Not cached.
 
   (get-user-by-email [this email])
-  ;; Returns the user without :password-hash, or nil.
+  ;; Returns the user without credentials, or nil. Deprecated (BOU-995): an
+  ;; email is unique per tenant, so nil also when it has several accounts; use
+  ;; ITenantAccountLookup/get-user-by-tenant-and-email.
 
   (list-users [this options])
   ;; options as IUserRepository/find-users.
@@ -408,6 +418,13 @@
   ;; password counts towards the sign-in lockout.
   ;; Throws :user-not-found, :account-locked (with :retry-after),
   ;; :invalid-current-password, :password-policy-violation.
+
+(defprotocol ITenantAccountLookup
+  (get-users-by-email [this email])
+  ;; Every account of `email`, in any tenant, without credentials (BOU-995).
+
+  (get-user-by-tenant-and-email [this tenant-id email]))
+  ;; The account of `email` in tenant `tenant-id` (nil for no tenant), or nil.
 
 (defprotocol IUserDeletion
   (delete-user [this user-id])

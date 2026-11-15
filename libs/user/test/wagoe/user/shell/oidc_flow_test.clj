@@ -178,15 +178,17 @@
     {:location (get-in resp [:headers "Location"])
      :cookie   (get-in resp [:cookies "oidc-pending" :value])}))
 
-(defn- callback! [{:keys [callback]} cookie params]
-  (callback (request {:path-params {:provider "fake"} :query-params params
-                      :cookies {"oidc-pending" {:value cookie}}})))
+(defn- callback! [{:keys [callback]} cookie params & [tenant-id]]
+  (callback (request (cond-> {:path-params {:provider "fake"} :query-params params
+                              :cookies {"oidc-pending" {:value cookie}}}
+                       tenant-id (assoc :tenant {:id tenant-id})))))
 
 (defn- sign-in!
-  "The whole browser round trip. Returns the callback response."
-  [a]
+  "The whole browser round trip, the callback in `tenant-id` when given.
+   Returns the callback response."
+  [a & [tenant-id]]
   (let [{:keys [location cookie]} (start! a)]
-    (callback! a cookie (authorize! location))))
+    (callback! a cookie (authorize! location) tenant-id)))
 
 (defn- session-token [resp] (get-in resp [:cookies "session-token" :value]))
 
@@ -439,3 +441,31 @@
     (reset! require? false)
     (is (= "ada@example.com" (authenticated-as a (session-token (sign-in! a))))
         "the provider's link finds it once MFA is waived")))
+
+(def ^:private tenant-a #uuid "a0000000-0000-0000-0000-00000000000a")
+(def ^:private tenant-b #uuid "b0000000-0000-0000-0000-00000000000b")
+
+(deftest ^:integration ^:security a-provider-sign-in-makes-no-account-in-a-tenant
+  ;; The tenant came from the request, which a header names (BOU-995)
+  (let [a    (app :auto-create? true)
+        resp (sign-in! a tenant-b)]
+    (is (some? (session-token resp)))
+    (is (nil? (:tenant-id (ports/find-user-by-email (:users a) "ada@example.com"))) "made in no tenant")))
+
+(deftest ^:integration ^:security a-provider-sign-in-takes-no-account-when-the-email-has-several
+  (let [a (app :auto-create? true)]
+    (add-user! a :tenant-id tenant-a)
+    (add-user! a :tenant-id tenant-b)
+    (let [resp (sign-in! a)]
+      (is (= 403 (:status resp)) "neither linked nor another made")
+      (is (nil? (session-token resp))))
+    (testing "on one tenant's URL, that tenant's account"
+      (is (some? (session-token (sign-in! a tenant-b)))))))
+
+(deftest ^:integration ^:security a-linked-identity-opens-no-account-of-another-tenant
+  (let [a (app)]
+    (add-user! a :tenant-id tenant-a)
+    (is (some? (session-token (sign-in! a tenant-a))) "linked in A")
+    (let [resp (sign-in! a tenant-b)]
+      (is (= 403 (:status resp)))
+      (is (nil? (session-token resp))))))
