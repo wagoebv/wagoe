@@ -732,7 +732,14 @@
           (concat
            (for [t tenants] (tenant-choice t nil nil return-to))
            (for [i invitations]
-             (tenant-choice (assoc i :id (:tenant-id i)) (:id i) [:t :user/choose-tenant-accept] return-to))))]
+             [:div.tenant-invitation
+              (tenant-choice (assoc i :id (:tenant-id i)) (:id i) [:t :user/choose-tenant-accept] return-to)
+              [:form {:method "post" :action "/web/choose-tenant"}
+               (csrf/hidden-field)
+               [:input {:type "hidden" :name "invitation-id" :value (:id i)}]
+               [:input {:type "hidden" :name "answer" :value "decline"}]
+               [:input {:type "hidden" :name "return-to" :value return-to}]
+               [:button.button.secondary {:type "submit"} [:t :user/choose-tenant-decline]]]])))]
    opts))
 
 (defn oidc-continue-page

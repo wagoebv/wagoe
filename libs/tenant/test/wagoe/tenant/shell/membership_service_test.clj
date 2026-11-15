@@ -170,6 +170,22 @@
       (ports/bootstrap-first-member service tenant-id (UUID/randomUUID) :admin)
       (is (false? (ports/bootstrap-open? service tenant-id))))))
 
+(deftest ^:unit an-invitation-revoked-meanwhile-is-not-accepted
+  ;; Read invited, then a revoke or suspension: the write must not bring it back (BOU-995)
+  (let [invited {:id (UUID/randomUUID) :tenant-id (UUID/randomUUID) :user-id (UUID/randomUUID)
+                 :role :member :status :invited}
+        repo    #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify
+          ports/ITenantMembershipRepository
+          (find-membership-by-id [_ _] invited)
+          ports/ITenantMembershipTransition
+          (update-membership-from-status! [_ _ _] false)
+          ports/ITenantMembershipDeletion
+          (delete-membership [_ _] nil))
+        service (sut/create-membership-service repo mock-logger mock-metrics-emitter mock-error-reporter)]
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"not in invited status"
+                          (ports/accept-invitation service (:id invited))))))
+
 (deftest ^:unit accept-invitation-test
   (testing "transitions membership to :active"
     (let [service      (make-service)

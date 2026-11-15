@@ -41,12 +41,15 @@
 (defn shared?
   "Whether `request` may not change `user`, nor see their sessions: they are in
    a tenant besides their own (or in one without having one), and the caller is
-   neither them nor a platform admin. The user service refuses the same changes;
-   a tenant's admin manages only the membership (BOU-995)."
+   neither them, a platform admin, nor acting in their own tenant. The user
+   service refuses the same changes; elsewhere a tenant's admin manages only the
+   membership (BOU-995)."
   [request user]
   (and (boolean (seq (disj (set (:tenant-ids user)) (some-> (:tenant-id user) str))))
        (not (access/same-id? (:id user) (get-in request [:user :id])))
-       (not (access/platform-admin? (:user request)))))
+       (not (access/platform-admin? (:user request)))
+       (not (and (:tenant-id user)
+                 (access/same-id? (:tenant-id user) (:tenant-id (access/admin-reach request)))))))
 
 (defn new-user-tenant
   "What a user `request` creates is given: `{:tenant-id t}`, `{}` for no tenant, or nil

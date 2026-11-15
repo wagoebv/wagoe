@@ -16,13 +16,14 @@ mode you'd see without it, and the fix.
 
 With `:wagoe/tenant` on, creating a user with an email another tenant already
 has invites that person to your tenant instead of answering 409 (API) or
-"already exists" (form). They join when they accept, at their next sign-in
+"already exists" (form). They accept or decline at their next sign-in
 (`/web/choose-tenant`); until then they are not in your list. Their password and
-name stay theirs: the password you typed is not used. Once in more than one
-tenant, a user can no longer be edited, deactivated or deleted by any tenant's
-admin, their own tenant's included (403); they or a platform admin can. Your
-user list shows a member's own role, not their membership role. API clients read
-`tenants` from the login answer and send `X-Tenant-Id`.
+name stay theirs: the password you typed is not used. A member whose own tenant
+is another can't be edited, deactivated or deleted by your admins (403); their
+own tenant's admins, a platform admin or they themselves can. Your user list
+shows a member's own role, not their membership role. API clients read `tenants`
+from the login answer and send `X-Tenant-Id`. Search's admin pages now take an
+admin of the tenant the request runs in, not any admin.
 
 ### 2. The admin service refuses keys that are not fields (BOU-998)
 

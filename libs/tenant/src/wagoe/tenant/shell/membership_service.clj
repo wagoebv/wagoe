@@ -98,7 +98,12 @@
                             :status (:status membership)})))
          (let [now     (time/now)
                updated (membership-core/accept-invitation membership now)]
-           (ports/update-membership membership-repository updated)
+           ;; Only while still invited: a revoke or suspension in between wins (BOU-995)
+           (if (satisfies? ports/ITenantMembershipTransition membership-repository)
+             (when-not (ports/update-membership-from-status! membership-repository updated :invited)
+               (throw (ex-info "Membership is not in invited status"
+                               {:type :validation-error :membership-id (:membership-id params)})))
+             (ports/update-membership membership-repository updated))
            updated)))
      {:logger          logger
       :metrics-emitter metrics-emitter

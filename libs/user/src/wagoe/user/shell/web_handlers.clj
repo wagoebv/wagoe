@@ -810,13 +810,25 @@
   (fn [request]
     (let [user          (:user request)
           invitation-id (some-> (get-in request [:form-params "invitation-id"]) parse-uuid)
-          _             (when invitation-id (user-ports/accept-invitation user-service user invitation-id))
+          decline?      (= "decline" (get-in request [:form-params "answer"]))
+          _             (when invitation-id
+                          (if decline?
+                            (user-ports/decline-invitation user-service user invitation-id)
+                            (user-ports/accept-invitation user-service user invitation-id)))
           tenant-id     (str (get-in request [:form-params "tenant-id"]))]
-      (if (contains? (user-ports/tenant-ids user-service user) tenant-id)
+      (cond
+        decline? (response/redirect (str "/web/choose-tenant?return-to="
+                                         (java.net.URLEncoder/encode
+                                          (str (safe-return-url (get-in request [:form-params "return-to"])
+                                                                (landing-path config user request)))
+                                          "UTF-8"))
+                                    :see-other)
+        (contains? (user-ports/tenant-ids user-service user) tenant-id)
         (-> (response/redirect (safe-return-url (get-in request [:form-params "return-to"])
                                                 (landing-path config user request))
                                :see-other)
             (assoc-in [:cookies tenant-cookie] (session-cookie config tenant-id)))
+        :else
         (access/forbidden-response "Not a member of this tenant" request
                                    (access/correlation-id request (str (random-uuid))))))))
 
@@ -1060,6 +1072,22 @@
                     "You can log in at any time.\n\n"
                     "— " app-name)})))
 
+(defn- send-invitation-email!
+  "Tell an existing account it was invited to another workspace (BOU-995). It
+   names no tenant and no inviter: they see both when they sign in to accept."
+  [email-sender user config]
+  (let [app-name (or (:app-name config) "Wagoe")
+        from     (or (:welcome-email-from config) "no-reply@localhost")]
+    (email-ports/send-email!
+     email-sender
+     {:id      (random-uuid)
+      :to      [(:email user)]
+      :from    from
+      :subject (str "You were invited on " app-name)
+      :body    (str "Hello,\n\n"
+                    "You were invited to another workspace. Sign in to accept or decline.\n\n"
+                    "— " app-name)})))
+
 (defn create-user-htmx-handler
   "HTMX handler for creating a new user (POST /web/users).
 
@@ -1107,7 +1135,9 @@
                   user-result (user-ports/register-user user-service user-data)
                   email-sent? (when (and send-welcome? email-sender)
                                 (try
-                                  (send-welcome-email! email-sender user-result config)
+                                  (if (:wagoe.user/invited? (meta user-result))
+                                    (send-invitation-email! email-sender user-result config)
+                                    (send-welcome-email! email-sender user-result config))
                                   true
                                   (catch Exception e
                                     (log/warn e "Failed to send welcome email" {:email (:email user-result)})

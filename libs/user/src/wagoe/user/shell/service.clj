@@ -269,18 +269,28 @@
   [memberships user]
   (boolean (seq (disj (tenant-ids-of memberships user) (some-> (:tenant-id user) str)))))
 
+(defn- own-tenants-admin?
+  "Whether `actor` is an admin of `target`'s own tenant, which keeps control of
+   them wherever else they are a member (BOU-995)."
+  [actor target]
+  (and (= :admin (some-> (:role actor) keyword))
+       (some? (:tenant-id target))
+       (access/same-id? (:tenant-id actor) (:tenant-id target))))
+
 (defn- assert-may-change!
-  "Throw :forbidden when the request's actor is neither `user-id` nor a platform
-   admin and `user-id` names someone in another tenant too (BOU-995). Without an
-   actor (the CLI, a job) it is allowed, as `check-admin-change!` allows."
+  "Throw :forbidden when `user-id` names someone in another tenant too and the
+   request's actor is neither them, a platform admin, nor an admin of their own
+   tenant (BOU-995). Without an actor (the CLI, a job) it is allowed, as
+   `check-admin-change!` allows."
   [{:keys [user-repository memberships]} user-id]
   (when-let [actor-id (:actor-id *audit-context*)]
     (when-not (access/same-id? actor-id user-id)
       (when-let [target (.find-user-by-id user-repository user-id)]
-        (when (and (in-another-tenant? memberships target)
-                   (not (access/platform-admin? (.find-user-by-id user-repository actor-id))))
-          (throw (ex-info "This user belongs to another tenant too"
-                          {:type :forbidden :user-id user-id})))))))
+        (when (in-another-tenant? memberships target)
+          (let [actor (.find-user-by-id user-repository actor-id)]
+            (when-not (or (access/platform-admin? actor) (own-tenants-admin? actor target))
+              (throw (ex-info "This user belongs to another tenant too"
+                              {:type :forbidden :user-id user-id})))))))))
 
 (defn- delete-users!
   "Delete `user-ids`, soft unless `permanent?`, in one transaction: all of
@@ -345,10 +355,13 @@
    :error-reporter  (:error-reporter user-service)})
 
 (defn- creation-answer
-  "What creating `user-data` as `id` returns: a new user's shape, so that an
-   invitation is not told apart from a creation (BOU-995)."
-  [user-data id]
-  (dissoc (user-core/prepare-user-for-creation user-data (current-timestamp) id) :password-hash))
+  "What a creation of `user-data` returns, for an invitation: a new user's
+   shape and a fresh id, never the identity's, so the two are not told apart
+   (BOU-995). Metadata `:wagoe.user/invited?` lets the handler send an
+   invitation, not a welcome."
+  [user-data]
+  (with-meta (dissoc (user-core/prepare-user-for-creation user-data (current-timestamp) (generate-user-id)) :password-hash)
+    {:wagoe.user/invited? true}))
 
 (defn- invite-to-tenant!
   "When `user-data` names a tenant and the email of an identity in no state of
@@ -367,7 +380,7 @@
       (try (.create-audit-log audit-repository
                               (audit-core/tenant-invitation-audit-entry (effective-audit-context {}) existing t))
            (catch Exception e (warn-audit-failed e)))
-      (creation-answer user-data (:id existing)))))
+      (creation-answer user-data))))
 
 (defn- tenant-member-ids
   "The ids of tenant `t`'s active members, for a listing of that tenant."
@@ -377,6 +390,13 @@
     (when (= 10000 (count ids))
       (log/warn "Tenant listing holds only its first 10000 members" {:tenant-id t}))
     ids))
+
+(defn- own-invitation!
+  "Throw unless membership `id` is an open invitation of `user`."
+  [memberships user id]
+  (let [m (tenant-ports/get-membership memberships id)]
+    (when-not (and (access/same-id? (:user-id m) (:id user)) (= :invited (keyword (:status m))))
+      (throw (ex-info "Not your invitation" {:type :forbidden})))))
 
 (defn- tenant-of
   "Tenant `id` as {:id :slug :name}, the name and slug read when `tenants` is there."
@@ -399,11 +419,14 @@
            (assoc (tenant-of (:tenants this) (:tenant-id m)) :id (str (:id m)) :tenant-id (str (:tenant-id m))))))
 
   (accept-invitation [this user membership-id]
-    (let [memberships (:memberships this)
-          m           (tenant-ports/get-membership memberships membership-id)]
-      (when-not (access/same-id? (:user-id m) (:id user))
-        (throw (ex-info "Not your invitation" {:type :forbidden})))
+    (let [memberships (:memberships this)]
+      (own-invitation! memberships user membership-id)
       (tenant-ports/accept-invitation memberships membership-id)))
+
+  (decline-invitation [this user membership-id]
+    (let [memberships (:memberships this)]
+      (own-invitation! memberships user membership-id)
+      (tenant-ports/revoke-member memberships membership-id)))
 
   ports/IUserService
 
@@ -1011,7 +1034,8 @@
      :revoke-user-session
      {:user-id user-id :session-id session-id}
      (fn [{:keys [params]}]
-       (let [{:keys [user-id session-id]} params]
+       (let [{:keys [user-id session-id]} params
+             _ (assert-may-change! this user-id)]
          (if (.invalidate-user-session session-repository user-id session-id)
            ;; The actor and their IP, not the revoked device's (BOU-698).
            (do (when-let [user (.find-user-by-id user-repository user-id)]

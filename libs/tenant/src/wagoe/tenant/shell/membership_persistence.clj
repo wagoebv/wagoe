@@ -150,6 +150,19 @@
          (boolean (db/execute-one! ctx query))))
      ctx))
 
+  ports/ITenantMembershipTransition
+  (update-membership-from-status! [_this membership-entity from-status]
+    (persistence-interceptors/execute-persistence-operation
+     :update-membership-from-status
+     {:membership-id (:id membership-entity) :from-status from-status}
+     (fn [_]
+       (let [db-record (membership-entity->db membership-entity)]
+         (pos? (db/execute-update! ctx {:update :public.tenant_memberships
+                                        :set    (select-keys db-record [:role :status :accepted_at :updated_at])
+                                        :where  [:and [:= :id (:id db-record)]
+                                                 [:= :status (type-conversion/keyword->string from-status)]]}))))
+     ctx))
+
   ports/ITenantMembershipDeletion
   (delete-membership [_this membership-id]
     (persistence-interceptors/execute-persistence-operation

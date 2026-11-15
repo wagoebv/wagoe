@@ -41,6 +41,8 @@
           (throw (ex-info "Membership not found" {:type :not-found}))))
     (accept-invitation [_ id]
       (swap! state (partial mapv #(cond-> % (= (str id) (str (:id %))) (assoc :status :active)))))
+    (revoke-member [_ id]
+      (swap! state (partial filterv #(not= (str id) (str (:id %))))))
     (list-tenant-members [_ tenant-id {:keys [status]}]
       (filterv #(and (= (str tenant-id) (str (:tenant-id %))) (or (nil? status) (= status (:status %)))) @state))))
 
@@ -76,10 +78,11 @@
     (is (= (:status free) (:status taken)) "the same answer")
     (is (= (get-in free [:headers "HX-Redirect"]) (get-in taken [:headers "HX-Redirect"])))
     (is (not (re-find #"(?i)already|taken|in use" (str (:body taken)))))
-    (testing "the API answer has the same shape"
+    (testing "the API answer has the same shape, and a fresh id, not the identity's"
       (reset! memberships [])
-      (is (= (set (keys (register! svc "free2@example.com" tenant-a)))
-             (set (keys (register! svc "b@example.com" tenant-a))))))
+      (let [invited (register! svc "b@example.com" tenant-a)]
+        (is (= (set (keys (register! svc "free2@example.com" tenant-a))) (set (keys invited))))
+        (is (not= (:id theirs) (:id invited)))))
     (testing "the identity is invited, not joined, and kept its password"
       (is (= [:invited] (map :status @memberships)))
       (is (= #{(str tenant-b)} (ports/tenant-ids svc theirs)))
@@ -101,6 +104,18 @@
     (is (= #{(str tenant-a) (str tenant-b)} (ports/tenant-ids svc theirs)))
     (is (empty? (ports/invitations svc theirs)))))
 
+(deftest ^:integration an-invitation-is-declined-by-its-invitee-only
+  (let [memberships (atom [])
+        svc         (user-service memberships)
+        theirs      (register! svc "b@example.com" tenant-b)
+        stranger    (register! svc "c@example.com" tenant-b)
+        _           (register! svc "b@example.com" tenant-a)
+        [invite]    (ports/invitations svc theirs)]
+    (is (= :forbidden (thrown-type #(ports/decline-invitation svc stranger (:id invite)))))
+    (ports/decline-invitation svc theirs (:id invite))
+    (is (empty? (ports/invitations svc theirs)))
+    (is (= #{(str tenant-b)} (ports/tenant-ids svc theirs)))))
+
 (deftest ^:integration ^:security no-tenants-admin-changes-a-user-in-another-tenant-too
   ;; Also through the admin UI, which calls the service, not the routes
   (let [memberships (atom [])
@@ -115,8 +130,9 @@
         as          (fn [actor f] (thrown-type #(service/with-audit-context {:actor-id (:id actor)} f)))]
     (join! shared)
     (is (= :forbidden (as admin-of-a #(ports/update-user-profile svc {:id (:id shared) :name "Changed"}))))
-    (is (= :forbidden (as admin-of-b #(ports/deactivate-user svc (:id shared)))) "not even their own tenant's")
-    (is (= :forbidden (as admin-of-b #(ports/delete-user svc (:id shared)))))
+    (is (= :forbidden (as admin-of-a #(ports/delete-user svc (:id shared)))))
+    (is (nil? (as admin-of-b #(ports/update-user-profile svc {:id (:id shared) :name "Ours"})))
+        "their own tenant keeps control")
     (is (nil? (as shared #(ports/update-user-profile svc {:id (:id shared) :name "Mine"}))) "they themselves")
     (is (nil? (as platform #(ports/update-user-profile svc {:id (:id shared) :name "Root's"}))) "a platform admin")
     (testing "a platform admin who joined a tenant is no tenant admin's to change"
@@ -166,6 +182,7 @@
     (is (= 403 (call :get admin-of-a member {:sessions? true})) "their sessions are not A's to see")
     (is (= 200 (call :put admin-of-a own)) "a user of one tenant stays theirs")
     (is (= 200 (call :put {:id (:id member) :role :user :tenant-id tenant-b} member)) "the user themselves")
+    (is (= 200 (call :put {:id (UUID/randomUUID) :role :admin :tenant-id tenant-b} member)) "their own tenant's admin")
     (is (= 200 (call :put {:id (UUID/randomUUID) :role :admin} member)) "a platform admin")))
 
 (defn- signed-in-service

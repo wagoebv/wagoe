@@ -49,6 +49,12 @@
   "Its own protocol, as ITenantMembershipRepository is stable."
   (delete-membership [this membership-id]))
 
+(defprotocol ITenantMembershipTransition
+  "Its own protocol, as ITenantMembershipRepository is stable (BOU-995)."
+  (update-membership-from-status! [this membership-entity from-status]
+    "Write `membership-entity` only while the row is still in `from-status`.
+     Returns whether it was written."))
+
 (defprotocol ITenantMembershipsOfUser
   "Its own protocol, as ITenantMembershipService is stable (BOU-995)."
   (memberships-of-user [this user-id]

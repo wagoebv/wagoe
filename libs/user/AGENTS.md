@@ -433,18 +433,21 @@ row. With the tenant module on, the user service gets the membership and tenant
 services (`:memberships`, `:tenants`) and implements `ITenantMembers`.
 
 - Creating a user in a tenant with the email of an identity outside it invites
-  them (an `:invited` membership) and answers as a creation does, in the same
-  shape; the identity's password and name stay. They join by accepting at
-  sign-in. An email the tenant already has, in any state, is `:user-exists`.
+  them (an `:invited` membership, audited) and answers as a creation does, in
+  the same shape with a fresh id; the identity's password and name stay, and
+  "send welcome" mails an invitation instead. They accept or decline at sign-in.
+  An email the tenant already has, in any state, is `:user-exists`. Until they
+  accept they are missing from the tenant's list (BOU-999).
 - A tenant's listing holds its active members too (`:filter-tenant-member-ids`).
-- A user in a tenant besides their own (or in one without having one) is changed
-  by no tenant's admin, not even their own tenant's: the service refuses
-  (`assert-may-change!`, the admin UI included), `wrap-target-user` answers 403
-  and hides their sessions, bulk actions skip them. Only they or a platform admin.
+- A user in a tenant besides their own (or in one without having one, as a
+  platform admin) is changed only by them, a platform admin or an admin of their
+  own tenant: the service refuses anyone else (`assert-may-change!`, the admin
+  UI included), `wrap-target-user` answers 403 and hides their sessions, bulk
+  actions skip them. Another tenant's admin manages only the membership.
 - Signing in, someone in several tenants or with an invitation goes to
   `/web/choose-tenant`, which sets the `wagoe-tenant` cookie the tenant
-  middleware reads; sign-in and logout clear it, as does the scope gate when it
-  names a tenant they left. A platform admin is not asked. The API login
+  middleware reads; sign-in and logout clear it, as do the tenant middleware and
+  scope gate when it names a tenant suspended or left since. A platform admin is not asked. The API login
   answers `tenants` for them; send one as `X-Tenant-Id`.
 
 ## Groups, roles and assignments

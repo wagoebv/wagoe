@@ -230,6 +230,16 @@
     (is (= (:id test-tenant-1) (get-in (handler (assoc-in request [:cookies "wagoe-tenant" :value] "")) [:body :tenant :id]))
         "a cleared cookie names nothing")))
 
+(deftest ^:unit ^:security a-suspended-chosen-tenant-is-forgotten
+  ;; The wagoe-tenant cookie outranks the user's own tenant: every request 403'd (BOU-995)
+  (let [handler (tenant-mw/wrap-tenant-resolution simple-handler
+                                                  (->MockTenantService (atom [(assoc test-tenant-2 :status :suspended)]))
+                                                  {:cache-ttl-ms 0})
+        refused (handler {:server-name "myapp.com" :uri "/web/logout" :request-method :post
+                          :cookies {"wagoe-tenant" {:value (str (:id test-tenant-2))}}})]
+    (is (= 403 (:status refused)))
+    (is (= 0 (get-in refused [:cookies "wagoe-tenant" :max-age])))))
+
 (deftest ^:unit wrap-tenant-resolution-priority-test
   (testing "subdomain takes priority over JWT"
     (let [tenant-service (create-mock-tenant-service)

@@ -292,7 +292,11 @@
 
                    ;; Add tenant to request and continue
                    (handler (assoc request :tenant tenant)))
-                 (error-response 403 :forbidden "Tenant is not active" request))))))))))
+                 (cond-> (error-response 403 :forbidden "Tenant is not active" request)
+                   ;; Chosen at sign-in and suspended since: forget it, so the
+                   ;; next request falls back to their own tenant (BOU-995)
+                   (get-in request [:cookies "wagoe-tenant"])
+                   (assoc :cookies {"wagoe-tenant" {:value "" :max-age 0 :path "/"}})))))))))))
 
 ;; =============================================================================
 ;; Middleware - Schema Switching

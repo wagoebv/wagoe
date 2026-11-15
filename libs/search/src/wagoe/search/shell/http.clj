@@ -66,10 +66,12 @@
 ;; =============================================================================
 
 (defn- require-admin
-  "Admin role or 403; the platform has already refused anyone not signed in."
+  "An admin where the request runs, or 403: an admin of another tenant who is
+   a member here is none (BOU-995). The platform has already refused anyone not
+   signed in."
   [handler]
   (fn [request]
-    (if (access/admin? request)
+    (if (access/tenant-admin? request)
       (handler request)
       (access/forbidden-response "Admin role required" request
                                  (access/correlation-id request (str (random-uuid)))))))

@@ -423,9 +423,12 @@
   ;; The tenants `user` is invited to and has not yet accepted, as
   ;; {:id membership-id :tenant-id :slug :name}.
 
-  (accept-invitation [this user membership-id]))
-  ;; Accept one of `user`'s own invitations. Throws :forbidden for another's,
-  ;; :not-found or :validation-error as the membership service does.
+  (accept-invitation [this user membership-id])
+  ;; Accept one of `user`'s own open invitations. Throws :forbidden for any
+  ;; other, :not-found as the membership service does.
+
+  (decline-invitation [this user membership-id]))
+  ;; Decline one of `user`'s own open invitations: it is removed.
 
 (defprotocol IUserDeletion
   (delete-user [this user-id])
