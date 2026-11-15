@@ -284,6 +284,14 @@
   ;; on the calling thread; on another store, or on a thread without that
   ;; binding, it does not (BOU-966).
 
+(defprotocol ITenantGroups
+  "What moving the groups of before into tenants reads and writes (BOU-996)."
+  (groups-with-tenant-members [this])
+  ;; [{:group-id :tenant-id}]: each group of no tenant with a member of that tenant.
+
+  (move-tenant-members [this from-group-id to-group-id tenant-id]))
+  ;; Move the members of `tenant-id` from one group to the other.
+
 (defprotocol IAllAssignments
   (find-all-assignments [this]))
   ;; Every assignment, each with :group-name, in one query. BOU-865.

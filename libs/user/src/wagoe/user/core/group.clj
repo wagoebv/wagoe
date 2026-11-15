@@ -23,8 +23,21 @@
   [s]
   (some-> s str str/trim (str/replace #"^:" "") not-empty keyword))
 
-(defn everyone? [group-id]
-  (= (str everyone-id) (str group-id)))
+(defn everyone-id-of
+  "Tenant `tenant-id`'s Everyone, derived from its id; `everyone-id` for no
+   tenant. Its high half is zero, as `everyone-id`'s is and no random UUID's
+   is, so `everyone?` knows every tenant's (BOU-996)."
+  [tenant-id]
+  (if-let [t (some-> tenant-id str parse-uuid)]
+    ;; ponytail: 64 bits of the tenant id; two tenants sharing them would share Everyone
+    (java.util.UUID. 0 (bit-or 2 (bit-xor (.getMostSignificantBits ^java.util.UUID t)
+                                          (.getLeastSignificantBits ^java.util.UUID t))))
+    everyone-id))
+
+(defn everyone?
+  "Whether `group-id` is an Everyone, no tenant's or a tenant's."
+  [group-id]
+  (boolean (some-> group-id str parse-uuid (#(zero? (.getMostSignificantBits ^java.util.UUID %))))))
 
 (defn permission-str
   "`permission` as stored and shown: its namespace kept, no colon."

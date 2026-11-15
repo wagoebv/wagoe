@@ -6,6 +6,7 @@
             [reitit.core :as r]
             [wagoe.user.schema :as schema]
             [wagoe.user.shell.http :as http]
+            [wagoe.user.shell.group-persistence :as group-persistence]
             [wagoe.user.shell.rights-handlers :as rights-handlers]
             [wagoe.user.shell.web-handlers :as web-handlers]
             [wagoe.platform.shell.adapters.database.factory :as factory]
@@ -141,16 +142,21 @@
   (is (= 404 (:status ((rights-handlers/user-rights (service (atom [])) nil)
                        {:user admin-of-a :path-params {:id (str (:id user-of-b))}})))))
 
-(deftest ^:unit ^:security roles-and-groups-take-a-platform-admin
-  ;; Roles and groups carry no tenant: a tenant's admin who edited one, or
-  ;; added a role to Everyone, changed it for every tenant (BOU-984)
+(deftest ^:unit ^:security a-tenants-admin-manages-their-tenants-roles-and-groups
+  ;; Platform admins only, since roles and groups carried no tenant (BOU-984);
+  ;; now a tenant's admin works in their tenant's, nobody else's (BOU-996)
   (let [routes (into {} (r/routes (r/router (:web (http/group-routes nil nil {})))))
-        status (fn [path user]
-                 (let [guard (last (:middleware (routes path)))]
-                   (:status ((guard (constantly {:status 200})) {:user user :headers {}}))))]
+        bound  (fn [path user & [tenant]]
+                 (let [guard (last (:middleware (routes path)))
+                       resp  ((guard (fn [_] {:status 200 :body group-persistence/*tenant*}))
+                              (cond-> {:user user :headers {}} tenant (assoc :tenant {:id tenant})))]
+                   (if (= 200 (:status resp)) (:body resp) (:status resp))))]
     (is (contains? routes "/admin/roles/save"))
     (doseq [path (keys routes)]
       (testing path
-        (is (= 403 (status path admin-of-a)))
-        (is (= 403 (status path no-tenant)))
-        (is (= 200 (status path {:id (UUID/randomUUID) :role :admin})))))))
+        (is (= {:id tenant-a} (bound path admin-of-a)) "their own tenant's")
+        (is (= 403 (bound path admin-of-a tenant-b)) "not another's, by header or host")
+        (is (= 403 (bound path user-of-a)) "not a user's")
+        (is (= 403 (bound path no-tenant)))
+        (is (= {:id nil} (bound path {:id (UUID/randomUUID) :role :admin})) "a platform admin: no tenant's")
+        (is (= {:id tenant-b} (bound path {:id (UUID/randomUUID) :role :admin} tenant-b)) "or the one named")))))

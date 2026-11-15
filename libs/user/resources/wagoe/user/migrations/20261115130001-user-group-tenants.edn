@@ -1,0 +1,6 @@
+;; tenant_id on user_groups and user_roles, and their names unique per tenant
+;; (BOU-996). The same idempotent definition adds them; the group service's boot
+;; migration moves the groups of before into their members' tenants.
+{:ns      wagoe.user.shell.user-tables
+ :up-fn   "up"
+ :down-fn "down"}

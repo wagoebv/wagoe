@@ -47,7 +47,7 @@
                                  "only-a-platform-admin-writes-documents"]
                                 "libs/search/test/wagoe/search/shell/http_test.clj"
                                 ["a-tenants-admin-sees-no-count-across-tenants"]}}
-   "user"          {:scoped-by "users.tenant_id, one account per tenant with its email unique there; listings and routes by user id forced to the caller's tenant; roles and groups, which carry no tenant, take a platform admin"
+   "user"          {:scoped-by "users.tenant_id, one account per tenant with its email unique there; listings and routes by user id forced to the caller's tenant; roles, groups and Everyone per tenant, managed by that tenant's admins"
                     :tests     {"libs/user/test/wagoe/user/shell/authz_negative_security_test.clj"
                                 ["require-tenant-member-denies-non-member"]
                                 "libs/user/test/wagoe/user/shell/tenant_scope_test.clj"
@@ -56,7 +56,13 @@
                                  "a-bulk-action-skips-another-tenants-users"
                                  "a-tenants-admin-creates-users-in-their-tenant"
                                  "another-tenants-users-rights-are-not-found"
-                                 "roles-and-groups-take-a-platform-admin"]
+                                 "a-tenants-admin-manages-their-tenants-roles-and-groups"]
+                                "libs/user/test/wagoe/user/shell/group_tenancy_test.clj"
+                                ["a-tenants-admin-sees-and-changes-only-their-tenants-groups"
+                                 "a-group-takes-only-its-tenants-users"
+                                 "a-users-rights-come-from-their-own-tenant"
+                                 "everyone-is-per-tenant"
+                                 "the-groups-of-before-move-into-their-members-tenants"]
                                 "libs/user/test/wagoe/user/shell/tenant_accounts_test.clj"
                                 ["creating-a-user-answers-the-same-whether-the-email-exists-in-another-tenant"
                                  "an-email-is-unique-per-tenant"

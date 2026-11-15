@@ -33,6 +33,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Creating a user told a tenant's admin that an email existed in another tenant** (BOU-995). An email is unique per
   tenant now: the same email in two tenants is two accounts. Sign-in takes the tenant from the URL or asks; see `UPGRADING.md`.
+- **Roles and groups were one set for every tenant** (BOU-996): only a platform admin could manage them. Each tenant
+  has its own now, and its admins manage them; the migration moves existing groups into their members' tenants.
 - **A tenant's admin could point a foreign key at, or move a record into, another tenant** (BOU-997), the latter by
   sending `tenant_id` for `tenant-id`. Both are refused now, as a field error.
 

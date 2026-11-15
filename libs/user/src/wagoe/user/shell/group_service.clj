@@ -2,7 +2,8 @@
   "IUserGroupService: groups, members, roles and assignments through one
    place, so each change is checked and audited. Reads go to the database
    every time."
-  (:require [clojure.string :as str]
+  (:require [wagoe.user.shell.group-persistence :as group-persistence]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [malli.core :as m]
             [malli.error :as me]
@@ -222,14 +223,35 @@
     (when-let [user (if (map? user) user (ports/find-user-by-id user-repository user))]
       (set (membership user)))))
 
+(defn- in-bound-tenant
+  "`options` for find-users kept to the tenant the group repository is bound
+   to, when it is (BOU-996)."
+  [options]
+  (cond-> options
+    group-persistence/*tenant* (assoc :filter-tenant-id (:id group-persistence/*tenant*))))
+
+(defn- tenant-of-user
+  "`user`'s tenant: from the map when it says, else as stored."
+  [user-repository user]
+  (if (and (map? user) (contains? user :tenant-id))
+    (:tenant-id user)
+    (:tenant-id (some->> (user-id-of user) (ports/find-user-by-id user-repository)))))
+
+(defn- in-users-tenant
+  "Call `f` with the group repository bound to `user`'s own tenant: their
+   groups, their tenant's Everyone and its roles, never another's (BOU-996)."
+  [user-repository user f]
+  (binding [group-persistence/*tenant* {:id (tenant-of-user user-repository user)}]
+    (f)))
+
 (defn active-users
   "Every active user, by email, through `xf`, read a page at a time so only
-   what `xf` keeps is held."
+   what `xf` keeps is held; of the bound tenant, when one is."
   [user-repository xf]
   (let [page 500]
     (loop [offset 0 acc []]
-      (let [users (:users (ports/find-users user-repository {:limit page :offset offset :filter-active true
-                                                             :sort-by :email :sort-direction :asc}))
+      (let [users (:users (ports/find-users user-repository (in-bound-tenant {:limit page :offset offset :filter-active true
+                                                                              :sort-by :email :sort-direction :asc})))
             acc   (into acc xf users)]
         (if (< (count users) page) acc (recur (+ offset page) acc))))))
 
@@ -412,7 +434,7 @@
      :groups?  (boolean (seq others))}))
 
 (defn- active-count [user-repository]
-  (:total-count (ports/find-users user-repository {:limit 1 :offset 0 :filter-active true})))
+  (:total-count (ports/find-users user-repository (in-bound-tenant {:limit 1 :offset 0 :filter-active true}))))
 
 (defn- user-diffs
   "How the change `plan` describes alters each reached user's effective
@@ -652,6 +674,46 @@
      :readers-roles  (when (seq viewers) (vec (group-core/module-roles (code-roles registry) "viewer" gated)))
      :grants         (filterv #(and (nil? (:migrated-at %)) (not (shadowed-grant? registry %))) grants)}))
 
+(defn- copy-assignments!
+  "Give `to-group-id`, in the bound tenant, `from-group-id`'s assignments, which
+   are no tenant's, with the managed roles they name copied into the tenant."
+  [repo from-group-id to-group-id]
+  (let [[assignments roles] (binding [group-persistence/*tenant* {:id nil}]
+                              [(ports/find-assignments repo from-group-id) (ports/find-roles repo)])
+        theirs              (into {} (map (juxt :name identity)) roles)
+        mine                (set (map :name (ports/find-roles repo)))]
+    (doseq [role (distinct (keep (comp theirs :role) assignments))
+            :when (not (mine (:name role)))]
+      (ports/insert-role repo (select-keys role [:name :description :permissions])))
+    (doseq [a assignments]
+      (ports/insert-assignment repo (-> (select-keys a [:role :scope :expires-at]) (assoc :group-id to-group-id))))))
+
+(defn- ensure-tenant-everyone!
+  "Make the bound tenant's Everyone, when it has none, starting from no
+   tenant's: its users kept those roles until now (BOU-996)."
+  [repo]
+  (when (ports/ensure-everyone repo)
+    (copy-assignments! repo group-core/everyone-id (group-core/everyone-id-of (:id group-persistence/*tenant*)))))
+
+(defn- move-groups-into-tenants!
+  "Groups were no tenant's before BOU-996. Each with members of a tenant gets a
+   copy in that tenant, its roles and assignments too, and those members move
+   to it: nobody loses access, and no group spans tenants. Idempotent: a moved
+   member is in no group of no tenant any more."
+  [repo]
+  (when (satisfies? ports/ITenantGroups repo)
+    (doseq [{:keys [group-id tenant-id]} (ports/groups-with-tenant-members repo)
+            :let [{:keys [name description]} (binding [group-persistence/*tenant* {:id nil}]
+                                               (ports/find-group repo group-id))]]
+      (binding [group-persistence/*tenant* {:id tenant-id}]
+        (ensure-tenant-everyone! repo)
+        (let [copy (or (some #(when (= name (:name %)) %) (ports/find-groups repo))
+                       (let [g (ports/insert-group repo {:name name :description description})]
+                         (copy-assignments! repo group-id (:id g))
+                         g))]
+          (ports/move-tenant-members repo group-id (:id copy) tenant-id)
+          (log/info "Moved a group's members into their tenant" {:group name :tenant-id tenant-id}))))))
+
 (defn migrate!
   "ADR-041's migration: under :enforce nobody may do less than under :off, and
    nobody becomes an admin. Idempotent; runs at boot.
@@ -672,7 +734,8 @@
                               (doseq [role everyone-roles]
                                 (assign-once! repo group-core/everyone-id role {}))
                               (migrate-viewers! repo viewers readers-roles)
-                              (migrate-grants! repo registry grants))))
+                              (migrate-grants! repo registry grants)
+                              (move-groups-into-tenants! repo))))
     (catch clojure.lang.ExceptionInfo e
       ;; Another node created Everyone or Readers first and migrated.
       (if (= :conflict (:type (ex-data e)))
@@ -700,6 +763,10 @@
   [{:keys [audit-repository] :as svc} group-id user-id expires-at]
   (let [{:keys [group focal grants expires-at] :as plan}
         (change-plan svc {:op :add-member :group-id group-id :user-id user-id :expires-at expires-at})
+        ;; A group takes only its own tenant's users (BOU-996)
+        _     (when (and group-persistence/*tenant*
+                         (not= (str (:id group-persistence/*tenant*)) (str (:tenant-id focal))))
+                (throw (not-found "No such user" {:user-id user-id})))
         diffs (user-diffs svc plan)]
     (audited! svc
               #(if expires-at
@@ -987,6 +1054,10 @@
   ports/IUserGroupService
 
   (list-groups [_]
+    ;; A tenant's Everyone is made the first time its groups are listed, from no
+    ;; tenant's (BOU-996)
+    (when (:id group-persistence/*tenant*)
+      (ports/in-transaction group-repository ensure-tenant-everyone!))
     (ports/find-groups group-repository))
 
   (get-group [_ group-id]
@@ -1083,8 +1154,9 @@
   (user-grants [_ user]
     (if-let [id (user-id-of user)]
       ;; One query: the assignments carry their managed role's permissions.
-      (let [assignments (ports/find-user-assignments group-repository id
-                                                     (provider-groups membership user-repository user))]
+      (let [assignments (in-users-tenant user-repository user
+                                         #(ports/find-user-assignments group-repository id
+                                                                       (provider-groups membership user-repository user)))]
         (group-core/user-grants assignments
                                 (merge (into {} (keep (fn [{:keys [role permissions]}]
                                                         (when permissions [role {:permissions permissions}])))
@@ -1095,15 +1167,23 @@
   (user-groups [_ user]
     ;; None for an unknown or soft-deleted user, as find-user-groups gives.
     (if-let [user (if (map? user) user (some->> user (ports/find-user-by-id user-repository)))]
-      (let [stored   (ports/find-user-groups group-repository (:id user))
-            provided (provider-groups membership user-repository user)
-            ids      (set (map :id stored))]
-        (into (mapv #(assoc % :source :member) stored)
-              (for [g (ports/find-groups group-repository)
-                    :when (and (not (ids (:id g)))
-                               (or (group-core/everyone? (:id g)) (contains? provided (:name g))))]
-                (assoc (dissoc g :member-count :role-count)
-                       :source (if (group-core/everyone? (:id g)) :everyone :provider)))))
+      (in-users-tenant
+       user-repository user
+       #(let [stored   (ports/find-user-groups group-repository (:id user))
+              provided (provider-groups membership user-repository user)
+              ids      (set (map :id stored))
+              listed   (for [g (ports/find-groups group-repository)
+                             :when (and (not (ids (:id g)))
+                                        (or (group-core/everyone? (:id g)) (contains? provided (:name g))))]
+                         (assoc (dissoc g :member-count :role-count)
+                                :source (if (group-core/everyone? (:id g)) :everyone :provider)))
+                ;; Until the tenant has its own Everyone, no tenant's counts (BOU-996)
+              template (when-not (some (comp group-core/everyone? :id) listed)
+                         (some-> (binding [group-persistence/*tenant* nil]
+                                   (ports/find-group group-repository group-core/everyone-id))
+                                 (assoc :source :everyone)))]
+          (cond-> (into (mapv (fn [g] (assoc g :source :member)) stored) listed)
+            template (conj template))))
       []))
 
   (permission-holders [_ permission]

@@ -177,6 +177,11 @@
         (is (str/starts-with? (:name (ports/find-group repo (:id mine))) "Everyone (")
             "an application's group of that name steps aside")))))
 
+(defn- name-key
+  "The unique key on `table`'s name: per tenant where tenants run (BOU-996)."
+  [table]
+  (if (#{:h2 :pg} test-db/engine) (str "uk_" table "_tenant_name") (str "uk_" table "_name")))
+
 (deftest ^:contract a-group-name-is-unique
   (test-db/with-db "user_group_names"
     (fn [ctx]
@@ -188,7 +193,8 @@
         (is (= {:type :conflict :field :name} (taken #(ports/insert-group repo {:name "Finance"}))))
         (is (= {:type :conflict :field :name} (taken #(ports/modify-group repo {:id (:id audit) :name "Finance"}))))
         (testing "names that already repeat do not stop boot"
-          (db/drop-index-if-exists! ctx "uk_user_groups_name" :user_groups)
+          (db/drop-index-if-exists! ctx (name-key "user_groups") :user_groups)
+          (when (= :pg test-db/engine) (db/drop-index-if-exists! ctx "uk_user_groups_name_no_tenant" :user_groups))
           (ports/insert-group repo {:name "Finance"})
           (persistence/initialize-user-schema! ctx)
           (is (= 2 (count (filter #(= "Finance" (:name %)) (ports/find-groups repo))))))))))
@@ -215,8 +221,8 @@
                        (index-names ctx "user_group_members")))
       (is (set/subset? #{"idx_user_group_roles_group_id" "idx_user_group_roles_role"}
                        (index-names ctx "user_group_roles")))
-      (is (contains? (index-names ctx "user_roles") "uk_user_roles_name"))
-      (is (contains? (index-names ctx "user_groups") "uk_user_groups_name")))))
+      (is (contains? (index-names ctx "user_roles") (name-key "user_roles")))
+      (is (contains? (index-names ctx "user_groups") (name-key "user_groups"))))))
 
 (deftest ^:contract expired-access-counts-for-nothing-until-removed
   ;; BOU-856: every read leaves an expired row out at once; remove-expired

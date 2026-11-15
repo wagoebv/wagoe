@@ -15,6 +15,42 @@
 
 (defn- id-str [id] (tc/uuid->string (tc/string->uuid (str id))))
 
+(def ^:dynamic *tenant*
+  "The tenant the repository works in, as {:id t} (t nil for no tenant's
+   groups and roles), or nil for every tenant's, as a migration or the expiry
+   job reads. The group pages bind it to the caller's tenant, a user's grants
+   to the user's (BOU-996)."
+  nil)
+
+(defn- tenant-cond
+  "`col` kept to the bound tenant, or nil when none is bound."
+  [col]
+  (when-let [{:keys [id]} *tenant*]
+    (if id [:= col (id-str id)] [:is col nil])))
+
+(defn- and-tenant [where col]
+  (if-let [c (tenant-cond col)] [:and where c] where))
+
+(defn- tenant-value []
+  (some-> *tenant* :id id-str))
+
+(defn- everyone []
+  (str (group/everyone-id-of (some-> *tenant* :id))))
+
+(defn- everyone-cond
+  "`col` naming the Everyone that counts in the bound tenant: its own, else,
+   until it has one, no tenant's, which stays its template (BOU-996)."
+  [col]
+  (let [own (everyone) none (str group/everyone-id)]
+    (if (= own none)
+      [:= col none]
+      [:or [:= col own]
+       [:and [:= col none] [:not [:exists {:select [1] :from [:user_groups] :where [:= :id own]}]]]])))
+
+(def ^:private role-in-groups-tenant
+  "An assignment's role, managed in its group's tenant: no tenant's for a group of none."
+  [:or [:= :r.tenant_id :g.tenant_id] [:and [:= :r.tenant_id nil] [:= :g.tenant_id nil]]])
+
 (defn- with-expiry
   "`m` with the row's :expires-at, when it has one."
   [m row]
@@ -153,13 +189,14 @@
   (find-group [_ group-id]
     (db->group (db/execute-one! ctx {:select [:*]
                                      :from   [:user_groups]
-                                     :where  [:= :id (id-str group-id)]})))
+                                     :where  (and-tenant [:= :id (id-str group-id)] :tenant_id)})))
 
   (find-groups [_]
     (mapv db->group (db/execute-query! ctx {:select   [:g.id :g.name :g.description :g.created_at :g.updated_at
                                                        [(member-count) :member-count]
                                                        [(role-count) :role-count]]
                                             :from     [[:user_groups :g]]
+                                            :where    (or (tenant-cond :g.tenant_id) [:= 1 1])
                                             :order-by [[:g.name :asc]]})))
 
   (insert-group [_ group]
@@ -167,6 +204,7 @@
                         :id (UUID/randomUUID) :created-at (Instant/now) :updated-at nil)]
       (name-taken! #(db/execute-update! ctx {:insert-into :user_groups
                                              :values      [{:id          (tc/uuid->string (:id stored))
+                                                            :tenant_id   (tenant-value)
                                                             :name        (:name stored)
                                                             :description (:description stored)
                                                             :created_at  (:created-at stored)}]}))
@@ -178,18 +216,21 @@
                                                                         :updated_at (Instant/now)}
                                                                  (contains? group :description)
                                                                  (assoc :description (:description group)))
-                                                       :where  [:= :id (id-str (:id group))]})))
+                                                       :where  (and-tenant [:= :id (id-str (:id group))] :tenant_id)})))
       (ports/find-group this (:id group))))
 
   (remove-group [_ group-id]
     ;; Explicit, where the keys' cascade would do: SQLite enforces keys only
     ;; on connections that ask.
     (let [id (id-str group-id)]
-      (db/with-transaction [tx ctx]
-        (db/execute-update! tx {:delete-from :user_group_grants :where [:= :group_id id]})
-        (db/execute-update! tx {:delete-from :user_group_roles :where [:= :group_id id]})
-        (db/execute-update! tx {:delete-from :user_group_members :where [:= :group_id id]})
-        (pos? (db/execute-update! tx {:delete-from :user_groups :where [:= :id id]})))))
+      ;; Another tenant's group is as missing: nothing of it goes
+      (when (or (nil? *tenant*)
+                (db/execute-one! ctx {:select [:id] :from [:user_groups] :where (and-tenant [:= :id id] :tenant_id)}))
+        (db/with-transaction [tx ctx]
+          (db/execute-update! tx {:delete-from :user_group_grants :where [:= :group_id id]})
+          (db/execute-update! tx {:delete-from :user_group_roles :where [:= :group_id id]})
+          (db/execute-update! tx {:delete-from :user_group_members :where [:= :group_id id]})
+          (pos? (db/execute-update! tx {:delete-from :user_groups :where [:= :id id]}))))))
 
   (find-members [_ group-id]
     (mapv (fn [row] (with-expiry {:id (tc/string->uuid (:id row)) :email (:email row) :name (:name row)
@@ -211,13 +252,15 @@
                                                  [:= :user_id (id-str user-id)]]})))
 
   (find-roles [_]
-    (mapv db->role (db/execute-query! ctx {:select [:*] :from [:user_roles] :order-by [[:name :asc]]})))
+    (mapv db->role (db/execute-query! ctx {:select [:*] :from [:user_roles] :where (or (tenant-cond :tenant_id) [:= 1 1])
+                                           :order-by [[:name :asc]]})))
 
   (insert-role [_ role]
     (let [stored (assoc (select-keys role [:name :description :permissions])
                         :id (UUID/randomUUID) :created-at (Instant/now) :updated-at nil)]
       (try (db/execute-update! ctx {:insert-into :user_roles
                                     :values      [{:id          (tc/uuid->string (:id stored))
+                                                   :tenant_id   (tenant-value)
                                                    :name        (group/permission-str (:name stored))
                                                    :description (:description stored)
                                                    :permissions (permissions-str (:permissions stored))
@@ -233,13 +276,18 @@
                                    :set    {:description (:description role)
                                             :permissions (permissions-str (:permissions role))
                                             :updated_at  (Instant/now)}
-                                   :where  [:= :name (group/permission-str (:name role))]})))
+                                   :where  (and-tenant [:= :name (group/permission-str (:name role))] :tenant_id)})))
 
   (remove-role [_ role-name]
     (let [role (group/permission-str role-name)]
       (db/with-transaction [tx ctx]
-        (db/execute-update! tx {:delete-from :user_group_roles :where [:= :role role]})
-        (pos? (db/execute-update! tx {:delete-from :user_roles :where [:= :name role]})))))
+        ;; Its assignments in the bound tenant's groups only: another tenant's
+        ;; role of the name is another role
+        (db/execute-update! tx {:delete-from :user_group_roles
+                                :where       (cond-> [:= :role role]
+                                               *tenant* (#(vector :and % [:in :group_id {:select [:id] :from [:user_groups]
+                                                                                         :where  (tenant-cond :tenant_id)}])))})
+        (pos? (db/execute-update! tx {:delete-from :user_roles :where (and-tenant [:= :name role] :tenant_id)})))))
 
   (find-assignments [_ group-id]
     (mapv db->assignment (db/execute-query! ctx {:select   [:*]
@@ -251,7 +299,7 @@
     (mapv db->assignment (db/execute-query! ctx {:select   [:a.* [:g.name :group-name]]
                                                  :from     [[(current :user_group_roles) :a]]
                                                  :join     [[:user_groups :g] [:= :g.id :a.group_id]]
-                                                 :where    [:= :a.role (group/permission-str role-name)]
+                                                 :where    (and-tenant [:= :a.role (group/permission-str role-name)] :g.tenant_id)
                                                  :order-by [[:g.name :asc]]})))
 
   (insert-assignment [_ assignment]
@@ -280,13 +328,14 @@
                                                 [:g.name :group-name] [:r.permissions :role-permissions]]
                                     :from      [[(current :user_group_roles) :a]]
                                     :join      [[:user_groups :g] [:= :g.id :a.group_id]]
-                                    :left-join [[:user_roles :r] [:= :r.name :a.role]]
+                                    :left-join [[:user_roles :r] [:and [:= :r.name :a.role] role-in-groups-tenant]]
                                     :where     [:and (live-user id)
-                                                (cond-> [:or [:= :g.id (str group/everyone-id)]
-                                                         [:in :g.id {:select [:m.group_id]
-                                                                     :from   [[(current :user_group_members) :m]]
-                                                                     :where  [:= :m.user_id id]}]]
-                                                  (seq group-names) (conj [:in :g.name (vec group-names)]))]
+                                                [:or (everyone-cond :g.id)
+                                                 (and-tenant (cond-> [:or [:in :g.id {:select [:m.group_id]
+                                                                                      :from   [[(current :user_group_members) :m]]
+                                                                                      :where  [:= :m.user_id id]}]]
+                                                               (seq group-names) (conj [:in :g.name (vec group-names)]))
+                                                             :g.tenant_id)]]
                                     :order-by  [[:g.name :asc] [:a.created_at :asc]]}))))
 
   (find-role-holders [_ role-names]
@@ -304,27 +353,29 @@
                ctx {:union-all [{:select [:m.user_id :r.group_id :r.role :r.scope]
                                  :from   [[(current :user_group_roles) :r]]
                                  :join   [[(current :user_group_members) :m] [:= :m.group_id :r.group_id]
-                                          [:auth_users :a] [:= :a.id :m.user_id]]
-                                 :where  [:and roles [:= :a.deleted_at nil] active]}
-                                ;; Everyone: every user, without a membership row.
+                                          [:auth_users :a] [:= :a.id :m.user_id]
+                                          [:user_groups :g] [:= :g.id :r.group_id]]
+                                 :where  (and-tenant [:and roles [:= :a.deleted_at nil] active] :g.tenant_id)}
+                                ;; Everyone: every user of its tenant, without a membership row.
                                 {:select [[:a.id :user_id] :r.group_id :r.role :r.scope]
                                  :from   [[(current :user_group_roles) :r]]
-                                 :join   [[:auth_users :a] [:= :r.group_id (str group/everyone-id)]]
-                                 :where  [:and roles [:= :a.deleted_at nil] active]}]})))))
+                                 :join   [[:auth_users :a] (everyone-cond :r.group_id)]
+                                 :where  (and-tenant [:and roles [:= :a.deleted_at nil] active] :a.tenant_id)}]})))))
 
   (ensure-everyone [_]
-    (if (db/execute-one! ctx {:select [:id] :from [:user_groups] :where [:= :id (str group/everyone-id)]})
+    (if (db/execute-one! ctx {:select [:id] :from [:user_groups] :where [:= :id (everyone)]})
       false
       (let [now (Instant/now)]
         ;; An application's own group of that name steps aside, renamed.
         (when-let [{:keys [id]} (db/execute-one! ctx {:select [:id] :from [:user_groups]
-                                                      :where  [:= :name group/everyone-name]})]
+                                                      :where  (and-tenant [:= :name group/everyone-name] :tenant_id)})]
           (db/execute-update! ctx {:update :user_groups
                                    :set    {:name       (str group/everyone-name " (" (subs (str id) 0 8) ")")
                                             :updated_at now}
                                    :where  [:= :id id]}))
         (db/execute-update! ctx {:insert-into :user_groups
-                                 :values      [{:id          (str group/everyone-id)
+                                 :values      [{:id          (everyone)
+                                                :tenant_id   (tenant-value)
                                                 :name        group/everyone-name
                                                 :description "Every signed-in user"
                                                 :created_at  now}]})
@@ -360,7 +411,8 @@
                                             :from     [[:user_groups :g]]
                                             :join     [[(current :user_group_members) :m] [:= :m.group_id :g.id]
                                                        [:auth_users :a] [:= :a.id :m.user_id]]
-                                            :where    [:and [:= :m.user_id (id-str user-id)] [:= :a.deleted_at nil]]
+                                            :where    (and-tenant [:and [:= :m.user_id (id-str user-id)] [:= :a.deleted_at nil]]
+                                                                  :g.tenant_id)
                                             :order-by [[:g.name :asc]]})))
 
   (ensure-tables [_]
@@ -375,11 +427,29 @@
     (db/with-transaction [tx ctx]
       (f (assoc this :ctx tx))))
 
+  ports/ITenantGroups
+  (groups-with-tenant-members [_]
+    (mapv (fn [row] {:group-id (tc/string->uuid (:group-id row)) :tenant-id (tc/string->uuid (:tenant-id row))})
+          (db/execute-query! ctx {:select-distinct [[:g.id :group-id] [:a.tenant_id :tenant-id]]
+                                  :from            [[:user_groups :g]]
+                                  :join            [[:user_group_members :m] [:= :m.group_id :g.id]
+                                                    [:auth_users :a] [:= :a.id :m.user_id]]
+                                  :where           [:and [:= :g.tenant_id nil] [:not= :a.tenant_id nil]
+                                                    [:<> :g.id (str group/everyone-id)]]})))
+
+  (move-tenant-members [_ from-group-id to-group-id tenant-id]
+    (db/execute-update! ctx {:update :user_group_members
+                             :set    {:group_id (id-str to-group-id)}
+                             :where  [:and [:= :group_id (id-str from-group-id)]
+                                      [:in :user_id {:select [:id] :from [:auth_users]
+                                                     :where  [:= :tenant_id (id-str tenant-id)]}]]}))
+
   ports/IAllAssignments
   (find-all-assignments [_]
     (mapv db->assignment (db/execute-query! ctx {:select   [:a.* [:g.name :group-name]]
                                                  :from     [[(current :user_group_roles) :a]]
-                                                 :join     [[:user_groups :g] [:= :g.id :a.group_id]]})))
+                                                 :join     [[:user_groups :g] [:= :g.id :a.group_id]]
+                                                 :where    (or (tenant-cond :g.tenant_id) [:= 1 1])})))
 
   ports/IAccessExpiry
   (insert-member-until [_ group-id user-id expires-at]

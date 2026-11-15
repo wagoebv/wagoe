@@ -157,14 +157,35 @@
         :mysql      (db/execute-ddl! ctx (str "ALTER TABLE user_audit_log DROP CHECK " audit-action-check
                                               ", ADD CONSTRAINT " audit-action-check " " audit-action-check-clause))))))
 
+(defn- name-key!
+  "Make `table`'s name unique: per tenant where tenants run (PostgreSQL, and H2
+   in tests), with names of no tenant unique among themselves on PostgreSQL;
+   everywhere elsewhere, where no tenant is (BOU-996). The old key, everywhere,
+   goes where the new one comes."
+  [ctx table old]
+  (let [t (name table)]
+    (case (protocols/engine (:adapter ctx))
+      :postgresql (do (db/create-index-if-not-exists! ctx (str "uk_" t "_tenant_name") table [:tenant_id :name] {:unique? true})
+                      (db/execute-ddl! ctx (str "CREATE UNIQUE INDEX IF NOT EXISTS uk_" t "_name_no_tenant ON " t
+                                                " (name) WHERE tenant_id IS NULL"))
+                      (db/drop-index-if-exists! ctx old table))
+      ;; One index: H2 can count NULLs as equal
+      :h2         (do (db/execute-ddl! ctx (str "CREATE UNIQUE NULLS NOT DISTINCT INDEX IF NOT EXISTS uk_" t
+                                                "_tenant_name ON " t " (tenant_id, name)"))
+                      (db/drop-index-if-exists! ctx old table))
+      (db/create-index-if-not-exists! ctx old table [:name] {:unique? true}))))
+
 (defn- unique-group-names!
   "Make user_groups.name unique, which an import matches on (BOU-718). Where
    names already repeat, say which and go on booting."
   [ctx]
   (try
-    (db/create-index-if-not-exists! ctx "uk_user_groups_name" :user_groups [:name] {:unique? true})
+    (name-key! ctx :user_groups "uk_user_groups_name")
     (catch clojure.lang.ExceptionInfo e
-      (when-not (= :conflict (:type (ex-data e))) (throw e))
+      ;; A key's refusal: :conflict from an index call, a 23505 from raw DDL
+      (when-not (or (= :conflict (:type (ex-data e)))
+                    (re-find #"23505" (str (:original-error (ex-data e)))))
+        (throw e))
       (log/error (str "Group names repeat, so user_groups.name is not unique and an import may"
                       " create a group twice. Rename or delete the duplicates at /web/admin/groups,"
                       " then restart.")
@@ -269,7 +290,7 @@
   ;; For the grants the migration moves onto roles. user_id and group_id are indexed already,
   ;; as every -id column is.
   (db/create-index-if-not-exists! ctx "idx_user_group_grants_permission" :user_group_grants [:permission])
-  (db/create-index-if-not-exists! ctx "uk_user_roles_name" :user_roles [:name] {:unique? true})
+  (name-key! ctx :user_roles "uk_user_roles_name")
   (db/create-index-if-not-exists! ctx "idx_user_group_roles_role" :user_group_roles [:role])
   (widen-audit-action-check! ctx)
   (hash-plaintext-session-tokens! ctx)
