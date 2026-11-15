@@ -36,8 +36,11 @@ request names, else those of no tenant. At boot the migration copies each group
 with members in a tenant into that tenant, with its roles, and moves those
 members: nobody loses access. Each tenant gets its own Everyone, starting from
 the one of no tenant, the first time an admin opens its groups. Code calling
-the group service outside a request works on every tenant's groups; bind
-`wagoe.user.shell.group-persistence/*tenant*` to `{:id tenant-id}` to work in one.
+the group service outside a request (an import in your migration, a job) works
+on the groups of no tenant; wrap it in
+`(wagoe.user.shell.group-service/with-tenant tenant-id f)` to work in one. A
+group repository of your own keeps the pages a platform admin's until it
+implements `ITenantGroups` and honours the tenant.
 
 ### 3. The admin service refuses keys that are not fields (BOU-998)
 

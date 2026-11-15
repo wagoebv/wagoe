@@ -5,6 +5,7 @@
    losing access."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [support.test-db :as test-db]
+            [wagoe.platform.database :as db]
             [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.shell.authorization :as authorization]
             [wagoe.user.core.group :as group]
@@ -30,6 +31,10 @@
     (let [ctx (factory/db-context (factory/h2-config (str "mem:group_tenancy_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]
       (try (f ctx) (finally (factory/close-db-context! ctx))))))
 
+(def ^:private ^:dynamic *provided*
+  "Group names the membership hook gives every user, as an identity provider would."
+  #{})
+
 (use-fixtures :each
   (fn [f]
     (with-tenant-db
@@ -39,7 +44,8 @@
               repo  (group-persistence/create-group-repository ctx)
               svc   (sut/create-group-service repo users
                                               (persistence/create-audit-repository ctx {:default-limit 50 :max-limit 100})
-                                              (sut/prepare-settings nil) {:registry registry})]
+                                              (sut/prepare-settings nil)
+                                              {:registry registry :membership (fn [_] *provided*)})]
           ;; No tenant's Everyone, as the boot migration makes it
           (ports/ensure-everyone repo)
           (binding [*system* {:svc svc :users users :repo repo}]
@@ -65,7 +71,8 @@
     (testing "the same name in two tenants"
       (is (not= (:id a) (:id b))))
     (testing "one tenant lists its own groups and its own Everyone"
-      (is (= #{(:id a) (group/everyone-id-of tenant-a)} (set (map :id (in tenant-a (ports/list-groups svc)))))))
+      (is (= #{(:id a) (group/everyone-id-of tenant-a)}
+             (set (map :id (in tenant-a (sut/ensure-everyone! svc) (ports/list-groups svc)))))))
     (testing "another tenant's group is not found, so not changed"
       (is (nil? (in tenant-a (ports/get-group svc (:id b)))))
       (is (= :not-found (refusal #(in tenant-a (ports/update-group svc {:id (:id b) :name "Mine"})))))
@@ -110,7 +117,7 @@
       (is (contains? (permissions-of ada) :orders/read))
       (is (contains? (permissions-of bob) :orders/read)))
     (testing "its own starts from that, and then only it counts"
-      (in tenant-a (ports/list-groups svc))
+      (in tenant-a (sut/ensure-everyone! svc))
       (let [everyone-a (group/everyone-id-of tenant-a)]
         (is (= [:orders/viewer] (map :role (:roles (in tenant-a (ports/get-group svc everyone-a))))))
         (in tenant-a (ports/add-group-role svc everyone-a {:role :reports/viewer})))
@@ -142,3 +149,75 @@
     (testing "and running it again changes nothing"
       (sut/migrate! svc)
       (is (= 1 (count (filter #(= "Finance" (:name %)) (in tenant-a (ports/list-groups svc)))))))))
+
+(deftest ^:integration ^:security a-member-of-another-tenant-has-that-tenants-rights-there
+  ;; A request in tenant B gave B's member their own tenant admin's grants (BOU-996)
+  (let [svc (:svc *system*)
+        ada (user! "ada@a.test" tenant-a)]
+    (in tenant-a
+        (let [g (ports/create-group svc {:name "Sales"})]
+          (ports/add-group-member svc (:id g) (:id ada))
+          (ports/add-group-role svc (:id g) {:role :orders/editor})))
+    (is (contains? (permissions-of ada) :orders/write) "at home")
+    (is (not (contains? (binding [db/*tenant-id* tenant-b] (permissions-of ada)) :orders/write))
+        "in B, none of A's groups count")))
+
+(deftest ^:integration ^:security removing-a-member-of-another-tenants-group-changes-nothing
+  (let [svc (:svc *system*)
+        bob (user! "bob@b.test" tenant-b)
+        g   (in tenant-b (let [g (ports/create-group svc {:name "Finance"})] (ports/add-group-member svc (:id g) (:id bob)) g))]
+    (is (not (in tenant-a (ports/remove-group-member svc (:id g) (:id bob)))))
+    (is (= ["bob@b.test"] (map :email (:members (in tenant-b (ports/get-group svc (:id g)))))))))
+
+(deftest ^:integration ^:security a-tenants-everyone-changes-stay-off-other-tenants-timelines
+  (let [svc (:svc *system*)
+        _   (user! "ada@a.test" tenant-a)
+        bob (user! "bob@b.test" tenant-b)]
+    (in tenant-a
+        (sut/ensure-everyone! svc)
+        (ports/add-group-role svc (group/everyone-id-of tenant-a) {:role :reports/viewer}))
+    (is (empty? (filter #(= (str (group/everyone-id-of tenant-a)) (str (:group-id %)))
+                        (in tenant-b (ports/rights-changes svc bob 50)))))))
+
+(deftest ^:integration outside-a-tenant-the-service-works-in-no-tenants-groups
+  ;; Unbound, it mixed every tenant's roles of a name, and an import found several groups
+  (let [svc (:svc *system*)
+        ada (user! "ada@a.test" tenant-a)]
+    (in tenant-a
+        (ports/create-role svc {:name :sales/lead :permissions #{:orders/read}})
+        (let [g (ports/create-group svc {:name "Sales"})]
+          (ports/add-group-member svc (:id g) (:id ada))
+          (ports/add-group-role svc (:id g) {:role :sales/lead})))
+    (in tenant-b (ports/create-group svc {:name "Sales"}))
+    (is (contains? (set (map :user-id (in tenant-a (ports/permission-holders svc :orders/read)))) (:id ada)))
+    (is (empty? (ports/permission-holders svc :orders/read)) "no tenant's: nobody holds it")
+    (is (= ["Sales"] (map (comp :name :group) (ports/import-groups! svc [{:name "Sales"}] {})))
+        "an import outside a tenant upserts no tenant's group")))
+
+(deftest ^:integration ^:security an-import-adds-only-its-tenants-users
+  (let [svc (:svc *system*)
+        bob (user! "bob@b.test" tenant-b)]
+    (is (= :validation-error (refusal #(in tenant-a (ports/import-groups! svc [{:name "Sales" :members [(:id bob)]}] {})))))))
+
+(deftest ^:integration a-providers-group-of-no-tenant-counts-until-the-tenant-has-its-own
+  ;; The migration copies groups with stored members; a provider fills its groups by name
+  (let [svc (:svc *system*)
+        ada (user! "ada@a.test" tenant-a)]
+    (in nil (let [g (ports/create-group svc {:name "okta-sales"})] (ports/add-group-role svc (:id g) {:role :orders/editor})))
+    (binding [*provided* #{"okta-sales"}]
+      (is (contains? (permissions-of ada) :orders/write))
+      (in tenant-a (ports/create-group svc {:name "okta-sales"}))
+      (is (not (contains? (permissions-of ada) :orders/write)) "the tenant's own, with no role, counts instead"))))
+
+(deftest ^:integration the-move-keeps-a-membership-already-in-the-copy
+  (let [{:keys [svc repo]} *system*
+        ada (user! "ada@a.test" tenant-a)
+        g   (in nil (ports/create-group svc {:name "Finance"}))]
+    (in nil (ports/insert-member repo (:id g) (:id ada)))
+    (sut/migrate! svc)
+    ;; Added to the old group again, by code outside a request
+    (in nil (ports/insert-member repo (:id g) (:id ada)))
+    (sut/migrate! svc)
+    (let [finance (some #(when (= "Finance" (:name %)) %) (in tenant-a (ports/list-groups svc)))]
+      (is (= ["ada@a.test"] (map :email (:members (in tenant-a (ports/get-group svc (:id finance))))))))
+    (is (empty? (:members (in nil (ports/get-group svc (:id g))))) "the old group keeps nobody of a tenant")))

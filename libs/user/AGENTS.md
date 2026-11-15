@@ -457,14 +457,18 @@ assignment is group + role + scope (`{}` is everywhere). A user's grants,
 pages are `/web/admin/groups` (`group-routes`, mounted beside the admin UI).
 
 Groups and managed roles belong to a tenant (`tenant_id`, nil for none), and a
-name is unique per tenant; code roles stay global (BOU-996). The group
-repository works in `group-persistence/*tenant*` when bound: `group-routes`
-binds the admin's tenant (a platform admin's: the one the request names, else
-none), `user-grants` the user's own. An assignment's role is the one managed in
-its group's tenant. Each tenant has its own Everyone (`everyone-id-of`), made
-from no tenant's the first time its groups are listed; until then no tenant's
-counts for its users. The boot migration copies a group of no tenant into each
-tenant it has members of, with its roles, and moves those members.
+name is unique per tenant; code roles stay global (BOU-996). The group service
+and repository work in one tenant's: `group-service/with-tenant`, else no
+tenant's. `group-routes` binds the admin's tenant (a platform admin's: the one
+the request names, else none; on a user's rights pages, that user's), and
+`user-grants` the tenant the request runs in, else the user's own: a member of
+another tenant gets that tenant's grants there. An assignment's role is the one
+managed in its group's tenant; a provider's group name matches the tenant's
+group, else no tenant's. Each tenant has its own Everyone (`everyone-id-of`),
+made from no tenant's before `group-routes` first shows it; until then no
+tenant's counts for its users. The boot migration copies a group of no tenant
+into each tenant it has members of, with its roles, and moves those members.
+A group repository without `ITenantGroups` keeps the pages a platform admin's.
 
 The user module's own routes say `:public`, `:signed-in` or `:self`, so
 `:wagoe/authorization :enforce` asks none of them a permission. Guide:

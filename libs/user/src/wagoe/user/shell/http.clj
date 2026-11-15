@@ -33,7 +33,7 @@
 
    All observability is handled automatically by interceptors."
   (:require [wagoe.core.http.access :as core-access]
-            [wagoe.user.shell.group-persistence :as group-persistence]
+            [wagoe.user.shell.group-service :as group-service]
             [wagoe.user.schema :as user-schema]
             [wagoe.core.interceptor :as interceptor]
             [wagoe.core.interceptor-context :as interceptor-context]
@@ -826,17 +826,37 @@
      :static (landing/root-routes config)
      :nav    (when web? nav)}))
 
+(defn- rights-target
+  "The user a /users/:id/rights, /explain or /grant request names, when
+   `request` reaches them; nil for any other route."
+  [user-service request]
+  (when (re-find #"/users/[^/]+/(rights|explain|grant)" (str (:uri request)))
+    (when-let [u (some->> (get-in request [:path-params :id]) str parse-uuid (user-ports/get-user-by-id user-service))]
+      (when (tenant-scope/reaches? request u) u))))
+
 (defn- in-admins-tenant
-  "Middleware: an admin where the request runs, working in the groups and roles
-   of the tenant they reach (a platform admin with none: those of no tenant);
-   403 for anyone else (BOU-996)."
-  [handler]
-  (fn [request]
-    (if-let [reach (when (access/admin? request) (core-access/admin-reach request))]
-      (binding [group-persistence/*tenant* {:id (:tenant-id reach)}]
-        (handler request))
-      (access/forbidden-response "Admin role required" request
-                                 (access/correlation-id request (str (random-uuid)))))))
+  "Middleware factory: an admin where the request runs works in the groups and
+   roles of the tenant they reach (a platform admin with none named: those of
+   no tenant), or, on a user's rights pages, of that user's tenant; 403 for
+   anyone else. A tenant gets its Everyone before a page shows it (BOU-996)."
+  [user-service group-service]
+  (fn [handler]
+    (fn [request]
+      (if-let [reach (when (access/admin? request) (core-access/admin-reach request))]
+        (let [target (rights-target user-service request)
+              t      (if target (:tenant-id target) (:tenant-id reach))]
+          (group-service/with-tenant t
+            #(do (when (and t group-service) (group-service/ensure-everyone! group-service))
+                 (handler request))))
+        (access/forbidden-response "Admin role required" request
+                                   (access/correlation-id request (str (random-uuid))))))))
+
+(defn- tenant-groups?
+  "Whether `group-service`'s repository keeps groups per tenant; one written
+   before BOU-996 does not, and its pages stay a platform admin's."
+  [group-service]
+  (let [repo (:group-repository group-service)]
+    (or (nil? repo) (satisfies? user-ports/ITenantGroups repo))))
 
 (defn group-routes
   "Groups, roles and permissions, mounted under /web/admin beside the admin UI,
@@ -845,7 +865,9 @@
    request names or of none (BOU-996). Absent when the web UI is switched off."
   [user-service group-service config]
   (let [guard [(user-middleware/flexible-authentication-middleware user-service)
-               in-admins-tenant]
+               (if (tenant-groups? group-service)
+                 (in-admins-tenant user-service group-service)
+                 require-platform-admin-middleware)]
         route (fn [path methods] [path (assoc methods :no-doc true :authorization :self :middleware guard)])]
     {:api    []
      :static []

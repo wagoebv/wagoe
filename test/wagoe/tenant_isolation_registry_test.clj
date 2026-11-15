@@ -62,7 +62,11 @@
                                  "a-group-takes-only-its-tenants-users"
                                  "a-users-rights-come-from-their-own-tenant"
                                  "everyone-is-per-tenant"
-                                 "the-groups-of-before-move-into-their-members-tenants"]
+                                 "the-groups-of-before-move-into-their-members-tenants"
+                                 "a-member-of-another-tenant-has-that-tenants-rights-there"
+                                 "removing-a-member-of-another-tenants-group-changes-nothing"
+                                 "a-tenants-everyone-changes-stay-off-other-tenants-timelines"
+                                 "an-import-adds-only-its-tenants-users"]
                                 "libs/user/test/wagoe/user/shell/tenant_accounts_test.clj"
                                 ["creating-a-user-answers-the-same-whether-the-email-exists-in-another-tenant"
                                  "an-email-is-unique-per-tenant"
