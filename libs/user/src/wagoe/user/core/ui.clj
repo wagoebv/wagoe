@@ -753,6 +753,9 @@
        [:input {:type "hidden" :name "password" :value (:password data)}]
        (when (:remember data)
          [:input {:type "hidden" :name "remember" :value "on"}])
+       ;; The tenant chosen, whose account the code is for (BOU-995)
+       (when (contains? data :tenant-id)
+         [:input {:type "hidden" :name "tenant-id" :value (str (:tenant-id data))}])
 
       ;; MFA code input
        (ui/form-field :mfa-code [:t :user/mfa-code-label]
@@ -775,6 +778,34 @@
       [:div.auth-footer
        [:p [:t :user/mfa-lost-access]]
        [:p [:t :user/mfa-backup-codes-prompt]]]]]))
+
+(defn tenant-choice-page
+  "Which tenant to sign in to, when the email and password open accounts in
+   several (BOU-995). `tenants` are {:id :name :slug}, :id nil for the account
+   of no tenant; the credentials go along hidden, as on the MFA page."
+  [data tenants opts]
+  (auth-page
+   [:t :user/choose-tenant-title]
+   :choose-tenant
+   :div.auth-page
+   :user/choose-tenant-subtitle
+   [[:div {:class "auth-card ui-card"}
+     [:div.card-body
+      [:form {:method "post" :action "/web/login" :class "form-card ui-form-shell"}
+       (csrf/hidden-field)
+       (when (:return-to opts)
+         [:input {:type "hidden" :name "return-to" :value (:return-to opts)}])
+       [:input {:type "hidden" :name "email" :value (:email data)}]
+       [:input {:type "hidden" :name "password" :value (:password data)}]
+       (when (:remember data)
+         [:input {:type "hidden" :name "remember" :value "on"}])
+       (ui/form-field :tenant-id [:t :user/choose-tenant-label]
+                      (into [:select {:id "tenant-id" :name "tenant-id"}]
+                            (for [{:keys [id name slug]} tenants]
+                              [:option {:value (str id)} (or name slug id [:t :user/choose-tenant-none])]))
+                      nil)
+       [:button.button.primary {:type "submit"} [:t :user/link-signin]]]]]]
+   opts))
 
 (defn mfa-login-page
   "Complete MFA login page (shown after successful password verification).

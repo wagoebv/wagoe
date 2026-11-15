@@ -1,0 +1,5 @@
+;; auth_users.tenant_id, filled from each profile, and an email unique per
+;; tenant instead of everywhere (BOU-995). The same idempotent definition does it.
+{:ns      wagoe.user.shell.user-tables
+ :up-fn   "up"
+ :down-fn "down"}

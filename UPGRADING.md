@@ -12,7 +12,18 @@ mode you'd see without it, and the fix.
 
 ## 1.2.x → Unreleased
 
-### 1. The admin service refuses keys that are not fields (BOU-998)
+### 1. One account per tenant (BOU-995)
+
+An email is unique within a tenant, not across them; the migration copies each
+profile's tenant onto `auth_users` and replaces the email key on PostgreSQL.
+Creating a user whose email another tenant has now creates a second account.
+Sign-in on a tenant's URL opens that tenant's account. Elsewhere, if email and
+password open accounts in several tenants, the form lists them and the API
+answers 409 with `tenants`: send the one chosen as `tenantId`. Code that calls
+`find-user-by-email` gets any one account of the email; use
+`find-user-by-tenant-and-email` (`ITenantAccounts`) instead.
+
+### 2. The admin service refuses keys that are not fields (BOU-998)
 
 `create-entity`, `create-entity-with-children` and `update-entity` turned every
 key into a column. They now answer a `:validation-error` with `:errors {key

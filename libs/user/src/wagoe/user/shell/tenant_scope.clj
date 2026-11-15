@@ -29,6 +29,20 @@
   (let [user (some->> id (ports/get-user-by-id user-service))]
     (when (reaches? request user) user)))
 
+(defn user-by-email
+  "The account of `email` that `request` names: its tenant's, when it lists one
+   tenant; else the only account of that email, or nil when there are several
+   (BOU-995)."
+  [user-service request email]
+  (let [opts (list-options request {})]
+    (cond
+      (nil? opts) nil
+      (and (contains? opts :filter-tenant-id) (satisfies? ports/ITenantAccountLookup user-service))
+      (ports/get-user-by-tenant-and-email user-service (:filter-tenant-id opts) email)
+      (satisfies? ports/ITenantAccountLookup user-service)
+      (let [[one more] (ports/get-users-by-email user-service email)] (when-not more one))
+      :else (ports/get-user-by-email user-service email))))
+
 (defn new-user-tenant
   "What a user `request` creates is given: `{:tenant-id t}`, `{}` for no tenant, or nil
    when it may create none. A tenant's admin creates in their tenant, so a role it grants stays there."

@@ -276,6 +276,12 @@
   {:ip-address (client-ip/request-ip request)
    :user-agent (get-in request [:headers "user-agent"])})
 
+(defn- tenant-login-context
+  "`login-context` with the tenant the request runs in, whose account a
+   provider's sign-in finds or makes (BOU-995)."
+  [request]
+  (assoc (login-context request) :tenant-id (get-in request [:tenant :id])))
+
 (def ^:private secret-fields ["password" "mfa-code" :password :mfa-code])
 
 (defn- without-secrets
@@ -448,6 +454,17 @@
           page-opts (login-branding (sign-in-opts config request return-to) config)]
       (html-response request (user-ui/login-page initial-data {} page-opts)))))
 
+(defn- sign-in-tenant
+  "`credentials` naming the tenant to sign in to: the request's (from its URL)
+   or the one chosen (`:tenant-id`, blank for no tenant); untouched when there
+   is neither, so every account of the email is tried (BOU-995)."
+  [request credentials]
+  (if-let [t (get-in request [:tenant :id])]
+    (assoc credentials :tenant-given? true :tenant-id (str t))
+    (cond-> credentials
+      (contains? credentials :tenant-id)
+      (assoc :tenant-given? true :tenant-id (not-empty (:tenant-id credentials))))))
+
 (defn login-submit-handler
   "POST /web/login - validate credentials, authenticate, set session cookie."
   [user-service config]
@@ -455,10 +472,12 @@
     (let [form-data (:form-params request)
           raw-return-to (or (get form-data "return-to")
                             (get-in request [:query-params "return-to"]))
-          prepared-data {:email (get form-data "email")
-                         :password (get form-data "password")
-                         :remember (boolean (get form-data "remember"))
-                         :mfa-code (get form-data "mfa-code")}
+          prepared-data (cond-> {:email (get form-data "email")
+                                 :password (get form-data "password")
+                                 :remember (boolean (get form-data "remember"))
+                                 :mfa-code (get form-data "mfa-code")}
+                          ;; Chosen among the accounts the password opens (BOU-995)
+                          (contains? form-data "tenant-id") (assoc :tenant-id (get form-data "tenant-id")))
           prepared-data (merge prepared-data (login-context request))
           [valid? validation-errors validated-data]
           (validate-request-data user-schema/LoginRequest prepared-data)
@@ -469,8 +488,10 @@
                        (user-ui/login-page prepared-data validation-errors page-opts)
                        400)
         (try
-          ;; Use IUserService/authenticate-user with validated data
-          (let [auth-result (user-ports/authenticate-user user-service validated-data)
+          ;; Use IUserService/authenticate-user with validated data. The
+          ;; tenant the URL names, else the one chosen, picks the account;
+          ;; without either every account of the email is tried (BOU-995).
+          (let [auth-result (user-ports/authenticate-user user-service (sign-in-tenant request validated-data))
                 user (:user auth-result)
                 return-to (when (:authenticated auth-result)
                             (safe-return-url raw-return-to (landing-path config user request)))]
@@ -517,6 +538,10 @@
 
               (enrolment-needed? auth-result)
               (start-enrolment config auth-result raw-return-to)
+
+              ;; The password opens accounts in several tenants: choose one
+              (= :tenant-choice-required (:reason auth-result))
+              (html-response request (user-ui/tenant-choice-page prepared-data (:tenants auth-result) page-opts) 200)
 
               ;; MFA required - show MFA code input
               (:requires-mfa? auth-result)
@@ -743,7 +768,7 @@
                                    (get-in request [:path-params :provider])
                                    (:query-params request)
                                    (get-in request [:cookies oidc-pending-cookie :value])
-                                   (login-context request)))
+                                   (tenant-login-context request)))
       (catch Exception e
         (server-error-page request e "OIDC callback error")))))
 
@@ -755,7 +780,7 @@
       (let [result (oidc/complete-mfa oidc-client
                                       (get-in request [:cookies oidc-mfa-cookie :value])
                                       (get-in request [:form-params "mfa-code"])
-                                      (login-context request))]
+                                      (tenant-login-context request))]
         (if (= :oidc/mfa-failed (get-in result [:error :type]))
           (html-response request
                          (user-ui/oidc-mfa-page {:mfa-code [[:t :user/oidc-mfa-invalid]]}

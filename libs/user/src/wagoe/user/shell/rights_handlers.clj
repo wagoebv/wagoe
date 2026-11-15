@@ -426,7 +426,7 @@
   (let [found (for [s (take group-core/preview-page-size (distinct (remove str/blank? (remove #{"#uuid" ":user-id"} (str/split (str text) #"[\s,;\"{}]+")))))
                     :let [u (if-let [id (parse-uuid s)]
                               (ports/get-user-by-id user-service id)
-                              (ports/get-user-by-email user-service s))]]
+                              (tenant-scope/user-by-email user-service request s))]]
                 [s (when (tenant-scope/reaches? request u) u)])]
     [(distinct (keep second found)) (keep (fn [[s u]] (when-not u s)) found)]))
 

@@ -241,7 +241,10 @@
       (ports/unlink-identity repo (:iss claims) (:sub claims)))
     (let [email-user (when (and email (nil? linked))
                        ;; Emails are stored as registered; try the provider's casing first.
-                       (some #(ports/find-user-by-email user-repository %)
+                       (some #(if (satisfies? ports/ITenantAccounts user-repository)
+                                ;; The account of the tenant signed in to (BOU-995)
+                                (ports/find-user-by-tenant-and-email user-repository (:tenant-id login-context) %)
+                                (ports/find-user-by-email user-repository %))
                              (distinct [(:email claims) email])))
           decision   (oidc/resolve-account
                       {:linked-user        linked
@@ -259,6 +262,7 @@
         (if-let [user (try
                         (ports/create-user user-repository
                                            (assoc (:user-data decision)
+                                                  :tenant-id (:tenant-id login-context)
                                                   ;; Signs in through its provider; nobody knows this password.
                                                   :password-hash (auth/hash-password (auth/generate-session-token))))
                         ;; The email still belongs to a deactivated, soft-deleted account.

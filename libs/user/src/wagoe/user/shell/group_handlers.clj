@@ -221,7 +221,7 @@
   ;; The lookup submits the user's id; a script may still send an email
   (let [user (if-let [user-id (some-> (form request "user-id") parse-uuid)]
                (ports/get-user-by-id user-service user-id)
-               (some->> (form request "email") not-empty (ports/get-user-by-email user-service)))]
+               (some->> (form request "email") not-empty (tenant-scope/user-by-email user-service request)))]
     ;; Another tenant's user is as unknown here as in the lookup (BOU-948)
     (or (when (and user (tenant-scope/lists? request user)) (:id user))
         (throw (ex-info "No such user" {:type :not-found :field :email})))))
