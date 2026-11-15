@@ -831,8 +831,7 @@
    `request` reaches them; nil for any other route."
   [user-service request]
   (when (re-find #"/users/[^/]+/(rights|explain|grant)" (str (:uri request)))
-    (when-let [u (some->> (get-in request [:path-params :id]) str parse-uuid (user-ports/get-user-by-id user-service))]
-      (when (tenant-scope/reaches? request u) u))))
+    (tenant-scope/reachable-user user-service request (some-> (get-in request [:path-params :id]) str parse-uuid))))
 
 (defn- in-admins-tenant
   "Middleware factory: an admin where the request runs works in the groups and

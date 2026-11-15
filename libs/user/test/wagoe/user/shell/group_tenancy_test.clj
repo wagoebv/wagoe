@@ -6,7 +6,6 @@
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [support.test-db :as test-db]
             [wagoe.platform.database :as db]
-            [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.shell.authorization :as authorization]
             [wagoe.user.core.group :as group]
             [wagoe.user.ports :as ports]
@@ -24,12 +23,6 @@
 
 (def ^:private ^:dynamic *system* nil)
 
-;; MySQL runs no tenants and keeps names unique everywhere, so its run uses H2.
-(defn- with-tenant-db [f]
-  (if (#{:h2 :pg} test-db/engine)
-    (test-db/with-db "group_tenancy" f)
-    (let [ctx (factory/db-context (factory/h2-config (str "mem:group_tenancy_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]
-      (try (f ctx) (finally (factory/close-db-context! ctx))))))
 
 (def ^:private ^:dynamic *provided*
   "Group names the membership hook gives every user, as an identity provider would."
@@ -37,7 +30,7 @@
 
 (use-fixtures :each
   (fn [f]
-    (with-tenant-db
+    (test-db/with-tenant-db "group_tenancy"
       (fn [ctx]
         (persistence/initialize-user-schema! ctx)
         (let [users (persistence/create-user-repository ctx)
@@ -56,7 +49,7 @@
                                         :password-hash "x" :tenant-id tenant-id}))
 
 (defmacro ^:private in [tenant-id & body]
-  `(binding [group-persistence/*tenant* {:id ~tenant-id}] ~@body))
+  `(sut/with-tenant ~tenant-id (fn [] ~@body)))
 
 (defn- refusal [f]
   (try (f) nil (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))

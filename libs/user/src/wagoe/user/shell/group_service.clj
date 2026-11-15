@@ -231,6 +231,11 @@
   (binding [group-persistence/*tenant* {:id tenant-id}]
     (f)))
 
+(defn- tenants-user?
+  "Whether `user` is of the bound tenant (BOU-996)."
+  [user]
+  (= (some-> (:tenant-id user) str) (some-> group-persistence/*tenant* :id str)))
+
 (defn- in-bound-tenant
   "`options` for find-users kept to the bound tenant's users when one is bound;
    unbound, every user's: no tenant's Everyone reaches them all until their
@@ -562,8 +567,7 @@
                           (map group-core/grant->assignment)
                           grants)
            :members (mapv #(or (let [u (ports/find-user-by-id user-repository %)]
-                                 ;; Only the bound tenant's users, as add-member! (BOU-996)
-                                 (when (= (str (:tenant-id u)) (str (:id group-persistence/*tenant*))) u))
+                                 (when (tenants-user? u) u))
                                (throw (refused "No such user" {:field :members :group (:name data) :user-id %})))
                           (distinct (:members spec))))))
 
@@ -783,8 +787,7 @@
   (let [{:keys [group focal grants expires-at] :as plan}
         (change-plan svc {:op :add-member :group-id group-id :user-id user-id :expires-at expires-at})
         ;; A group takes only its own tenant's users (BOU-996)
-        _     (when (and group-persistence/*tenant*
-                         (not= (str (:id group-persistence/*tenant*)) (str (:tenant-id focal))))
+        _     (when (and group-persistence/*tenant* (not (tenants-user? focal)))
                 (throw (not-found "No such user" {:user-id user-id})))
         diffs (user-diffs svc plan)]
     (audited! svc
@@ -1112,8 +1115,7 @@
   (remove-group-member [this group-id user-id]
     (let [{:keys [group focal grants] :as plan} (change-plan this {:op :remove-member :group-id group-id :user-id user-id})
           diffs (user-diffs this plan)]
-      ;; Another tenant's group is as missing: nothing to remove (BOU-996)
-      (audited! this #(and group (ports/remove-member % group-id user-id))
+      (audited! this #(ports/remove-member % group-id user-id)
                 ;; A soft-deleted user holds nothing, so leaving changes nothing to audit.
                 #(when (and % focal)
                    (audit! audit-repository :group-leave group [focal] grants {:diffs diffs})))))
