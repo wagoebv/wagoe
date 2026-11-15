@@ -7,7 +7,8 @@
 
    Every step returns {:ok …} or {:error {:type :oidc/… :message …}}; only a
    bad configuration throws, at boot."
-  (:require [wagoe.core.utils.text :as text]
+  (:require [wagoe.user.core.user :as user-core]
+            [wagoe.core.utils.text :as text]
             [buddy.core.codecs :as codecs]
             [buddy.core.keys :as keys]
             [buddy.sign.jws :as jws]
@@ -225,22 +226,21 @@
             :session   session
             :return-to (:return-to sign-in)}})))
 
-(defn- email-account
-  "The account of `email` a provider's sign-in may take: tenant `t`'s, else the
-   only account of that email (BOU-995)."
-  [user-repository t email]
-  (if (satisfies? ports/ITenantAccounts user-repository)
-    (if t
-      (ports/find-user-by-tenant-and-email user-repository t email)
-      (let [[one more] (ports/find-users-by-email user-repository email)] (when-not more one)))
-    (ports/find-user-by-email user-repository email)))
-
-(defn- several-accounts?
-  "Whether, without a tenant, any of `emails` has accounts in more than one: a
-   provider's sign-in then takes none, nor makes another (BOU-995)."
+(defn- email-accounts
+  "What `emails` find for a provider's sign-in: tenant `t`'s account, else the
+   only account of the email, and whether some email had several (BOU-995)."
   [user-repository t emails]
-  (and (nil? t) (satisfies? ports/ITenantAccounts user-repository)
-       (some #(< 1 (count (ports/find-users-by-email user-repository %))) emails)))
+  (if t
+    {:user (some #(auth/account-in-tenant user-repository t %) emails)}
+    (let [found (map #(auth/accounts-of user-repository %) emails)]
+      {:user (some user-core/sole found) :several? (boolean (some next found))})))
+
+(defn- refused?
+  "Whether a provider's sign-in takes no account: the linked one is another
+   tenant's, or no account was found and the email has several (BOU-995)."
+  [linked t email-user several?]
+  (boolean (or (and linked t (not= (str t) (str (:tenant-id linked))))
+               (and (nil? linked) (nil? email-user) several?))))
 
 (defn- account
   "The account for verified `claims`, created when the provider allows it, of
@@ -259,12 +259,11 @@
     (when (and found (nil? linked))
       (log/warn "Dropping OIDC link to a missing user" {:user-id (:user-id found) :provider (:id p)})
       (ports/unlink-identity repo (:iss claims) (:sub claims)))
-    (let [email-user (when (and email (nil? linked))
-                       ;; Emails are stored as registered; try the provider's casing first.
-                       (some #(email-account user-repository t %) (distinct [(:email claims) email])))
-          decision   (if (or (and linked t (not= (str t) (str (:tenant-id linked))))
-                             (and (nil? linked) (nil? email-user) email
-                                  (several-accounts? user-repository t (distinct [(:email claims) email]))))
+    (let [;; Emails are stored as registered; try the provider's casing first.
+          {email-user :user several? :several?}
+          (when (and email (nil? linked))
+            (email-accounts user-repository t (distinct [(:email claims) email])))
+          decision   (if (refused? linked t email-user several?)
                        {:error {:type :oidc/no-account :message "No account matches this sign-in"}}
                        (oidc/resolve-account
                         {:linked-user        linked

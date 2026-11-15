@@ -210,16 +210,28 @@
   "A hash to check a password against when no account has the email."
   (delay (hash-password "no account has this email")))
 
-(defn login-accounts
-  "The accounts `email` signs in to: the one of `login-context`'s tenant when
-   it names one (`:tenant-given?`, `:tenant-id` nil for no tenant), else every
-   account of that email (BOU-995)."
-  [user-repository email login-context]
+(defn accounts-of
+  "Every account of `email`. A repository without `ITenantAccounts` knows one
+   per email (BOU-995)."
+  [user-repository email]
   (if (satisfies? ports/ITenantAccounts user-repository)
-    (if (:tenant-given? login-context)
-      (some-> (ports/find-user-by-tenant-and-email user-repository (:tenant-id login-context) email) vector)
-      (ports/find-users-by-email user-repository email))
+    (ports/find-users-by-email user-repository email)
     (some-> (.find-user-by-email user-repository email) vector)))
+
+(defn account-in-tenant
+  "The account of `email` in tenant `tenant-id`, nil meaning no tenant."
+  [user-repository tenant-id email]
+  (if (satisfies? ports/ITenantAccounts user-repository)
+    (ports/find-user-by-tenant-and-email user-repository tenant-id email)
+    (.find-user-by-email user-repository email)))
+
+(defn login-accounts
+  "The accounts `email` signs in to: the one of `login-context`'s tenant when it
+   names one (`:tenant-given?`, `:tenant-id` nil for no tenant), else every one."
+  [user-repository email login-context]
+  (if (:tenant-given? login-context)
+    (some-> (account-in-tenant user-repository (:tenant-id login-context) email) vector)
+    (accounts-of user-repository email)))
 
 (defn- attempt
   "Steps 3 and 4 for one account: may it try, the attempt counted, then the
@@ -277,8 +289,9 @@
 
           ;; Step 2: the accounts this email signs in to (I/O): the named
           ;; tenant's, else each of them (BOU-995)
+          ;; The caller may have read them already
           accounts (when (:valid? credential-validation)
-                     (login-accounts user-repository email login-context))
+                     (or (:accounts login-context) (login-accounts user-repository email login-context)))
 
           ;; Steps 3 and 4, per account. With several, only those the password
           ;; opens count, and nothing tells the others apart.
@@ -289,13 +302,13 @@
                      (verify-password password @dummy-hash))
           several? (< 1 (count attempts))
           matched  (filterv :password-valid? attempts)
-          ;; The password opened one: the others were not guessed at, so their
-          ;; attempt does not count (it would lock them in time)
+          winner   (if several? (user-core/sole matched) (first attempts))
+          ;; The password opened some: the others were not guessed at, and a
+          ;; choice signs into none yet, so no attempt but the winner's counts
           _        (when (and several? (seq matched))
                      (run! #(lockout/release-attempt! user-repository (get-in % [:user :id]) (:claim %))
-                           (remove :password-valid? (filter (comp :claimed? :claim) attempts))))
-          {:keys [user login-allowed? claim password-valid?]}
-          (if several? (when (= 1 (count matched)) (first matched)) (first attempts))
+                           (remove #{winner} (filter (comp :claimed? :claim) attempts))))
+          {:keys [user login-allowed? claim password-valid?]} winner
 
           ;; Step 5: Analyze login risk
           login-risk (when (and user password-valid?)
@@ -326,19 +339,17 @@
 
                    ;; The password opens accounts in several tenants: they choose
                    (and several? (< 1 (count matched)))
-                   (do (run! #(lockout/release-attempt! user-repository (get-in % [:user :id]) (:claim %)) matched)
-                       {:success?   false
-                        :error      {:type    :tenant-choice-required
-                                     :message "Choose the tenant to sign in to"}
-                        :tenant-ids (mapv (comp :tenant-id :user) matched)})
+                   {:success?   false
+                    :error      {:type    :tenant-choice-required
+                                 :message "Choose the tenant to sign in to"}
+                    :tenant-ids (mapv (comp :tenant-id :user) matched)}
 
                    ;; Several accounts, none the password opens: one answer for all
                    (and several? (empty? matched))
                    (do (log/warn "Authentication failed - invalid password" {:email email})
-                       {:success?      false
-                        :error         {:type    :authentication-failed
-                                        :message "Invalid credentials"}
-                        :attempted-ids (mapv (comp :id :user) attempts)})
+                       {:success? false
+                        :error    {:type    :authentication-failed
+                                   :message "Invalid credentials"}})
 
                    ;; User not found or login blocked
                    (not (:allowed? login-allowed?))

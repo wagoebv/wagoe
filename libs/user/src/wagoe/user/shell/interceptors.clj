@@ -866,11 +866,9 @@
                                         ;; unresolved, so an IP-based MFA hook can refuse it.
                                         :ip-address (client-ip/request-ip (:request context))}
                                  (:mfaCode body) (assoc :mfa-code (:mfaCode body))
-                                 ;; The tenant the URL names, else the one chosen (BOU-995)
-                                 (get-in context [:request :tenant :id])
-                                 (assoc :tenant-given? true :tenant-id (str (get-in context [:request :tenant :id])))
-                                 (and (not (get-in context [:request :tenant :id])) (contains? body :tenantId))
-                                 (assoc :tenant-given? true :tenant-id (not-empty (:tenantId body))))]
+                                 (contains? body :tenantId) (assoc :tenant-id (:tenantId body)))
+                  ;; The tenant the URL names, else the one chosen (BOU-995)
+                  session-data (tenant-scope/sign-in-tenant (:request context) session-data)]
               (-> context
                   (assoc :session-data session-data)
                   (ctx/add-breadcrumb :operation :session-create-transform-complete

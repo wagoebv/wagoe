@@ -454,17 +454,6 @@
           page-opts (login-branding (sign-in-opts config request return-to) config)]
       (html-response request (user-ui/login-page initial-data {} page-opts)))))
 
-(defn- sign-in-tenant
-  "`credentials` naming the tenant to sign in to: the request's (from its URL)
-   or the one chosen (`:tenant-id`, blank for no tenant); untouched when there
-   is neither, so every account of the email is tried (BOU-995)."
-  [request credentials]
-  (if-let [t (get-in request [:tenant :id])]
-    (assoc credentials :tenant-given? true :tenant-id (str t))
-    (cond-> credentials
-      (contains? credentials :tenant-id)
-      (assoc :tenant-given? true :tenant-id (not-empty (:tenant-id credentials))))))
-
 (defn login-submit-handler
   "POST /web/login - validate credentials, authenticate, set session cookie."
   [user-service config]
@@ -491,7 +480,7 @@
           ;; Use IUserService/authenticate-user with validated data. The
           ;; tenant the URL names, else the one chosen, picks the account;
           ;; without either every account of the email is tried (BOU-995).
-          (let [auth-result (user-ports/authenticate-user user-service (sign-in-tenant request validated-data))
+          (let [auth-result (user-ports/authenticate-user user-service (tenant-scope/sign-in-tenant request validated-data))
                 user (:user auth-result)
                 return-to (when (:authenticated auth-result)
                             (safe-return-url raw-return-to (landing-path config user request)))]

@@ -429,3 +429,9 @@
      :avg-events-per-day (if (> unique-days 0) (/ event-count unique-days) 0)
      :activity-score (min 100 (* (/ unique-days analysis-period-days) 100))
      :user-id (:id user)}))
+
+(defn sole
+  "The only element of `xs`, or nil when it has none or several: an email's
+   account when it has exactly one (BOU-995)."
+  [xs]
+  (when-not (next xs) (first xs)))

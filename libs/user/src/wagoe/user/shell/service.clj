@@ -310,15 +310,6 @@
    :metrics-emitter (:metrics-emitter user-service)
    :error-reporter  (:error-reporter user-service)})
 
-(defn- account-in-tenant
-  "The account of `email` in tenant `tenant-id` (nil for none): an email is
-   unique per tenant (BOU-995). A repository without `ITenantAccounts` knows one
-   account per email."
-  [user-repository tenant-id email]
-  (if (satisfies? ports/ITenantAccounts user-repository)
-    (ports/find-user-by-tenant-and-email user-repository tenant-id email)
-    (.find-user-by-email user-repository email)))
-
 (defn- tenant-of
   "Tenant `id` as {:id :name :slug}, for the choice at sign-in; nil `id` is no
    tenant. Name and slug are read when the tenant service is there."
@@ -375,7 +366,7 @@
                                          :violations (:violations password-validation)})))
 
                       ;; 3. Check business rules using pure core function
-                      (let [existing-user (account-in-tenant user-repository (:tenant-id user-data) (:email user-data))
+                      (let [existing-user (auth-shell/account-in-tenant user-repository (:tenant-id user-data) (:email user-data))
                             uniqueness-result (user-core/check-duplicate-user-decision user-data existing-user)]
                         (when (= :reject (:decision uniqueness-result))
                           (throw (ex-info "User already exists"
@@ -430,7 +421,7 @@
        (let [service (if tx-context
                        (tx-bind-user-service this tx-context)
                        this)]
-         (if-let [existing-user (account-in-tenant (:user-repository service) (:tenant-id user-data) (:email user-data))]
+         (if-let [existing-user (auth-shell/account-in-tenant (:user-repository service) (:tenant-id user-data) (:email user-data))]
            (let [auth-result (.authenticate-user ^wagoe.user.ports.IUserService service
                                                  (merge {:email (:email user-data)
                                                          :password (:password user-data)
@@ -526,7 +517,7 @@
                               auth-service
                               email
                               password
-                              login-context)]
+                              (assoc login-context :accounts accounts))]
 
              ;; Transform auth-service result to match expected format
              (cond
@@ -555,9 +546,8 @@
 
                ;; Authentication failed
                :else
-               (let [;; Each account tried, when the email has several (BOU-995)
-                     audited (or (seq (filter (comp (set (:attempted-ids auth-result)) :id) accounts))
-                                 (some-> existing-user vector))]
+               (let [;; Each account of the email the sign-in could have opened (BOU-995)
+                     audited accounts]
                  (doseq [u audited]
                    (.create-audit-log audit-repository
                                       (audit-core/login-audit-entry
@@ -643,9 +633,7 @@
      (fn [{:keys [params]}]
        (let [{:keys [email]} params
              ;; Deprecated: nil when the email has accounts in several tenants (BOU-995)
-             user (if (satisfies? ports/ITenantAccounts user-repository)
-                    (let [[one more] (ports/find-users-by-email user-repository email)] (when-not more one))
-                    (.find-user-by-email user-repository email))]
+             user (user-core/sole (auth-shell/accounts-of user-repository email))]
          (some-> user user-core/without-credentials)))
      (observability this)))
 
@@ -696,7 +684,7 @@
          ;; checked first, in the shape the platform gives a named one; a form
          ;; shows it on its field (BOU-673). The constraint stays the backstop.
          (when-let [other (when (and old-user (not= (:email merged) (:email old-user)))
-                            (account-in-tenant user-repository (:tenant-id old-user) (:email merged)))]
+                            (auth-shell/account-in-tenant user-repository (:tenant-id old-user) (:email merged)))]
            (when (not= (:id other) (:id input))
              (throw (ex-info "Another record already has this email"
                              {:type :conflict :constraint :unique :field :email}))))
@@ -895,13 +883,10 @@
 
   ports/ITenantAccountLookup
   (get-users-by-email [_ email]
-    (mapv user-core/without-credentials
-          (if (satisfies? ports/ITenantAccounts user-repository)
-            (ports/find-users-by-email user-repository email)
-            (some-> (.find-user-by-email user-repository email) vector))))
+    (mapv user-core/without-credentials (auth-shell/accounts-of user-repository email)))
 
   (get-user-by-tenant-and-email [_ tenant-id email]
-    (some-> (account-in-tenant user-repository tenant-id email) user-core/without-credentials))
+    (some-> (auth-shell/account-in-tenant user-repository tenant-id email) user-core/without-credentials))
 
   ports/IUserDeletion
   (delete-user [this user-id]

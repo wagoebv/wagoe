@@ -1,6 +1,7 @@
 (ns wagoe.user.shell.tenant-scope
   "Whose users a request may list and act on (BOU-948, BOU-953)."
-  (:require [wagoe.core.http.access :as access]
+  (:require [wagoe.user.core.user :as user-core]
+            [wagoe.core.http.access :as access]
             [wagoe.user.ports :as ports]))
 
 (defn list-options
@@ -40,8 +41,19 @@
       (and (contains? opts :filter-tenant-id) (satisfies? ports/ITenantAccountLookup user-service))
       (ports/get-user-by-tenant-and-email user-service (:filter-tenant-id opts) email)
       (satisfies? ports/ITenantAccountLookup user-service)
-      (let [[one more] (ports/get-users-by-email user-service email)] (when-not more one))
+      (user-core/sole (ports/get-users-by-email user-service email))
       :else (ports/get-user-by-email user-service email))))
+
+(defn sign-in-tenant
+  "`credentials` naming the tenant to sign in to: the request's (from its URL)
+   or the one chosen (`:tenant-id`, blank for no tenant); untouched when there
+   is neither, so every account of the email is tried (BOU-995)."
+  [request credentials]
+  (if-let [t (get-in request [:tenant :id])]
+    (assoc credentials :tenant-given? true :tenant-id (str t))
+    (cond-> credentials
+      (contains? credentials :tenant-id)
+      (assoc :tenant-given? true :tenant-id (not-empty (:tenant-id credentials))))))
 
 (defn new-user-tenant
   "What a user `request` creates is given: `{:tenant-id t}`, `{}` for no tenant, or nil

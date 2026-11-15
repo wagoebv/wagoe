@@ -190,10 +190,13 @@
   "Give each auth_users row its profile's tenant, for rows made before the
    column (BOU-995). Rows of no tenant stay NULL."
   [ctx]
-  (db/execute-ddl! ctx (str "UPDATE auth_users SET tenant_id = "
-                            "(SELECT u.tenant_id FROM users u WHERE u.id = auth_users.id) "
-                            "WHERE tenant_id IS NULL AND EXISTS "
-                            "(SELECT 1 FROM users u WHERE u.id = auth_users.id AND u.tenant_id IS NOT NULL)")))
+  ;; A read first: the UPDATE would take row locks at every boot for nothing
+  (when (db/execute-one! ctx {:select [1] :from [[:auth_users :a]] :join [[:users :u] [:= :u.id :a.id]]
+                              :where [:and [:is :a.tenant_id nil] [:not= :u.tenant_id nil]] :limit 1})
+    (db/execute-ddl! ctx (str "UPDATE auth_users SET tenant_id = "
+                              "(SELECT u.tenant_id FROM users u WHERE u.id = auth_users.id) "
+                              "WHERE tenant_id IS NULL AND EXISTS "
+                              "(SELECT 1 FROM users u WHERE u.id = auth_users.id AND u.tenant_id IS NOT NULL)"))))
 
 (defn- tenant-email-key!
   "Make an email unique per tenant instead of everywhere (BOU-995). Only where
