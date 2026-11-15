@@ -28,7 +28,21 @@ calls `find-user-by-email` gets any one account of the email, and
 its new account in no tenant and refuses an email of several accounts unless
 the URL names the tenant.
 
-### 2. The admin service refuses keys that are not fields (BOU-998)
+### 2. Roles and groups per tenant (BOU-996)
+
+Groups and managed roles belong to a tenant now, and a tenant's admins manage
+them at `/web/admin/groups`; a platform admin manages those of the tenant the
+request names, else those of no tenant. At boot the migration copies each group
+with members in a tenant into that tenant, with its roles, and moves those
+members: nobody loses access. Each tenant gets its own Everyone, starting from
+the one of no tenant, the first time an admin opens its groups. Code calling
+the group service outside a request (an import in your migration, a job) works
+on the groups of no tenant; wrap it in
+`(wagoe.user.shell.group-service/with-tenant tenant-id f)` to work in one. A
+group repository of your own keeps the pages a platform admin's until it
+implements `ITenantGroups` and honours the tenant.
+
+### 3. The admin service refuses keys that are not fields (BOU-998)
 
 `create-entity`, `create-entity-with-children` and `update-entity` turned every
 key into a column. They now answer a `:validation-error` with `:errors {key

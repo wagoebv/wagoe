@@ -165,6 +165,8 @@
   "Schema for a group of users. Its grants apply to every member."
   [:map {:title "User Group"}
    [:id :uuid]
+   ;; Whose: a group belongs to one tenant, nil to none (BOU-996)
+   [:tenant-id {:optional true} [:maybe :uuid]]
    [:name [:string {:min 1 :max 255}]]
    [:description {:optional true} [:maybe [:string {:max 255}]]]
    [:created-at inst?]
@@ -199,6 +201,8 @@
    Code roles ship with modules and are not stored."
   [:map {:title "User Role"}
    [:id :uuid]
+   ;; Whose: a managed role belongs to one tenant, nil to none (BOU-996)
+   [:tenant-id {:optional true} [:maybe :uuid]]
    [:name [:string {:min 1 :max 255}]]
    [:description {:optional true} [:maybe [:string {:max 255}]]]
    [:permissions {:column-type :text} :string]

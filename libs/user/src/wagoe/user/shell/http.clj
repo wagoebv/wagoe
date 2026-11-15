@@ -32,7 +32,9 @@
    - GET    /docs/*               - Documentation
 
    All observability is handled automatically by interceptors."
-  (:require [wagoe.user.schema :as user-schema]
+  (:require [wagoe.core.http.access :as core-access]
+            [wagoe.user.shell.group-service :as group-service]
+            [wagoe.user.schema :as user-schema]
             [wagoe.core.interceptor :as interceptor]
             [wagoe.core.interceptor-context :as interceptor-context]
             [wagoe.platform.core.http.access :as access]
@@ -799,13 +801,13 @@
           :entities [:users]
           :items    [{:href "/web/profile" :icon :user
                       :label [:t :user/nav-profile-title] :description [:t :user/nav-profile-description]}
-                     {:href "/web/admin/groups" :icon :shield :access :platform-admin
+                     {:href "/web/admin/groups" :icon :shield :access :admin
                       :label [:t :admin/groups-title] :description [:t :admin/groups-description]}
-                     {:href "/web/admin/roles" :icon :key :access :platform-admin
+                     {:href "/web/admin/roles" :icon :key :access :admin
                       :label [:t :user.roles/page-title] :description [:t :user.roles/nav-description]}
-                     {:href "/web/admin/permissions" :icon :check :access :platform-admin
+                     {:href "/web/admin/permissions" :icon :check :access :admin
                       :label [:t :user.permissions/page-title] :description [:t :user.permissions/nav-description]}
-                     {:href "/web/admin/access" :icon :clipboard :access :platform-admin
+                     {:href "/web/admin/access" :icon :clipboard :access :admin
                       :label [:t :user.access/page-title] :description [:t :user.access/nav-description]}
                      {:href "/web/audit" :icon :file-text :access :platform-admin
                       :label [:t :admin/audit-trail-title] :description [:t :admin/audit-trail-description]}]}})
@@ -824,14 +826,47 @@
      :static (landing/root-routes config)
      :nav    (when web? nav)}))
 
+(defn- rights-target
+  "The user a /users/:id/rights, /explain or /grant request names, when
+   `request` reaches them; nil for any other route."
+  [user-service request]
+  (when (re-find #"/users/[^/]+/(rights|explain|grant)" (str (:uri request)))
+    (tenant-scope/reachable-user user-service request (some-> (get-in request [:path-params :id]) str parse-uuid))))
+
+(defn- in-admins-tenant
+  "Middleware factory: an admin where the request runs works in the groups and
+   roles of the tenant they reach (a platform admin with none named: those of
+   no tenant), or, on a user's rights pages, of that user's tenant; 403 for
+   anyone else. A tenant gets its Everyone before a page shows it (BOU-996)."
+  [user-service group-service]
+  (fn [handler]
+    (fn [request]
+      (if-let [reach (when (access/admin? request) (core-access/admin-reach request))]
+        (let [target (rights-target user-service request)
+              t      (if target (:tenant-id target) (:tenant-id reach))]
+          (group-service/with-tenant t
+            #(do (when (and t group-service) (group-service/ensure-everyone! group-service))
+                 (handler request))))
+        (access/forbidden-response "Admin role required" request
+                                   (access/correlation-id request (str (random-uuid))))))))
+
+(defn- tenant-groups?
+  "Whether `group-service`'s repository keeps groups per tenant; one written
+   before BOU-996 does not, and its pages stay a platform admin's."
+  [group-service]
+  (let [repo (:group-repository group-service)]
+    (or (nil? repo) (satisfies? user-ports/ITenantGroups repo))))
+
 (defn group-routes
   "Groups, roles and permissions, mounted under /web/admin beside the admin UI,
-   and a user's rights at /web/users/:id/rights, /explain and /grant: platform
-   admins only. Roles and groups carry no tenant, so a tenant's admin who edits
-   one edits it for every tenant (BOU-984). Absent when the web UI is switched off."
+   and a user's rights at /web/users/:id/rights, /explain and /grant: an admin
+   of a tenant manages that tenant's, a platform admin those of the tenant the
+   request names or of none (BOU-996). Absent when the web UI is switched off."
   [user-service group-service config]
   (let [guard [(user-middleware/flexible-authentication-middleware user-service)
-               require-platform-admin-middleware]
+               (if (tenant-groups? group-service)
+                 (in-admins-tenant user-service group-service)
+                 require-platform-admin-middleware)]
         route (fn [path methods] [path (assoc methods :no-doc true :authorization :self :middleware guard)])]
     {:api    []
      :static []

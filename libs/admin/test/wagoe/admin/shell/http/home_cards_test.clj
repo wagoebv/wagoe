@@ -92,11 +92,12 @@
       (is (not (str/includes? body "/web/audit")))
       (is (not (str/includes? body "/web/logout"))))))
 
-(deftest ^:unit a-tenant-admin-sees-no-platform-admin-card
-  ;; These pages admit platform admins only (BOU-984).
+(deftest ^:unit a-tenant-admin-sees-their-tenants-access-cards-not-the-audit
+  ;; Groups, roles and access are a tenant's own since BOU-996; the audit trail spans tenants.
   (let [body (home nil {:tenant-id (random-uuid)})]
-    (doseq [href platform-admin-hrefs]
-      (is (not (str/includes? body href)) href))))
+    (doseq [href (remove #{"/web/audit"} platform-admin-hrefs)]
+      (is (str/includes? body (str "href=\"" href "\"")) href))
+    (is (not (str/includes? body "/web/audit")))))
 
 (deftest ^:unit a-plain-user-sees-only-what-they-may-open
   (testing "an admin: entity tiles with counts"

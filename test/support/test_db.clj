@@ -6,7 +6,7 @@
             [support.mysql :as mysql]
             [wagoe.platform.shell.adapters.database.factory :as factory]))
 
-(def engine
+(def ^:dynamic engine
   (keyword (or (System/getenv "WAGOE_TEST_DB") "h2")))
 
 (defonce ^:private pg
@@ -42,3 +42,11 @@
     :mysql (mysql/with-database prefix f)
     (throw (ex-info (str "WAGOE_TEST_DB must be h2, pg or mysql, not " (name engine))
                     {:type :validation-error :engine engine}))))
+
+(defn with-tenant-db
+  "`with-db`, on H2 when the run is on MySQL: MySQL runs no tenants and keeps
+   emails and group names unique everywhere (BOU-995, BOU-996)."
+  [prefix f]
+  (if (= :mysql engine)
+    (binding [engine :h2] (with-db prefix f))
+    (with-db prefix f)))
