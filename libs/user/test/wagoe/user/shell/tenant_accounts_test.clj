@@ -24,13 +24,17 @@
 
 (def ^:private ^:dynamic *ctx* nil)
 
-;; WAGOE_TEST_DB picks the engine: on PostgreSQL the key is two indexes (BOU-995)
+;; WAGOE_TEST_DB picks the engine: on PostgreSQL the key is two indexes (BOU-995).
+;; MySQL and SQLite run no tenants and keep a global email key, so there is
+;; nothing here to test on them.
 (use-fixtures :each
   (fn [f]
-    (test-db/with-db "tenant_accounts"
-      (fn [ctx]
-        (persistence/initialize-user-schema! ctx)
-        (binding [*ctx* ctx] (f))))))
+    (if (#{:h2 :pg} test-db/engine)
+      (test-db/with-db "tenant_accounts"
+        (fn [ctx]
+          (persistence/initialize-user-schema! ctx)
+          (binding [*ctx* ctx] (f))))
+      (println "tenant-accounts-test: skipped, no tenants on" test-db/engine))))
 
 (defn- user-service [& [observability]]
   (let [users    (persistence/create-user-repository *ctx*)
