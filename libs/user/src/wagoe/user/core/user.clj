@@ -429,3 +429,17 @@
      :avg-events-per-day (if (> unique-days 0) (/ event-count unique-days) 0)
      :activity-score (min 100 (* (/ unique-days analysis-period-days) 100))
      :user-id (:id user)}))
+
+(defn may-change-member?
+  "Whether `actor` may change `target`: `target` themselves, a platform admin
+   (an admin of no tenant), an admin of `target`'s own tenant, or anyone when
+   `target` is in no tenant besides their own. `tenant-ids`, the id strings of
+   `target`'s tenants, may be a delay: it is read last (BOU-995)."
+  [actor target tenant-ids]
+  (let [own    (some-> (:tenant-id target) str)
+        admin? (= :admin (some-> (:role actor) keyword))]
+    (boolean
+     (or (= (str (:id actor)) (str (:id target)))
+         (and admin? (nil? (:tenant-id actor)))
+         (and admin? (some? own) (= own (some-> (:tenant-id actor) str)))
+         (empty? (disj (set (force tenant-ids)) own))))))

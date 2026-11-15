@@ -94,6 +94,15 @@
   ([v] (as-identifier v (if (parse-uuid (str v)) :id :slug)))
   ([v type] (when v {:type type :value v})))
 
+(defn forget-chosen-tenant
+  "`response` clearing the tenant chosen at sign-in when `request` named one: it
+   names a tenant suspended or left since, and the next request falls back to
+   the user's own (BOU-995)."
+  [response request]
+  (cond-> response
+    (get-in request [:cookies "wagoe-tenant"])
+    (assoc :cookies {"wagoe-tenant" {:value "" :max-age 0 :path "/"}})))
+
 (defn- tenant-identifiers
   "Where the request may name its tenant, first first: the subdomain (always a
    slug), a JWT claim, the X-Tenant-Slug/X-Tenant-Id header, the tenant chosen
@@ -292,11 +301,7 @@
 
                    ;; Add tenant to request and continue
                    (handler (assoc request :tenant tenant)))
-                 (cond-> (error-response 403 :forbidden "Tenant is not active" request)
-                   ;; Chosen at sign-in and suspended since: forget it, so the
-                   ;; next request falls back to their own tenant (BOU-995)
-                   (get-in request [:cookies "wagoe-tenant"])
-                   (assoc :cookies {"wagoe-tenant" {:value "" :max-age 0 :path "/"}})))))))))))
+                 (forget-chosen-tenant (error-response 403 :forbidden "Tenant is not active" request) request))))))))))
 
 ;; =============================================================================
 ;; Middleware - Schema Switching

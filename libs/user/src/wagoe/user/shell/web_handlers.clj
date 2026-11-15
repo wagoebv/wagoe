@@ -418,6 +418,11 @@
 
 (def ^:private tenant-cookie-cleared {:value "" :max-age 0 :path "/"})
 
+(defn- choose-tenant-url
+  "The choice of tenant, coming back to `location` (BOU-995)."
+  [location]
+  (str "/web/choose-tenant?return-to=" (java.net.URLEncoder/encode (str location) "UTF-8")))
+
 (defn- after-sign-in
   "Where `user` goes after signing in: to the choice of tenant first when they
    belong to several or are invited to one (BOU-995), else to `location`. A
@@ -427,7 +432,7 @@
            (not (access/platform-admin? user))
            (or (< 1 (count (user-ports/tenant-ids user-service user)))
                (seq (user-ports/invitations user-service user))))
-    (str "/web/choose-tenant?return-to=" (java.net.URLEncoder/encode (str location) "UTF-8"))
+    (choose-tenant-url location)
     location))
 
 (def ^:private enrolment-cookie "mfa-enrolment")
@@ -596,9 +601,8 @@
           (catch Exception e
             (log/error e "Error during logout"))))
       (-> (response/redirect "/")
-          (assoc :cookies {"session-token"
-                           {:value "" :max-age 0 :path "/"}
-                           tenant-cookie tenant-cookie-cleared})))))
+          (assoc :cookies {"session-token" tenant-cookie-cleared
+                           tenant-cookie   tenant-cookie-cleared})))))
 
 ;; =============================================================================
 ;; Second-factor setup before signing in
@@ -809,25 +813,20 @@
   [user-service config]
   (fn [request]
     (let [user          (:user request)
-          invitation-id (some-> (get-in request [:form-params "invitation-id"]) parse-uuid)
-          decline?      (= "decline" (get-in request [:form-params "answer"]))
-          _             (when invitation-id
-                          (if decline?
-                            (user-ports/decline-invitation user-service user invitation-id)
-                            (user-ports/accept-invitation user-service user invitation-id)))
-          tenant-id     (str (get-in request [:form-params "tenant-id"]))]
+          form          (:form-params request)
+          invitation-id (some-> (get form "invitation-id") parse-uuid)
+          tenant-id     (str (get form "tenant-id"))
+          return-to     (safe-return-url (get form "return-to") (landing-path config user request))]
       (cond
-        decline? (response/redirect (str "/web/choose-tenant?return-to="
-                                         (java.net.URLEncoder/encode
-                                          (str (safe-return-url (get-in request [:form-params "return-to"])
-                                                                (landing-path config user request)))
-                                          "UTF-8"))
-                                    :see-other)
-        (contains? (user-ports/tenant-ids user-service user) tenant-id)
-        (-> (response/redirect (safe-return-url (get-in request [:form-params "return-to"])
-                                                (landing-path config user request))
-                               :see-other)
+        (and invitation-id (= "decline" (get form "answer")))
+        (do (user-ports/decline-invitation user-service user invitation-id)
+            (response/redirect (choose-tenant-url return-to) :see-other))
+
+        (do (when invitation-id (user-ports/accept-invitation user-service user invitation-id))
+            (contains? (user-ports/tenant-ids user-service user) tenant-id))
+        (-> (response/redirect return-to :see-other)
             (assoc-in [:cookies tenant-cookie] (session-cookie config tenant-id)))
+
         :else
         (access/forbidden-response "Not a member of this tenant" request
                                    (access/correlation-id request (str (random-uuid))))))))
@@ -1052,41 +1051,40 @@
         (-> (server-error request e "Unexpected error in bulk-update-users-htmx-handler")
             (with-error-toast request :common/error-generic))))))
 
-(defn- send-welcome-email!
-  "Send welcome email to a newly created user through the email lib.
-   email-sender satisfies wagoe.email.ports/EmailSenderProtocol (wired from
-   :wagoe/email), so welcome mail flows through the framework's email module
-   rather than the lower-level external SMTP provider.
-   Config keys used: :welcome-email-from, :app-name (set at wiring time)."
-  [email-sender user config]
-  (let [app-name (or (:app-name config) "Wagoe")
-        from     (or (:welcome-email-from config) "no-reply@localhost")]
+(defn- send-account-email!
+  "Mail `user` about their account through the email lib. email-sender
+   satisfies wagoe.email.ports/EmailSenderProtocol (wired from :wagoe/email).
+   Config keys used: :welcome-email-from, :app-name (set at wiring time).
+   `content` gets the app name and returns [subject body]."
+  [email-sender user config content]
+  (let [app-name       (or (:app-name config) "Wagoe")
+        [subject body] (content app-name)]
     (email-ports/send-email!
      email-sender
      {:id      (random-uuid)
       :to      [(:email user)]
-      :from    from
-      :subject (str "Welcome to " app-name)
-      :body    (str "Hello " (:name user) ",\n\n"
-                    "Your account has been created successfully.\n\n"
-                    "You can log in at any time.\n\n"
-                    "— " app-name)})))
+      :from    (or (:welcome-email-from config) "no-reply@localhost")
+      :subject subject
+      :body    (str body "\n\n— " app-name)})))
+
+(defn- send-welcome-email!
+  "Welcome a newly created user."
+  [email-sender user config]
+  (send-account-email! email-sender user config
+                       (fn [app-name]
+                         [(str "Welcome to " app-name)
+                          (str "Hello " (:name user) ",\n\n"
+                               "Your account has been created successfully.\n\n"
+                               "You can log in at any time.")])))
 
 (defn- send-invitation-email!
   "Tell an existing account it was invited to another workspace (BOU-995). It
    names no tenant and no inviter: they see both when they sign in to accept."
   [email-sender user config]
-  (let [app-name (or (:app-name config) "Wagoe")
-        from     (or (:welcome-email-from config) "no-reply@localhost")]
-    (email-ports/send-email!
-     email-sender
-     {:id      (random-uuid)
-      :to      [(:email user)]
-      :from    from
-      :subject (str "You were invited on " app-name)
-      :body    (str "Hello,\n\n"
-                    "You were invited to another workspace. Sign in to accept or decline.\n\n"
-                    "— " app-name)})))
+  (send-account-email! email-sender user config
+                       (fn [app-name]
+                         [(str "You were invited on " app-name)
+                          "Hello,\n\nYou were invited to another workspace. Sign in to accept or decline."])))
 
 (defn create-user-htmx-handler
   "HTMX handler for creating a new user (POST /web/users).

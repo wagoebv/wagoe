@@ -1,6 +1,7 @@
 (ns wagoe.user.shell.tenant-scope
   "Whose users a request may list and act on (BOU-948, BOU-953)."
   (:require [wagoe.core.http.access :as access]
+            [wagoe.user.core.user :as user-core]
             [wagoe.user.ports :as ports]))
 
 (defn list-options
@@ -33,23 +34,19 @@
     (assoc :tenant-ids (ports/tenant-ids user-service user))))
 
 (defn reachable-user
-  "The user `id` names, with their `:tenant-ids`, when `request` may reach them; else nil."
+  "The user `id` names, with their `:tenant-ids`, when `request` may reach them; else nil.
+   The caller themselves needs no tenants read."
   [user-service request id]
-  (let [user (with-tenants user-service (some->> id (ports/get-user-by-id user-service)))]
+  (let [user (some->> id (ports/get-user-by-id user-service))
+        user (cond->> user
+               (not (access/same-id? id (get-in request [:user :id]))) (with-tenants user-service))]
     (when (reaches? request user) user)))
 
 (defn shared?
-  "Whether `request` may not change `user`, nor see their sessions: they are in
-   a tenant besides their own (or in one without having one), and the caller is
-   neither them, a platform admin, nor acting in their own tenant. The user
-   service refuses the same changes; elsewhere a tenant's admin manages only the
-   membership (BOU-995)."
+  "Whether `request` may not change `user`, nor see their sessions: the rule the
+   user service applies to changes (`user-core/may-change-member?`, BOU-995)."
   [request user]
-  (and (boolean (seq (disj (set (:tenant-ids user)) (some-> (:tenant-id user) str))))
-       (not (access/same-id? (:id user) (get-in request [:user :id])))
-       (not (access/platform-admin? (:user request)))
-       (not (and (:tenant-id user)
-                 (access/same-id? (:tenant-id user) (:tenant-id (access/admin-reach request)))))))
+  (not (user-core/may-change-member? (:user request) user (:tenant-ids user))))
 
 (defn new-user-tenant
   "What a user `request` creates is given: `{:tenant-id t}`, `{}` for no tenant, or nil

@@ -720,7 +720,7 @@
 
 (defn tenant-choice-page
   "Which tenant to sign in to, for someone in several, and the tenants they are
-   invited to, each joined by choosing it (BOU-995). `tenants` are
+   invited to, each accepted or declined here (BOU-995). `tenants` are
    {:id :slug :name}; `invitations` {:id membership-id :tenant-id :slug :name}."
   [tenants invitations return-to opts]
   (auth-page

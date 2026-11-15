@@ -919,9 +919,8 @@
   "`user`'s tenants as {:id :slug :name}, when they belong to more than one."
   [context user]
   (let [svc (get-in context [:system :user-service])]
-    (when (satisfies? ports/ITenantMembers svc)
-      (let [ts (ports/tenants svc user)]
-        (when (< 1 (count ts)) (vec ts))))))
+    (when (and (satisfies? ports/ITenantMembers svc) (< 1 (count (ports/tenant-ids svc user))))
+      (vec (ports/tenants svc user)))))
 
 (def format-session-creation-response
   "200 with the session, 200 with requiresMfa when a second factor is still

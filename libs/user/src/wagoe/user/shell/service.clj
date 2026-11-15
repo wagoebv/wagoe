@@ -263,34 +263,18 @@
         (comp (filter #(= :active (keyword (:status %)))) (map (comp str :tenant-id)))
         (memberships-of memberships user)))
 
-(defn- in-another-tenant?
-  "Whether `user` is in a tenant besides their own, or in one without having
-   one: no tenant's admin then changes them (BOU-995)."
-  [memberships user]
-  (boolean (seq (disj (tenant-ids-of memberships user) (some-> (:tenant-id user) str)))))
-
-(defn- own-tenants-admin?
-  "Whether `actor` is an admin of `target`'s own tenant, which keeps control of
-   them wherever else they are a member (BOU-995)."
-  [actor target]
-  (and (= :admin (some-> (:role actor) keyword))
-       (some? (:tenant-id target))
-       (access/same-id? (:tenant-id actor) (:tenant-id target))))
-
 (defn- assert-may-change!
-  "Throw :forbidden when `user-id` names someone in another tenant too and the
-   request's actor is neither them, a platform admin, nor an admin of their own
-   tenant (BOU-995). Without an actor (the CLI, a job) it is allowed, as
-   `check-admin-change!` allows."
+  "Throw :forbidden unless the request's actor may change `user-id`
+   (`user-core/may-change-member?`, BOU-995). Without an actor (the CLI, a job)
+   it is allowed, as `check-admin-change!` allows."
   [{:keys [user-repository memberships]} user-id]
   (when-let [actor-id (:actor-id *audit-context*)]
     (when-not (access/same-id? actor-id user-id)
       (when-let [target (.find-user-by-id user-repository user-id)]
-        (when (in-another-tenant? memberships target)
-          (let [actor (.find-user-by-id user-repository actor-id)]
-            (when-not (or (access/platform-admin? actor) (own-tenants-admin? actor target))
-              (throw (ex-info "This user belongs to another tenant too"
-                              {:type :forbidden :user-id user-id})))))))))
+        (when-not (user-core/may-change-member? (.find-user-by-id user-repository actor-id) target
+                                                (delay (tenant-ids-of memberships target)))
+          (throw (ex-info "This user belongs to another tenant too"
+                          {:type :forbidden :user-id user-id})))))))
 
 (defn- delete-users!
   "Delete `user-ids`, soft unless `permanent?`, in one transaction: all of
@@ -472,7 +456,7 @@
                                          :violations (:violations password-validation)})))
 
                       ;; 3. Check business rules using pure core function. An identity
-                      ;; another tenant holds joins this one instead (BOU-995).
+                      ;; outside this tenant is invited instead (BOU-995).
                       (let [existing-user (.find-user-by-email user-repository (:email user-data))
                             uniqueness-result (user-core/check-duplicate-user-decision user-data existing-user)]
                         (if (= :reject (:decision uniqueness-result))
