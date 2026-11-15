@@ -203,11 +203,15 @@
    and the email key they have says the same."
   [ctx]
   (case (protocols/engine (:adapter ctx))
-    :postgresql (do (db/create-index-if-not-exists! ctx "uk_auth_users_tenant_email" :auth_users
-                                                    [:tenant_id :email] {:unique? true})
-                    (db/execute-ddl! ctx (str "CREATE UNIQUE INDEX IF NOT EXISTS uk_auth_users_email_no_tenant "
-                                              "ON auth_users (email) WHERE tenant_id IS NULL"))
-                    (db/execute-ddl! ctx "ALTER TABLE auth_users DROP CONSTRAINT IF EXISTS uk_auth_users_email"))
+    ;; Only while the old key is there: an ALTER locks the table even when it
+    ;; would do nothing, and this runs at every boot (BOU-616)
+    :postgresql (when (db/execute-one! ctx {:select [1] :from [:pg_constraint]
+                                            :where [:= :conname "uk_auth_users_email"]})
+                  (db/create-index-if-not-exists! ctx "uk_auth_users_tenant_email" :auth_users
+                                                  [:tenant_id :email] {:unique? true})
+                  (db/execute-ddl! ctx (str "CREATE UNIQUE INDEX IF NOT EXISTS uk_auth_users_email_no_tenant "
+                                            "ON auth_users (email) WHERE tenant_id IS NULL"))
+                  (db/execute-ddl! ctx "ALTER TABLE auth_users DROP CONSTRAINT IF EXISTS uk_auth_users_email"))
     ;; ponytail: H2 lets two accounts of no tenant share an email; register-user still refuses it
     :h2         (do (db/create-index-if-not-exists! ctx "uk_auth_users_tenant_email" :auth_users
                                                     [:tenant_id :email] {:unique? true})
@@ -482,7 +486,7 @@
    :a.created_at
    :a.updated_at
    :a.deleted_at
-   :u.tenant_id
+   :a.tenant_id
    :u.name
    :u.role
    :u.avatar_url
@@ -533,35 +537,7 @@
      {:email email}
      (fn [{:keys [params]}]
        (let [email (:email params)
-             query {:select [:a.id
-                             :a.email
-                             :a.password_hash
-                             :a.active
-                             :a.mfa_enabled
-                             :a.mfa_secret
-                             :a.mfa_backup_codes
-                             :a.mfa_backup_codes_used
-                             :a.mfa_enabled_at
-                             :a.mfa_reset_at
-                             :a.failed_login_count
-                             :a.lockout_until
-                             :a.created_at
-                             :a.updated_at
-                             :a.deleted_at
-                             :u.tenant_id
-                             :u.name
-                             :u.role
-                             :u.avatar_url
-                             :u.login_count
-                             :u.last_login
-                             :u.date_format
-                             :u.time_format
-                             :u.notifications_email
-                             :u.notifications_push
-                             :u.notifications_sms
-                             :u.theme
-                             :u.language
-                             :u.timezone]
+             query {:select user-columns
                     :from [[:auth_users :a]]
                     :join [[:users :u] [:= :a.id :u.id]]
                     :where [:and

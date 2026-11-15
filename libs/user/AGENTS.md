@@ -442,7 +442,10 @@ tenant; H2 has the first; SQLite and MySQL, which run no tenants, keep `email`.
   the password opens signs in; several ask which (`:tenant-choice-required`,
   the form's tenant list, the API's 409 with `tenants`). A wrong password tells
   nothing of the others.
-- OIDC finds and makes the account of the tenant the request runs in.
+- OIDC finds the account of the tenant the request runs in, else the only one of
+  the email; several, or a linked account of another tenant, are refused. It
+  makes new accounts in no tenant: a header or host never puts one in a tenant.
+- `get-user-by-email` is deprecated: nil when the email has several accounts.
 
 ## Groups, roles and assignments
 

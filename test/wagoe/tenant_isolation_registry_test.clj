@@ -62,7 +62,15 @@
                                  "an-email-is-unique-per-tenant"
                                  "sign-in-finds-the-account-of-the-tenant-or-of-the-password"
                                  "a-wrong-password-gives-no-choice-and-tells-nothing"
-                                 "a-lookup-by-email-names-the-callers-tenants-account"]}}
+                                 "a-lookup-by-email-names-the-callers-tenants-account"
+                                 "a-right-password-does-not-count-against-the-other-accounts"
+                                 "a-failed-sign-in-on-an-email-of-several-accounts-is-audited"
+                                 "an-email-change-is-checked-in-its-tenant-only"
+                                 "a-lookup-by-email-of-several-accounts-is-none"]
+                                "libs/user/test/wagoe/user/shell/oidc_flow_test.clj"
+                                ["a-provider-sign-in-makes-no-account-in-a-tenant"
+                                 "a-provider-sign-in-takes-no-account-when-the-email-has-several"
+                                 "a-linked-identity-opens-no-account-of-another-tenant"]}}
    "audience"      {:scoped-by "segments span every tenant, so only a platform admin reaches them"
                     :tests     {"libs/audience/test/wagoe/audience/shell/http_test.clj"
                                 ["a-tenants-admin-gets-no-audience"]}}

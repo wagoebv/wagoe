@@ -838,7 +838,9 @@
    :enter (fn [context]
             (let [input-data (get-in context [:request :parameters :body])
                   {:keys [email password]} input-data]
-              (if (and email password)
+              (if (and email password
+                       ;; A UUID or blank: anything else is no tenant's id (BOU-995)
+                       (re-matches schema/tenant-id-or-blank (str (:tenantId input-data))))
                 (-> context
                     (assoc :raw-session-data input-data)
                     (ctx/add-breadcrumb :operation :session-create-validation-success

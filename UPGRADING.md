@@ -19,9 +19,14 @@ profile's tenant onto `auth_users` and replaces the email key on PostgreSQL.
 Creating a user whose email another tenant has now creates a second account.
 Sign-in on a tenant's URL opens that tenant's account. Elsewhere, if email and
 password open accounts in several tenants, the form lists them and the API
-answers 409 with `tenants`: send the one chosen as `tenantId`. Code that calls
-`find-user-by-email` gets any one account of the email; use
-`find-user-by-tenant-and-email` (`ITenantAccounts`) instead.
+answers 409 with `tenants`: send the one chosen as `tenantId`. An account of no
+tenant, a platform admin's, signs in where the URL names no tenant. Code that
+calls `find-user-by-email` gets any one account of the email, and
+`get-user-by-email` none when there are several; use
+`find-user-by-tenant-and-email` (`ITenantAccounts`) or
+`get-user-by-tenant-and-email` (`ITenantAccountLookup`). An OIDC sign-in makes
+its new account in no tenant and refuses an email of several accounts unless
+the URL names the tenant.
 
 ### 2. The admin service refuses keys that are not fields (BOU-998)
 

@@ -4,13 +4,15 @@
    email and password both open, choosing only among those."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
+            [support.test-db :as test-db]
             [wagoe.platform.database :as db]
-            [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.http :as user-http]
             [wagoe.user.shell.persistence :as persistence]
             [wagoe.user.shell.service :as service]
+            [wagoe.tenant.ports :as tenant-ports]
+            [wagoe.user.core.ui :as user-ui]
             [wagoe.user.shell.tenant-scope :as tenant-scope]
             [wagoe.user.shell.web-handlers :as web-handlers])
   (:import [java.util UUID]))
@@ -22,19 +24,20 @@
 
 (def ^:private ^:dynamic *ctx* nil)
 
+;; WAGOE_TEST_DB picks the engine: on PostgreSQL the key is two indexes (BOU-995)
 (use-fixtures :each
   (fn [f]
-    (let [ctx (factory/db-context (factory/h2-config (str "mem:tenant_accounts_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]
-      (try
+    (test-db/with-db "tenant_accounts"
+      (fn [ctx]
         (persistence/initialize-user-schema! ctx)
-        (binding [*ctx* ctx] (f))
-        (finally (factory/close-db-context! ctx))))))
+        (binding [*ctx* ctx] (f))))))
 
-(defn- user-service []
+(defn- user-service [& [observability]]
   (let [users    (persistence/create-user-repository *ctx*)
         sessions (persistence/create-session-repository *ctx*)]
-    (service/create-user-service users sessions (persistence/create-audit-repository *ctx* {}) {}
-                                 (auth/create-authentication-service users sessions nil {}))))
+    (service/create-user-service users sessions (persistence/create-audit-repository *ctx* {:default-limit 50}) {}
+                                 (auth/create-authentication-service users sessions nil {})
+                                 (or observability {}))))
 
 (defn- register! [svc email password tenant-id]
   (ports/register-user svc (cond-> {:email email :name "Someone" :password password :role :user}
@@ -80,7 +83,11 @@
     (testing "the database refuses a second account of one tenant and email"
       (let [repo (persistence/create-user-repository *ctx*)]
         (is (thrown? Exception (ports/create-user repo {:email "x@example.com" :name "Dup" :role :user :active true
-                                                        :password-hash "x" :tenant-id tenant-a})))))))
+                                                        :password-hash "x" :tenant-id tenant-a})))
+        (when (= :pg test-db/engine)
+          (is (thrown? Exception (ports/create-user repo {:email "root@example.com" :name "Dup" :role :user
+                                                          :active true :password-hash "x"}))
+              "on PostgreSQL, and among accounts of no tenant"))))))
 
 (defn- sign-in [svc email password & [tenant-id]]
   (ports/authenticate-user svc (cond-> {:email email :password password}
@@ -161,3 +168,74 @@
            (tenant-scope/user-by-email svc {:user {:id (UUID/randomUUID) :role :admin :tenant-id tenant-a}} "x@e.com")))
     (is (nil? (tenant-scope/user-by-email svc {:user {:id (UUID/randomUUID) :role :admin}} "x@e.com"))
         "a platform admin naming an email of several accounts names none")))
+
+(defn- stored [id]
+  (db/execute-one! *ctx* {:select [:failed_login_count :lockout_until] :from [:auth_users] :where [:= :id (str id)]}))
+
+(deftest ^:integration ^:security a-right-password-does-not-count-against-the-other-accounts
+  ;; Every account of the email was tried, and only the one opened was reset: the others locked in time
+  (let [svc (user-service)
+        _   (register! svc "x@example.com" pw-a tenant-a)
+        b   (register! svc "x@example.com" pw-b tenant-b)]
+    (dotimes [_ 6] (sign-in svc "x@example.com" pw-a))
+    (is (zero? (or (:failed-login-count (stored (:id b))) (:failed_login_count (stored (:id b))) 0)))
+    (is (true? (:authenticated (sign-in svc "x@example.com" pw-b tenant-b))) "B still signs in")
+    (testing "a wrong password still counts on each"
+      (sign-in svc "x@example.com" "Wrong-Horse-99")
+      (is (= 1 (or (:failed-login-count (stored (:id b))) (:failed_login_count (stored (:id b)))))))))
+
+(deftest ^:integration ^:security a-failed-sign-in-on-an-email-of-several-accounts-is-audited
+  (let [svc (user-service)
+        a   (register! svc "x@example.com" pw-a tenant-a)
+        b   (register! svc "x@example.com" pw-b tenant-b)]
+    (sign-in svc "x@example.com" "Wrong-Horse-99")
+    (is (= #{(:id a) (:id b)}
+           (set (map :target-user-id (filter #(and (= :login (:action %)) (= :failure (:result %)))
+                                             (:audit-logs (ports/list-audit-logs svc {:limit 50})))))))))
+
+(deftest ^:integration a-deleted-tenants-account-is-still-a-choice
+  ;; Its name is gone with it; get-tenant throws, and the choice answered 500
+  (let [tenants #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify tenant-ports/ITenantService
+          (get-tenant [_ id]
+            (if (= id tenant-a) {:id id :name "Alpha"} (throw (ex-info "Tenant not found" {:type :not-found})))))
+        svc     (user-service {:tenants tenants})]
+    (register! svc "y@example.com" pw-a tenant-a)
+    (register! svc "y@example.com" pw-a tenant-b)
+    (let [r (sign-in svc "y@example.com" pw-a)]
+      (is (= :tenant-choice-required (:reason r)))
+      (is (= #{"Alpha" nil} (set (map :name (:tenants r))))))))
+
+(deftest ^:integration ^:security an-email-change-is-checked-in-its-tenant-only
+  (let [svc (user-service)
+        a   (register! svc "a@example.com" pw-a tenant-a)
+        _   (register! svc "b@example.com" pw-b tenant-b)
+        _   (register! svc "taken@example.com" pw-a tenant-a)]
+    (is (some? (ports/update-user-profile svc {:id (:id a) :email "b@example.com"})) "B's email is free in A")
+    (is (= :conflict (thrown-type #(ports/update-user-profile svc {:id (:id a) :email "taken@example.com"}))))))
+
+(deftest ^:integration registration-signs-in-to-the-account-it-made
+  ;; It tried every account of the email, and a tenant's same password asked for a choice
+  (let [svc      (user-service)
+        _        (register! svc "z@example.com" pw-a tenant-a)
+        response ((web-handlers/register-submit-handler svc {})
+                  {:form-params {"name" "Zed" "email" "z@example.com" "password" pw-a}
+                   :headers {"user-agent" "test"} :remote-addr "127.0.0.1"})]
+    (is (some? (get-in response [:cookies "session-token" :value])) "signed in, not sent to a choice")))
+
+(deftest ^:unit the-code-step-keeps-the-tenant-chosen
+  (let [page (str (user-ui/mfa-login-page {:email "y@example.com" :password "p" :tenant-id (str tenant-b)} {} {}))]
+    (is (str/includes? page (str tenant-b)))))
+
+(deftest ^:integration a-malformed-tenant-is-refused-not-read-as-none
+  (let [svc     (user-service)
+        _       (register! svc "y@example.com" pw-a nil)
+        handler (user-http/login-handler svc)]
+    (is (= 400 (:status (handler {:parameters {:body {:email "y@example.com" :password pw-a :tenantId "garbage"}}}))))))
+
+(deftest ^:integration ^:security a-lookup-by-email-of-several-accounts-is-none
+  (let [svc (user-service)]
+    (register! svc "y@example.com" pw-a tenant-a)
+    (is (some? (ports/get-user-by-email svc "y@example.com")) "one account: that one")
+    (register! svc "y@example.com" pw-a tenant-b)
+    (is (nil? (ports/get-user-by-email svc "y@example.com")) "several: none, not any")))

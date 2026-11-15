@@ -206,6 +206,10 @@
   (when-not (str/blank? code)
     (mfa-shell/check-code! (:user-repository auth-service) user code)))
 
+(def ^:private dummy-hash
+  "A hash to check a password against when no account has the email."
+  (delay (hash-password "no account has this email")))
+
 (defn login-accounts
   "The accounts `email` signs in to: the one of `login-context`'s tenant when
    it names one (`:tenant-given?`, `:tenant-id` nil for no tenant), else every
@@ -280,8 +284,16 @@
           ;; opens count, and nothing tells the others apart.
           ;; ponytail: one bcrypt per account of the email
           attempts (mapv #(attempt user-repository auth-config % password current-time) accounts)
+          ;; No account: one hash anyway, so the time says nothing of it
+          _        (when (and (:valid? credential-validation) (empty? attempts))
+                     (verify-password password @dummy-hash))
           several? (< 1 (count attempts))
           matched  (filterv :password-valid? attempts)
+          ;; The password opened one: the others were not guessed at, so their
+          ;; attempt does not count (it would lock them in time)
+          _        (when (and several? (seq matched))
+                     (run! #(lockout/release-attempt! user-repository (get-in % [:user :id]) (:claim %))
+                           (remove :password-valid? (filter (comp :claimed? :claim) attempts))))
           {:keys [user login-allowed? claim password-valid?]}
           (if several? (when (= 1 (count matched)) (first matched)) (first attempts))
 
@@ -323,9 +335,10 @@
                    ;; Several accounts, none the password opens: one answer for all
                    (and several? (empty? matched))
                    (do (log/warn "Authentication failed - invalid password" {:email email})
-                       {:success? false
-                        :error    {:type    :authentication-failed
-                                   :message "Invalid credentials"}})
+                       {:success?      false
+                        :error         {:type    :authentication-failed
+                                        :message "Invalid credentials"}
+                        :attempted-ids (mapv (comp :id :user) attempts)})
 
                    ;; User not found or login blocked
                    (not (:allowed? login-allowed?))

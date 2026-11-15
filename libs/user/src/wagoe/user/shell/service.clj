@@ -323,7 +323,10 @@
   "Tenant `id` as {:id :name :slug}, for the choice at sign-in; nil `id` is no
    tenant. Name and slug are read when the tenant service is there."
   [tenants id]
-  (let [t (when (and tenants id) (tenant-ports/get-tenant tenants (parse-uuid (str id))))]
+  (let [t (when (and tenants id)
+            ;; A deleted tenant's account is still an account: shown by its id
+            (try (tenant-ports/get-tenant tenants (parse-uuid (str id)))
+                 (catch clojure.lang.ExceptionInfo _ nil)))]
     {:id (some-> id str) :name (:name t) :slug (:slug t)}))
 
 (defrecord UserService [user-repository session-repository audit-repository validation-config auth-service]
@@ -488,7 +491,7 @@
              ;; Service-level lockout gate: look up user and check lockout BEFORE
              ;; delegating to auth-shell, providing belt-and-suspenders enforcement.
              ;; Only for one account: with several, auth-shell judges each.
-             accounts      (auth-shell/login-accounts user-repository email login-context)
+             accounts      (when (string? email) (auth-shell/login-accounts user-repository email login-context))
              existing-user (when (= 1 (count accounts)) (first accounts))
              current-time (current-timestamp)
              lockout-check (when existing-user
@@ -552,18 +555,14 @@
 
                ;; Authentication failed
                :else
-               (let [user-for-audit existing-user
-                     audit-entry (when user-for-audit
-                                   (audit-core/login-audit-entry
-                                    (:id user-for-audit)
-                                    (:email user-for-audit)
-                                    ip-address
-                                    user-agent
-                                    false
-                                    (or (get-in auth-result [:error :message])
-                                        "Authentication failed")))]
-                 (when audit-entry
-                   (.create-audit-log audit-repository audit-entry))
+               (let [;; Each account tried, when the email has several (BOU-995)
+                     audited (or (seq (filter (comp (set (:attempted-ids auth-result)) :id) accounts))
+                                 (some-> existing-user vector))]
+                 (doseq [u audited]
+                   (.create-audit-log audit-repository
+                                      (audit-core/login-audit-entry
+                                       (:id u) (:email u) ip-address user-agent false
+                                       (or (get-in auth-result [:error :message]) "Authentication failed"))))
                  ;; The public shape is unchanged. auth-shell moved to the
                  ;; ADR-036 §3 return — {:error {:type … :message …}} — and this
                  ;; is the layer that flattens it, so `login` keeps answering
@@ -643,10 +642,11 @@
      {:email email}
      (fn [{:keys [params]}]
        (let [{:keys [email]} params
-             user (.find-user-by-email user-repository email)]
-         ;; Remove sensitive data before returning
-         (when user
-           (dissoc user :password-hash))))
+             ;; Deprecated: nil when the email has accounts in several tenants (BOU-995)
+             user (if (satisfies? ports/ITenantAccounts user-repository)
+                    (let [[one more] (ports/find-users-by-email user-repository email)] (when-not more one))
+                    (.find-user-by-email user-repository email))]
+         (some-> user user-core/without-credentials)))
      (observability this)))
 
   (list-users [this options]

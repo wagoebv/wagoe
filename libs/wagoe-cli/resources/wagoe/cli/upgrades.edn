@@ -150,4 +150,9 @@
  {:ticket "BOU-971"
   :since  "1.2.0"
   :note   "The 0-arity wagoe.platform.database/current-transaction: it answers the innermost transaction on any database."
-  :manual "Pass the context or datasource the code writes through: (current-transaction ctx). A rewrite cannot tell which that is."}]
+  :manual "Pass the context or datasource the code writes through: (current-transaction ctx). A rewrite cannot tell which that is."}
+
+ {:ticket "BOU-995"
+  :since  "Unreleased"
+  :note   "wagoe.user.ports/get-user-by-email: an email is unique per tenant now, so it answers nil when the email has accounts in several tenants."
+  :manual "Call wagoe.user.ports/get-user-by-tenant-and-email with the tenant the code acts in (nil for none). A rewrite cannot tell which tenant that is."}]

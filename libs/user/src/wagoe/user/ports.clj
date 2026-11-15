@@ -344,7 +344,9 @@
   ;; Returns the user without :password-hash, or nil. Not cached.
 
   (get-user-by-email [this email])
-  ;; Returns the user without :password-hash, or nil.
+  ;; Returns the user without credentials, or nil. Deprecated (BOU-995): an
+  ;; email is unique per tenant, so nil also when it has several accounts; use
+  ;; ITenantAccountLookup/get-user-by-tenant-and-email.
 
   (list-users [this options])
   ;; options as IUserRepository/find-users.

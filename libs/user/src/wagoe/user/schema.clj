@@ -305,6 +305,10 @@
       (into user-preferences-flat-fields)
       (into user-date-time-preferences-flat-fields)))
 
+(def tenant-id-or-blank
+  "A tenant id as a sign-in names it: a UUID, or blank for no tenant (BOU-995)."
+  #"^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
 (def LoginRequest
   "Schema for login API requests."
   [:map {:title "Login Request"
@@ -314,7 +318,7 @@
    [:remember {:optional true} :boolean]
    [:mfa-code {:optional true} [:maybe :string]] ; 6-digit TOTP code or backup code
    ;; The tenant chosen among the accounts that email and password open (BOU-995)
-   [:tenant-id {:optional true} [:maybe :string]]
+   [:tenant-id {:optional true} [:maybe [:re {:error/message "Invalid tenant"} tenant-id-or-blank]]]
    [:ip-address {:optional true} [:maybe :string]]
    [:user-agent {:optional true} [:maybe :string]]])
 

@@ -32,7 +32,8 @@
    - GET    /docs/*               - Documentation
 
    All observability is handled automatically by interceptors."
-  (:require [wagoe.core.interceptor :as interceptor]
+  (:require [wagoe.user.schema :as user-schema]
+            [wagoe.core.interceptor :as interceptor]
             [wagoe.core.interceptor-context :as interceptor-context]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
@@ -344,7 +345,7 @@
    [:password :string]
    [:mfaCode {:optional true} :string]
    ;; The tenant to sign in to, among those a 409 listed (BOU-995)
-   [:tenantId {:optional true} [:maybe :string]]
+   [:tenantId {:optional true} [:maybe [:re user-schema/tenant-id-or-blank]]]
    [:deviceInfo {:optional true} [:map
                                   [:userAgent {:optional true} :string]
                                   [:ipAddress {:optional true} :string]]]])

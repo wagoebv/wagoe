@@ -884,6 +884,9 @@
                            ;; second factor the app requires with the password.
                            :registration? true
                            :remember false
+                           ;; This account, not every one of the email (BOU-995)
+                           :tenant-given? true
+                           :tenant-id (some-> (:tenant-id user-result) str)
                            :ip-address (client-ip/request-ip request)
                            :user-agent (get-in request [:headers "user-agent"])}
                 auth-result (user-ports/authenticate-user user-service auth-data)]

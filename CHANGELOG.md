@@ -36,6 +36,11 @@ for what is public API, what is internal, and how deprecations are announced.
 - **A tenant's admin could point a foreign key at, or move a record into, another tenant** (BOU-997), the latter by
   sending `tenant_id` for `tenant-id`. Both are refused now, as a field error.
 
+### Deprecated
+
+- `IUserService/get-user-by-email` (BOU-995): nil when the email has accounts in several tenants. Use
+  `ITenantAccountLookup/get-user-by-tenant-and-email`.
+
 ### Changed
 
 - **The admin service refuses a key that is not a field of the entity** (BOU-998), as a `:validation-error` on that

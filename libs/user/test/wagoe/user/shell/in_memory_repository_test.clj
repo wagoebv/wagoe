@@ -40,6 +40,13 @@
     unlock? (assoc :lockout-until nil)))
 
 (defrecord MemoryUserRepository [state]
+  ports/ITenantAccounts
+  (find-user-by-tenant-and-email [_ tenant-id email]
+    (first (filter #(and (active? %) (= email (:email %)) (= (str tenant-id) (str (:tenant-id %)))) (vals @state))))
+
+  (find-users-by-email [_ email]
+    (filterv #(and (active? %) (= email (:email %))) (vals @state)))
+
   ports/IUserRepository
 
   (find-user-by-id [_ user-id]
@@ -59,7 +66,8 @@
     (let [user (assoc user-entity
                       :id (or (:id user-entity) (UUID/randomUUID))
                       :created-at (or (:created-at user-entity) (Instant/now)))]
-      (when (some #(= (:email user) (:email %)) (vals @state))
+      ;; Unique per tenant, as the database keys it (BOU-995)
+      (when (some #(and (= (:email user) (:email %)) (= (str (:tenant-id user)) (str (:tenant-id %)))) (vals @state))
         (throw (ex-info "Email already registered"
                         {:type :user-exists :email (:email user)})))
       (swap! state assoc (:id user) user)

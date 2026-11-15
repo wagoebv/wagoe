@@ -225,15 +225,35 @@
             :session   session
             :return-to (:return-to sign-in)}})))
 
+(defn- email-account
+  "The account of `email` a provider's sign-in may take: tenant `t`'s, else the
+   only account of that email (BOU-995)."
+  [user-repository t email]
+  (if (satisfies? ports/ITenantAccounts user-repository)
+    (if t
+      (ports/find-user-by-tenant-and-email user-repository t email)
+      (let [[one more] (ports/find-users-by-email user-repository email)] (when-not more one)))
+    (ports/find-user-by-email user-repository email)))
+
+(defn- several-accounts?
+  "Whether, without a tenant, any of `emails` has accounts in more than one: a
+   provider's sign-in then takes none, nor makes another (BOU-995)."
+  [user-repository t emails]
+  (and (nil? t) (satisfies? ports/ITenantAccounts user-repository)
+       (some #(< 1 (count (ports/find-users-by-email user-repository %))) emails)))
+
 (defn- account
-  "The account for verified `claims`, created when the provider allows it.
+  "The account for verified `claims`, created when the provider allows it, of
+   no tenant: a header or host never puts a new account in a tenant (BOU-995).
    Returns {:ok {:user u :link? bool}} or an error."
   [client p claims login-context]
   (let [{:keys [user-repository]} (:auth-service client)
         repo   (:identity-repository client)
         found  (ports/find-identity repo (:iss claims) (:sub claims))
         linked (when found (ports/find-user-by-id user-repository (:user-id found)))
-        email  (oidc/verified-email claims p)]
+        email  (oidc/verified-email claims p)
+        ;; Signing in on one tenant's URL opens that tenant's account only (BOU-995)
+        t      (:tenant-id login-context)]
     ;; A link to a user who is gone would refuse this subject for good: drop it
     ;; and resolve as if it had never been made.
     (when (and found (nil? linked))
@@ -241,20 +261,20 @@
       (ports/unlink-identity repo (:iss claims) (:sub claims)))
     (let [email-user (when (and email (nil? linked))
                        ;; Emails are stored as registered; try the provider's casing first.
-                       (some #(if (satisfies? ports/ITenantAccounts user-repository)
-                                ;; The account of the tenant signed in to (BOU-995)
-                                (ports/find-user-by-tenant-and-email user-repository (:tenant-id login-context) %)
-                                (ports/find-user-by-email user-repository %))
-                             (distinct [(:email claims) email])))
-          decision   (oidc/resolve-account
-                      {:linked-user        linked
-                       :email-user         email-user
-                       :email-user-linked? (boolean
-                                            (when email-user
-                                              (some #(= (:iss claims) (:issuer %))
-                                                    (ports/find-identities-by-user repo (:id email-user)))))
-                       :claims             claims
-                       :provider           p})]
+                       (some #(email-account user-repository t %) (distinct [(:email claims) email])))
+          decision   (if (or (and linked t (not= (str t) (str (:tenant-id linked))))
+                             (and (nil? linked) (nil? email-user) email
+                                  (several-accounts? user-repository t (distinct [(:email claims) email]))))
+                       {:error {:type :oidc/no-account :message "No account matches this sign-in"}}
+                       (oidc/resolve-account
+                        {:linked-user        linked
+                         :email-user         email-user
+                         :email-user-linked? (boolean
+                                              (when email-user
+                                                (some #(= (:iss claims) (:issuer %))
+                                                      (ports/find-identities-by-user repo (:id email-user)))))
+                         :claims             claims
+                         :provider           p}))]
       (case (:action decision)
         :login {:ok {:user (:user decision) :link? false}}
         :link  {:ok {:user (:user decision) :link? true}}
@@ -262,7 +282,6 @@
         (if-let [user (try
                         (ports/create-user user-repository
                                            (assoc (:user-data decision)
-                                                  :tenant-id (:tenant-id login-context)
                                                   ;; Signs in through its provider; nobody knows this password.
                                                   :password-hash (auth/hash-password (auth/generate-session-token))))
                         ;; The email still belongs to a deactivated, soft-deleted account.
