@@ -5,6 +5,7 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [support.test-db :as test-db]
+            [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.platform.database :as db]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
@@ -25,16 +26,19 @@
 (def ^:private ^:dynamic *ctx* nil)
 
 ;; WAGOE_TEST_DB picks the engine: on PostgreSQL the key is two indexes (BOU-995).
-;; MySQL and SQLite run no tenants and keep a global email key, so there is
-;; nothing here to test on them.
+;; MySQL runs no tenants and keeps a global email key, so its run uses H2.
+(defn- with-tenant-db [f]
+  (if (#{:h2 :pg} test-db/engine)
+    (test-db/with-db "tenant_accounts" f)
+    (let [ctx (factory/db-context (factory/h2-config (str "mem:tenant_accounts_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]
+      (try (f ctx) (finally (factory/close-db-context! ctx))))))
+
 (use-fixtures :each
   (fn [f]
-    (if (#{:h2 :pg} test-db/engine)
-      (test-db/with-db "tenant_accounts"
-        (fn [ctx]
-          (persistence/initialize-user-schema! ctx)
-          (binding [*ctx* ctx] (f))))
-      (println "tenant-accounts-test: skipped, no tenants on" test-db/engine))))
+    (with-tenant-db
+      (fn [ctx]
+        (persistence/initialize-user-schema! ctx)
+        (binding [*ctx* ctx] (f))))))
 
 (defn- user-service [& [observability]]
   (let [users    (persistence/create-user-repository *ctx*)
