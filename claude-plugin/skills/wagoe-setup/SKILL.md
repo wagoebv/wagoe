@@ -32,7 +32,7 @@ If anything is missing, show the user this command, say what it does, and ask
 before running it:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
+curl -fsSL https://github.com/wagoebv/wagoe/releases/latest/download/install.sh | bash
 ```
 
 It installs a JVM (via sdkman), Clojure, Babashka and the `wagoe` CLI, and adds

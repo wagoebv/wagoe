@@ -44,7 +44,8 @@ patched. The current version is on the
 In scope:
 
 - the `com.wagoe/*` artifacts on Clojars,
-- the installer: `get.wagoe.org` and [`scripts/install.sh`](scripts/install.sh).
+- the installer: `get.wagoe.org` and [`scripts/install.sh`](scripts/install.sh). The copy
+  attached to the latest release, which `get.wagoe.org` serves, is the one its hash and attestation cover.
   To verify it before running it, see the
   [installation guide](https://wagoe.org/docs/getting-started/installation.html).
 

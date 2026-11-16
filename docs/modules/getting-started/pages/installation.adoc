@@ -14,20 +14,24 @@ Fallback if `get.wagoe.org` is unavailable:
 
 [source,bash]
 ----
-curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
+curl -fsSL https://github.com/wagoebv/wagoe/releases/latest/download/install.sh | bash
 ----
 
 Supports macOS, Debian/Ubuntu, Fedora/RHEL, Arch Linux, and WSL2.
 
 === Verify before you run it
 
-Each release attaches the installer and its SHA-256. Download both, check, then run:
+Both commands above run the installer attached to the latest release. Each
+release attaches it with its SHA-256 and, from the release after 1.2.0, a signed attestation that
+the release workflow of `wagoebv/wagoe` built it. The hash shows the download is
+intact; the attestation shows it is ours. Download, check, then run:
 
 [source,bash]
 ----
 curl -fsSLO https://github.com/wagoebv/wagoe/releases/latest/download/install.sh
 curl -fsSLO https://github.com/wagoebv/wagoe/releases/latest/download/install.sh.sha256
 sha256sum -c install.sh.sha256    # macOS: shasum -a 256 -c install.sh.sha256
+gh attestation verify install.sh --repo wagoebv/wagoe
 bash install.sh
 ----
 

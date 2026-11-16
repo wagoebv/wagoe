@@ -37,6 +37,8 @@ for what is public API, what is internal, and how deprecations are announced.
   has its own now, and its admins manage them; the migration moves existing groups into their members' tenants.
 - **A tenant's admin could point a foreign key at, or move a record into, another tenant** (BOU-997), the latter by
   sending `tenant_id` for `tenant-id`. Both are refused now, as a field error.
+- **The install one-liner ran `install.sh` from `main`, not the release copy its hash covers** (BOU-974). It runs the
+  latest release's now, and releases attest it: `gh attestation verify install.sh --repo wagoebv/wagoe`.
 
 ### Deprecated
 
