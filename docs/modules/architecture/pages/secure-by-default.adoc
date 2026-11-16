@@ -15,7 +15,7 @@ row with no test says so.
 | Security headers: CSP `script-src 'self'`, HSTS (one year, preload), `X-Frame-Options: DENY`, `nosniff`, COOP, `Referrer-Policy`, `Permissions-Policy`
 | On, on every routed response. No inline script, `onclick` or `hx-on` runs.
 | Not a config key: build your own stack with `http-security-headers` and a header map
-| 1.0.0; CSP without `'unsafe-inline'`/`'unsafe-eval'`: unreleased
+| 1.0.0; CSP without `'unsafe-inline'`/`'unsafe-eval'`: 1.2.0
 | {repo}libs/platform/test/wagoe/platform/shell/security_test.clj[`security-response-headers-test`, `no-inline-script-in-ui-source-test`]
 
 | CSRF token on state-changing web routes
@@ -129,7 +129,7 @@ row with no test says so.
 | Known vulnerabilities in dependencies
 | Scanned weekly, on every change to a `deps.edn`, and before each release publishes.
 | `.wagoe/check-vulns.edn` to allowlist, with a reason
-| 1.1.0; release gate: unreleased
+| 1.1.0; release gate: 1.2.0
 | {repo}.github/workflows/security.yml[`security.yml`], {repo}libs/tools/test/wagoe/tools/check_vulns_test.clj[`check_vulns_test`]
 |===
 
