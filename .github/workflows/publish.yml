@@ -21,10 +21,13 @@ on:
 # The Create GitHub Release step needs write access to releases; the default
 # GITHUB_TOKEN is read-only, which 403s ("Resource not accessible by integration").
 # `checks: read` is for the CI guard below, which reads the check runs reported
-# against the tagged commit.
+# against the tagged commit. `id-token` and `attestations` sign the installer's
+# provenance (BOU-974).
 permissions:
   contents: write
   checks: read
+  id-token: write
+  attestations: write
 
 jobs:
   publish:
@@ -241,6 +244,14 @@ jobs:
       - name: Hash the installer
         if: startsWith(github.ref, 'refs/tags/')
         run: cd scripts && sha256sum install.sh > install.sh.sha256
+
+      # The hash comes from the same release, so it shows the download is
+      # intact, not that it is ours; a signed attestation does (BOU-974).
+      - name: Attest the installer
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/attest-build-provenance@v4.2.2
+        with:
+          subject-path: scripts/install.sh
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')

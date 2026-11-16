@@ -24,7 +24,7 @@ curl -fsSL https://get.wagoe.org | bash
 Fallback if `get.wagoe.org` is unavailable:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
+curl -fsSL https://github.com/wagoebv/wagoe/releases/latest/download/install.sh | bash
 ```
 
 Supports macOS, Debian/Ubuntu, Fedora/RHEL, Arch Linux, and WSL2.
