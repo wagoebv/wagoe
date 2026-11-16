@@ -34,6 +34,8 @@ docker run --rm "$IMAGE" bash -euo pipefail -c "$(declare -f quickstart_failed_s
   apt-get install -y -qq curl ca-certificates sudo git unzip zip >/dev/null
 
   echo "--- installing toolchain ---"
+  # The installer on main, not the release copy the skill names: this checks
+  # the installer about to be released (BOU-974).
   curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash > /tmp/install.log 2>&1 \
     || { log_excerpt /tmp/install.log 30; echo "FAIL: install.sh"; exit 1; }
   echo "install.sh ok"

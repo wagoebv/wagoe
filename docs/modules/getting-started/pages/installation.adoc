@@ -22,7 +22,7 @@ Supports macOS, Debian/Ubuntu, Fedora/RHEL, Arch Linux, and WSL2.
 === Verify before you run it
 
 Both commands above run the installer attached to the latest release. Each
-release attaches it with its SHA-256 and, from 1.3.0, a signed attestation that
+release attaches it with its SHA-256 and, from the release after 1.2.0, a signed attestation that
 the release workflow of `wagoebv/wagoe` built it. The hash shows the download is
 intact; the attestation shows it is ours. Download, check, then run:
 

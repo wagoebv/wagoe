@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Wagoe Framework installer
 # Usage: curl -fsSL https://get.wagoe.org | bash
-# Fallback: curl -fsSL https://raw.githubusercontent.com/wagoebv/wagoe/main/scripts/install.sh | bash
+# Fallback: curl -fsSL https://github.com/wagoebv/wagoe/releases/latest/download/install.sh | bash
 
 set -euo pipefail
 
