@@ -204,7 +204,10 @@ admin pages, and per module what they may do: a level (*viewer*, *editor*,
 *manager*) when they hold all of that level's roles, else how many of its
 permissions they hold, or *no access*. *What they can and can't do* lists every
 permission, held or not: *Why* and *Why not* open the explanation, and *Give it*
-the grant wizard. *Roles* lists each role with the groups giving it. *Groups*
+the grant wizard. A permission held only within a scope is marked *scoped*; one
+whose scope comes from the member and resolves to nothing is not held, as
+enforcement drops it. Under `:enforce`, the admin pages open for whoever may read
+an admin entity, whatever their role. *Roles* lists each role with the groups giving it. *Groups*
 lists each group and why they are in it: *Added*, *Everyone* or *Identity
 provider*. *Where each permission comes from* lists, by module, each role a
 group gives with its permissions and scope. A scope taken from the member shows

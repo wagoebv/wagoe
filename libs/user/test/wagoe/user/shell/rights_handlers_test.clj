@@ -153,7 +153,7 @@
         (testing "in no group, nothing is held, and each permission links to granting it"
           (is (= :not-held (holds (page) "invoice/read")))
           (is (str/includes? (page) (str "/web/users/" (:id ada) "/grant?permission=invoice%2Fread")))
-          (is (str/includes? (page) "admin-no")))
+          (is (re-find #"class=\"rights-admin\">[^<]*admin-no" (page))))
         (testing "a membership that has ended gives nothing"
           (ports/insert-member-until (:group-repository gsvc) (:id g) (:id ada)
                                      (.minusSeconds (java.time.Instant/now) 3600))

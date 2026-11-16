@@ -801,39 +801,79 @@
        :permissions (for [[p {:keys [label]}] ps]
                       {:permission p :label label :held? (contains? held p)})})))
 
+(defn usable-grants
+  "`grants` the user can use: one whose scope takes a value from a user
+   source counts only when that source resolved to values, as enforcement
+   drops it otherwise. `resolved` as `scope-view` reads it (BOU-1000)."
+  [grants resolved]
+  (remove (fn [{:keys [scope]}]
+            (some (fn [[k v]]
+                    (when (scope/source? v)
+                      (let [r (get resolved [k v])]
+                        (or (= :error r) (empty? r)))))
+                  scope))
+          grants))
+
+(defn scoped-only
+  "The permissions `grants` give only within a scope, never everywhere."
+  [grants]
+  (let [by-p (group-by :permission grants)]
+    (set (for [[p gs] by-p :when (every? (comp seq :scope) gs)] p))))
+
+(defn- scoped-badge []
+  (ui/tone-badge [:t :user.access/scoped] :warning))
+
 (defn- standing-badge
   "One module's standing as a badge: everything for a platform admin, else
-   its level, all, some or none of its permissions."
-  [{:keys [level held total]} platform-admin?]
-  (cond platform-admin? (ui/tone-badge [:t :user.rights/standing-everything] :success)
-        level           (ui/tone-badge [:t (level-labels level)] :success)
-        (zero? held)    (ui/tone-badge [:t :user.rights/standing-none] :neutral)
-        (= held total)  (ui/tone-badge [:t :user.rights/standing-all] :success)
-        :else           (ui/tone-badge [:t :user.rights/standing-some {:held held :total total}] :info)))
+   its level, all, some or none of its permissions; marked scoped when a
+   permission it counts holds only within a scope."
+  [{:keys [level held total permissions]} platform-admin? scoped]
+  (list
+   (cond platform-admin? (ui/tone-badge [:t :user.rights/standing-everything] :success)
+         level           (ui/tone-badge [:t (level-labels level)] :success)
+         (zero? held)    (ui/tone-badge [:t :user.rights/standing-none] :neutral)
+         (= held total)  (ui/tone-badge [:t :user.rights/standing-all] :success)
+         :else           (ui/tone-badge [:t :user.rights/standing-some {:held held :total total}] :info))
+   (when (and (not platform-admin?) (some #(and (:held? %) (scoped (:permission %))) permissions))
+     (list " " (scoped-badge)))))
+
+(defn- opens-admin?
+  "Whether the user opens the admin pages: a platform admin always; under
+   :enforce, an admin read permission, as the admin checks it; else the
+   :admin role."
+  [user held {:keys [platform-admin? mode]}]
+  (boolean
+   (cond platform-admin?    true
+         (= :enforce mode)  (some #(and (str/starts-with? (str (namespace (keyword (group/permission-str %)))) "admin.")
+                                        (= "read" (name (keyword (group/permission-str %)))))
+                                  held)
+         :else              (= :admin (some-> (:role user) keyword)))))
 
 (defn- glance-section
   "What the user may do at a glance: whether they open the admin pages, then
    per module their standing."
-  [user standing platform-admin?]
+  [user held standing scoped opts]
   (section [:t :user.rights/glance-heading] {:class "rights-glance"}
            [:p.rights-admin
-            (if (= :admin (some-> (:role user) keyword))
+            (if (opens-admin? user held opts)
               [:t :user.rights/admin-yes]
               [:t :user.rights/admin-no])]
-           (table [[:t :user.rights/column-module] [:t :user.rights/column-standing]]
-                  (for [{:keys [module] :as s} standing]
-                    [:tr.rights-module [:td module] [:td (standing-badge s platform-admin?)]]))))
+           (if (seq standing)
+             (table [[:t :user.rights/column-module] [:t :user.rights/column-standing]]
+                    (for [{:keys [module] :as s} standing]
+                      [:tr.rights-module [:td module] [:td (standing-badge s (:platform-admin? opts) scoped)]]))
+             [:p.empty-state [:t :user.permissions/empty]])))
 
 (defn- permission-matrix
   "Every permission of the registry per module, held or not, each with the
    way to the reason and, when not held, to granting it. A module the user
    has nothing in starts folded."
-  [user-id standing platform-admin?]
+  [user-id standing scoped platform-admin?]
   (section [:t :user.rights/matrix-heading] {:class "rights-matrix"}
            [:p [:t :user.rights/matrix-note]]
            (for [{:keys [module held permissions] :as s} standing]
              [:details.rights-matrix-module (when (or platform-admin? (pos? held)) {:open true})
-              [:summary module " " (standing-badge s platform-admin?)]
+              [:summary module " " (standing-badge s platform-admin? scoped)]
               (action-table [[:t :user.permissions/column-permission] [:t :user.permissions/column-label]
                              [:t :user.rights/column-holds] ""]
                             (for [{:keys [permission label held?]} permissions
@@ -842,7 +882,9 @@
                                [:td [:a {:href (permission-path permission)} (code permission)]]
                                [:td label]
                                [:td (if yes?
-                                      (ui/tone-badge [:t :user.rights/holds-yes] :success)
+                                      (list (ui/tone-badge [:t :user.rights/holds-yes] :success)
+                                            (when (and (not platform-admin?) (scoped permission))
+                                              (list " " (scoped-badge))))
                                       (ui/tone-badge [:t :user.rights/holds-no] :neutral))]
                                [:td (if yes?
                                       [:a {:href (explain-path user-id permission nil)} [:t :user.rights/why]]
@@ -867,7 +909,9 @@
                [:p.empty-state [:t :user.rights/roles-empty]]))))
 
 (defn rights-page
-  "`user`'s groups, each with where the membership comes from, and their
+  "At a glance, what `user` may do per module and whether they open the admin
+   pages; every permission, held or not, with the way to its reason; their
+   roles (BOU-1000). Then `user`'s groups, each with where the membership comes from, and their
    effective permissions, each with the group, role and scope it comes from.
    `grants` as `user-grants` gives them; `(:scope-info opts)` as `scope-view`
    reads it; `(:registry opts)`, the declared permissions, places each in its
@@ -876,7 +920,10 @@
    the timeline of changes to their rights (BOU-855)."
   [user groups grants opts]
   (let [n        (or (not-empty (:name user)) (:email user))
-        standing (module-standing (:registry opts) (:roles opts) (set (map :permission grants)))]
+        usable   (usable-grants grants (get-in opts [:scope-info :resolved]))
+        held     (set (map :permission usable))
+        scoped   (scoped-only usable)
+        standing (module-standing (:registry opts) (:roles opts) held)]
     (page
      [:t :user.rights/page-title {:name n}]
      (list
@@ -888,9 +935,9 @@
       (user-tabs (:id user) :rights)
       (when (:platform-admin? opts)
         [:div {:class "alert alert-info" :role "status"} [:t :user.rights/platform-admin-note]])
-      (glance-section user standing (:platform-admin? opts))
-      (permission-matrix (:id user) standing (:platform-admin? opts))
-      (roles-section grants)
+      (glance-section user held standing scoped opts)
+      (permission-matrix (:id user) standing scoped (:platform-admin? opts))
+      (roles-section usable)
       (section [:t :user.rights/groups-heading]
                (if (seq groups)
                  (table [[:t :user.rights/column-group] [:t :user.roles/column-source]]
