@@ -313,16 +313,19 @@
     ;; :scheduled? distinguishes an immediate enqueue from schedule-job!, which
     ;; funnels through here too. It was lost when the INSERT moved into
     ;; insert-job!, leaving the two indistinguishable in logs (BOU-252).
-    ;; In a transaction open on this database, the job commits with it, so no
-    ;; worker sees it before the rows it reads (BOU-993). A savepoint, so a
-    ;; failed enqueue leaves the caller's transaction usable for its cleanup.
-    (when-let [job-id (if-let [tx (db/current-transaction ds)]
-                        (db/in-savepoint tx #(insert-job! tx queue-name job))
-                        (insert-job! ds queue-name job))]
-      (log/info "Enqueued job" {:job-id     job-id
-                                :queue      queue-name
-                                :scheduled? (some? (:execute-at job))})
-      job-id))
+    (let [insert! (fn [conn job]
+                    (when-let [job-id (insert-job! conn queue-name job)]
+                      (log/info "Enqueued job" {:job-id     job-id
+                                                :queue      queue-name
+                                                :scheduled? (some? (:execute-at job))})
+                      job-id))]
+      ;; In a transaction open on this database, the job commits with it, so
+      ;; no worker sees it before the rows it reads (BOU-993). A savepoint, so
+      ;; a failed enqueue leaves the caller's transaction usable for its
+      ;; cleanup. One open on another database: the job waits for its commit.
+      (if-let [tx (db/current-transaction ds)]
+        (db/in-savepoint tx #(insert! tx job))
+        (bound-tenant/after-commit job #(insert! ds %)))))
 
   (schedule-job! [this queue-name job execute-at]
     (ports/enqueue-job! this queue-name (assoc job :execute-at execute-at)))

@@ -57,3 +57,28 @@
       (finally
         (factory/close-db-context! ctx)
         (epg/stop! pg)))))
+
+(deftest ^:integration a-failed-enqueue-leaves-the-tenant-request-usable
+  ;; PostgreSQL refuses every later statement of a transaction after a failed
+  ;; one, so the export's cleanup ran into an aborted transaction (BOU-993)
+  (let [pg  (epg/start!)
+        ctx (epg/db-context pg)
+        ds  (:datasource ctx)]
+    (try
+      (jobs-db/create-jobs-table! ds)
+      (db/execute-ddl! ctx "CREATE SCHEMA tenant_a")
+      (db/execute-ddl! ctx "CREATE TABLE tenant_a.exports (id INT)")
+      (let [q   (jobs-db/create-db-job-queue ds)
+            job {:id (random-uuid) :job-type :send-email :queue :default :priority :normal
+                 :status :pending :args {} :created-at (Instant/now) :updated-at (Instant/now)}]
+        (provisioning/call-in-schema ctx "tenant_a"
+                                     (fn [tx]
+                                       (db/execute-update! tx {:insert-into :exports :values [{:id 1}]})
+            ;; Longer than the queue column: the insert fails in the database
+                                       (is (thrown? Exception (jobs/enqueue-job! q (keyword (apply str (repeat 300 "q"))) job)))
+                                       (db/execute-update! tx {:delete-from :exports :where [:= :id 1]})))
+        (is (= [] (db/execute-query! ctx {:select [:*] :from [:tenant_a.exports]}))
+            "the cleanup committed"))
+      (finally
+        (factory/close-db-context! ctx)
+        (epg/stop! pg)))))

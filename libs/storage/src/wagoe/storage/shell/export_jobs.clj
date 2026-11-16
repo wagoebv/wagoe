@@ -30,12 +30,11 @@
                                          (random-uuid) (Instant/now)))))
 
 (defn- open-job
-  "`requested-by`'s open job for `subject`. One older than a download window
-   is a worker that died mid-export: it is failed, so it blocks no later
-   request."
+  "`requested-by`'s open job for `subject`. An abandoned one is failed here,
+   in the request's tenant, so it blocks no later request."
   [store subject requested-by ^Instant now]
   (when-let [job (ports/open-export-job store subject requested-by)]
-    (if (.isAfter ^Instant (:created-at job) (.minus now ^Duration core/download-window))
+    (if-not (core/abandoned? job now)
       job
       (do (ports/save-export-job! store (core/failed job "No worker finished it" now))
           nil))))
