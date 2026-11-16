@@ -133,6 +133,39 @@
                            "platform-admin-note"))
         (is (= 404 (:status (get-page app admin (str "/web/users/" (random-uuid) "/rights")))))))))
 
+(defn- holds
+  "Whether the rights page `page` shows `permission` as held: :held,
+   :not-held, or nil when it is not listed (BOU-1000)."
+  [page permission]
+  (some->> (re-find (re-pattern (str "<tr class=\"rights-(held|not-held)\">((?!</tr>).)*?<code>"
+                                     (java.util.regex.Pattern/quote permission) "</code>"))
+                    page)
+           second keyword))
+
+(deftest ^:integration the-rights-tab-shows-what-a-user-can-and-cannot-do
+  (with-app
+    (fn [{:keys [app users gsvc admin]}]
+      (let [ada  (ports/create-user users {:email "ada@example.com" :name "Ada" :role :user
+                                           :active true :password-hash "x"})
+            g    (ports/create-group gsvc {:name "Finance"})
+            page #(:body (get-page app admin (str "/web/users/" (:id ada) "/rights")))]
+        (ports/add-group-role gsvc (:id g) {:role :invoice/viewer :scope {}})
+        (testing "in no group, nothing is held, and each permission links to granting it"
+          (is (= :not-held (holds (page) "invoice/read")))
+          (is (str/includes? (page) (str "/web/users/" (:id ada) "/grant?permission=invoice%2Fread")))
+          (is (re-find #"class=\"rights-admin\">[^<]*admin-no" (page))))
+        (testing "a membership that has ended gives nothing"
+          (ports/insert-member-until (:group-repository gsvc) (:id g) (:id ada)
+                                     (.minusSeconds (java.time.Instant/now) 3600))
+          (is (= :not-held (holds (page) "invoice/read"))))
+        (testing "a current membership gives the role's permissions, and the role is listed"
+          (ports/add-group-member gsvc (:id g) (:id ada))
+          (is (= :held (holds (page) "invoice/read")))
+          (is (= :not-held (holds (page) "invoice/approve")))
+          (is (re-find #"class=\"rights-role\"" (page))))
+        (testing "a platform admin holds every permission"
+          (is (= :held (holds (:body (get-page app admin (str "/web/users/" (:id admin) "/rights"))) "invoice/approve"))))))))
+
 (deftest ^:integration the-lists-signal-hygiene-and-the-rights-tab-shows-changes
   (with-app
     (fn [{:keys [app users gsvc admin]}]
@@ -183,7 +216,7 @@
                                               :active true :password-hash "x"})
             _       (ports/create-group gsvc {:name "Finance"})
             calls   (atom 0)
-            handler (rights-handlers/user-rights usvc (assoc gsvc :membership (fn [_] (swap! calls inc) #{"Finance"})))
+            handler (rights-handlers/user-rights usvc (assoc gsvc :membership (fn [_] (swap! calls inc) #{"Finance"})) :off)
             page    (handler (assoc (req admin :get "/") :path-params {:id (str (:id ada))}))]
         (is (= 200 (:status page)))
         (is (str/includes? (:body page) "Finance") "the hook's group")

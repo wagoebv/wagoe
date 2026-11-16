@@ -139,7 +139,7 @@
       (is (= [200 nil] (create {:user {:id (UUID/randomUUID) :role :admin}}))))))
 
 (deftest ^:unit ^:security another-tenants-users-rights-are-not-found
-  (is (= 404 (:status ((rights-handlers/user-rights (service (atom [])) nil)
+  (is (= 404 (:status ((rights-handlers/user-rights (service (atom [])) nil :off)
                        {:user admin-of-a :path-params {:id (str (:id user-of-b))}})))))
 
 (deftest ^:unit ^:security a-tenants-admin-manages-their-tenants-roles-and-groups

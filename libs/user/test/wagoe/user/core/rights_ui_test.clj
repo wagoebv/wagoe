@@ -58,6 +58,14 @@
           :when (and (vector? tr) (keyword? (first tr)) (re-find #"^tr\b" (name (first tr))))]
       [(:class (second tr)) (vec (shown tr))])))
 
+(defn- section-of
+  "The [:section] of `hiccup` headed by translation key `k`."
+  [hiccup k]
+  (some #(when (and (vector? %) (keyword? (first %)) (re-find #"^section\b" (name (first %)))
+                    (some #{[:t k]} (tree-seq coll? seq %)))
+           %)
+        (tree-seq coll? seq hiccup)))
+
 (def ^:private roles
   [{:name :orders/clerk :description "Takes orders" :permissions #{:orders/read} :source :managed}
    {:name :admin.users/viewer :description "Reads users" :permissions #{:admin.users/read} :source :code :module :admin}
@@ -93,7 +101,8 @@
                    {:permission p :role (if (= "orders" (namespace p)) :orders/clerk :admin.users/editor)
                     :group-id 1 :group-name "Everyone" :scope {}})
         registry {:admin.users/read {:module :admin} :admin.users/write {:module :admin}}
-        rows     (rows-of (sut/rights-page {:id 1 :name "Ada"} [] grants {:registry registry}))]
+        rows     (rows-of (section-of (sut/rights-page {:id 1 :name "Ada"} [] grants {:registry registry})
+                                      :user.rights/permissions-heading))]
     (is (= [["admin"]
             ["admin.users/read" " " "admin.users/write" "Everyone" " " :user.access/holds-role " " "admin.users/editor" " " :user.access/everywhere]
             ["orders"]
@@ -214,3 +223,171 @@
     (is (some #{:user.explain/mode-off} (shown :off)))
     (is (some #{:user.explain/mode-enforce} (shown :enforce)))
     (is (not-any? #{:user.explain/mode-report :user.explain/mode-off :user.explain/mode-enforce} (shown nil)))))
+
+;; =============================================================================
+;; At a glance, and what they can and can't do (BOU-1000)
+;; =============================================================================
+
+(def ^:private orders-registry
+  {:orders/read {:module :orders :label "Read orders"} :orders/write {:module :orders :label "Edit orders"}
+   :orders/delete {:module :orders :label "Delete orders"} :reports/read {:module :reports :label "Read reports"}})
+
+(def ^:private orders-roles
+  (sut/role-index
+   [{:name :orders/viewer :source :code :permissions #{:orders/read}}
+    {:name :orders/editor :source :code :permissions #{:orders/read :orders/write}}
+    {:name :orders/manager :source :code :permissions #{:orders/read :orders/write :orders/delete}}
+    {:name :orders/clerk :source :managed :permissions #{:orders/write}}]))
+
+(deftest ^:unit a-module-reads-as-the-highest-level-its-permissions-cover
+  (let [standing #(into {} (map (juxt :module (juxt :level :held :total)))
+                        (sut/module-standing orders-registry orders-roles %))]
+    (is (= {"orders" ["editor" 2 3] "reports" [nil 0 1]} (standing #{:orders/read :orders/write})))
+    (is (= {"orders" [nil 1 3] "reports" [nil 0 1]} (standing #{:orders/write}))
+        "a managed role's permissions count, but name no level")
+    (is (= ["orders" "reports"] (map :module (sut/module-standing orders-registry orders-roles #{}))))
+    (testing "a level with a role per entity needs all of them"
+      (let [roles   (sut/role-index [{:name :admin.users/viewer :module :admin :source :code :permissions #{:admin.users/read}}
+                                     {:name :admin.tenants/viewer :module :admin :source :code :permissions #{:admin.tenants/read}}])
+            reg     {:admin.users/read {:module :admin} :admin.tenants/read {:module :admin}}
+            level   #(:level (first (sut/module-standing reg roles %)))]
+        (is (nil? (level #{:admin.users/read})))
+        (is (= "viewer" (level #{:admin.users/read :admin.tenants/read})))))))
+
+(defn- glance [page]
+  (text (section-of page :user.rights/glance-heading)))
+
+(defn- matrix-row-nodes
+  "The permission rows of the page's matrix."
+  [page]
+  (filter #(and (vector? %) (#{:tr.rights-held :tr.rights-not-held} (first %))) (tree-seq coll? seq page)))
+
+(defn- matrix-rows
+  "The permission rows of the page: [tag permission] per row."
+  [page]
+  (for [node (matrix-row-nodes page)]
+    [(first node) (some #(when (and (vector? %) (= :code (first %))) (second %)) (tree-seq coll? seq node))]))
+
+(defn- hrefs [page]
+  (set (keep #(when (map? %) (:href %)) (tree-seq coll? seq page))))
+
+(deftest ^:unit a-user-without-groups-sees-every-permission-they-lack
+  (let [page (sut/rights-page {:id 7 :name "Ada" :role :user} [] [] {:registry orders-registry :roles orders-roles})
+        txt  (text page)]
+    (is (some #{:user.rights/admin-no} txt))
+    (is (= 2 (count (filter #{:user.rights/standing-none} (glance page))))
+        "one per module, in the summary")
+    (is (some #{:user.rights/roles-empty} txt))
+    (is (= #{:tr.rights-not-held} (set (map first (matrix-rows page)))))
+    (is (= 4 (count (matrix-rows page))) "every permission of the registry")
+    (is (contains? (hrefs page) (sut/grant-path 7 :orders/delete nil)) "a missing permission links to granting it")
+    (is (contains? (hrefs page) (sut/explain-path 7 :orders/delete nil)))))
+
+(deftest ^:unit a-held-permission-links-to-why-and-names-its-role
+  (let [grants [{:permission :orders/read :role :orders/viewer :group-id 2 :group-name "Sales" :scope {}}
+                {:permission :orders/write :role :orders/clerk :group-id 3 :group-name "Desk" :scope {:dept 7}}]
+        page   (sut/rights-page {:id 7 :name "Ada" :role :admin} [] grants {:registry orders-registry :roles orders-roles})
+        rows   (into {} (map (comp vec reverse)) (matrix-rows page))]
+    (is (= :tr.rights-held (rows "orders/read") (rows "orders/write")) "a scoped permission is held too")
+    (is (= :tr.rights-not-held (rows "orders/delete")))
+    (is (some #{:user.rights/admin-yes} (text page)))
+    (is (some #{:user.access/level-editor} (glance page))
+        "read through one role and write through another cover the editor's permissions")
+    (testing "the roles, each with its group"
+      (is (= [["orders/clerk" "Desk"] ["orders/viewer" "Sales"]]
+             (map second (rows-of (section-of page :user.rights/roles-heading))))))))
+
+(deftest ^:unit a-platform-admin-holds-everything
+  (let [page (sut/rights-page {:id 1 :name "Root" :role :admin} [] []
+                              {:registry orders-registry :roles orders-roles :platform-admin? true})]
+    (is (= #{:tr.rights-held} (set (map first (matrix-rows page)))))
+    (is (= 2 (count (filter #{:user.rights/standing-everything} (glance page)))))))
+
+(defn- page-for
+  ([grants] (page-for grants {}))
+  ([grants opts]
+   (sut/rights-page {:id 7 :name "Ada" :role :user} [] grants
+                    (merge {:registry orders-registry :roles orders-roles} opts))))
+
+(defn- grant [p & {:keys [role scope] :or {role :orders/clerk scope {}}}]
+  {:permission p :role role :group-id 3 :group-name "Desk" :scope scope})
+
+(deftest ^:unit each-standing-reads-as-its-own-badge
+  (testing "a level per role that covers the module's level"
+    (is (some #{:user.access/level-viewer} (glance (page-for [(grant :orders/read)]))))
+    (is (some #{:user.access/level-manager}
+              (glance (page-for (map grant [:orders/read :orders/write :orders/delete]))))))
+  (testing "some of a module's permissions, with the numbers"
+    (is (some #{[:t :user.rights/standing-some {:held 1 :total 3}]}
+              (tree-seq coll? seq (section-of (page-for [(grant :orders/write)]) :user.rights/glance-heading)))))
+  (testing "all of a module's permissions, where no code role names a level"
+    (is (some #{:user.rights/standing-all} (glance (page-for [(grant :reports/read)]))))))
+
+(defn- row-of
+  "The matrix row of `permission`."
+  [page permission]
+  (some #(when (some #{(name permission)} (map str (tree-seq coll? seq %))) %) (matrix-row-nodes page)))
+
+(deftest ^:unit a-held-row-links-to-why-and-a-missing-row-to-why-not-and-granting
+  (let [page    (page-for [(grant :orders/read)])
+        held    (row-of page "orders/read")
+        missing (row-of page "orders/delete")]
+    (is (some #{:user.rights/why} (text held)))
+    (is (not-any? #{:user.rights/why-not :user.rights/grant} (text held)))
+    (is (contains? (hrefs held) (sut/explain-path 7 :orders/read nil)))
+    (is (not (contains? (hrefs held) (sut/grant-path 7 :orders/read nil))))
+    (is (some #{:user.rights/why-not} (text missing)))
+    (is (not-any? #{:user.rights/why} (text missing)))
+    (is (contains? (hrefs missing) (sut/grant-path 7 :orders/delete nil)))))
+
+(deftest ^:unit roles-link-to-their-role-and-group
+  (is (= #{(sut/role-path :orders/clerk) (sut/group-path 3)}
+         (hrefs (section-of (page-for [(grant :orders/write)]) :user.rights/roles-heading)))))
+
+(defn- open-modules [page]
+  (for [node (tree-seq coll? seq page)
+        :when (and (vector? node) (= :details.rights-matrix-module (first node)))]
+    [(some #(when (and (vector? %) (= :summary (first %))) (second %)) (rest node))
+     (boolean (:open (second node)))]))
+
+(deftest ^:unit a-module-with-nothing-held-starts-folded
+  (is (= [["orders" true] ["reports" false]] (open-modules (page-for [(grant :orders/read)]))))
+  (is (= [["orders" false] ["reports" false]] (open-modules (page-for []))))
+  (is (= [["orders" true] ["reports" true]] (open-modules (page-for [] {:platform-admin? true})))))
+
+(deftest ^:unit a-platform-admin-is-offered-no-grant
+  (let [page (page-for [] {:platform-admin? true})]
+    (is (some #{:user.rights/platform-admin-note} (text page)))
+    (is (not-any? #{:user.rights/grant :user.rights/why-not} (text (section-of page :user.rights/matrix-heading))))
+    (is (some #{:user.rights/admin-yes} (glance page)))
+    (is (not-any? #{:user.rights/standing-none :user.access/level-viewer} (glance page)))))
+
+(deftest ^:unit a-scope-from-the-user-that-resolves-to-nothing-gives-nothing
+  ;; Enforcement drops such a right, so the page does too
+  (let [g     (grant :orders/read :role :orders/viewer :scope {:dept :user/department})
+        held? #(= :tr.rights-held (first (row-of % "orders/read")))]
+    (is (held? (page-for [g] {:scope-info {:resolved {[:dept :user/department] #{7}}}})))
+    (is (not (held? (page-for [g] {:scope-info {:resolved {[:dept :user/department] #{}}}}))))
+    (is (not (held? (page-for [g] {:scope-info {:resolved {[:dept :user/department] :error}}}))))
+    (is (some #{:user.rights/roles-empty} (text (page-for [g] {:scope-info {:resolved {}}}))))))
+
+(deftest ^:unit a-permission-held-only-within-a-scope-is-marked-scoped
+  (let [page (page-for [(grant :orders/read :scope {:dept 7}) (grant :orders/write)])]
+    (is (some #{:user.access/scoped} (text (row-of page "orders/read"))))
+    (is (not-any? #{:user.access/scoped} (text (row-of page "orders/write"))))
+    (is (some #{:user.access/scoped} (glance page)))))
+
+(deftest ^:unit who-opens-the-admin-pages-follows-the-authorization-mode
+  (let [admin-read {:admin.users/read {:module :admin}}
+        page       (fn [user grants opts]
+                     (sut/rights-page user [] grants (merge {:registry admin-read :roles {}} opts)))
+        reader     [{:permission :admin.users/read :role :admin.users/viewer :group-id 1 :group-name "Ops" :scope {}}]]
+    (testing "the :admin role, outside :enforce, a string role too"
+      (is (some #{:user.rights/admin-yes} (glance (page {:id 1 :role "admin"} [] {:mode :report}))))
+      (is (some #{:user.rights/admin-no} (glance (page {:id 1 :role :user} reader {:mode :off})))))
+    (testing "an admin read permission under :enforce, whatever the role"
+      (is (some #{:user.rights/admin-yes} (glance (page {:id 1 :role :user} reader {:mode :enforce}))))
+      (is (some #{:user.rights/admin-no} (glance (page {:id 1 :role :admin} [] {:mode :enforce})))))))
+
+(deftest ^:unit an-app-without-permissions-says-so
+  (is (some #{:user.permissions/empty} (glance (sut/rights-page {:id 1} [] [] {})))))

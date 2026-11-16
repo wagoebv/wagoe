@@ -225,8 +225,10 @@
 
 (defn user-rights
   "GET /web/users/:id/rights — the user's groups, effective permissions and
-   the changes to them."
-  [user-service group-service]
+   the changes to them. `mode`, the `:wagoe/authorization :mode`, decides who
+   opens the admin pages: the :admin role, or under :enforce an admin read
+   permission (BOU-1000)."
+  [user-service group-service mode]
   ;; Asked once (Convention 5)
   (let [timeline? (satisfies? ports/IRightsTimeline group-service)]
     (fn [request]
@@ -240,6 +242,7 @@
                                                        :registry (registry-permissions group-service)
                                                        :roles (rights-ui/role-index (ports/list-roles group-service))
                                                        :platform-admin? (access/platform-admin? user)
+                                                       :mode mode
                                                        :changes (rights-changes timeline? user-service group-service user)
                                                        :scope-info (assoc (group-handlers/scope-info group-service)
                                                                           :resolved (resolve-sources group-service user grants))))

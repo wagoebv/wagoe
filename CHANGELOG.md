@@ -45,6 +45,11 @@ for what is public API, what is internal, and how deprecations are announced.
 - `IUserService/get-user-by-email` (BOU-995): nil when the email has accounts in several tenants. Use
   `ITenantAccountLookup/get-user-by-tenant-and-email`.
 
+### Added
+
+- **A user's Rights tab shows what they can and can't do** (BOU-1000): per module at a glance, every permission held or
+  not with its reason, their roles, and whether they open the admin pages. Nothing to change in an app.
+
 ### Changed
 
 - **The admin service refuses a key that is not a field of the entity** (BOU-998), as a `:validation-error` on that
