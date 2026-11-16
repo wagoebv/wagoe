@@ -30,7 +30,11 @@
     Returns:
       Job ID (UUID), or nil when the job's :unique-key is held by another job
       still pending or running. The key is freed when that job is acked
-      without being put back (done, or failed for good); a retry keeps it.")
+      without being put back (done, or failed for good); a retry keeps it.
+
+    In a transaction open on this thread the job waits for its commit, and
+    never runs if it rolls back (BOU-993). An adapter that enqueues it after
+    the commit answers its id.")
 
   (schedule-job! [this queue-name job execute-at]
     "Schedule a job for future execution.

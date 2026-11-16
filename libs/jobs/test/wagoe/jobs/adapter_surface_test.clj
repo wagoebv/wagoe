@@ -18,6 +18,7 @@
             [wagoe.jobs.shell.adapters.redis :as redis]
             [wagoe.jobs.shell.worker :as worker]
             [wagoe.platform.database :as pdb]
+            [wagoe.platform.shell.adapters.database.factory :as factory]
             [next.jdbc :as jdbc]
             [clojure.test :refer [deftest is testing]])
   (:import [java.time Instant ZoneId]
@@ -712,3 +713,36 @@
          (ports/ack-job! q :stolen "slow" (:id j))
          (is (nil? (ports/enqueue-job! q :stolen (assoc (job :queue :stolen) :unique-key "k")))
              (str label ": the previous owner's late ack freed the key")))))))
+
+(defn- future-dequeue
+  "What a worker on another thread dequeues from `q` now."
+  [q]
+  @(future (ports/dequeue-job! q :default "w2")))
+
+(defn- tx-context
+  "A db-context whose transactions run on `q`'s database when it has one, so
+   an enqueue joins them; on a database of its own otherwise."
+  [q]
+  (let [ctx (factory/db-context (factory/h2-config (str "mem:after_commit_" (System/nanoTime))))]
+    (cond-> ctx (:ds q) (assoc :datasource (:ds q)))))
+
+(deftest ^:integration a-job-enqueued-in-a-transaction-waits-for-its-commit
+  ;; A worker that ran it earlier missed the rows the request had not
+  ;; committed yet (BOU-993)
+  (each-backend
+   (fn [q label]
+     (let [ctx (tx-context q)]
+       (testing "committed: no worker sees it before"
+         (let [j (job)]
+           (pdb/with-transaction* ctx
+             (fn [_]
+               (is (= (:id j) (ports/enqueue-job! q :default j)) label)
+               (is (nil? (future-dequeue q)) label)))
+           (is (= (:id j) (:id (ports/dequeue-job! q :default "w1"))) label)))
+       (testing "rolled back: never"
+         (try (pdb/with-transaction* ctx
+                (fn [_]
+                  (ports/enqueue-job! q :default (job))
+                  (throw (ex-info "rolled back" {}))))
+              (catch clojure.lang.ExceptionInfo _))
+         (is (nil? (ports/dequeue-job! q :default "w1")) label))))))

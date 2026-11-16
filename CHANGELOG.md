@@ -48,6 +48,11 @@ for what is public API, what is internal, and how deprecations are announced.
 - **The admin service refuses a key that is not a field of the entity** (BOU-998), as a `:validation-error` on that
   key; it wrote any key as a column. Pass kebab-case field names only: see `UPGRADING.md`.
 
+### Fixed
+
+- **A job enqueued in a transaction could run before the commit** (BOU-993) and miss its rows; a data export then stayed
+  pending for a day. Jobs wait for the commit now; the DB queue commits them with it.
+
 ## [1.2.0] — 2026-11-13
 
 ### Security
