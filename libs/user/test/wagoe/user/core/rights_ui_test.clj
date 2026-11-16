@@ -254,11 +254,18 @@
         (is (nil? (level #{:admin.users/read})))
         (is (= "viewer" (level #{:admin.users/read :admin.tenants/read})))))))
 
+(defn- glance [page]
+  (text (section-of page :user.rights/glance-heading)))
+
+(defn- matrix-row-nodes
+  "The permission rows of the page's matrix."
+  [page]
+  (filter #(and (vector? %) (#{:tr.rights-held :tr.rights-not-held} (first %))) (tree-seq coll? seq page)))
+
 (defn- matrix-rows
   "The permission rows of the page: [tag permission] per row."
   [page]
-  (for [node (tree-seq coll? seq page)
-        :when (and (vector? node) (#{:tr.rights-held :tr.rights-not-held} (first node)))]
+  (for [node (matrix-row-nodes page)]
     [(first node) (some #(when (and (vector? %) (= :code (first %))) (second %)) (tree-seq coll? seq node))]))
 
 (defn- hrefs [page]
@@ -268,7 +275,7 @@
   (let [page (sut/rights-page {:id 7 :name "Ada" :role :user} [] [] {:registry orders-registry :roles orders-roles})
         txt  (text page)]
     (is (some #{:user.rights/admin-no} txt))
-    (is (= 2 (count (filter #{:user.rights/standing-none} (text (section-of page :user.rights/glance-heading)))))
+    (is (= 2 (count (filter #{:user.rights/standing-none} (glance page))))
         "one per module, in the summary")
     (is (some #{:user.rights/roles-empty} txt))
     (is (= #{:tr.rights-not-held} (set (map first (matrix-rows page)))))
@@ -284,7 +291,7 @@
     (is (= :tr.rights-held (rows "orders/read") (rows "orders/write")) "a scoped permission is held too")
     (is (= :tr.rights-not-held (rows "orders/delete")))
     (is (some #{:user.rights/admin-yes} (text page)))
-    (is (some #{:user.access/level-editor} (text (section-of page :user.rights/glance-heading)))
+    (is (some #{:user.access/level-editor} (glance page))
         "read through one role and write through another cover the editor's permissions")
     (testing "the roles, each with its group"
       (is (= [["orders/clerk" "Desk"] ["orders/viewer" "Sales"]]
@@ -294,10 +301,7 @@
   (let [page (sut/rights-page {:id 1 :name "Root" :role :admin} [] []
                               {:registry orders-registry :roles orders-roles :platform-admin? true})]
     (is (= #{:tr.rights-held} (set (map first (matrix-rows page)))))
-    (is (= 2 (count (filter #{:user.rights/standing-everything} (text (section-of page :user.rights/glance-heading))))))))
-
-(defn- glance [page]
-  (text (section-of page :user.rights/glance-heading)))
+    (is (= 2 (count (filter #{:user.rights/standing-everything} (glance page)))))))
 
 (defn- page-for
   ([grants] (page-for grants {}))
@@ -322,10 +326,7 @@
 (defn- row-of
   "The matrix row of `permission`."
   [page permission]
-  (some #(when (and (vector? %) (#{:tr.rights-held :tr.rights-not-held} (first %))
-                    (some #{(name permission)} (map str (tree-seq coll? seq %))))
-           %)
-        (tree-seq coll? seq page)))
+  (some #(when (some #{(name permission)} (map str (tree-seq coll? seq %))) %) (matrix-row-nodes page)))
 
 (deftest ^:unit a-held-row-links-to-why-and-a-missing-row-to-why-not-and-granting
   (let [page    (page-for [(grant :orders/read)])

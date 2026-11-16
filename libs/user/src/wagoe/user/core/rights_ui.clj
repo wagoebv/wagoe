@@ -5,6 +5,7 @@
   (:require [clojure.string :as str]
             [wagoe.platform.core.csrf :as csrf]
             [wagoe.core.utils.text :as text]
+            [wagoe.platform.core.authorization :as authz]
             [wagoe.platform.core.scope :as scope]
             [wagoe.shared.ui.core.components :as ui]
             [wagoe.shared.ui.core.htmx :as htmx]
@@ -823,6 +824,11 @@
 (defn- scoped-badge []
   (ui/tone-badge [:t :user.access/scoped] :warning))
 
+(defn- scoped-mark
+  "The scoped badge, after a space, when `scoped?`."
+  [scoped?]
+  (when scoped? (list " " (scoped-badge))))
+
 (defn- standing-badge
   "One module's standing as a badge: everything for a platform admin, else
    its level, all, some or none of its permissions; marked scoped when a
@@ -834,20 +840,19 @@
          (zero? held)    (ui/tone-badge [:t :user.rights/standing-none] :neutral)
          (= held total)  (ui/tone-badge [:t :user.rights/standing-all] :success)
          :else           (ui/tone-badge [:t :user.rights/standing-some {:held held :total total}] :info))
-   (when (and (not platform-admin?) (some #(and (:held? %) (scoped (:permission %))) permissions))
-     (list " " (scoped-badge)))))
+   (scoped-mark (some #(and (:held? %) (scoped (:permission %))) permissions))))
 
 (defn- opens-admin?
   "Whether the user opens the admin pages: a platform admin always; under
-   :enforce, an admin read permission, as the admin checks it; else the
-   :admin role."
+   :enforce, roughly as the admin checks it, a read permission on an admin
+   entity; else the :admin role."
   [user held {:keys [platform-admin? mode]}]
   (boolean
-   (cond platform-admin?    true
-         (= :enforce mode)  (some #(and (str/starts-with? (str (namespace (keyword (group/permission-str %)))) "admin.")
-                                        (= "read" (name (keyword (group/permission-str %)))))
-                                  held)
-         :else              (= :admin (some-> (:role user) keyword)))))
+   (cond platform-admin?   true
+         (= :enforce mode) (some #(let [p (keyword (group/permission-str %))]
+                                    (and (authz/admin-permission? p) (= "read" (name p))))
+                                 held)
+         :else             (= :admin (some-> (:role user) keyword)))))
 
 (defn- glance-section
   "What the user may do at a glance: whether they open the admin pages, then
@@ -872,28 +877,27 @@
   (section [:t :user.rights/matrix-heading] {:class "rights-matrix"}
            [:p [:t :user.rights/matrix-note]]
            (for [{:keys [module held permissions] :as s} standing]
-             [:details.rights-matrix-module (when (or platform-admin? (pos? held)) {:open true})
+             [:details.rights-matrix-module (when (pos? held) {:open true})
               [:summary module " " (standing-badge s platform-admin? scoped)]
               (action-table [[:t :user.permissions/column-permission] [:t :user.permissions/column-label]
                              [:t :user.rights/column-holds] ""]
-                            (for [{:keys [permission label held?]} permissions
-                                  :let [yes? (or platform-admin? held?)]]
-                              [(if yes? :tr.rights-held :tr.rights-not-held)
+                            (for [{:keys [permission label held?]} permissions]
+                              [(if held? :tr.rights-held :tr.rights-not-held)
                                [:td [:a {:href (permission-path permission)} (code permission)]]
                                [:td label]
-                               [:td (if yes?
+                               [:td (if held?
                                       (list (ui/tone-badge [:t :user.rights/holds-yes] :success)
-                                            (when (and (not platform-admin?) (scoped permission))
-                                              (list " " (scoped-badge))))
+                                            (scoped-mark (scoped permission)))
                                       (ui/tone-badge [:t :user.rights/holds-no] :neutral))]
-                               [:td (if yes?
-                                      [:a {:href (explain-path user-id permission nil)} [:t :user.rights/why]]
-                                      (list [:a {:href (explain-path user-id permission nil)} [:t :user.rights/why-not]]
-                                            " · "
-                                            [:a {:href (grant-path user-id permission nil)} [:t :user.rights/grant]]))]]))])))
+                               [:td [:a {:href (explain-path user-id permission nil)}
+                                     [:t (if held? :user.rights/why :user.rights/why-not)]]
+                                (when-not held?
+                                  (list " · " [:a {:href (grant-path user-id permission nil)} [:t :user.rights/grant]]))]]))])))
 
 (defn- roles-section
-  "The roles the user holds, each with the groups giving it."
+  "The roles the user holds, each with the groups giving it. `grants` are the
+   usable ones: a role given only in a scope that resolves to nothing is left
+   out here, and still shown under where each permission comes from."
   [grants]
   (let [by-role (->> grants
                      (group-by :role)
@@ -921,8 +925,9 @@
   [user groups grants opts]
   (let [n        (or (not-empty (:name user)) (:email user))
         usable   (usable-grants grants (get-in opts [:scope-info :resolved]))
-        held     (set (map :permission usable))
-        scoped   (scoped-only usable)
+        ;; A platform admin holds every permission, everywhere
+        held     (if (:platform-admin? opts) (set (keys (:registry opts))) (set (map :permission usable)))
+        scoped   (if (:platform-admin? opts) #{} (scoped-only usable))
         standing (module-standing (:registry opts) (:roles opts) held)]
     (page
      [:t :user.rights/page-title {:name n}]

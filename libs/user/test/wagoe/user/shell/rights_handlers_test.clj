@@ -216,7 +216,7 @@
                                               :active true :password-hash "x"})
             _       (ports/create-group gsvc {:name "Finance"})
             calls   (atom 0)
-            handler (rights-handlers/user-rights usvc (assoc gsvc :membership (fn [_] (swap! calls inc) #{"Finance"})))
+            handler (rights-handlers/user-rights usvc (assoc gsvc :membership (fn [_] (swap! calls inc) #{"Finance"})) :off)
             page    (handler (assoc (req admin :get "/") :path-params {:id (str (:id ada))}))]
         (is (= 200 (:status page)))
         (is (str/includes? (:body page) "Finance") "the hook's group")

@@ -228,27 +228,26 @@
    the changes to them. `mode`, the `:wagoe/authorization :mode`, decides who
    opens the admin pages: the :admin role, or under :enforce an admin read
    permission (BOU-1000)."
-  ([user-service group-service] (user-rights user-service group-service :off))
-  ([user-service group-service mode]
-   ;; Asked once (Convention 5)
-   (let [timeline? (satisfies? ports/IRightsTimeline group-service)]
-     (fn [request]
-       (if-let [user (user-of user-service request)]
-         ;; Groups and grants both ask the membership hook: ask it once
-         (let [group-service (cond-> group-service (:membership group-service) (update :membership memoize))
-               grants        (ports/user-grants group-service user)]
-           (html-response request
-                          (rights-ui/rights-page user (ports/user-groups group-service user) grants
-                                                 (assoc (page-opts request)
-                                                        :registry (registry-permissions group-service)
-                                                        :roles (rights-ui/role-index (ports/list-roles group-service))
-                                                        :platform-admin? (access/platform-admin? user)
-                                                        :mode mode
-                                                        :changes (rights-changes timeline? user-service group-service user)
-                                                        :scope-info (assoc (group-handlers/scope-info group-service)
-                                                                           :resolved (resolve-sources group-service user grants))))
-                          200))
-         (not-found request :user.rights/user-not-found))))))
+  [user-service group-service mode]
+  ;; Asked once (Convention 5)
+  (let [timeline? (satisfies? ports/IRightsTimeline group-service)]
+    (fn [request]
+      (if-let [user (user-of user-service request)]
+        ;; Groups and grants both ask the membership hook: ask it once
+        (let [group-service (cond-> group-service (:membership group-service) (update :membership memoize))
+              grants        (ports/user-grants group-service user)]
+          (html-response request
+                         (rights-ui/rights-page user (ports/user-groups group-service user) grants
+                                                (assoc (page-opts request)
+                                                       :registry (registry-permissions group-service)
+                                                       :roles (rights-ui/role-index (ports/list-roles group-service))
+                                                       :platform-admin? (access/platform-admin? user)
+                                                       :mode mode
+                                                       :changes (rights-changes timeline? user-service group-service user)
+                                                       :scope-info (assoc (group-handlers/scope-info group-service)
+                                                                          :resolved (resolve-sources group-service user grants))))
+                         200))
+        (not-found request :user.rights/user-not-found)))))
 
 (defn- asked
   "The permission and record `params` ask: `permission`, and a `scope.<key>`
