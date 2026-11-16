@@ -775,6 +775,97 @@
                        [:td (change-effect c scope-info)]]))
              [:p.empty-state [:t :user.timeline/empty]])))
 
+(def ^:private levels-high-first ["manager" "editor" "viewer"])
+
+(defn module-standing
+  "What `held`, a set of permissions, gives in each module of `registry`
+   {p {:label :module}}: {:module :held :total :level :permissions}, sorted
+   by module. :level is the highest code role level whose permissions, over
+   every code role of that level in the module, `held` covers: a module with
+   a viewer role per entity reads as viewer only when all of them are held.
+   :permissions is [{:permission :label :held?}] (BOU-1000). `roles` as
+   `role-index` gives them."
+  [registry roles held]
+  (let [levels (reduce (fn [m [n r]]
+                         (if-let [l (role-level r)]
+                           (update-in m [(role-module roles n) l] (fnil into #{}) (:permissions r))
+                           m))
+                       {} roles)]
+    (for [[module ps] (sort-by key (group-by #(permission-module registry (key %)) registry))
+          :let [ps     (sort-by (comp group/permission-str key) ps)
+                covers (fn [l] (when-let [rp (not-empty (get-in levels [module l]))] (every? held rp)))]]
+      {:module      module
+       :held        (count (filter (comp held key) ps))
+       :total       (count ps)
+       :level       (some #(when (covers %) %) levels-high-first)
+       :permissions (for [[p {:keys [label]}] ps]
+                      {:permission p :label label :held? (contains? held p)})})))
+
+(defn- standing-badge
+  "One module's standing as a badge: everything for a platform admin, else
+   its level, all, some or none of its permissions."
+  [{:keys [level held total]} platform-admin?]
+  (cond platform-admin? (ui/tone-badge [:t :user.rights/standing-everything] :success)
+        level           (ui/tone-badge [:t (level-labels level)] :success)
+        (zero? held)    (ui/tone-badge [:t :user.rights/standing-none] :neutral)
+        (= held total)  (ui/tone-badge [:t :user.rights/standing-all] :success)
+        :else           (ui/tone-badge [:t :user.rights/standing-some {:held held :total total}] :info)))
+
+(defn- glance-section
+  "What the user may do at a glance: whether they open the admin pages, then
+   per module their standing."
+  [user standing platform-admin?]
+  (section [:t :user.rights/glance-heading] {:class "rights-glance"}
+           [:p.rights-admin
+            (if (= :admin (some-> (:role user) keyword))
+              [:t :user.rights/admin-yes]
+              [:t :user.rights/admin-no])]
+           (table [[:t :user.rights/column-module] [:t :user.rights/column-standing]]
+                  (for [{:keys [module] :as s} standing]
+                    [:tr.rights-module [:td module] [:td (standing-badge s platform-admin?)]]))))
+
+(defn- permission-matrix
+  "Every permission of the registry per module, held or not, each with the
+   way to the reason and, when not held, to granting it. A module the user
+   has nothing in starts folded."
+  [user-id standing platform-admin?]
+  (section [:t :user.rights/matrix-heading] {:class "rights-matrix"}
+           [:p [:t :user.rights/matrix-note]]
+           (for [{:keys [module held permissions] :as s} standing]
+             [:details.rights-matrix-module (when (or platform-admin? (pos? held)) {:open true})
+              [:summary module " " (standing-badge s platform-admin?)]
+              (action-table [[:t :user.permissions/column-permission] [:t :user.permissions/column-label]
+                             [:t :user.rights/column-holds] ""]
+                            (for [{:keys [permission label held?]} permissions
+                                  :let [yes? (or platform-admin? held?)]]
+                              [(if yes? :tr.rights-held :tr.rights-not-held)
+                               [:td [:a {:href (permission-path permission)} (code permission)]]
+                               [:td label]
+                               [:td (if yes?
+                                      (ui/tone-badge [:t :user.rights/holds-yes] :success)
+                                      (ui/tone-badge [:t :user.rights/holds-no] :neutral))]
+                               [:td (if yes?
+                                      [:a {:href (explain-path user-id permission nil)} [:t :user.rights/why]]
+                                      (list [:a {:href (explain-path user-id permission nil)} [:t :user.rights/why-not]]
+                                            " · "
+                                            [:a {:href (grant-path user-id permission nil)} [:t :user.rights/grant]]))]]))])))
+
+(defn- roles-section
+  "The roles the user holds, each with the groups giving it."
+  [grants]
+  (let [by-role (->> grants
+                     (group-by :role)
+                     (sort-by (comp group/permission-str key)))]
+    (section [:t :user.rights/roles-heading] {:class "rights-roles"}
+             (if (seq by-role)
+               (table [[:t :user.groups/field-role] [:t :user.rights/column-via]]
+                      (for [[role gs] by-role]
+                        [:tr.rights-role
+                         [:td [:a {:href (role-path role)} (code role)]]
+                         [:td (interpose ", " (for [[id n] (distinct (map (juxt :group-id :group-name) gs))]
+                                                [:a {:href (group-path id)} n]))]]))
+               [:p.empty-state [:t :user.rights/roles-empty]]))))
+
 (defn rights-page
   "`user`'s groups, each with where the membership comes from, and their
    effective permissions, each with the group, role and scope it comes from.
@@ -784,7 +875,8 @@
    `(:platform-admin? opts)`: the user passes every check. `(:changes opts)`:
    the timeline of changes to their rights (BOU-855)."
   [user groups grants opts]
-  (let [n (or (not-empty (:name user)) (:email user))]
+  (let [n        (or (not-empty (:name user)) (:email user))
+        standing (module-standing (:registry opts) (:roles opts) (set (map :permission grants)))]
     (page
      [:t :user.rights/page-title {:name n}]
      (list
@@ -796,6 +888,9 @@
       (user-tabs (:id user) :rights)
       (when (:platform-admin? opts)
         [:div {:class "alert alert-info" :role "status"} [:t :user.rights/platform-admin-note]])
+      (glance-section user standing (:platform-admin? opts))
+      (permission-matrix (:id user) standing (:platform-admin? opts))
+      (roles-section grants)
       (section [:t :user.rights/groups-heading]
                (if (seq groups)
                  (table [[:t :user.rights/column-group] [:t :user.roles/column-source]]

@@ -199,11 +199,17 @@ for every signed-in user, today's and tomorrow's.
 After any change, check it one of these ways.
 
 The user's Rights tab::
-Open the user and choose *Rights*. *Groups* lists each group and why they are
-in it: *Added*, *Everyone* or *Identity provider*. *Effective permissions*
-lists, by module, each role a group gives with its permissions and scope. A scope
-taken from the member shows the value it resolved to and its source, or
-*(none, so no rights)*. A platform admin's tab says they pass every check.
+Open the user and choose *Rights*. *At a glance* says whether they open the
+admin pages, and per module what they may do: a level (*viewer*, *editor*,
+*manager*) when they hold all of that level's roles, else how many of its
+permissions they hold, or *no access*. *What they can and can't do* lists every
+permission, held or not: *Why* and *Why not* open the explanation, and *Give it*
+the grant wizard. *Roles* lists each role with the groups giving it. *Groups*
+lists each group and why they are in it: *Added*, *Everyone* or *Identity
+provider*. *Where each permission comes from* lists, by module, each role a
+group gives with its permissions and scope. A scope taken from the member shows
+the value it resolved to and its source, or *(none, so no rights)*. A platform
+admin's tab says they pass every check, and shows every permission as held.
 +
 image::access/user-rights.png[A user's Rights tab]
 
