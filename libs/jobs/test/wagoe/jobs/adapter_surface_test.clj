@@ -18,6 +18,7 @@
             [wagoe.jobs.shell.adapters.redis :as redis]
             [wagoe.jobs.shell.worker :as worker]
             [wagoe.platform.database :as pdb]
+            [wagoe.platform.shell.adapters.database.factory :as factory]
             [next.jdbc :as jdbc]
             [clojure.test :refer [deftest is testing]])
   (:import [java.time Instant ZoneId]
@@ -712,3 +713,50 @@
          (ports/ack-job! q :stolen "slow" (:id j))
          (is (nil? (ports/enqueue-job! q :stolen (assoc (job :queue :stolen) :unique-key "k")))
              (str label ": the previous owner's late ack freed the key")))))))
+
+(defn- future-dequeue
+  "What a worker on another thread dequeues from `q` now."
+  [q]
+  @(future (ports/dequeue-job! q :default "w2")))
+
+(defn- with-tx-context
+  "`(f ctx)`, `ctx` a db-context whose transactions run on `q`'s database
+   when it has one, so an enqueue joins them; on a database of its own
+   otherwise."
+  [q f]
+  (let [own (factory/db-context (factory/h2-config (str "mem:after_commit_" (System/nanoTime))))]
+    (try (f (cond-> own (:ds q) (assoc :datasource (:ds q))))
+         (finally (factory/close-db-context! own)))))
+
+(deftest ^:integration a-job-enqueued-in-a-transaction-waits-for-its-commit
+  ;; A worker that ran it earlier missed the rows the request had not
+  ;; committed yet (BOU-993)
+  (each-backend
+   (fn [q label]
+     (with-tx-context q
+       (fn [ctx]
+         (testing "committed: no worker sees it before, and it keeps its tenant"
+           (let [j (job)]
+             (binding [pdb/*tenant-id* "t1"]
+               (pdb/with-transaction* ctx
+                 (fn [_]
+                   (is (= (:id j) (ports/enqueue-job! q :default j)) label)
+                   (is (nil? (future-dequeue q)) label))))
+             (let [out (ports/dequeue-job! q :default "w1")]
+               (is (= [(:id j) "t1"] [(:id out) (get-in out [:metadata :tenant-id])]) label)
+               (ports/ack-job! q :default "w1" (:id out)))))
+         (testing "rolled back: never"
+           (try (pdb/with-transaction* ctx
+                  (fn [_]
+                    (ports/enqueue-job! q :default (job))
+                    (throw (ex-info "rolled back" {}))))
+                (catch clojure.lang.ExceptionInfo _))
+           (is (nil? (ports/dequeue-job! q :default "w1")) label))
+         (testing "a held unique key: the queue that joins the transaction refuses now, the others at commit"
+           (let [held (assoc (job) :unique-key "k")
+                 j    (assoc (job) :unique-key "k")]
+             (ports/enqueue-job! q :default held)
+             (is (= (when-not (= "db" label) (:id j))
+                    (pdb/with-transaction* ctx (fn [_] (ports/enqueue-job! q :default j))))
+                 label)
+             (is (= [(:id held)] (drain q :default)) label))))))))

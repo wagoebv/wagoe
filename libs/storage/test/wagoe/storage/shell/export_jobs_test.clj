@@ -141,13 +141,35 @@
           (is (= :failed (:status (ports/find-export-job (:store ctx) id)))))
         (is (not= id (request! app user)))))))
 
+(def ^:private down-queue
+  "A queue that refuses every job, as one that is down."
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify job-ports/IJobQueue
+    (enqueue-job! [_ _ _] (throw (ex-info "queue down" {:type :internal-error})))))
+
 (deftest ^:integration a-job-that-could-not-be-queued-is-not-left-open
   (with-export-jobs
     (fn [{:keys [ctx app]}]
       (let [user {:id (random-uuid)}]
-        (with-redefs [job-ports/enqueue-job! (fn [& _] (throw (ex-info "queue down" {:type :internal-error})))]
-          (is (thrown? clojure.lang.ExceptionInfo (request! app user))))
-        (is (nil? (ports/open-export-job (:store ctx) {:type :user :id (:id user)} (:id user))))))))
+        (is (thrown? clojure.lang.ExceptionInfo
+                     (sut/request-export! (assoc ctx :job-queue down-queue) {:type :user :id (:id user)} (:id user))))
+        (is (nil? (ports/open-export-job (:store ctx) {:type :user :id (:id user)} (:id user))))
+        (is (some? (request! app user)) "the next request opens a job")))))
+
+(deftest ^:integration a-job-whose-enqueue-was-lost-does-not-block-a-new-request
+  ;; A queue that takes jobs at commit can lose one then; the export stayed
+  ;; pending for a day (BOU-993)
+  (with-export-jobs
+    (fn [{:keys [ctx app]}]
+      (let [user {:id (random-uuid)}
+            id   (request! app user)
+            st   (:store ctx)]
+        (testing "still waiting for a worker: the same job"
+          (is (= id (request! app user))))
+        (ports/save-export-job! st (assoc (ports/find-export-job st id)
+                                          :created-at (.minus (Instant/now) (Duration/ofMinutes 16))))
+        (is (not= id (request! app user)))
+        (is (= :failed (:status (ports/find-export-job st id))))))))
 
 (deftest ^:integration a-stale-open-job-does-not-block-a-new-request
   (with-export-jobs

@@ -5,6 +5,11 @@
   "How long a finished archive can be downloaded."
   (java.time.Duration/ofHours 24))
 
+(def start-window
+  "How long a queued job may wait for a worker. A queue that takes jobs at
+   commit can lose one then (BOU-993); still pending after this, it never ran."
+  (java.time.Duration/ofMinutes 15))
+
 (def requests-per-hour
   "How many export jobs one requester may open an hour, by default. 0 is no
    limit."
@@ -23,6 +28,14 @@
 (defn failed
   [job message now]
   (assoc job :status :failed :error message :finished-at now))
+
+(defn abandoned?
+  "Whether open `job` will not finish: pending past `start-window`, or open
+   past `download-window`, a worker that died mid-export."
+  [job ^java.time.Instant now]
+  (let [older? #(.isBefore ^java.time.Instant (:created-at job) (.minus now ^java.time.Duration %))]
+    (or (older? download-window)
+        (and (= :pending (:status job)) (older? start-window)))))
 
 (defn requested-by?
   "Whether `user-id` asked for `job`. Only they may see it."

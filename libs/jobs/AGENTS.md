@@ -165,6 +165,13 @@ Ask before calling, rather than discovering the limitation at runtime:
 reintroduce the dual-write window this exists to close, with no error and no log.
 A worker on the DB queue picks the job up after commit.
 
+`enqueue-job!` inside a platform transaction (`db/with-transaction`) waits for
+its commit too (BOU-993): the DB queue joins the transaction open on its
+database; Redis and in-memory enqueue once it commits, and answer the job's id
+then, even when its `:unique-key` will turn it away. A failure at commit cannot
+reach the caller: it is logged as "A job enqueued at commit was lost", with the
+job id, type and tenant.
+
 > `wagoe.jobs.shell.adapters.db/enqueue-in-tx!` still exists but is deprecated —
 > calling into the adapter namespace couples application code to one
 > implementation. Use the port.

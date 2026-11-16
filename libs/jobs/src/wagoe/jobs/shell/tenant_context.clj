@@ -97,8 +97,6 @@
                 :priority priority
                 :queue queue-name})
 
-     ;; Note: create-job is in wagoe.jobs.core.job, but we're in shell
-     ;; We use the IJobQueue port directly
      (ports/enqueue-job! job-queue queue-name
                          (assoc job-input :id job-id
                                 :status :pending

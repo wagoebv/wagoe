@@ -200,26 +200,30 @@
                   (some #(some #{job-id} %) (mapcat vals (vals @(:queues state)))))
       (swap! (:unique-keys state) #(if (= job-id (get % k)) (dissoc % k) %)))))
 
+(defn- enqueue!
+  [state queue-name job]
+  (if-not (claim-unique-key! state job)
+    (do (log/info "Job refused: its unique key is held" {:job-id (:id job) :unique-key (:unique-key job)})
+        nil)
+    (let [job-id (:id job)]
+      ;; Store job
+      (swap! (:jobs state) assoc job-id job)
+
+      ;; Add to appropriate queue
+      (if (:execute-at job)
+        ;; Scheduled job: add to sorted set
+        (add-to-scheduled! (:scheduled state) job-id (:execute-at job))
+        ;; Immediate job: add to priority queue
+        (add-to-queue! (:queues state) queue-name (:priority job) job-id))
+
+      (log/info "Enqueued job" {:job-id job-id :queue queue-name :priority (:priority job)})
+      job-id)))
+
 (defrecord InMemoryJobQueue [state]
   ports/IJobQueue
 
   (enqueue-job! [_ queue-name job]
-    (if-not (claim-unique-key! state job)
-      (do (log/info "Job refused: its unique key is held" {:job-id (:id job) :unique-key (:unique-key job)})
-          nil)
-      (let [job-id (:id job)]
-        ;; Store job
-        (swap! (:jobs state) assoc job-id (bound-tenant/stamp job))
-
-        ;; Add to appropriate queue
-        (if (:execute-at job)
-          ;; Scheduled job: add to sorted set
-          (add-to-scheduled! (:scheduled state) job-id (:execute-at job))
-          ;; Immediate job: add to priority queue
-          (add-to-queue! (:queues state) queue-name (:priority job) job-id))
-
-        (log/info "Enqueued job" {:job-id job-id :queue queue-name :priority (:priority job)})
-        job-id)))
+    (bound-tenant/after-commit job #(enqueue! state queue-name %)))
 
   (schedule-job! [this queue-name job execute-at]
     (let [scheduled-job (assoc job :execute-at execute-at)]

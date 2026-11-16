@@ -223,44 +223,47 @@
 ;; Forward declaration for use in protocol implementation
 (declare process-scheduled-jobs-internal!)
 
+(defn- enqueue!
+  [^JedisPool pool queue-name job]
+  (with-redis pool
+    (fn [^Jedis redis]
+      (let [job-id (:id job)
+            job-key (job-key job-id)
+            queue-key (queue-key queue-name)
+            serialized (codec/encode-job job)
+            unique (some-> (:unique-key job) str)]
+
+        (if (and unique
+                 (zero? (long (.eval redis ^String claim-unique-script
+                                     ^java.util.List [(unique-key-key unique) unique-held-key]
+                                     ^java.util.List [(str job-id) unique]))))
+          (do (log/info "Job refused: its unique key is held" {:job-id job-id :unique-key unique})
+              nil)
+          (do
+            ;; Store job data
+            (.set redis job-key serialized)
+
+            ;; Add to appropriate queue based on priority and execute-at
+            (if (:execute-at job)
+              ;; Scheduled job: add to sorted set with execute-at as score
+              (.zadd redis (scheduled-key)
+                     (double (.toEpochMilli (:execute-at job)))
+                     (str job-id))
+
+              ;; Immediate job: add to priority queue. LPUSH for every priority,
+              ;; because dequeue is RPOPLPUSH — RPUSH on :low made it the one
+              ;; priority that ran newest-first.
+              (.lpush redis (priority-key queue-key (:priority job :normal))
+                      (into-array String [(str job-id)])))
+
+            (log/info "Enqueued job" {:job-id job-id :queue queue-name :priority (:priority job)})
+            job-id))))))
+
 (defrecord RedisJobQueue [^JedisPool pool]
   ports/IJobQueue
 
-  (enqueue-job! [_ queue-name job*]
-    (with-redis pool
-      (fn [^Jedis redis]
-        (let [job (bound-tenant/stamp job*)
-              job-id (:id job)
-              job-key (job-key job-id)
-              queue-key (queue-key queue-name)
-              serialized (codec/encode-job job)
-              unique (some-> (:unique-key job) str)]
-
-          (if (and unique
-                   (zero? (long (.eval redis ^String claim-unique-script
-                                       ^java.util.List [(unique-key-key unique) unique-held-key]
-                                       ^java.util.List [(str job-id) unique]))))
-            (do (log/info "Job refused: its unique key is held" {:job-id job-id :unique-key unique})
-                nil)
-            (do
-              ;; Store job data
-              (.set redis job-key serialized)
-
-              ;; Add to appropriate queue based on priority and execute-at
-              (if (:execute-at job)
-                ;; Scheduled job: add to sorted set with execute-at as score
-                (.zadd redis (scheduled-key)
-                       (double (.toEpochMilli (:execute-at job)))
-                       (str job-id))
-
-                ;; Immediate job: add to priority queue. LPUSH for every priority,
-                ;; because dequeue is RPOPLPUSH — RPUSH on :low made it the one
-                ;; priority that ran newest-first.
-                (.lpush redis (priority-key queue-key (:priority job :normal))
-                        (into-array String [(str job-id)])))
-
-              (log/info "Enqueued job" {:job-id job-id :queue queue-name :priority (:priority job)})
-              job-id))))))
+  (enqueue-job! [_ queue-name job]
+    (bound-tenant/after-commit job #(enqueue! pool queue-name %)))
 
   (schedule-job! [this queue-name job execute-at]
     (let [scheduled-job (assoc job :execute-at execute-at)]
