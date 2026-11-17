@@ -9,12 +9,16 @@
   (:require [wagoe.user.ports :as ports]
             [wagoe.user.core.session :as session-core]
             [wagoe.user.core.user :as user-core]
+            [wagoe.user.core.view-as :as view-as]
+            [wagoe.shared.ui.core.view-as :as view-as-ui]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.service :as user-service]
+            [wagoe.core.utils.redirect :as redirect]
             [wagoe.core.utils.type-conversion :as type-conv]
             [wagoe.platform.core.http.access :as access]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [ring.util.response]
             [ring.websocket :as ring-ws]))
 
 ;; =============================================================================
@@ -183,9 +187,25 @@
 ;; Session Authentication Middleware
 ;; =============================================================================
 
+(defn- viewed-as
+  "The user `session`, `admin`'s, views the app as now, as they may still be
+   viewed as; nil for none (BOU-868). A view past its time, or of one no longer
+   to be viewed as, is ended and audited, so it neither blocks a new one nor
+   comes back."
+  [user-service admin session]
+  (when (:view-as-user-id session)
+    (let [now    (java.time.Instant/now)
+          target (when (view-as/active? session now)
+                   (some->> (:view-as-user-id session) (ports/get-user-by-id user-service) without-credentials))]
+      (if (and target (nil? (view-as/refusal admin target (dissoc session :view-as-user-id) now)))
+        target
+        (do (when (satisfies? ports/IViewAs user-service) (ports/stop-view-as user-service admin session))
+            nil)))))
+
 (defn- session-user
   "`{:user u :session s}` for the session `token` names, or `{:refusal response}`,
-   the 401 that refuses it."
+   the 401 that refuses it. An administrator viewing the app as another user is
+   that user, with `:viewing-as` {:admin :until} (BOU-868)."
   [user-service token request]
   (if (re-find #"\p{Cntrl}" token)
     ;; No issued token has one, and PostgreSQL fails a query carrying a NUL:
@@ -199,7 +219,11 @@
         (do
           (log/info "Session validation successful" {:user-id (:user-id session)})
           (if user
-            {:user (without-credentials user) :session (dissoc session :user)}
+            (let [admin   (without-credentials user)
+                  session (dissoc session :user)]
+              (if-let [target (viewed-as user-service admin session)]
+                {:user target :session session :viewing-as {:admin admin :until (:view-as-until session)}}
+                {:user admin :session session}))
             {:refusal (create-unauthorized-response "User not found" :user-not-found request)}))
         (do
           (log/info "Session invalid or expired" {:uri (:uri request)})
@@ -212,6 +236,38 @@
           (do (log/info "Session refused" {:uri (:uri request) :reason (:reason (ex-data ex))})
               {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)})
           (throw ex))))))
+
+(defn- back-path
+  "The path and query the Referer names, never another site."
+  [request]
+  (let [p (some-> (get-in request [:headers "referer"]) (str/replace #"^[a-zA-Z][a-zA-Z0-9+.-]*://[^/]*" ""))]
+    (if (and p (redirect/local-path? p)) p "/web")))
+
+(defn- read-only-refusal
+  "Refuses a request that would change something while viewing the app as
+   another user, but for stopping or signing out (BOU-868): a browser's form
+   goes back to its page, the bar still there, with why; anything else gets a
+   403. Marked, so `authenticate-if-present` answers it rather than passing the
+   request on unauthenticated."
+  [request]
+  (when (and (:viewing-as request)
+             (view-as/writes? (:request-method request))
+             (not (view-as/allowed-writes (:uri request))))
+    (assoc (if (and (str/starts-with? (str (:uri request)) "/web/")
+                    (nil? (get-in request [:headers "hx-request"])))
+             (assoc (ring.util.response/redirect (back-path request) :see-other)
+                    :flash {:error :user.view-as/disabled})
+             (create-forbidden-response "Read-only while viewing as another user" :view-as-read-only request))
+           ::read-only true)))
+
+(defn- with-viewing
+  "Call `f` with the page bar bound when `request` views as another user."
+  [request f]
+  (if (:viewing-as request)
+    (binding [view-as-ui/*viewing* {:name      (or (not-empty (get-in request [:user :name])) (get-in request [:user :email]))
+                                    :stop-path view-as/stop-path}]
+      (f))
+    (f)))
 
 (defn session-authentication-middleware
   "Middleware that validates session tokens and updates session access time.
@@ -229,8 +285,10 @@
   [user-service handler]
   (fn [request]
     (if-let [session-token (extract-session-token request)]
-      (let [{:keys [user session refusal]} (session-user user-service session-token request)]
-        (or refusal (handler (assoc request :user user :session session :auth-type :session))))
+      (let [{:keys [user session refusal viewing-as]} (session-user user-service session-token request)
+            request (cond-> (assoc request :user user :session session :auth-type :session)
+                      viewing-as (assoc :viewing-as viewing-as))]
+        (or refusal (read-only-refusal request) (with-viewing request #(handler request))))
 
       ;; No session token provided
       (do
@@ -281,16 +339,20 @@
                        (let [t (get-in request [:query-params "token"])]
                          (when (string? t) t)))
             request  (cond-> request
-                       ws-token (assoc-in [:headers "authorization"] (str "Bearer " ws-token)))]
-        (cond
-          (extract-bearer-token request)
-          ((jwt-authentication-middleware user-service capture) request)
+                       ws-token (assoc-in [:headers "authorization"] (str "Bearer " ws-token)))
+            answered (cond
+                       (extract-bearer-token request)
+                       ((jwt-authentication-middleware user-service capture) request)
 
-          (extract-session-token request)
-          ((session-authentication-middleware user-service capture) request)
+                       (extract-session-token request)
+                       ((session-authentication-middleware user-service capture) request)
 
-          :else nil)
-        (handler (or @captured request))))))
+                       :else nil)
+            request  (or @captured request)]
+        ;; A change while viewing as another user is refused, not passed on
+        (if (::read-only answered)
+          answered
+          (with-viewing request #(handler request)))))))
 
 ;; =============================================================================
 ;; Flexible Authentication Middleware

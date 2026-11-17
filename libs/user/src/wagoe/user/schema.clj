@@ -147,7 +147,10 @@
    [:last-accessed-at {:optional true} [:maybe inst?]]
    [:revoked-at {:optional true} [:maybe inst?]]
    [:user-agent {:optional true :column-type :text} :string]
-   [:ip-address {:optional true} [:maybe :string]]])
+   [:ip-address {:optional true} [:maybe :string]]
+   ;; An administrator viewing the app as another user, until when (BOU-868)
+   [:view-as-user-id {:optional true} [:maybe :uuid]]
+   [:view-as-until {:optional true} [:maybe inst?]]])
 
 (def UserIdentity
   "Schema for a link between a user and an OpenID Connect (issuer, subject)."
@@ -257,7 +260,7 @@
    `:permanent-delete` did (BOU-682)."
   [:create :update :delete :permanent-delete :activate :deactivate :role-change
    :bulk-action :login :logout :session-revoked :group-join :group-leave :grant-add :grant-remove
-   :data-export :mfa-disabled :mfa-enabled])
+   :data-export :mfa-disabled :mfa-enabled :view-as-start :view-as-stop])
 
 (def UserAuditLog
   "Schema for User Audit Log entity - tracks all user-related actions for compliance and security.

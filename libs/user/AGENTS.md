@@ -35,6 +35,9 @@ Rules:
 - Keep form/table/badge visuals on shared classes and token variables (no per-page color overrides).
 - There is one user list, `/web/users`; `admin/users.edn` sends `/web/admin/users` there with `:list-url`.
   The user's `:role :admin` reads as *Administrator* (yes/no) in every page: "role" is for the Roles page (BOU-1003).
+- Viewing as a user (BOU-868): `user_sessions.view_as_*` names whom an administrator's session views as.
+  `authenticate-if-present` swaps `:user`, keeps the administrator in `:viewing-as`, refuses every write but
+  `/web/view-as/stop`, and binds `wagoe.shared.ui.core.view-as/*viewing*` for the page bar.
 
 Reference:
 - `libs/ui-style/README.md` (bundle keys and style contract)

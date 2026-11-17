@@ -1900,3 +1900,38 @@
                            status))))
       (catch Exception e
         (server-error request e "Error in mfa-disable-handler")))))
+
+;; =============================================================================
+;; View as a user (BOU-868)
+;; =============================================================================
+
+(def ^:private view-as-refusals
+  {:admin :user.view-as/refused-admin :self :user.view-as/refused-self :inactive :user.view-as/refused-inactive
+   :nested :user.view-as/refused-nested :not-admin :user.view-as/refused-not-admin :session :user.view-as/refused-session
+   :unsupported :user.view-as/refused-unsupported})
+
+(defn start-view-as-handler
+  "POST /web/users/:id/view-as — an administrator views the app as the user,
+   read-only, from where that user lands; refused, back to the user's Rights tab."
+  [user-service _config]
+  (fn [request]
+    (let [target-id (parse-uuid (str (get-in request [:path-params :id])))]
+      (try
+        (user-ports/start-view-as user-service (:user request) (:session request) target-id)
+        (response/redirect "/web" :see-other)
+        (catch clojure.lang.ExceptionInfo e
+          (let [{:keys [type reason]} (ex-data e)]
+            (if (#{:forbidden :not-found} type)
+              (assoc (response/redirect (rights-ui/user-rights-path target-id) :see-other)
+                     :flash {:error (get view-as-refusals reason :user/error-user-not-found)})
+              (throw e))))))))
+
+(defn stop-view-as-handler
+  "POST /web/view-as/stop — back to the administrator, on the Rights tab of
+   the user they viewed as."
+  [user-service _config]
+  (fn [request]
+    (if-let [{:keys [admin]} (:viewing-as request)]
+      (let [target (user-ports/stop-view-as user-service admin (:session request))]
+        (response/redirect (if target (rights-ui/user-rights-path (:id target)) rights-ui/users-path) :see-other))
+      (response/redirect "/web" :see-other))))

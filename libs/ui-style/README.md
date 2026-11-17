@@ -57,6 +57,7 @@ Contains:
   - `resources/public/js/htmx-ext-sse.min.js`
   - `resources/public/js/forms.js`
   - `resources/public/js/keyboard.js`
+  - `resources/public/js/view-as.js` (loaded only while an administrator views the app as a user)
 
 Build from monorepo root:
 

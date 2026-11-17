@@ -1,0 +1,6 @@
+;; user_sessions' view-as columns, and user_audit_log's action check widened
+;; to take :view-as-start and :view-as-stop (BOU-868). The same idempotent
+;; definition.
+{:ns      wagoe.user.shell.user-tables
+ :up-fn   "up"
+ :down-fn "down"}

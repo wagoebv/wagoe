@@ -501,3 +501,32 @@
      :affected-count affected-count
      :user-role      (when (= :role-change action) (:role changes))
      :ends-on        (when (:membership-ends metadata) (some-> (:expires-at metadata) str java.time.Instant/parse))}))
+
+;; =============================================================================
+;; Viewing as a user (BOU-868)
+;; =============================================================================
+
+(defn view-as-start-audit-entry
+  "`admin` starting to view the app as `target` until `until`."
+  [admin target until {:keys [ip-address user-agent]}]
+  {:action            :view-as-start
+   :actor-id          (:id admin)
+   :actor-email       (:email admin)
+   :target-user-id    (:id target)
+   :target-user-email (:email target)
+   :metadata          {:until (str until)}
+   :ip-address        ip-address
+   :user-agent        user-agent
+   :result            :success})
+
+(defn view-as-stop-audit-entry
+  "`admin` no longer viewing the app as `target`."
+  [admin target {:keys [ip-address user-agent]}]
+  {:action            :view-as-stop
+   :actor-id          (:id admin)
+   :actor-email       (:email admin)
+   :target-user-id    (:id target)
+   :target-user-email (:email target)
+   :ip-address        ip-address
+   :user-agent        user-agent
+   :result            :success})

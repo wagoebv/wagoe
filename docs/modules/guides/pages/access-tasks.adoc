@@ -195,6 +195,16 @@ this assignment, not everything.
 Open the *Everyone* group and assign the role there. A role on Everyone holds
 for every signed-in user, today's and tomorrow's.
 
+== View the app as a user
+
+To check what someone sees, open their Rights tab and choose *View as this
+user*. The app then shows their pages, menus and buttons, with their rights,
+for 30 minutes or until you choose *Stop* in the bar at the top. Nothing can be
+changed while you look: their forms and buttons show, switched off, and the
+server refuses any change. Starting and stopping are in the audit trail, with
+you as the one who did it. An administrator, yourself or a deactivated user
+cannot be viewed as, and you cannot view as someone while already doing so.
+
 == Take a permission away
 
 On the user's Rights tab, choose *Take it away* beside a permission they hold.

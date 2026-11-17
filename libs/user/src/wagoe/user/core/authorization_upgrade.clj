@@ -7,6 +7,7 @@
    `:enforce` decides differently. A user here is {:id :email :role :tenant-id
    :platform-admin? :rights}, `:rights` resolved as the interceptor reads them."
   (:require [clojure.string :as str]
+            [wagoe.user.core.user :as user-core]
             [wagoe.core.utils.text :as text]
             [wagoe.user.core.group :as group-core]
             [wagoe.platform.core.scope :as scope]))
@@ -39,7 +40,7 @@
     {:user user :endpoint endpoint :permission permission :access result}))
 
 (defn- legacy-admin? [user]
-  (= :admin (some-> (:role user) keyword)))
+  (user-core/admin-role? user))
 
 (defn admin-findings
   "Each user and `admin.<entity>/read|write` permission where :enforce differs

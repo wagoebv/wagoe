@@ -134,11 +134,9 @@
 
 (defn- widen-audit-action-check!
   "Let user_audit_log's action CHECK take every `audit-actions` value on a
-   database created before one was added: `:permanent-delete` (BOU-682),
-   `:session-revoked` (BOU-698), `:data-export` (BOU-735),
-   `:mfa-disabled` (BOU-782), `:mfa-enabled` (BOU-815).
-   Without it that audit entry is refused, and the refusal only warns. H2
-   re-applies its checks at every boot already."
+   database created before one was added. Without it that audit entry is
+   refused, and the refusal only warns. H2 re-applies its checks at every boot
+   already."
   [ctx]
   (let [engine (protocols/engine (:adapter ctx))
         sql    (audit-action-check-sql ctx engine)]
@@ -396,13 +394,17 @@
                                   :user_agent :user-agent
                                   :ip_address :ip-address
                                   :last_accessed_at :last-accessed-at
-                                  :revoked_at :revoked-at})
+                                  :revoked_at :revoked-at
+                                  :view_as_user_id :view-as-user-id
+                                  :view_as_until :view-as-until})
         (update :id type-conversion/string->uuid)
         (update :user-id type-conversion/string->uuid)
         (update :expires-at type-conversion/string->instant)
         (update :created-at type-conversion/string->instant)
         (update :last-accessed-at type-conversion/string->instant)
         (update :revoked-at type-conversion/string->instant)
+        (update :view-as-user-id #(some-> % type-conversion/string->uuid))
+        (update :view-as-until #(some-> % type-conversion/string->instant))
         ;; The stored hash is no use to a caller, and update-session must not
         ;; write it back hashed again.
         (dissoc :session-token))))
@@ -1182,7 +1184,8 @@
      {:session-entity session-entity}
      (fn [{:keys [params]}]
        (let [session-entity (:session-entity params)
-             db-session (session-entity->db session-entity)
+             ;; Viewing as is set-view-as's alone: an access write must not undo it
+             db-session (session-entity->db (dissoc session-entity :view-as-user-id :view-as-until))
              id-match   [:= :id (type-conversion/uuid->string (:id session-entity))]
              ;; A session read as live must not overwrite a revocation that
              ;; landed since the read (BOU-666).
@@ -1233,7 +1236,15 @@
                                                [:= :id (type-conversion/uuid->string (:session-id params))]
                                                [:= :user_id (type-conversion/uuid->string (:user-id params))]
                                                [:is :revoked_at nil]]})))
-     {:db-ctx ctx})))
+     {:db-ctx ctx}))
+
+  ports/ISessionViewAs
+  (set-view-as [_ session-id user-id until]
+    (pos? (db/execute-update! ctx {:update :user_sessions
+                                   :set    {:view_as_user_id (some-> user-id type-conversion/uuid->string)
+                                            :view_as_until   until}
+                                   :where  [:and [:= :id (type-conversion/uuid->string session-id)]
+                                            [:is :revoked_at nil]]}))))
 
 ;; =============================================================================
 ;; Audit Log Repository Implementation
