@@ -1922,7 +1922,7 @@
       (try
         ;; An admin of this tenant by membership is an administrator here too (BOU-1004)
         (when (and ms tenant-id target-id
-                   (= :admin (some-> (tenant-ports/get-active-membership ms target-id tenant-id) :role keyword)))
+                   (core-access/membership-admin? (tenant-ports/get-active-membership ms target-id tenant-id)))
           (throw (ex-info "An administrator is not viewed as" {:type :forbidden :reason :admin})))
         (user-ports/start-view-as user-service (:user request) (:session request) target-id)
         (response/redirect "/web" :see-other)

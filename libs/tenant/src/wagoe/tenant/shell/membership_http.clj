@@ -53,30 +53,29 @@
     (fn [request]
       (let [tenant-id (some-> (get-in request [:path-params :tenant-id]) parse-uuid-safe)
             user-id   (get-in request [:user :id])
-            member    (when (and tenant-id user-id)
-                        (membership-ports/get-active-membership membership-service user-id tenant-id))]
+            runs-in   (get-in request [:tenant :id])
+            ;; Read only when a check needs it
+            member    (delay (when (and tenant-id user-id)
+                               (membership-ports/get-active-membership membership-service user-id tenant-id)))
+            forbid    #(access/forbidden-response % request (access/correlation-id request (str (random-uuid))))]
         (cond
           ;; A view as another user is no way to the tenants they administer (BOU-1004)
-          (and (:viewing-as request) (= :admin (some-> member :role keyword)))
-          (access/refused-view
-           (access/forbidden-response "An administrator is not viewed as" request
-                                      (access/correlation-id request (str (random-uuid)))))
+          (and (:viewing-as request) (access/membership-admin? @member))
+          (access/refused-view (forbid "An administrator is not viewed as"))
 
           ;; Not `admin?`: an admin of another tenant holds that role too (BOU-983)
           (or (nil? tenant-id)
               (access/platform-admin? (:user request))
               (and (access/admin? request)
                    (access/same-id? (get-in request [:user :tenant-id]) tenant-id))
-              (and member
+              (and @member
                    ;; The path's tenant, where the request runs in one (BOU-1004)
-                   (or (nil? (get-in request [:tenant :id])) (access/same-id? (get-in request [:tenant :id]) tenant-id))
-                   (or (nil? roles) (contains? roles (:role member)))))
+                   (or (nil? runs-in) (access/same-id? runs-in tenant-id))
+                   (or (nil? roles) (contains? roles (:role @member)))))
           (handler request)
 
           :else
-          (access/forbidden-response
-           (if roles "Tenant admin role required" "Tenant membership required")
-           request (access/correlation-id request (str (random-uuid)))))))))
+          (forbid (if roles "Tenant admin role required" "Tenant membership required")))))))
 
 (defn- membership-in-tenant
   "The membership `membership-id`, or a :not-found throw when it belongs to a

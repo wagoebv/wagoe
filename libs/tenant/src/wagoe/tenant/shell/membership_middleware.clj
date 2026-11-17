@@ -24,7 +24,7 @@
   [membership-service request]
   (when-let [admin (get-in request [:viewing-as :admin])]
     (cond
-      (= :admin (some-> request :tenant-membership :role keyword))
+      (access/membership-admin? (:tenant-membership request))
       (refused request "An administrator is not viewed as")
 
       ;; Asked only when their own field or role does not settle it
