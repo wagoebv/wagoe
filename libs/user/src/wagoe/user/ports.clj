@@ -614,6 +614,13 @@
   ;; transaction, so a refused step leaves no group. Audited as the join and
   ;; the assignment. Returns the group. BOU-863.
 
+(defprotocol IMembershipExpiry
+  (end-membership-at [this group-id user-id expires-at]))
+  ;; Keeps the user's stored membership of the group until `expires-at`, an
+  ;; Instant in the future, instead of for good; audited as a join until then.
+  ;; False when they are no stored member. Refused when the repository lacks
+  ;; IAccessExpiry. BOU-1001.
+
 (defprotocol ITimeBoundAccess
   (add-group-member-until [this group-id user-id expires-at])
   ;; add-group-member, the membership ending at `expires-at`, an Instant in

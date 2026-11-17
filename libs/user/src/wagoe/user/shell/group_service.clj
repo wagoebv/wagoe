@@ -798,6 +798,23 @@
                  (audit! audit-repository :group-join group [focal] grants
                          {:diffs diffs :metadata (expiry-metadata expires-at)})))))
 
+(defn- end-membership-at!
+  "Keep the user's stored membership of the group until `expires-at`: removed
+   and added again until then, in one transaction (BOU-1001)."
+  [{:keys [audit-repository] :as svc} group-id user-id expires-at]
+  (not-everyone! group-id)
+  (when (nil? expires-at)
+    (throw (refused "Pick the day the membership ends" {:field :expires-at})))
+  (let [until (checked-expiry! svc expires-at)
+        {:keys [group focal grants]} (change-plan svc {:op :remove-member :group-id group-id :user-id user-id})]
+    ;; Rights change only on that day: the entry says until when, with no diff
+    (audited! svc
+              #(boolean (and focal
+                             (ports/remove-member % group-id user-id)
+                             (ports/insert-member-until % group-id user-id until)))
+              #(when %
+                 (audit! audit-repository :group-join group [focal] grants {:metadata (expiry-metadata until)})))))
+
 (defn- offer
   "`option` with the preview of `change`, or with :refused, the refusal's
    ex-data, when the change would be refused: one bad option leaves the rest."
@@ -1070,6 +1087,10 @@
   ports/IGrantGroup
   (create-grant-group [this group user-id assignment expires-at]
     (create-grant-group! this group user-id assignment expires-at))
+
+  ports/IMembershipExpiry
+  (end-membership-at [this group-id user-id expires-at]
+    (end-membership-at! this group-id user-id expires-at))
 
   ports/ITimeBoundAccess
   (add-group-member-until [this group-id user-id expires-at]

@@ -10,6 +10,8 @@
             [wagoe.user.core.grant-ui :as grant-ui]
             [wagoe.user.core.group :as group-core]
             [wagoe.user.core.hygiene :as hygiene]
+            [wagoe.user.core.revoke :as revoke]
+            [wagoe.user.core.revoke-ui :as revoke-ui]
             [wagoe.user.core.rights-ui :as rights-ui]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.group-handlers :as group-handlers]
@@ -319,6 +321,61 @@
        #(access-ui/page ov (superusers user-service)
                         (assoc (page-opts request) :filters filters :roles roles
                                :registry registry :scope-info scope-info))))))
+
+;; =============================================================================
+;; Remove wizard (BOU-1001)
+;; =============================================================================
+
+(defn- offer
+  "`option` with the preview of `change`, or why it would be refused."
+  [group-service option change]
+  (try (assoc option :preview (ports/preview-change group-service change))
+       (catch clojure.lang.ExceptionInfo e
+         (if (group-core/refusal? (ex-data e))
+           (assoc option :refused (group-handlers/refusal-text (ex-data e)))
+           (throw e)))))
+
+(defn- revoke-options
+  "Why `user` holds `permission`, and the ways to take it away: leaving each
+   group that gives it, or ending the assignment there that does, ranked.
+   What comes through Everyone or an identity provider is `:blocked`."
+  [group-service user permission]
+  (let [;; Every preview reads the roles and asks the membership hook: once
+        svc     (cond-> (group-service/with-roles group-service) (:membership group-service) (update :membership memoize))
+        explain (ports/explain-access svc user permission nil)
+        {member true other false} (group-by #(= :member (:membership %)) (:paths explain))
+        gives?  (fn [ps a] (some #(and (= (:role a) (:role %)) (= (or (:scope a) {}) (or (:stored-scope %) {}))) ps))]
+    {:explain explain
+     :blocked (vec (distinct (map #(select-keys % [:group-id :group-name :membership]) other)))
+     :options (revoke/rank
+               (for [[gid ps] (group-by :group-id member)
+                     :let [g {:id gid :name (:group-name (first ps))}]
+                     o (cons (offer svc {:kind :leave :group g :expires-at (:membership-expires-at (first ps))}
+                                    {:op :remove-member :group-id gid :user-id (:id user)})
+                             (for [a (:roles (ports/get-group svc gid)) :when (gives? ps a)]
+                               (offer svc {:kind :end-assignment :group g :assignment a}
+                                      {:op :remove-role :group-id gid :assignment-id (:id a) :user-id (:id user)})))]
+                 o)
+               permission)}))
+
+(defn revoke-wizard
+  "GET /web/users/:id/revoke — the ways to take a permission away from the
+   user, each with what else it changes. Setting a membership's end is
+   offered when the group service can (`IMembershipExpiry`)."
+  [user-service group-service]
+  (let [expiry? (satisfies? ports/IMembershipExpiry group-service)]
+    (fn [request]
+      (if-let [user (user-of user-service request)]
+        (let [permission (group-core/parse-name (get-in request [:query-params "permission"]))]
+          (html-response request
+                         (revoke-ui/revoke-page user (when permission (revoke-options group-service user permission))
+                                                (assoc (page-opts request)
+                                                       :asked {:permission permission}
+                                                       :expiry? expiry?
+                                                       :registry (registry-permissions group-service)
+                                                       :scope-info (group-handlers/scope-info group-service)))
+                         200))
+        (not-found request :user.rights/user-not-found)))))
 
 ;; =============================================================================
 ;; Grant wizard (BOU-853)

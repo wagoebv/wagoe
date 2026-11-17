@@ -6,6 +6,7 @@
             [support.test-db :as test-db]
             [wagoe.platform.shell.authorization :as authz]
             [wagoe.user.core.group :as group-core]
+            [wagoe.user.core.rights-ui :as rights-ui]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.group-persistence :as group-persistence]
             [wagoe.user.shell.group-service :as group-service]
@@ -340,6 +341,8 @@
                               [:get (str "/web/users/" (:id user) "/grant")]
                               [:post (str "/web/users/" (:id user) "/grant/role")]
                               [:post (str "/web/users/" (:id user) "/grant/group")]
+                              [:get (str "/web/users/" (:id user) "/revoke")]
+                              [:post (str "/web/admin/groups/" (random-uuid) "/members/" (:id user) "/expire")]
                               [:get "/web/admin/permissions/grant"]
                               [:get "/web/admin/access"]]]
           (let [r (app (req user method uri {"name" "x/y"}))]
@@ -487,3 +490,57 @@
           (is (str/includes? (:body r) "grant-join"))
           (is (str/includes? (:body r) "grant-refused"))
           (is (str/includes? (:body r) "error-scope")))))))
+
+(deftest ^:integration the-remove-wizard-takes-a-permission-away
+  (with-app
+    (fn [{:keys [app users usvc gsvc admin audit]}]
+      (let [user!   #(ports/create-user users {:email % :name % :role :user :active true :password-hash "x"})
+            ada     (user! "ada@example.com")
+            bob     (user! "bob@example.com")
+            finance (ports/create-group gsvc {:name "Finance"})
+            desk    (ports/create-group gsvc {:name "Desk"})
+            ops     (ports/create-group gsvc {:name "Ops"})
+            page    (fn [svc u p] (:body (explain (rights-handlers/revoke-wizard usvc svc) admin u {"permission" p})))
+            member  #(str "/web/admin/groups/" (:id %1) "/members/" (:id %2))]
+        (ports/add-group-role gsvc (:id finance) {:role :invoice/editor :scope {}})
+        (ports/add-group-role gsvc (:id desk) {:role :invoice/viewer :scope {}})
+        (ports/add-group-role gsvc (:id ops) {:role :invoice/viewer :scope {}})
+        (doseq [u [ada bob]] (ports/add-group-member gsvc (:id finance) (:id u)))
+        (ports/add-group-member gsvc (:id desk) (:id ada))
+        (testing "a held permission links to the wizard from the rights page"
+          (is (str/includes? (:body (explain (rights-handlers/user-rights usvc gsvc :off) admin ada {}))
+                             (str "/web/users/" (:id ada) "/revoke?permission=invoice%2Fwrite"))))
+        (testing "leaving the group before ending its assignment, which reaches Bob too; each previewed"
+          (let [body (page gsvc ada "invoice/write")]
+            (is (< -1 (index-of body "revoke-leave") (index-of body "revoke-end-assignment")))
+            (is (str/includes? body "revoke-nothing-else") "Desk still gives invoice/read")
+            (is (str/includes? body "preview-removed"))
+            (is (str/includes? body "bob@example.com"))
+            (is (str/includes? body (str "action=\"" (member finance ada) "/remove\"")))
+            (is (str/includes? body (str "action=\"" (member finance ada) "/expire\"")))
+            (is (not (str/includes? body "revoke-still-held")))))
+        (testing "held through two groups: no option alone takes it away, and each says so"
+          (is (str/includes? (page gsvc ada "invoice/read") "revoke-still-held")))
+        (testing "not held, the wizard says so"
+          (is (str/includes? (page gsvc ada "invoice/approve") "revoke-not-held")))
+        (testing "a membership kept until a day changes nothing now, and is audited"
+          (let [day (str (.plusDays (java.time.LocalDate/now java.time.ZoneOffset/UTC) 30))]
+            (is (= 303 (:status (app (req admin :post (str (member desk ada) "/expire") {"expires-at" day})))))
+            (is (= day (some-> (some #(when (= (:id desk) (:id %)) %) (ports/user-groups gsvc ada))
+                               :expires-at rights-ui/expiry-date)))
+            (is (some #(and (= "group-join" (name (:action %))) (= day (subs (str (get-in % [:metadata :expires-at])) 0 10)))
+                      (ports/find-audit-logs-by-user audit (:id ada) {:limit 10})))
+            (is (= 422 (:status (app (req admin :post (str (member desk ada) "/expire") {"expires-at" "2000-01-01"})))))
+            (is (= 422 (:status (app (req admin :post (str (member desk ada) "/expire") {})))))))
+        (testing "applied through the group's own page, it is gone"
+          (is (= 303 (:status (app (req admin :post (str (member finance ada) "/remove") {"confirm" "true"})))))
+          (is (not (:allowed? (ports/explain-access gsvc ada :invoice/write nil)))))
+        (testing "what cannot be taken away here says where it can"
+          (is (str/includes? (page gsvc admin "invoice/read") "revoke-platform-admin"))
+          (let [cy (user! "cy@example.com")]
+            (is (str/includes? (page (assoc gsvc :membership (fn [_] #{"Ops"})) cy "invoice/read") "revoke-via-provider"))
+            (ports/ensure-everyone (:group-repository gsvc))
+            (ports/add-group-role gsvc group-core/everyone-id {:role :invoice/editor :scope {}})
+            (let [body (page gsvc cy "invoice/write")]
+              (is (str/includes? body "revoke-via-everyone"))
+              (is (not (str/includes? body "revoke-option"))))))))))
