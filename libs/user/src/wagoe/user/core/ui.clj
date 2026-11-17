@@ -63,9 +63,16 @@
 ;; User Table Components
 ;; =============================================================================
 
+(defn- groups-cell
+  "The groups a user is in, Everyone left out: every user is (BOU-1002)."
+  [groups]
+  (if-let [gs (seq (remove #(= :everyone (:source %)) groups))]
+    (interpose ", " (for [{:keys [id name]} gs] [:a {:href (str "/web/admin/groups/" id)} name]))
+    [:span.empty-value "—"]))
+
 (defn user-row
-  "The cells of a user's row: name, email, role and status, the badges
-   styled as the admin's enum cells.
+  "The cells of a user's row: name, email, role, status and groups, the
+   badges styled as the admin's enum cells.
 
    Args:
      user: User entity map (from User schema)
@@ -82,14 +89,16 @@
                     "user-role-badge")
      (ui/tone-badge (if active? [:t :user/badge-active] [:t :user/badge-inactive])
                     (if active? :success :warning)
-                    "user-status-badge")]))
+                    "user-status-badge")
+     (groups-cell (:groups user))]))
 
 (def ^:private user-columns
   ;; The columns of `user-row`, in its order
   [{:field :name :label [:t :common/column-name] :class "c-title"}
    {:field :email :label [:t :common/column-email]}
    {:field :role :label [:t :common/column-role] :sortable? false}
-   {:field :status :label [:t :common/column-status] :sortable? false}])
+   {:field :status :label [:t :common/column-status] :sortable? false}
+   {:field :groups :label [:t :user/column-groups] :sortable? false}])
 
 (defn- user-table-row
   "A row that opens the user (admin-ux.js), with a box for bulk actions."
@@ -106,6 +115,17 @@
       [:a.row-nav-hint {:href href :aria-label [:t :user/button-view-user]}
        (icons/icon :chevron-right {:size 14})]]]))
 
+(defn- permission-note
+  "Who the permission filter counts beyond the groups they were added to:
+   Everyone, an identity provider, platform admins (BOU-1002)."
+  [{:keys [everyone? provided platform-admins] :as found}]
+  (when found
+    [:div.users-permission-note {:class "alert alert-info" :role "status"}
+     (if everyone?
+       [:p [:t :user.list/via-everyone]]
+       (list [:p [:t :user.list/via-provider {:count (count provided)} (count provided)]]
+             [:p [:t :user.list/via-platform-admin {:count (count platform-admins)} (count platform-admins)]]))]))
+
 (defn users-table-fragment
   "Generate just the users table container fragment (for HTMX refresh).
 
@@ -120,6 +140,8 @@
   ([users table-query total-count]
    (users-table-fragment users table-query total-count {}))
   ([users table-query total-count filters]
+   (users-table-fragment users table-query total-count filters {}))
+  ([users table-query total-count filters {:keys [found]}]
    (let [base-url      "/web/users"
          hx-target     "#users-table-container"
          table-params  (table-ui/table-query->params table-query)
@@ -137,6 +159,7 @@
        ;; Outside .table-sort: a filter starts at page one, a bulk action stays
        (table-ui/hidden-inputs (select-keys table-params ["page"]))
        (table-ui/hidden-inputs filter-params)]
+      (permission-note (:permission found))
       (if (empty? users)
         [:div.empty-state [:t :user/empty-state-no-users]]
         [:div.table-and-pagination
@@ -516,11 +539,24 @@
                           :offset    0
                           :limit     20})
          filters     (or (:filters opts) {})
-         ;; Page one, sorted as now, with the other filter's value
-         filter-opts (fn [other]
+         {:keys [choices]} (:access opts)
+         ids         (cond-> ["#users-search" "#users-role-filter"]
+                       choices (into ["#users-permission-filter" "#users-group-filter" "#users-has-role-filter"]))
+         ;; Page one, sorted as now, with the other filters' values
+         filter-opts (fn [self]
                        {:url        "/web/users"
                         :hx-target  "#users-table-container"
-                        :hx-include (str "#users-table-container .table-sort input, " other)})]
+                        :hx-include (str/join ", " (cons "#users-table-container .table-sort input" (remove #{self} ids)))})
+         access-filter (fn [k label all options]
+                         [:div.toolbar-filter
+                          (table-ui/filter-input
+                           (merge (filter-opts (str "#users-" (name k) "-filter"))
+                                  {:name        (name k)
+                                   :value       (get filters k)
+                                   :label       label
+                                   :placeholder all
+                                   :options     options
+                                   :attrs       {:id (str "users-" (name k) "-filter") :class "select select-sm"}}))])]
      (admin-page
       [:t :user/page-users-title]
       [:t :user/page-users-title]
@@ -531,14 +567,14 @@
        [:div.table-toolbar-container
         [:div.toolbar-row-actions
          (table-ui/toolbar-search
-          (merge (filter-opts "#users-role-filter")
+          (merge (filter-opts "#users-search")
                  {:id          "users-search"
                   :name        "q"
                   :value       (:q filters)
                   :placeholder [:t :user/filter-placeholder-email]}))
          [:div.toolbar-filter
           (table-ui/filter-input
-           (merge (filter-opts "#users-search")
+           (merge (filter-opts "#users-role-filter")
                   {:name        "role"
                    :value       (:role filters)
                    :label       [:t :common/label-role]
@@ -546,12 +582,19 @@
                    :options     [["user" [:t :common/role-user]]
                                  ["admin" [:t :common/role-admin]]]
                    :attrs       {:id "users-role-filter" :class "select select-sm"}}))]
+         (when choices
+           (list (access-filter :permission [:t :user.list/filter-permission] [:t :user.list/any-permission]
+                                (map (juxt identity identity) (:permissions choices)))
+                 (access-filter :group [:t :user.list/filter-group] [:t :user.list/any-group]
+                                (map (juxt (comp str :id) :name) (:groups choices)))
+                 (access-filter :has-role [:t :user.list/filter-role] [:t :user.list/any-role]
+                                (map (juxt identity identity) (:roles choices)))))
          [:div.toolbar-actions
           [:a.button.primary {:href "/web/users/new" :class "gap-2"}
            (icons/icon :plus {:size 18})
            [:t :user/button-create]]]]]
        (bulk-bar)
-       (users-table users table-query total-count filters)]
+       (users-table-fragment users table-query total-count filters (:access opts))]
       opts))))
 
 (defn create-user-page

@@ -47,7 +47,7 @@
   (testing "generates correct table row for active user"
     (let [row (ui/user-row sample-user)]
       (is (vector? row))
-      (is (= 4 (count row)))
+      (is (= 5 (count row)))
       (is (= "John Doe" (nth row 0)))
       (is (= "john@example.com" (nth row 1)))
 

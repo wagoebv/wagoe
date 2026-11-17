@@ -229,6 +229,13 @@ admin's tab says they pass every check, and shows every permission as held.
 +
 image::access/user-rights.png[A user's Rights tab]
 
+Who can do something::
+The *Users* list filters on *Can do*, a permission; *Group*; and *Has role*, a
+role from the Roles page; alone or together. The filters are in the address,
+so the result can be shared. Each user shows the groups they are in. A
+permission filter also says whether Everyone gives it, and how many of the
+users get it through an identity provider or as platform admin.
+
 Who holds a permission or role::
 *Permissions* lists every permission the app has, by module; search for a
 permission or a role. Open one, or a role on the
