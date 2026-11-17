@@ -911,12 +911,19 @@
   (start-view-as [_ admin session target-id]
     (let [now    (current-timestamp)
           target (some->> target-id (.find-user-by-id user-repository) user-core/without-credentials)]
+      ;; A session store of an app's own may not keep views: refused, not a 500
+      (when-not (satisfies? ports/ISessionViewAs session-repository)
+        (throw (ex-info "This session store cannot view as a user" {:type :forbidden :reason :unsupported})))
       (when-let [{:keys [error]} (view-as/refusal admin target session now)]
         (throw (ex-info (:message error) error)))
       (let [until (.plusSeconds ^java.time.Instant now (* 60 view-as/duration-minutes))]
         (when-not (ports/set-view-as session-repository (:id session) (:id target) until)
           (throw (ex-info "The session has ended" {:type :forbidden :reason :session})))
-        (.create-audit-log audit-repository (view-as/start-entry admin target until (effective-audit-context {})))
+        ;; No view without its audit entry
+        (try (.create-audit-log audit-repository (view-as/start-entry admin target until (effective-audit-context {})))
+             (catch Exception e
+               (ports/set-view-as session-repository (:id session) nil nil)
+               (throw e)))
         {:target target :until until})))
 
   (stop-view-as [_ admin session]

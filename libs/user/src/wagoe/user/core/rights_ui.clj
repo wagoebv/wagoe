@@ -953,7 +953,7 @@
               n
               [:a {:href (explain-path (:id user) nil nil) :class "btn btn-sm"} [:t :user.explain/open]]
               ;; Read-only, as them; never as an administrator (BOU-868)
-              (when (and (not= :admin (some-> (:role user) keyword)) (:active user true))
+              (when (and (not= :admin (some-> (:role user) keyword)) (:active user))
                 [:form.view-as-start {:method "post" :action (str "/web/users/" (:id user) "/view-as")}
                  (csrf/hidden-field)
                  [:button {:type "submit" :class "btn btn-sm"} [:t :user.view-as/start]]]))

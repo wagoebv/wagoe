@@ -626,6 +626,7 @@
  :user.view-as/refused-nested "Stop eerst met kijken als de andere gebruiker."
  :user.view-as/refused-not-admin "Alleen een beheerder kijkt als een andere gebruiker."
  :user.view-as/refused-session "Je sessie is verlopen; meld je opnieuw aan."
+ :user.view-as/refused-unsupported "De sessie-opslag van deze app kan niet als een gebruiker kijken."
  :user.access/page-title "Toegangsoverzicht"
  :user.access/nav-description "Welke groep wat heeft, per module."
  :user.access/description "Het niveau van elke groep per module. Open een cel voor de toewijzingen en rechten erachter."

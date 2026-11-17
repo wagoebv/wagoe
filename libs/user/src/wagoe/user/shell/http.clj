@@ -940,7 +940,8 @@
 (defn- export-response
   "`doc`, a user's data export, as a download, logged with who asked."
   [data-export doc request]
-  (log/info "Data export" {:subject-user-id (get-in doc [:subject :id]) :actor-id (get-in request [:user :id])})
+  (log/info "Data export" {:subject-user-id (get-in doc [:subject :id])
+                           :actor-id        (:actor-id (user-svc/request-audit-context request))})
   (privacy/export-response data-export doc request))
 
 (defn export-own-data-handler
@@ -950,6 +951,9 @@
     (let [user-id (get-in request [:user :id])]
       (when-not user-id
         (throw (ex-info "User not authenticated" {:type :unauthorized})))
+      ;; Viewing as someone is no way to their data (BOU-868)
+      (when (:viewing-as request)
+        (throw (ex-info "Not while viewing as another user" {:type :forbidden})))
       (export-response data-export (privacy/export-subject data-export {:type :user :id user-id}) request))))
 
 (defn- path-user-id [request]

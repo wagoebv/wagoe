@@ -1907,7 +1907,8 @@
 
 (def ^:private view-as-refusals
   {:admin :user.view-as/refused-admin :self :user.view-as/refused-self :inactive :user.view-as/refused-inactive
-   :nested :user.view-as/refused-nested :not-admin :user.view-as/refused-not-admin :session :user.view-as/refused-session})
+   :nested :user.view-as/refused-nested :not-admin :user.view-as/refused-not-admin :session :user.view-as/refused-session
+   :unsupported :user.view-as/refused-unsupported})
 
 (defn start-view-as-handler
   "POST /web/users/:id/view-as — an administrator views the app as the user,

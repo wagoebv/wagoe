@@ -17,6 +17,7 @@
             [wagoe.platform.core.http.access :as access]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [ring.util.response]
             [ring.websocket :as ring-ws]))
 
 ;; =============================================================================
@@ -187,13 +188,18 @@
 
 (defn- viewed-as
   "The user `session`, `admin`'s, views the app as now, as they may still be
-   viewed as; nil for none (BOU-868)."
+   viewed as; nil for none (BOU-868). A view past its time, or of one no longer
+   to be viewed as, is ended and audited, so it neither blocks a new one nor
+   comes back."
   [user-service admin session]
-  (let [now (java.time.Instant/now)]
-    (when (view-as/active? session now)
-      (let [target (some->> (:view-as-user-id session) (ports/get-user-by-id user-service) without-credentials)]
-        (when-not (view-as/refusal admin target (dissoc session :view-as-user-id) now)
-          target)))))
+  (when (:view-as-user-id session)
+    (let [now    (java.time.Instant/now)
+          target (when (view-as/active? session now)
+                   (some->> (:view-as-user-id session) (ports/get-user-by-id user-service) without-credentials))]
+      (if (and target (nil? (view-as/refusal admin target (dissoc session :view-as-user-id) now)))
+        target
+        (do (when (satisfies? ports/IViewAs user-service) (ports/stop-view-as user-service admin session))
+            nil)))))
 
 (defn- session-user
   "`{:user u :session s}` for the session `token` names, or `{:refusal response}`,
@@ -230,15 +236,30 @@
               {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)})
           (throw ex))))))
 
+(defn- back-path
+  "The path and query the Referer names, never another site."
+  [request]
+  (or (some-> (get-in request [:headers "referer"])
+              (#(try (java.net.URI. %) (catch Exception _ nil)))
+              (#(str (.getRawPath ^java.net.URI %) (some->> (.getRawQuery ^java.net.URI %) (str "?"))))
+              not-empty)
+      "/web"))
+
 (defn- read-only-refusal
-  "403 for a request that would change something while viewing the app as
-   another user, but for stopping (BOU-868). Marked, so `authenticate-if-present`
-   answers it rather than passing the request on unauthenticated."
+  "Refuses a request that would change something while viewing the app as
+   another user, but for stopping or signing out (BOU-868): a browser's form
+   goes back to its page, the bar still there, with why; anything else gets a
+   403. Marked, so `authenticate-if-present` answers it rather than passing the
+   request on unauthenticated."
   [request]
   (when (and (:viewing-as request)
              (view-as/writes? (:request-method request))
-             (not= view-as/stop-path (:uri request)))
-    (assoc (create-forbidden-response "Read-only while viewing as another user" :view-as-read-only request)
+             (not (view-as/allowed-writes (:uri request))))
+    (assoc (if (and (str/starts-with? (str (:uri request)) "/web/")
+                    (nil? (get-in request [:headers "hx-request"])))
+             (assoc (ring.util.response/redirect (back-path request) :see-other)
+                    :flash {:error :user.view-as/disabled})
+             (create-forbidden-response "Read-only while viewing as another user" :view-as-read-only request))
            ::read-only true)))
 
 (defn- with-viewing

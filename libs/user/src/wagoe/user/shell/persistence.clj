@@ -134,10 +134,7 @@
 
 (defn- widen-audit-action-check!
   "Let user_audit_log's action CHECK take every `audit-actions` value on a
-   database created before one was added: `:permanent-delete` (BOU-682),
-   `:session-revoked` (BOU-698), `:data-export` (BOU-735),
-   `:mfa-disabled` (BOU-782), `:mfa-enabled` (BOU-815).
-   Without it that audit entry is refused, and the refusal only warns. H2
+   database created before one was added. Without it that audit entry is refused, and the refusal only warns. H2
    re-applies its checks at every boot already."
   [ctx]
   (let [engine (protocols/engine (:adapter ctx))

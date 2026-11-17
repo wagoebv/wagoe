@@ -9,6 +9,10 @@
 
 (def stop-path "/web/view-as/stop")
 
+(def allowed-writes
+  "What a view may still post: stopping it, and signing out, which ends it."
+  #{stop-path "/web/logout"})
+
 (defn active?
   "Whether `session` views the app as another user at `now`."
   [{:keys [view-as-user-id view-as-until]} now]
@@ -25,7 +29,8 @@
 (defn refusal
   "Why `admin`, whose `session` it is, may not view the app as `target`, or
    nil. Only an administrator, not one already viewing, and never as an
-   administrator, themselves or a deactivated user."
+   administrator, themselves, a deactivated user or one of another tenant
+   than a tenant's administrator's."
   [admin target session now]
   (cond
     (active? session now)                  (refused :nested "Stop viewing as the other user first")
@@ -33,7 +38,10 @@
     (nil? target)                          {:error {:type :not-found :message "No such user"}}
     (= (str (:id admin)) (str (:id target))) (refused :self "That is you")
     (= :admin (some-> (:role target) keyword)) (refused :admin "An administrator is not viewed as")
-    (not (:active target))                 (refused :inactive "A deactivated user is not viewed as")))
+    (not (:active target))                 (refused :inactive "A deactivated user is not viewed as")
+    ;; Another tenant's user is not found, as on every user page (BOU-953)
+    (and (:tenant-id admin) (not= (str (:tenant-id admin)) (str (:tenant-id target))))
+    {:error {:type :not-found :message "No such user"}}))
 
 (defn start-entry
   "The audit entry for `admin` starting to view as `target` until `until`."
