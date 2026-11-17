@@ -58,6 +58,11 @@
   [user-id permission scope]
   (asking-path "/grant" user-id permission scope))
 
+(defn revoke-path
+  "The wizard taking `permission` away from `user-id` (BOU-1001)."
+  [user-id permission]
+  (asking-path "/revoke" user-id permission nil))
+
 (def grant-bulk-path
   "Who a permission would refuse, and the smallest fix for each (BOU-853)."
   (str permissions-path "/grant"))
@@ -734,8 +739,11 @@
   "What a timeline entry did to the user's rights: each right gained and lost,
    for a change to Everyone how many users it changed, or the user's own role
    or sign-in."
-  [{:keys [action user-role added removed permissions affected-count]} scope-info]
+  [{:keys [action user-role added removed permissions affected-count ends-on]} scope-info]
   (cond
+    ends-on
+    [:span.timeline-ends-on [:t :user.timeline/ends-on {:date (expiry-date ends-on)}]]
+
     (= :role-change action)
     (let [role #(if (str/blank? %) [:t :user.timeline/no-role] [:code %])]
       (list (role (:old user-role)) " → " (role (:new user-role))))
@@ -891,8 +899,10 @@
                                       (ui/tone-badge [:t :user.rights/holds-no] :neutral))]
                                [:td [:a {:href (explain-path user-id permission nil)}
                                      [:t (if held? :user.rights/why :user.rights/why-not)]]
-                                (when-not held?
-                                  (list " · " [:a {:href (grant-path user-id permission nil)} [:t :user.rights/grant]]))]]))])))
+                                " · "
+                                (if held?
+                                  [:a {:href (revoke-path user-id permission)} [:t :user.rights/revoke]]
+                                  [:a {:href (grant-path user-id permission nil)} [:t :user.rights/grant]])]]))])))
 
 (defn- roles-section
   "The roles the user holds, each with the groups giving it. `grants` are the
@@ -1004,9 +1014,10 @@
                                   :else                  (mismatch-text (:keys row) (:labels scope-info)))])))))
 
 (defn asking-form
-  "The form posting to `action` a permission on a record, `kind` `:explain`
-   or `:grant` (BOU-853): granting asks no `everywhere`, an empty scope is
-   everywhere. `inputs` go before its button."
+  "The form posting to `action` a permission on a record, `kind` `:explain`,
+   `:grant` (BOU-853) or `:revoke` (BOU-1001): only explaining asks
+   `everywhere`; granting reads an empty scope as everywhere. `inputs` go
+   before its button."
   [kind action registry scope-keys {:keys [permission record]} & inputs]
   (let [prefix (name kind)]
     [:form {:method "get" :action action :class (str prefix "-form space-y-3")}
@@ -1016,7 +1027,8 @@
       (for [p (sort-by group/permission-str (keys registry))
             :let [v (group/permission-str p)]]
         [:option {:value v :selected (= p permission)} v])]
-     [:p [:t (if (= :grant kind) :user.grant/scope-hint :user.explain/record-hint)]]
+     (when (seq scope-keys)
+       [:p [:t (if (= :grant kind) :user.grant/scope-hint :user.explain/record-hint)]])
      (for [[k label] scope-keys
            :let [id (str prefix "-scope-" (name k))]]
        (list [:label {:for id} label]
@@ -1028,7 +1040,7 @@
                  :checked (= :everywhere record)}]
         [:t :user.explain/field-everywhere]])
      inputs
-     [:button {:type "submit" :class "btn btn-primary"} [:t (if (= :grant kind) :user.grant/submit :user.explain/submit)]]]))
+     [:button {:type "submit" :class "btn btn-primary"} [:t (if (= :explain kind) :user.explain/submit :user.grant/submit)]]]))
 
 (defn- verdict [{:keys [allowed? via]} record]
   (let [asked (cond (= :everywhere record) :everywhere (seq record) :record :else :anywhere)]
@@ -1100,6 +1112,22 @@
   (for [[k v] (sort-by key params)
         v     (if (sequential? v) v [v])]
     [:input {:type "hidden" :name k :value (str v)}]))
+
+(defn apply-form
+  "A wizard option's form, classed `cls`, posting `fields`, {name value}, to
+   `action`, `label` on its button: the option shows its preview, so a change
+   posts confirmed."
+  [cls label action fields & inputs]
+  [:form {:method "post" :action action :class (str cls " space-y-3")}
+   (csrf/hidden-field)
+   (hidden-fields fields)
+   inputs
+   [:button.button.primary {:type "submit"} [:t label]]])
+
+(defn assignment-line
+  "\"Assign <role> <scope>\", as a wizard option names an assignment."
+  [{:keys [role scope]} scope-info]
+  [:p [:t :user.grant/assign] " " (code role) " " (scope-view scope scope-info)])
 
 (defn preview-sections
   "What a change does to effective rights, `preview` as `preview-change`

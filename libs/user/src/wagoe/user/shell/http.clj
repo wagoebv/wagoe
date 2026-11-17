@@ -827,10 +827,10 @@
      :nav    (when web? nav)}))
 
 (defn- rights-target
-  "The user a /users/:id/rights, /explain or /grant request names, when
+  "The user a /users/:id/rights, /explain, /grant or /revoke request names, when
    `request` reaches them; nil for any other route."
   [user-service request]
-  (when (re-find #"/users/[^/]+/(rights|explain|grant)" (str (:uri request)))
+  (when (re-find #"/users/[^/]+/(rights|explain|grant|revoke)" (str (:uri request)))
     (tenant-scope/reachable-user user-service request (some-> (get-in request [:path-params :id]) str parse-uuid))))
 
 (defn- in-admins-tenant
@@ -926,7 +926,12 @@
                    (route "/users/:id/grant/role"
                           {:post {:handler (rights-handlers/grant-role user-service group-service)}})
                    (route "/users/:id/grant/group"
-                          {:post {:handler (rights-handlers/grant-group user-service group-service)}})])}))
+                          {:post {:handler (rights-handlers/grant-group user-service group-service)}})
+                   (route "/users/:id/revoke"
+                          {:get {:handler (rights-handlers/revoke-wizard user-service group-service)}})
+                   (when (group-service/ends-memberships? group-service)
+                     (route "/users/:id/revoke/expire"
+                            {:post {:handler (rights-handlers/revoke-on-day user-service group-service)}}))])}))
 
 (defn- export-response
   "`doc`, a user's data export, as a download, logged with who asked."

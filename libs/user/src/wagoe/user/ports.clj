@@ -312,6 +312,12 @@
   ;; Deletes what expired at or before `now`. Returns what it deleted:
   ;; {:members [{:group-id :user-id :expires-at}] :assignments [assignment]}.
 
+(defprotocol IMembershipEnd
+  (end-member-at [this group-id user-id expires-at]))
+  ;; Moves the end of the user's current stored membership of the group to
+  ;; `expires-at`, only ever earlier: true when it did, false when there is
+  ;; no such membership or it ends sooner already. The row is kept. BOU-1001.
+
 (defprotocol IExpiredAccess
   "Expiry a group at a time, so a group that fails leaves the others (BOU-965)."
   (find-expired [this now])
@@ -613,6 +619,13 @@
   ;; only the user, until `expires-at` unless nil, and `assignment`, in one
   ;; transaction, so a refused step leaves no group. Audited as the join and
   ;; the assignment. Returns the group. BOU-863.
+
+(defprotocol IMembershipExpiry
+  (end-membership-at [this group-id user-id expires-at]))
+  ;; Ends the user's current stored membership of the group at `expires-at`,
+  ;; an Instant in the future and before it ends now; audited as a join with
+  ;; that end. Refused for anything else, or when the repository lacks
+  ;; IMembershipEnd. BOU-1001.
 
 (defprotocol ITimeBoundAccess
   (add-group-member-until [this group-id user-id expires-at])

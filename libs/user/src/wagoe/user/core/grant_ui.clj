@@ -2,25 +2,15 @@
   "The grant wizard (BOU-853): give a user one permission through a group,
    each option with its preview, the one giving least else first. Pure
    Hiccup; each option's form posts to the page that makes that change."
-  (:require [wagoe.platform.core.csrf :as csrf]
-            [wagoe.user.core.group :as group]
+  (:require [wagoe.user.core.group :as group]
             [wagoe.user.core.group-ui :as group-ui]
             [wagoe.user.core.rights-ui :as rights-ui]))
 
 (def ^:private code rights-ui/code)
 
-(defn- assignment-line [{:keys [role scope]} scope-info]
-  [:p [:t :user.grant/assign] " " (code role) " " (rights-ui/scope-view scope scope-info)])
+(def ^:private assignment-line rights-ui/assignment-line)
 
-(defn- apply-form
-  "A form posting `fields`, {name value}, to `action`: the option shows its
-   preview, so a change is posted confirmed."
-  [action fields & inputs]
-  [:form.grant-apply {:method "post" :action action :class "space-y-3"}
-   (csrf/hidden-field)
-   (rights-ui/hidden-fields fields)
-   inputs
-   [:button.button.primary {:type "submit"} [:t :user.grant/apply]]])
+(def ^:private apply-form (partial rights-ui/apply-form "grant-apply" :user.grant/apply))
 
 (defn- extra [{:keys [extra]} scope-info]
   (if (seq extra)

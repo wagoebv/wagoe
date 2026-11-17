@@ -86,7 +86,9 @@
                   :scope      :user.groups/error-scope
                   :email      :user.groups/error-no-user
                   :user       :user.rights/user-not-found
-                  :expires-at :user.groups/error-expires-at} field)
+                  :expires-at :user.groups/error-expires-at
+                  :member     :user.revoke/error-not-member
+                  :ends-sooner :user.revoke/error-ends-sooner} field)
                 ({:not-found :user.groups/not-found} type)
                 (when (= [:conflict :name] [type field]) :user.groups/error-name-taken)
                 :user.groups/error-name)]

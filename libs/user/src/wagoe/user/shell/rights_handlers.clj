@@ -10,6 +10,8 @@
             [wagoe.user.core.grant-ui :as grant-ui]
             [wagoe.user.core.group :as group-core]
             [wagoe.user.core.hygiene :as hygiene]
+            [wagoe.user.core.revoke :as revoke]
+            [wagoe.user.core.revoke-ui :as revoke-ui]
             [wagoe.user.core.rights-ui :as rights-ui]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.group-handlers :as group-handlers]
@@ -321,6 +323,89 @@
                                :registry registry :scope-info scope-info))))))
 
 ;; =============================================================================
+;; Remove wizard (BOU-1001)
+;; =============================================================================
+
+(defn- wizard-opts [request group-service q opts]
+  (merge (page-opts request)
+         {:asked      q
+          :registry   (registry-permissions group-service)
+          :scope-info (group-handlers/scope-info group-service)}
+         opts))
+
+(defn- worded
+  "`options` with each refused one's reason put into words."
+  [options]
+  (mapv #(cond-> % (:refused %) (update :refused group-handlers/refusal-text)) options))
+
+(defn- revoke-options
+  "Why `user` holds `permission`, and the ways to take it away: leaving each
+   group that gives it, or ending the assignment there that does, ranked.
+   What comes through Everyone or an identity provider is `:blocked`: a group
+   the provider names stays theirs however they were added."
+  [group-service user permission]
+  (let [;; Every preview reads the roles and asks the membership hook: once
+        svc      (cond-> (group-service/with-roles group-service) (:membership group-service) (update :membership memoize))
+        explain  (ports/explain-access svc user permission nil)
+        provided (group-service/provider-group-names svc user)
+        paths    (map #(cond-> % (provided (:group-name %)) (assoc :membership :provider)) (:paths explain))
+        offer    (partial group-service/offer svc)
+        {member :member provider :provider} (group-by :membership paths)]
+    {:explain explain
+     :blocked (vec (distinct (map #(select-keys % [:group-id :group-name :membership]) (remove (set member) paths))))
+     :options (worded
+               (revoke/rank
+                (concat
+                 (for [[gid [p]] (group-by :group-id member)]
+                   (offer {:kind :leave :group {:id gid :name (:group-name p)} :expires-at (:membership-expires-at p)}
+                          {:op :remove-member :group-id gid :user-id (:id user)}))
+                 ;; An assignment ends for every member, a provider's too
+                 (for [[gid ps] (group-by :group-id (concat member provider))
+                       a        (:roles (ports/get-group svc gid))
+                       :when    (some (partial revoke/gives? a) ps)]
+                   (offer {:kind :end-assignment :group {:id gid :name (:group-name (first ps))} :assignment a}
+                          {:op :remove-role :group-id gid :assignment-id (:id a) :user-id (:id user)})))
+                permission
+                paths))}))
+
+(defn- revoke-response
+  "The remove wizard for the user in the path, asking `permission`."
+  [request user-service group-service permission status opts]
+  (if-let [user (user-of user-service request)]
+    (let [permission (group-core/parse-name permission)]
+      (html-response request
+                     (revoke-ui/revoke-page user (when permission (revoke-options group-service user permission))
+                                            (wizard-opts request group-service {:permission permission}
+                                                         (assoc opts :expiry? (group-service/ends-memberships? group-service))))
+                     status))
+    (not-found request :user.rights/user-not-found)))
+
+(defn revoke-wizard
+  "GET /web/users/:id/revoke — the ways to take a permission away from the
+   user, each with what else it changes."
+  [user-service group-service]
+  (fn [request]
+    (revoke-response request user-service group-service (get-in request [:query-params "permission"]) 200 {})))
+
+(defn revoke-on-day
+  "POST /web/users/:id/revoke/expire — end the user's membership of the group
+   posted on the day posted, then back to their Rights tab. Nothing changes
+   until then; refused, the wizard says why."
+  [user-service group-service]
+  (fn [request]
+    (if-let [user (user-of user-service request)]
+      (try
+        (ports/end-membership-at group-service (parse-uuid (str (form request "group-id"))) (:id user)
+                                 (group-handlers/form-expiry request))
+        (redirect (rights-ui/user-rights-path (:id user)) :user.revoke/flash-ends)
+        (catch clojure.lang.ExceptionInfo e
+          (if (group-core/refusal? (ex-data e))
+            (revoke-response request user-service group-service (form request "permission") 422
+                             {:error (group-handlers/error-text e)})
+            (throw e))))
+      (not-found request :user.rights/user-not-found))))
+
+;; =============================================================================
 ;; Grant wizard (BOU-853)
 ;; =============================================================================
 
@@ -332,18 +417,10 @@
     {:permission permission
      :record     (if (and (map? record) (seq record)) (group-handlers/decode-scope group-service record) {})}))
 
-(defn- wizard-opts [request group-service q opts]
-  (merge (page-opts request)
-         {:asked      q
-          :registry   (registry-permissions group-service)
-          :scope-info (group-handlers/scope-info group-service)}
-         opts))
-
 (defn- grant-options
   "`grant-options`, each refused option's reason put into words."
   [group-service user permission record]
-  (update (ports/grant-options group-service user permission record) :options
-          (partial mapv #(cond-> % (:refused %) (update :refused group-handlers/refusal-text)))))
+  (update (ports/grant-options group-service user permission record) :options worded))
 
 (defn- grant-response
   "The wizard for the user in the path, asking what `params` ask; a refused

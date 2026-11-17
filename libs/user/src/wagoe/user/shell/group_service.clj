@@ -798,7 +798,46 @@
                  (audit! audit-repository :group-join group [focal] grants
                          {:diffs diffs :metadata (expiry-metadata expires-at)})))))
 
-(defn- offer
+(defn ends-memberships?
+  "Whether `svc` can end a membership on a day (BOU-1001)."
+  [svc]
+  (boolean (and (satisfies? ports/IMembershipExpiry svc)
+                (:expiry? svc)
+                (satisfies? ports/IMembershipEnd (:group-repository svc)))))
+
+(defn- end-membership-at!
+  "End the user's current stored membership of the group at `expires-at`,
+   earlier than it ends now; the row is kept (BOU-1001)."
+  [{:keys [audit-repository group-repository] :as svc} group-id user-id expires-at]
+  (not-everyone! group-id)
+  (when-not (satisfies? ports/IMembershipEnd group-repository)
+    (throw (refused "This group repository cannot end a membership on a day" {:field :expires-at})))
+  (when (nil? expires-at)
+    (throw (refused "Pick the day the membership ends" {:field :expires-at})))
+  (let [until (checked-expiry! svc expires-at)
+        {:keys [group focal grants]} (change-plan svc {:op :remove-member :group-id group-id :user-id user-id})
+        held  (when focal
+                (some #(when (and (= :member (:source %)) (access/same-id? group-id (:id %))) %)
+                      (ports/user-groups svc focal)))]
+    (cond
+      (nil? held)
+      (throw (not-found "No such membership" {:field :member}))
+
+      (and (:expires-at held) (not (.isBefore ^Instant until (:expires-at held))))
+      (throw (refused "The membership ends sooner already" {:field :ends-sooner})))
+    ;; Rights change only on that day, audited then as the leave; this entry says when
+    (audited! svc
+              #(ports/end-member-at % group-id user-id until)
+              #(when %
+                 (audit! audit-repository :group-join group [focal] grants
+                         {:metadata {:expires-at (str until) :membership-ends true}})))))
+
+(defn provider-group-names
+  "The group names the membership hook gives `user`."
+  [{:keys [membership user-repository]} user]
+  (or (provider-groups membership user-repository user) #{}))
+
+(defn offer
   "`option` with the preview of `change`, or with :refused, the refusal's
    ex-data, when the change would be refused: one bad option leaves the rest."
   [svc option change]
@@ -1070,6 +1109,10 @@
   ports/IGrantGroup
   (create-grant-group [this group user-id assignment expires-at]
     (create-grant-group! this group user-id assignment expires-at))
+
+  ports/IMembershipExpiry
+  (end-membership-at [this group-id user-id expires-at]
+    (end-membership-at! this group-id user-id expires-at))
 
   ports/ITimeBoundAccess
   (add-group-member-until [this group-id user-id expires-at]

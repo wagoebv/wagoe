@@ -81,6 +81,19 @@
     (is (= :not-found (refusal #(in tenant-a (ports/add-group-member svc (:id g) (:id bob))))))
     (is (empty? (:members (in tenant-a (ports/get-group svc (:id g))))))))
 
+(deftest ^:integration ^:security a-tenants-admin-ends-only-their-tenants-memberships
+  ;; BOU-1001: the remove wizard's "end on a day"
+  (let [svc  (:svc *system*)
+        bob  (user! "bob@b.test" tenant-b)
+        b    (in tenant-b (ports/create-group svc {:name "Finance"}))
+        day  (.plusSeconds (java.time.Instant/now) 86400)
+        ends #(:expires-at (some (fn [g] (when (= (:id b) (:id g)) g)) (in tenant-b (ports/user-groups svc bob))))]
+    (in tenant-b (ports/add-group-member svc (:id b) (:id bob)))
+    (is (= :not-found (refusal #(in tenant-a (ports/end-membership-at svc (:id b) (:id bob) day)))))
+    (is (nil? (ends)) "tenant B's membership does not end")
+    (in tenant-b (ports/end-membership-at svc (:id b) (:id bob) day))
+    (is (some? (ends)) "in its own tenant it does")))
+
 (deftest ^:integration ^:security a-users-rights-come-from-their-own-tenant
   ;; A role of one name in two tenants is two roles
   (let [svc (:svc *system*)

@@ -254,6 +254,13 @@
             (is (= #{(:id bob)} (set (map :user-id (ports/find-role-holders repo #{:a/old :a/new})))))
             (is (= [[1 1]] (map (juxt :member-count :role-count) (ports/find-groups repo)))))
 
+          (testing "a membership's end only moves earlier; an expired one is left to remove-expired (BOU-1001)"
+            (is (false? (ports/remove-member repo (:id finance) (:id ada))))
+            (is (false? (ports/end-member-at repo (:id finance) (:id ada) future)))
+            (is (false? (ports/end-member-at repo (:id finance) (:id bob) (.plusSeconds future 60))))
+            (is (true? (ports/end-member-at repo (:id finance) (:id bob) (.minusSeconds future 60))))
+            (is (= [(.minusSeconds future 60)] (map :expires-at (ports/find-user-groups repo (:id bob))))))
+
           (testing "an expired membership is replaced by a new one"
             (is (true? (ports/insert-member repo (:id finance) (:id ada))))
             (is (= 2 (count (ports/find-members repo (:id finance)))))
