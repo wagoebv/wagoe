@@ -110,15 +110,16 @@
   (cond-> user-columns (some #(contains? % :groups) users) (conj groups-column)))
 
 (defn- user-table-row
-  "A row that opens the user (admin-ux.js), with a box for bulk actions."
-  [user]
+  "A row that opens the user (admin-ux.js), with a box for bulk actions,
+   its cells under `columns`."
+  [columns user]
   (let [href (str "/web/admin/users/" (:id user))]
     [:tr {:class "clickable-row" :data-href href}
      [:td.checkbox-cell [:input (alpine/row-checkbox-attrs (:id user) (or (not-empty (:name user)) (:email user)))]]
      (map (fn [{:keys [field] col-class :class} cell]
             [:td {:class (str "field-" (name field) (when col-class (str " " col-class)))}
              (if (= :name field) [:a {:href href} cell] cell)])
-          (columns-for [user])
+          columns
           (user-row user))
      [:td.actions-cell
       [:a.row-nav-hint {:href href :aria-label [:t :user/button-view-user]}
@@ -161,7 +162,8 @@
   ([users table-query total-count filters]
    (users-table-fragment users table-query total-count filters {}))
   ([users table-query total-count filters access]
-   (let [base-url      "/web/users"
+   (let [columns       (columns-for users)
+         base-url      "/web/users"
          hx-target     "#users-table-container"
          table-params  (table-ui/table-query->params table-query)
          filter-params (table-ui/search-filters->params filters)]
@@ -188,12 +190,12 @@
             :hx-target   hx-target
             :table-query table-query
             :filters     filters
-            :columns     (columns-for users)
+            :columns     columns
             :head-before [[:th.checkbox-header [:input (alpine/select-all-checkbox-attrs)]]]
             :head-after  [[:th.actions-header [:span.sr-only [:t :common/column-actions]]]]
             :rows        (for [user users
                                :when (nil? (:deleted-at user))]
-                           (user-table-row user))})]
+                           (user-table-row columns user))})]
          (table-ui/pagination {:table-query  table-query
                                :total-count  total-count
                                :base-url     base-url

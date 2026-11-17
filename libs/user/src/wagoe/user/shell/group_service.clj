@@ -718,6 +718,34 @@
        (catch clojure.lang.ExceptionInfo e
          (when-not (= :conflict (:type (ex-data e))) (throw e)))))
 
+(defn in-tenant
+  "Call `f` in `tenant-id`'s groups and roles, its Everyone made first, as
+   the group pages read them: until then the no-tenant one stands in, which
+   reads miss."
+  [svc tenant-id f]
+  (with-tenant tenant-id
+    (fn []
+      (when (and tenant-id svc) (ensure-everyone! svc))
+      (f))))
+
+(defn tenant-groups?
+  "Whether `svc`'s repository keeps groups per tenant; one written before
+   BOU-996 does not, and its pages stay a platform admin's."
+  [svc]
+  (let [repo (:group-repository svc)]
+    (or (nil? repo) (satisfies? ports/ITenantGroups repo))))
+
+(defn memoized-membership
+  "`svc` asking the membership hook once per user: for a page or a set of
+   previews that changes nothing."
+  [svc]
+  (cond-> svc (:membership svc) (update :membership memoize)))
+
+(defn registry-permissions
+  "The permissions the registry declares, {permission {:label :module}}."
+  [svc]
+  (some-> (:registry svc) authz/permissions))
+
 (defn- move-groups-into-tenants!
   "Groups were no tenant's before BOU-996. Each with members of a tenant gets a
    copy in that tenant, its roles and assignments too, and those members move
@@ -970,9 +998,9 @@
    with what it took from each user's effective rights. A group at a time
    when the repository has IExpiredAccess: once the others are removed, a
    failed group's exception is thrown, any further ones suppressed on it."
-  [{:keys [membership user-repository] :as svc} now]
+  [{:keys [user-repository] :as svc} now]
   (let [;; Each diff asks the membership hook: once per user for the job; and the roles once
-        svc     (cond-> (with-roles svc) membership (update :membership memoize))
+        svc     (memoized-membership (with-roles svc))
         user-of (memoize #(ports/find-user-by-id user-repository %))
         removed (if (:expired-access? svc) (expire-by-group! svc user-of now) (expire-all! svc user-of now))
         {:keys [members assignments failed]} removed]
@@ -1036,7 +1064,7 @@
                       (throw (ex-info "Explaining access needs the permission registry"
                                       {:type :configuration-error})))
           ;; Grants and groups both ask the membership hook: ask it once
-          svc     (cond-> this membership (update :membership memoize))
+          svc     (memoized-membership this)
           result  (explain svc user permission record)
           groups  (into {} (map (juxt :id identity)) (ports/user-groups svc user))
           sourced #(let [{:keys [source expires-at]} (get groups (:group-id %))]
@@ -1078,7 +1106,7 @@
   ports/IGrantOptions
   (grant-options [this user permission scope]
     (let [;; Every preview asks the membership hook for this user, and reads the roles: once
-          this    (cond-> (with-roles this) membership (update :membership memoize))
+          this    (memoized-membership (with-roles this))
           roles   (::roles this)
           explain (ports/explain-access this user permission (if (empty? scope) :everywhere scope))
           role    (grant-core/smallest-role roles permission)

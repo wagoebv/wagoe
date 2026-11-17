@@ -14,6 +14,7 @@
             [wagoe.user.core.revoke-ui :as revoke-ui]
             [wagoe.user.core.rights-ui :as rights-ui]
             [wagoe.user.ports :as ports]
+            [wagoe.user.shell.access-filter :as access-filter]
             [wagoe.user.shell.group-handlers :as group-handlers]
             [wagoe.user.shell.group-service :as group-service]
             [wagoe.user.shell.tenant-scope :as tenant-scope]
@@ -29,8 +30,7 @@
   (let [v (get-in request [:form-params "permissions"])]
     (into #{} (keep group-core/parse-name) (if (sequential? v) v (some-> v vector)))))
 
-(defn- registry-permissions [group-service]
-  (some-> (:registry group-service) authz/permissions))
+(def ^:private registry-permissions group-service/registry-permissions)
 
 (defn- not-found [request message-key]
   (html-response request [:p [:t message-key]] 404))
@@ -236,7 +236,7 @@
     (fn [request]
       (if-let [user (user-of user-service request)]
         ;; Groups and grants both ask the membership hook: ask it once
-        (let [group-service (cond-> group-service (:membership group-service) (update :membership memoize))
+        (let [group-service (group-service/memoized-membership group-service)
               grants        (ports/user-grants group-service user)]
           (html-response request
                          (rights-ui/rights-page user (ports/user-groups group-service user) grants
@@ -291,18 +291,6 @@
 ;; Access overview (BOU-854)
 ;; =============================================================================
 
-(defn- superusers
-  "The platform admins, who pass every check."
-  [user-service]
-  ;; Paged: tenant admins share the role and would push platform admins past one page
-  (->> (iterate #(+ % 100) 0)
-       (map #(:users (ports/list-users user-service {:filter-role :admin :filter-active true
-                                                     :sort-by :email :sort-direction :asc
-                                                     :limit 100 :offset %})))
-       (take-while seq)
-       (apply concat)
-       (filter access/platform-admin?)))
-
 (defn access-overview
   "GET /web/admin/access — groups by modules; `module` and `group` filter it,
    and a filter's htmx request gets the matrix alone."
@@ -318,7 +306,7 @@
       (group-handlers/fragment-response
        request access-ui/matrix-id
        #(access-ui/matrix ov roles registry scope-info)
-       #(access-ui/page ov (superusers user-service)
+       #(access-ui/page ov (access-filter/platform-admins user-service)
                         (assoc (page-opts request) :filters filters :roles roles
                                :registry registry :scope-info scope-info))))))
 
@@ -345,7 +333,7 @@
    the provider names stays theirs however they were added."
   [group-service user permission]
   (let [;; Every preview reads the roles and asks the membership hook: once
-        svc      (cond-> (group-service/with-roles group-service) (:membership group-service) (update :membership memoize))
+        svc      (group-service/memoized-membership (group-service/with-roles group-service))
         explain  (ports/explain-access svc user permission nil)
         provided (group-service/provider-group-names svc user)
         paths    (map #(cond-> % (provided (:group-name %)) (assoc :membership :provider)) (:paths explain))

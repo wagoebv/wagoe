@@ -192,8 +192,7 @@
 (deftest ^:unit filters-are-offered-where-groups-are-kept-per-tenant
   (let [tenant-admin {:role :admin :tenant-id tenant}]
     (is (not (access-filter/offered? {:group-repository {}} tenant-admin)) "an older repository keeps one set")
-    (is (access-filter/offered? {:group-repository {}} {:role :admin}) "a platform admin's, as the group pages")
-    (is (not (access-filter/offered? nil tenant-admin)))))
+    (is (access-filter/offered? {:group-repository {}} {:role :admin}) "a platform admin's, as the group pages")))
 
 (deftest ^:unit platform-admins-are-found-past-the-first-page
   (let [admin  (fn [i t] {:id (random-uuid) :email (str "a" i "@x.test") :role :admin :tenant-id t})

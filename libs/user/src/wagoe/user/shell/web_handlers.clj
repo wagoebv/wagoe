@@ -40,6 +40,7 @@
             [wagoe.user.shell.oidc :as oidc]
             [wagoe.user.shell.tenant-scope :as tenant-scope]
             [wagoe.user.shell.access-filter :as access-filter]
+            [wagoe.user.shell.group-service :as group-service]
             [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
@@ -332,7 +333,7 @@
    here. With the group service in `config`, the users carry their groups and
    the list can be filtered on a permission, group or role (BOU-1002), in the
    groups of the tenant the caller reaches."
-  [user-service config request query-params]
+  [user-service config request query-params & {:keys [choices?]}]
   (let [table-query (web-table/parse-table-query
                      query-params
                      {:default-sort      :created-at
@@ -348,10 +349,10 @@
         ;; Outside a tenant the filters read the groups of no tenant, so the list does too
         no-tenant?  (and (seq access) (not (contains? reach :tenant-id)))
         ;; One read of the tenant's groups for the filters and what they offer
-        [found choices] (when gs
-                          (access-filter/in-tenant gs tenant-id
+        [found choices] (when (and gs (or choices? (seq access)))
+                          (group-service/in-tenant gs tenant-id
                                                    #(vector (when (seq access) (access-filter/find-users user-service gs tenant-id access))
-                                                            (access-filter/choices gs))))
+                                                            (when choices? (access-filter/choices gs)))))
         opts        (tenant-scope/list-options request
                                                (cond-> (build-user-list-opts table-query filters)
                                                  no-tenant?           (assoc :filter-tenant-id nil)
@@ -371,10 +372,13 @@
   [user-service config]
   (fn [request]
     (try
-      (let [[users table-query total-count filters access] (users-list user-service config request (:query-params request))]
+      (let [fragment? (htmx/fragment-request? (:headers request) ["users-table-container"])
+            ;; Only the full page shows the filters' choices
+            [users table-query total-count filters access]
+            (users-list user-service config request (:query-params request) :choices? (not fragment?))]
         ;; One URL, two bodies: a cache must not answer one with the other
         (-> (html-response request
-                           (if (htmx/fragment-request? (:headers request) ["users-table-container"])
+                           (if fragment?
                              (user-ui/users-table-fragment users table-query total-count filters access)
                              (user-ui/users-page users total-count
                                                  {:user        (:user request)
@@ -975,8 +979,8 @@
             ;; Merge query params from URL and hidden form fields to
             ;; preserve current filters and table state during bulk ops
             qp          (merge (:query-params request)
-                               (select-keys form-params ["q" "role" "status" "permission" "group" "has-role"
-                                                "sort" "dir" "page" "page-size"]))]
+                               (select-keys form-params (into ["q" "role" "status" "sort" "dir" "page" "page-size"]
+                                                              access-filter/params)))]
         (when (or (empty? ids) (str/blank? (str action)))
           (throw (ex-info "No users selected or action missing"
                           {:type :bad-request})))
