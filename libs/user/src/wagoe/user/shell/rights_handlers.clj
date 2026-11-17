@@ -326,6 +326,18 @@
 ;; Remove wizard (BOU-1001)
 ;; =============================================================================
 
+(defn- wizard-opts [request group-service q opts]
+  (merge (page-opts request)
+         {:asked      q
+          :registry   (registry-permissions group-service)
+          :scope-info (group-handlers/scope-info group-service)}
+         opts))
+
+(defn- worded
+  "`options` with each refused one's reason put into words."
+  [options]
+  (mapv #(cond-> % (:refused %) (update :refused group-handlers/refusal-text)) options))
+
 (defn- revoke-options
   "Why `user` holds `permission`, and the ways to take it away: leaving each
    group that gives it, or ending the assignment there that does, ranked.
@@ -337,25 +349,24 @@
         explain  (ports/explain-access svc user permission nil)
         provided (group-service/provider-group-names svc user)
         paths    (map #(cond-> % (provided (:group-name %)) (assoc :membership :provider)) (:paths explain))
-        offer    (fn [o change] (let [o (group-service/offer svc o change)]
-                                  (cond-> o (:refused o) (update :refused group-handlers/refusal-text))))
-        member   (filter #(= :member (:membership %)) paths)
-        ;; An assignment ends for every member, a provider's too
-        assigned (filter #(#{:member :provider} (:membership %)) paths)]
+        offer    (partial group-service/offer svc)
+        {member :member provider :provider} (group-by :membership paths)]
     {:explain explain
-     :blocked (vec (distinct (map #(select-keys % [:group-id :group-name :membership]) (remove #(= :member (:membership %)) paths))))
-     :options (revoke/rank
-               (concat
-                (for [[gid [p]] (group-by :group-id member)]
-                  (offer {:kind :leave :group {:id gid :name (:group-name p)} :expires-at (:membership-expires-at p)}
-                         {:op :remove-member :group-id gid :user-id (:id user)}))
-                (for [[gid ps] (group-by :group-id assigned)
-                      a        (:roles (ports/get-group svc gid))
-                      :when    (some (partial revoke/gives? a) ps)]
-                  (offer {:kind :end-assignment :group {:id gid :name (:group-name (first ps))} :assignment a}
-                         {:op :remove-role :group-id gid :assignment-id (:id a) :user-id (:id user)})))
-               permission
-               paths)}))
+     :blocked (vec (distinct (map #(select-keys % [:group-id :group-name :membership]) (remove (set member) paths))))
+     :options (worded
+               (revoke/rank
+                (concat
+                 (for [[gid [p]] (group-by :group-id member)]
+                   (offer {:kind :leave :group {:id gid :name (:group-name p)} :expires-at (:membership-expires-at p)}
+                          {:op :remove-member :group-id gid :user-id (:id user)}))
+                 ;; An assignment ends for every member, a provider's too
+                 (for [[gid ps] (group-by :group-id (concat member provider))
+                       a        (:roles (ports/get-group svc gid))
+                       :when    (some (partial revoke/gives? a) ps)]
+                   (offer {:kind :end-assignment :group {:id gid :name (:group-name (first ps))} :assignment a}
+                          {:op :remove-role :group-id gid :assignment-id (:id a) :user-id (:id user)})))
+                permission
+                paths))}))
 
 (defn- revoke-response
   "The remove wizard for the user in the path, asking `permission`."
@@ -364,12 +375,8 @@
     (let [permission (group-core/parse-name permission)]
       (html-response request
                      (revoke-ui/revoke-page user (when permission (revoke-options group-service user permission))
-                                            (merge (page-opts request)
-                                                   {:asked      {:permission permission}
-                                                    :expiry?    (group-service/ends-memberships? group-service)
-                                                    :registry   (registry-permissions group-service)
-                                                    :scope-info (group-handlers/scope-info group-service)}
-                                                   opts))
+                                            (wizard-opts request group-service {:permission permission}
+                                                         (assoc opts :expiry? (group-service/ends-memberships? group-service))))
                      status))
     (not-found request :user.rights/user-not-found)))
 
@@ -410,18 +417,10 @@
     {:permission permission
      :record     (if (and (map? record) (seq record)) (group-handlers/decode-scope group-service record) {})}))
 
-(defn- wizard-opts [request group-service q opts]
-  (merge (page-opts request)
-         {:asked      q
-          :registry   (registry-permissions group-service)
-          :scope-info (group-handlers/scope-info group-service)}
-         opts))
-
 (defn- grant-options
   "`grant-options`, each refused option's reason put into words."
   [group-service user permission record]
-  (update (ports/grant-options group-service user permission record) :options
-          (partial mapv #(cond-> % (:refused %) (update :refused group-handlers/refusal-text)))))
+  (update (ports/grant-options group-service user permission record) :options worded))
 
 (defn- grant-response
   "The wizard for the user in the path, asking what `params` ask; a refused

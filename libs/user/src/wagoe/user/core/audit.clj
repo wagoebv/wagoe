@@ -483,7 +483,7 @@
    :permissions and :affected-count instead; an entry from before BOU-852
    none of these. A :role-change of the user's own role has :user-role,
    {:old :new} (BOU-960). A membership given an end has :ends-on, the
-   Instant's text (BOU-1001)."
+   Instant (BOU-1001)."
   [entries n]
   (for [{:keys [created-at actor-email action metadata changes]}
         (take n (one-per-change (sort-by :created-at #(compare %2 %1) entries)))
@@ -500,4 +500,4 @@
      :permissions    (mapv #(update % :permission group/parse-name) permissions)
      :affected-count affected-count
      :user-role      (when (= :role-change action) (:role changes))
-     :ends-on        (when (:membership-ends metadata) (:expires-at metadata))}))
+     :ends-on        (when (:membership-ends metadata) (some-> (:expires-at metadata) str java.time.Instant/parse))}))

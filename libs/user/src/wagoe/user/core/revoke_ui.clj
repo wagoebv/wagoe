@@ -2,20 +2,13 @@
   "The remove wizard (BOU-1001): take one permission away from a user, each
    way with its preview, the one taking least else first. Pure Hiccup; each
    option's form posts to the group page that makes that change."
-  (:require [wagoe.platform.core.csrf :as csrf]
-            [wagoe.user.core.group :as group]
+  (:require [wagoe.user.core.group :as group]
             [wagoe.user.core.rights-ui :as rights-ui]))
 
 (def ^:private code rights-ui/code)
 
-(defn- apply-form
-  "A form posting `fields`, {name value}, to `action`; `label` on its button."
-  [action fields label & inputs]
-  [:form.revoke-apply {:method "post" :action action :class "space-y-3"}
-   (csrf/hidden-field)
-   (rights-ui/hidden-fields fields)
-   inputs
-   [:button.button.primary {:type "submit"} [:t label]]])
+(defn- apply-form [action fields label & inputs]
+  (apply rights-ui/apply-form "revoke-apply" label action fields inputs))
 
 (defn- what-else
   "Whether the option takes the permission away, and what else they lose."
@@ -62,8 +55,7 @@
      [:p.revoke-refused {:class "alert alert-warning"} [:t :user.grant/refused] " " refused]
      (list
       (when (= :end-assignment kind)
-        [:p [:t :user.grant/assign] " " (code (:role assignment)) " "
-         (rights-ui/scope-view (:scope assignment) scope-info)])
+        (rights-ui/assignment-line assignment scope-info))
       (what-else o scope-info)
       (rights-ui/preview-sections preview scope-info)
       (case kind

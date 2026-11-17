@@ -742,7 +742,7 @@
   [{:keys [action user-role added removed permissions affected-count ends-on]} scope-info]
   (cond
     ends-on
-    [:span.timeline-ends-on [:t :user.timeline/ends-on {:date (subs (str ends-on) 0 (min 10 (count (str ends-on))))}]]
+    [:span.timeline-ends-on [:t :user.timeline/ends-on {:date (expiry-date ends-on)}]]
 
     (= :role-change action)
     (let [role #(if (str/blank? %) [:t :user.timeline/no-role] [:code %])]
@@ -1112,6 +1112,22 @@
   (for [[k v] (sort-by key params)
         v     (if (sequential? v) v [v])]
     [:input {:type "hidden" :name k :value (str v)}]))
+
+(defn apply-form
+  "A wizard option's form, classed `cls`, posting `fields`, {name value}, to
+   `action`, `label` on its button: the option shows its preview, so a change
+   posts confirmed."
+  [cls label action fields & inputs]
+  [:form {:method "post" :action action :class (str cls " space-y-3")}
+   (csrf/hidden-field)
+   (hidden-fields fields)
+   inputs
+   [:button.button.primary {:type "submit"} [:t label]]])
+
+(defn assignment-line
+  "\"Assign <role> <scope>\", as a wizard option names an assignment."
+  [{:keys [role scope]} scope-info]
+  [:p [:t :user.grant/assign] " " (code role) " " (scope-view scope scope-info)])
 
 (defn preview-sections
   "What a change does to effective rights, `preview` as `preview-change`
