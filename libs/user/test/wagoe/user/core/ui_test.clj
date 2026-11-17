@@ -461,7 +461,7 @@
       (let [content (str page)]
         (is (re-find #"page-create-user-title" content))
         (is (re-find #"form-create-title" content))
-        (is (re-find #"\[:a \{:href \"/web/admin/users\"\} \[:t :user/page-users-title\]\]" content)
+        (is (re-find #"\[:a \{:href \"/web/users\"\} \[:t :user/page-users-title\]\]" content)
             "the breadcrumb leads back to return-to"))))
 
   (testing "accepts data parameter"

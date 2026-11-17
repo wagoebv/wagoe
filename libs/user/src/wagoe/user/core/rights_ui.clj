@@ -942,7 +942,7 @@
     (page
      [:t :user.rights/page-title {:name n}]
      (list
-      (header [[[:t :user/page-users-title] "/web/admin/users"]
+      (header [[[:t :user/page-users-title] "/web/users"]
                [n (str "/web/admin/users/" (:id user))]
                [[:t :user.rights/tab]]]
               n
@@ -1069,7 +1069,7 @@
     (page
      [:t :user.explain/page-title {:name n}]
      (list
-      (header [[[:t :user/page-users-title] "/web/admin/users"]
+      (header [[[:t :user/page-users-title] "/web/users"]
                [n (str "/web/admin/users/" (:id user))]
                [[:t :user.rights/tab] (user-rights-path (:id user))]
                [[:t :user.explain/crumb]]]

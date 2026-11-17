@@ -33,6 +33,8 @@ Rules:
   a brand panel beside one card); `layout/pilot-page-layout` is for error pages.
 - Do not pass module-local hardcoded `:css [...]` lists from user feature namespaces.
 - Keep form/table/badge visuals on shared classes and token variables (no per-page color overrides).
+- There is one user list, `/web/users`; `admin/users.edn` sends `/web/admin/users` there with `:list-url`.
+  The user's `:role :admin` reads as *Administrator* (yes/no) in every page: "role" is for the Roles page (BOU-1003).
 
 Reference:
 - `libs/ui-style/README.md` (bundle keys and style contract)
@@ -192,7 +194,7 @@ require-authenticated    ; 401 if no session user
 require-unauthenticated  ; 403 if session user exists (login/register pages)
 
 ;; Authorization
-require-admin            ; 403 unless role = "admin"
+require-admin            ; 403 unless role = "admin": the user's Administrator field
 (require-role :moderator); Factory function for any role
 require-self-or-admin    ; 403 unless user is accessing own resource or is admin
 

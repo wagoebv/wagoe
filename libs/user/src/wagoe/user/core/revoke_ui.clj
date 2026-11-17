@@ -91,7 +91,7 @@
     (rights-ui/page
      [:t :user.revoke/page-title {:name n}]
      (list
-      (rights-ui/header [[[:t :user/page-users-title] "/web/admin/users"]
+      (rights-ui/header [[[:t :user/page-users-title] "/web/users"]
                          [n (str "/web/admin/users/" (:id user))]
                          [[:t :user.rights/tab] (rights-ui/user-rights-path (:id user))]
                          [[:t :user.revoke/crumb]]]

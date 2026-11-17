@@ -23,7 +23,7 @@
       (loc/fill (page/locator pg "#email") "lisa.hendriks@meridian.dev")
       (loc/fill (page/locator pg "#password") "Str0ng-Pass-2026")
       (loc/click (page/locator pg "#create-user-form button[type='submit']"))
-      (page/wait-for-url pg #".*/web/admin/users$" {:timeout 10000.0})
+      (page/wait-for-url pg #".*/web/users$" {:timeout 10000.0})
       (page/wait-for-selector pg "#toasts .alert.alert-success" {:timeout 10000.0})
       (is (str/includes? (loc/inner-text (page/locator pg "#toasts .alert-success")) "Lisa Hendriks"))
       (is (loc/is-visible? (page/locator pg "table.data-table >> text=lisa.hendriks@meridian.dev"))))))

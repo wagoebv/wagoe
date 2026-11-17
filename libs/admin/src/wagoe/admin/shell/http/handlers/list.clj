@@ -155,28 +155,36 @@
 (defn entity-list-handler
   "The entity list page: table, search, sorting, paging, filters. Its own
    controls request this URL and push it, so the address bar holds the list's
-   state; they get the table fragment back."
+   state; they get the table fragment back. An entity with `:list-url` has its
+   module's list instead, which this redirects to, the query kept (BOU-1003)."
   [admin-service schema-provider config]
   (fn [request]
     (let [user (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)
-          state (list-state admin-service schema-provider config request user entity-name)]
+          list-url (:list-url (ports/get-entity-config schema-provider entity-name))
+          state (when-not list-url (list-state admin-service schema-provider config request user entity-name))]
       ;; One URL, two bodies: a cache must not answer one with the other
       (ring-response/header
-       (if (htmx/fragment-request? (:headers request) ["entity-table-container" "filter-table-container"])
+       (cond
+         list-url
+         (ring-response/redirect (str list-url (when-let [qs (:query-string request)] (str "?" qs))) :see-other)
+
+         (htmx/fragment-request? (:headers request) ["entity-table-container" "filter-table-container"])
          (table-fragment-response request entity-name state)
+
+         :else
          (let [{:keys [entity-config options records total-count table-query permissions display]} state
                entities (ports/list-available-entities schema-provider)
                entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)]
            (support/html-response request
                                   (admin-ui/admin-layout
                                    (admin-ui/entity-list-page entity-name records entity-config table-query
-                                                             total-count permissions
-                                                             (assoc options
-                                                                    :display display
-                                                                    :parent-trail (support/parent-trail
-                                                                                   admin-service schema-provider
-                                                                                   entity-name entity-config options)))
+                                                              total-count permissions
+                                                              (assoc options
+                                                                     :display display
+                                                                     :parent-trail (support/parent-trail
+                                                                                    admin-service schema-provider
+                                                                                    entity-name entity-config options)))
                                    {:user user
                                     :current-entity entity-name
                                     :entity-configs entity-configs

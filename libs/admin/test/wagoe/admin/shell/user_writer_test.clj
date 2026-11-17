@@ -285,12 +285,13 @@
 
 (deftest ^:unit role-options-are-what-the-user-service-accepts
   ;; Since BOU-771 :user means no role; labelled "User" it read as a role (BOU-917).
+  ;; The field reads "Administrator", :user as "No" (BOU-1003).
   (let [accepted (->> (m/children (mu/get (m/schema user-schema/UpdateUserRequest) :role))
                       first m/children set)]
     (is (= accepted (set (map first role-options))))
     (let [[_ k] (get (into {} role-options) :user)
           en    (edn/read-string (slurp "libs/i18n/resources/wagoe/i18n/translations/en.edn"))]
-      (is (= "No role" (get en k))))))
+      (is (= "No" (get en k))))))
 
 (deftest ^:integration each-role-option-saves-and-the-no-role-filter-finds-non-admins
   (let [{:keys [admin schema config users] :as sys} (system)

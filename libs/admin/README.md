@@ -128,6 +128,8 @@ This is the full schema for a single entity config file. All keys are optional u
   :search-fields   [:name :description]         ; Fields searched by the free-text search box
   :default-sort    :created-at                  ; Default sort field (default: :id)
   :default-sort-dir :desc                       ; :asc or :desc (default: :asc)
+  :list-url        "/web/users"                 ; A module's own list: this list redirects there,
+                                                ; its query kept. Detail pages stay the admin's.
 
   ;; ─────────────────────────────────────────────────────────────────────
   ;; FORM / DETAIL VIEW

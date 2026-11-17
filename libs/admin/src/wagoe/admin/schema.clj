@@ -339,6 +339,8 @@
               :list-fields :detail-fields :search-fields :editable-fields
               :hide-fields :readonly-fields :field-order :default-sort
               :default-sort-dir :soft-delete :create-redirect-url
+              ;; A module's own list page for the entity: the admin's list redirects there (BOU-1003)
+              [:list-url :string]
               [:writer :keyword]
               ;; Links beside the edit page, as tabs; `{id}` in :href is the record's key.
               ;; A symbol names a var holding them, the module that owns the pages.

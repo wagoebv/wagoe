@@ -49,6 +49,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **A user's Rights tab shows what they can and can't do** (BOU-1000): per module at a glance, every permission held or
   not with its reason, their roles, and whether they open the admin pages. Nothing to change in an app.
+- **One user list, and "Role" reads "Administrator"** (BOU-1003): `/web/admin/users` redirects to `/web/users`
+  through the new admin option `:list-url`. Add `:list-url "/web/users"` to your `admin/users.edn`.
 - **Filter the user list on what users can do** (BOU-1002): on a permission, a group or a role, in the URL, with
   each user's groups. Nothing to change in an app.
 - **Take a permission away from a user** (BOU-1001): a wizard ranks leaving a group or ending an assignment by what

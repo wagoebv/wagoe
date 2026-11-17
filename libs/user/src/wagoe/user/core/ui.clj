@@ -637,7 +637,7 @@
    Returns:
      Complete HTML page for creating users"
   [& [data errors opts]]
-  (let [return-to (or (:return-to opts) "/web/admin/users")
+  (let [return-to (or (:return-to opts) "/web/users")
         policy    (or (:password-policy opts) default-password-policy)]
     (admin-page
      [:t :user/page-create-user-title]
@@ -1208,7 +1208,7 @@
      [:t :user/sessions-title]
      [:div.entity-detail-page.user-sessions-page
       (page-header
-       [[[:t :user/page-users-title] (when admin? "/web/admin/users")]
+       [[[:t :user/page-users-title] (when admin? "/web/users")]
         [(:name user) (when admin? (str "/web/admin/users/" (:id user)))]
         [[:t :user/sessions-title]]]
        [(when (> (count sessions) 1)

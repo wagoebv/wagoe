@@ -8,7 +8,7 @@
  :common/error-page-home      "Go to home"
  :common/column-name        "Name"
  :common/column-email       "Email"
- :common/column-role        "Role"
+ :common/column-role        "Administrator"
  :common/column-status      "Status"
  :common/column-ip-address  "IP Address"
  :common/column-created     "Created"
@@ -16,7 +16,7 @@
 
  :common/label-email        "Email"
  :common/label-name         "Name"
- :common/label-role         "Role"
+ :common/label-role         "Administrator"
  :common/label-status       "Status"
 
  :common/button-apply       "Apply"
@@ -32,10 +32,10 @@
  :common/button-print       "Print"
  :common/button-search      "Search"
 
- :common/filter-all-roles   "All roles"
+ :common/filter-all-roles   "Administrator or not"
  ;; :user is no role since BOU-771 (BOU-917)
- :common/role-user          "No role"
- :common/role-admin         "Admin"
+ :common/role-user          "No"
+ :common/role-admin         "Yes"
  :common/role-viewer        "Viewer"
 
  :common/option-yes         "Yes"
@@ -61,7 +61,7 @@
  :common/audit-login        "Login"
  :common/audit-logout       "Logout"
  :common/audit-session-revoked "Session revoked"
- :common/audit-role-change  "Role Change"
+ :common/audit-role-change  "Administrator Change"
  :common/audit-bulk-action  "Bulk Action"
  :common/audit-group-join "Joined group"
  :common/audit-group-leave "Left group"
@@ -172,8 +172,8 @@
  :user/bulk-action-deactivate   "Deactivate"
  :user/bulk-action-activate     "Activate"
  :user/bulk-action-delete       "Delete"
- :user/bulk-action-role-admin   "Change Role to Admin"
- :user/bulk-action-role-user    "Remove Admin Role"
+ :user/bulk-action-role-admin   "Make Administrator"
+ :user/bulk-action-role-user    "No Longer Administrator"
  :user/button-apply-bulk        "Apply to Selected"
 
  :user/filter-placeholder-email "Search email..."
@@ -368,7 +368,7 @@
 
  ;; Groups
  :user.groups/page-title "Groups"
- :user.groups/description "Members of a group hold the rights of its roles. Everyone contains every signed-in user. The admin role needs no group."
+ :user.groups/description "Members of a group hold the rights of its roles. Everyone contains every signed-in user. Being an administrator needs no group."
  :user.groups/field-name "Name"
  :user.groups/field-description "Description"
  :user.groups/column-members "Members"
@@ -600,7 +600,7 @@
  :user.revoke/hint "Rights come only through groups. Each option below ends a membership or an assignment and shows what else it changes; the first takes least else."
  :user.revoke/not-held "They don't hold it."
  :user.revoke/blocked-heading "Can't be taken away here"
- :user.revoke/platform-admin "A platform admin passes every check. Take away the admin role on their details page:"
+ :user.revoke/platform-admin "A platform admin passes every check. Turn off Administrator on their details page:"
  :user.revoke/via-everyone "Every user gets it through Everyone. Change what Everyone holds on its group page:"
  :user.revoke/via-provider "The identity provider puts them in {group}. Change that in the provider; its roles are changed on the group page:"
  :user.revoke/leave-heading "Remove them from {group}"
@@ -698,8 +698,8 @@
  :admin.users/group-notifications      "Notifications"
  :admin.users/field-email              "Email"
  :admin.users/field-name               "Name"
- :admin.users/field-role               "Role"
- :admin.users/role-help                "Admin opens the admin. When rights are enforced, an Admin outside any tenant passes every check. Without it, what a user may do comes from their groups, on the Rights tab."
+ :admin.users/field-role               "Administrator"
+ :admin.users/role-help                "Opens the admin pages. When rights are enforced, an administrator outside any tenant passes every check. What a user may do comes from the roles their groups give, on the Rights tab."
  :admin.users/field-active             "Active"
  :admin.users/field-created            "Created"
  :admin.users/field-theme              "Theme"

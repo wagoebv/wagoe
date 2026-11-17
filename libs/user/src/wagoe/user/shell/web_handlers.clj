@@ -396,8 +396,9 @@
   "GET /web/users/:id, the user's page before the admin's edit page replaced
    it: a redirect there, so old links keep working. Not an id: the list."
   [request]
-  (response/redirect (str "/web/admin/users"
-                          (some->> (parse-uuid (get-in request [:path-params :id])) (str "/")))))
+  (response/redirect (if-let [id (parse-uuid (get-in request [:path-params :id]))]
+                       (str "/web/admin/users/" id)
+                       "/web/users")))
 
 (defn create-user-page-handler
   "Handler for the create user page (GET /web/users/new).
@@ -410,7 +411,7 @@
   [config]
   (fn [request]
     (let [raw-return-to (get-in request [:query-params "return-to"])
-          return-to (safe-return-url raw-return-to "/web/admin/users")
+          return-to (safe-return-url raw-return-to "/web/users")
           page-opts {:user (get request :user)
                      :flash (get request :flash)
                      :return-to return-to
@@ -1068,7 +1069,7 @@
   (fn [request]
     (let [form-data (:form-params request)
           raw-return-to (get form-data "return-to")
-          return-to (safe-return-url raw-return-to "/web/admin/users")
+          return-to (safe-return-url raw-return-to "/web/users")
           send-welcome? (let [v (get form-data "send-welcome")]
                           (or (= "on" v) (= "true" v)
                               (and (sequential? v) (some #{"on" "true"} v))))
@@ -1155,7 +1156,7 @@
               (with-error-toast request :user/error-delete-admin-only))
           (do
             (user-ports/permanently-delete-user user-service uuid)
-            (redirect-with-toast request "/web/admin/users" :success :user/toast-user-deleted))))
+            (redirect-with-toast request "/web/users" :success :user/toast-user-deleted))))
       (catch IllegalArgumentException _
         (-> (html-response request (ui/error-message [:t :user/error-invalid-user-id]) 400)
             (with-error-toast request :user/error-invalid-user-id)))
