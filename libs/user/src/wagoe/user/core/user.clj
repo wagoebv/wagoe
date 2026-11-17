@@ -20,6 +20,11 @@
 ;; User Creation Business Logic
 ;; =============================================================================
 
+(defn admin-role?
+  "Whether `user` is an administrator: their own field, stored as `:role :admin`."
+  [user]
+  (= :admin (some-> (:role user) keyword)))
+
 (defn validate-user-creation-request
   "Pure function: Validate user creation request against comprehensive business rules.
 

@@ -14,7 +14,8 @@
             [wagoe.shared.ui.core.shell :as shell]
             [wagoe.shared.ui.core.table :as table-ui]
             [wagoe.user.core.group :as group]
-            [wagoe.user.core.hygiene :as hygiene]))
+            [wagoe.user.core.hygiene :as hygiene]
+            [wagoe.user.core.user :as user-core]))
 
 (def roles-path "/web/admin/roles")
 (def permissions-path "/web/admin/permissions")
@@ -865,7 +866,7 @@
          (= :enforce mode) (some #(let [p (keyword (group/permission-str %))]
                                     (and (authz/admin-permission? p) (= "read" (name p))))
                                  held)
-         :else             (= :admin (some-> (:role user) keyword)))))
+         :else             (user-core/admin-role? user))))
 
 (defn- glance-section
   "What the user may do at a glance: whether they open the admin pages, then
@@ -953,7 +954,7 @@
               n
               [:a {:href (explain-path (:id user) nil nil) :class "btn btn-sm"} [:t :user.explain/open]]
               ;; Read-only, as them; never as an administrator (BOU-868)
-              (when (and (not= :admin (some-> (:role user) keyword)) (:active user))
+              (when (and (not (user-core/admin-role? user)) (:active user))
                 [:form.view-as-start {:method "post" :action (str "/web/users/" (:id user) "/view-as")}
                  (csrf/hidden-field)
                  [:button {:type "submit" :class "btn btn-sm"} [:t :user.view-as/start]]]))

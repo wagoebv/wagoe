@@ -11,8 +11,9 @@
     var form = el.closest('form');
     return el.closest('#view-as-bar') || (form && (form.getAttribute('action') === '/web/logout' || (reads(form) && !el.matches(WRITES))));
   }
+  var bar = document.getElementById('view-as-bar');
+  var title = bar ? bar.getAttribute('data-disabled-title') || '' : '';
   function off(root) {
-    var title = (document.getElementById('view-as-bar') || {getAttribute: function () { return ''; }}).getAttribute('data-disabled-title') || '';
     var sel = 'form button, form input, form select, form textarea, ' + WRITES;
     var els = Array.prototype.slice.call(root.querySelectorAll(sel));
     if (root.matches && root.matches(sel)) els.push(root);

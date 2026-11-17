@@ -1,7 +1,8 @@
 (ns wagoe.user.core.view-as
   "An administrator viewing the app as another user, read-only (BOU-868): the
    session takes that user's rights for a while, and the administrator stays
-   the actor of what is audited.")
+   the actor of what is audited."
+  (:require [wagoe.user.core.user :as user-core]))
 
 (def duration-minutes
   "How long a view lasts before it ends by itself."
@@ -34,29 +35,11 @@
   [admin target session now]
   (cond
     (active? session now)                  (refused :nested "Stop viewing as the other user first")
-    (not= :admin (some-> (:role admin) keyword)) (refused :not-admin "Only an administrator views as another user")
+    (not (user-core/admin-role? admin))    (refused :not-admin "Only an administrator views as another user")
     (nil? target)                          {:error {:type :not-found :message "No such user"}}
     (= (str (:id admin)) (str (:id target))) (refused :self "That is you")
-    (= :admin (some-> (:role target) keyword)) (refused :admin "An administrator is not viewed as")
+    (user-core/admin-role? target)         (refused :admin "An administrator is not viewed as")
     (not (:active target))                 (refused :inactive "A deactivated user is not viewed as")
     ;; Another tenant's user is not found, as on every user page (BOU-953)
     (and (:tenant-id admin) (not= (str (:tenant-id admin)) (str (:tenant-id target))))
     {:error {:type :not-found :message "No such user"}}))
-
-(defn start-entry
-  "The audit entry for `admin` starting to view as `target` until `until`."
-  [admin target until ctx]
-  {:action            :view-as-start
-   :actor-id          (:id admin)
-   :actor-email       (:email admin)
-   :target-user-id    (:id target)
-   :target-user-email (:email target)
-   :metadata          {:until (str until)}
-   :ip-address        (:ip-address ctx)
-   :user-agent        (:user-agent ctx)
-   :result            :success})
-
-(defn stop-entry
-  "The audit entry for `admin` no longer viewing as `target`."
-  [admin target ctx]
-  (assoc (start-entry admin target nil ctx) :action :view-as-stop :metadata nil))

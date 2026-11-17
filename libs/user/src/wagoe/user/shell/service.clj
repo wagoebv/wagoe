@@ -920,7 +920,7 @@
         (when-not (ports/set-view-as session-repository (:id session) (:id target) until)
           (throw (ex-info "The session has ended" {:type :forbidden :reason :session})))
         ;; No view without its audit entry
-        (try (.create-audit-log audit-repository (view-as/start-entry admin target until (effective-audit-context {})))
+        (try (.create-audit-log audit-repository (audit-core/view-as-start-audit-entry admin target until (effective-audit-context {})))
              (catch Exception e
                (ports/set-view-as session-repository (:id session) nil nil)
                (throw e)))
@@ -931,7 +931,7 @@
       (ports/set-view-as session-repository (:id session) nil nil)
       ;; A user deleted meanwhile ends the view all the same
       (when-let [target (.find-user-by-id user-repository target-id)]
-        (.create-audit-log audit-repository (view-as/stop-entry admin target (effective-audit-context {})))
+        (.create-audit-log audit-repository (audit-core/view-as-stop-audit-entry admin target (effective-audit-context {})))
         (user-core/without-credentials target))))
 
   ports/IUserSessionRevocation

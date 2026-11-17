@@ -13,6 +13,7 @@
             [wagoe.shared.ui.core.view-as :as view-as-ui]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.service :as user-service]
+            [wagoe.core.utils.redirect :as redirect]
             [wagoe.core.utils.type-conversion :as type-conv]
             [wagoe.platform.core.http.access :as access]
             [clojure.string :as str]
@@ -239,11 +240,8 @@
 (defn- back-path
   "The path and query the Referer names, never another site."
   [request]
-  (or (some-> (get-in request [:headers "referer"])
-              (#(try (java.net.URI. %) (catch Exception _ nil)))
-              (#(str (.getRawPath ^java.net.URI %) (some->> (.getRawQuery ^java.net.URI %) (str "?"))))
-              not-empty)
-      "/web"))
+  (let [p (some-> (get-in request [:headers "referer"]) (str/replace #"^[a-zA-Z][a-zA-Z0-9+.-]*://[^/]*" ""))]
+    (if (and p (redirect/local-path? p)) p "/web")))
 
 (defn- read-only-refusal
   "Refuses a request that would change something while viewing the app as
