@@ -11,6 +11,8 @@
             [wagoe.user.shell.middleware :as middleware]
             [wagoe.user.shell.persistence :as persistence]
             [wagoe.user.shell.service :as user-service]
+            [wagoe.core.http.access]
+            [wagoe.tenant.ports]
             [wagoe.user.shell.http]
             [wagoe.user.shell.web-handlers :as web-handlers])
   (:import [java.time Instant]
@@ -74,6 +76,9 @@
               (is (= "/web/orders?page=2" (get-in r [:headers "Location"])) "the path only, never another site")
               (is (= {:error :user.view-as/disabled} (:flash r)))))
           (is (= 403 (:status (send! svc token :post "/api/v1/orders"))) "an API call is a 403")
+          (let [r (send! svc token :get "/ws" {"upgrade" "websocket" "connection" "Upgrade"})]
+            (is (= 403 (:status r)) "no socket opens: its messages could write (BOU-1004)")
+            (is (str/includes? (str (:body r)) "Read-only while viewing")))
           (is (= 200 (:status (send! svc token :post view-as/stop-path))))
           (is (= 200 (:status (send! svc token :post "/web/logout"))) "signing out ends it")
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Not while viewing"
@@ -171,6 +176,16 @@
             start  #((web-handlers/start-view-as-handler svc {})
                      {:request-method :post :uri "/" :user admin :session session :headers {}
                       :path-params {:id (str (:id %))}})]
+        (testing "an admin of this tenant by membership is refused before anything is set (BOU-1004)"
+          (let [ms #_{:clj-kondo/ignore [:missing-protocol-method]}
+                (reify wagoe.tenant.ports/ITenantMembershipService
+                  (get-active-membership [_ user-id _] (when (= user-id (:id ada)) {:role :admin})))
+                t  (random-uuid)
+                r  ((web-handlers/start-view-as-handler svc {:membership-service ms})
+                    {:request-method :post :uri "/" :user admin :session session :headers {}
+                     :tenant {:id t} :path-params {:id (str (:id ada))}})]
+            (is (= :user.view-as/refused-admin (get-in r [:flash :error])))
+            (is (nil? (:view-as-user-id (session-of sessions token))))))
         (let [r (start other)]
           (is (= 303 (:status r)))
           (is (= (str "/web/users/" (:id other) "/rights") (get-in r [:headers "Location"])))
@@ -218,3 +233,22 @@
     (is (str/includes? page (str ":action \"" view-as/stop-path "\""))))
   (let [page (pr-str (layout/page-layout "T" [:p "x"]))]
     (is (not (str/includes? page "view-as")))))
+
+(deftest ^:integration ^:security a-tenant-refusing-the-view-ends-it
+  ;; BOU-1004: the tenant module answers with a marked refusal
+  (with-app
+    (fn [{:keys [svc sessions audit user!]}]
+      (let [admin (user! "admin@example.com" {:role :admin})
+            ada   (user! "ada@example.com" {})
+            [token session] (sign-in! sessions admin)
+            app   ((middleware/authenticate-if-present svc)
+                   (fn [_] (wagoe.core.http.access/refused-view {:status 403 :body "no"})))]
+        (ports/start-view-as svc admin session (:id ada))
+        (let [r (app {:request-method :get :uri "/web/orders" :headers {"x-session-token" token}})]
+          (is (= 303 (:status r)))
+          (is (= "/web" (get-in r [:headers "Location"])))
+          (is (= {:error :user.view-as/ended-refused} (:flash r))))
+        (is (nil? (:view-as-user-id (session-of sessions token))))
+        (is (contains? (actions audit (:id ada)) "view-as-stop"))
+        (testing "not viewing, the refusal is passed on as it is"
+          (is (= 403 (:status (app {:request-method :get :uri "/web/orders" :headers {"x-session-token" token}})))))))))

@@ -628,6 +628,7 @@
  :user.view-as/refused-not-admin "Only an administrator views as another user."
  :user.view-as/refused-session "Your session has ended; sign in again."
  :user.view-as/refused-unsupported "This app's session store cannot view as a user."
+ :user.view-as/ended-refused "The view ended: there you may not see this user's pages."
  :user.access/page-title "Access overview"
  :user.access/nav-description "Which group holds what, module by module."
  :user.access/description "Each group's level per module. Open a cell for the assignments and permissions behind it."

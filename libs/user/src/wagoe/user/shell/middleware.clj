@@ -13,6 +13,7 @@
             [wagoe.shared.ui.core.view-as :as view-as-ui]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.service :as user-service]
+            [wagoe.core.http.access :as core-access]
             [wagoe.core.utils.redirect :as redirect]
             [wagoe.core.utils.type-conversion :as type-conv]
             [wagoe.platform.core.http.access :as access]
@@ -237,6 +238,12 @@
               {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)})
           (throw ex))))))
 
+(defn- browser-page?
+  "Whether `request` is a browser's for a whole page, which a redirect with a
+   message answers better than a bare refusal."
+  [request]
+  (and (str/starts-with? (str (:uri request)) "/web/") (nil? (get-in request [:headers "hx-request"]))))
+
 (defn- back-path
   "The path and query the Referer names, never another site."
   [request]
@@ -251,10 +258,11 @@
    request on unauthenticated."
   [request]
   (when (and (:viewing-as request)
-             (view-as/writes? (:request-method request))
-             (not (view-as/allowed-writes (:uri request))))
-    (assoc (if (and (str/starts-with? (str (:uri request)) "/web/")
-                    (nil? (get-in request [:headers "hx-request"])))
+             ;; A socket's messages could write: none opens while viewing (BOU-1004)
+             (or (ring-ws/upgrade-request? request)
+                 (and (view-as/writes? (:request-method request))
+                      (not (view-as/allowed-writes (:uri request))))))
+    (assoc (if (browser-page? request)
              (assoc (ring.util.response/redirect (back-path request) :see-other)
                     :flash {:error :user.view-as/disabled})
              (create-forbidden-response "Read-only while viewing as another user" :view-as-read-only request))
@@ -298,6 +306,17 @@
 ;; =============================================================================
 ;; Pass-through Authentication Middleware
 ;; =============================================================================
+
+(defn- end-refused-view
+  "Where the tenant a request runs in refuses the view (BOU-1004): it ends,
+   audited, and a browser is back as the administrator with why; anything else
+   gets the refusal."
+  [user-service request response]
+  (when (satisfies? ports/IViewAs user-service)
+    (ports/stop-view-as user-service (get-in request [:viewing-as :admin]) (:session request)))
+  (if (browser-page? request)
+    (assoc (ring.util.response/redirect "/web" :see-other) :flash {:error :user.view-as/ended-refused})
+    response))
 
 (defn authenticate-if-present
   "Middleware factory: sets `:user` when the request carries valid credentials,
@@ -352,7 +371,10 @@
         ;; A change while viewing as another user is refused, not passed on
         (if (::read-only answered)
           answered
-          (with-viewing request #(handler request)))))))
+          (let [response (with-viewing request #(handler request))]
+            (if (and (:viewing-as request) (core-access/view-refused? response))
+              (end-refused-view user-service request response)
+              response)))))))
 
 ;; =============================================================================
 ;; Flexible Authentication Middleware

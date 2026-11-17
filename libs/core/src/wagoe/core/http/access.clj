@@ -51,6 +51,11 @@
                    (platform-admin? user)))
       (nil? (:tenant-id user)))))
 
+(defn membership-admin?
+  "Whether `membership`, a tenant membership, makes its user an admin there."
+  [membership]
+  (= :admin (some-> membership :role keyword)))
+
 (defn tenant-admin?
   "Whether the caller is an admin where the request runs. In a tenant: a
    platform admin, an admin by membership of it, or an admin user of it; an
@@ -60,7 +65,7 @@
         tenant-id (get-in request [:tenant :id])]
     (if tenant-id
       (or (platform-admin? user)
-          (= :admin (some-> request :tenant-membership :role keyword))
+          (membership-admin? (:tenant-membership request))
           (and (admin? request) (same-id? (:tenant-id user) tenant-id)))
       (admin? request))))
 
@@ -75,6 +80,17 @@
       tenant-id              (when (in-tenant-scope? request) {:tenant-id tenant-id})
       (platform-admin? user) {}
       :else                  {:tenant-id (:tenant-id user)})))
+
+(defn refused-view
+  "`response`, marked as refusing an administrator's view as another user
+   there (BOU-1004): the user module, outermost, ends the view."
+  [response]
+  (assoc response ::view-refused true))
+
+(defn view-refused?
+  "Whether `response` refused a view as another user."
+  [response]
+  (boolean (::view-refused response)))
 
 (defn admin-reach
   "`tenant-reach` for an admin by role, who is one only where they are a tenant

@@ -2,7 +2,8 @@
   "Contract tests for the membership HTTP endpoints, over the real service and
    repository on H2 — a mock can drift from the service it stands in for, and
    the tenant handlers' did (BOU-576)."
-  (:require [wagoe.platform.shell.adapters.database.factory :as factory]
+  (:require [wagoe.core.http.access :as access]
+            [wagoe.platform.shell.adapters.database.factory :as factory]
             [wagoe.tenant.shell.membership-http :as sut]
             [wagoe.tenant.shell.membership-persistence :as membership-persistence]
             [wagoe.tenant.shell.membership-service :as membership-service]
@@ -277,3 +278,19 @@
     (is (= 403 (:status invite)))
     (is (= 403 (:status listing)))
     (is (nil? (ports/get-active-membership *service* stranger tenant-id-1)))))
+
+(deftest ^:contract ^:security a-view-as-a-tenants-admin-reaches-none-of-its-memberships
+  ;; BOU-1004: viewing as a user who administers a tenant by membership
+  (ports/bootstrap-first-member *service* other-tenant tenant-admin :admin)
+  (let [list-as (fn [extra]
+                  (through-route "/tenants/:tenant-id/memberships" :get
+                                 (merge (assoc (make-request :get {:tenant-id (str other-tenant)})
+                                               :user {:id tenant-admin :role :user})
+                                        extra)))]
+    (is (= 200 (:status (list-as {}))) "their own request")
+    (let [r (list-as {:viewing-as {:admin {:id stranger :role :admin}}})]
+      (is (= 403 (:status r)))
+      (is (access/view-refused? r) "so the view ends"))
+    (testing "a member reads the path's tenant only where the request runs in it"
+      (is (= 403 (:status (list-as {:tenant {:id tenant-id-1}}))))
+      (is (= 200 (:status (list-as {:tenant {:id other-tenant}})))))))

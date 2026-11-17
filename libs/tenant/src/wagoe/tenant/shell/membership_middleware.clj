@@ -4,6 +4,35 @@
             [wagoe.core.http.errors :as errors]
             [wagoe.tenant.ports :as ports]))
 
+(defn- forbidden
+  "403 with `message`, encoded here, as the tenant middleware's refusals are:
+   this may sit outside content negotiation."
+  [request message]
+  {:status  403
+   :headers {"Content-Type" "application/json"}
+   :body    (json/generate-string
+             (errors/body :forbidden message {:correlation-id (:correlation-id request)}))})
+
+(defn- refused [request message]
+  (access/refused-view (forbidden request message)))
+
+(defn- viewing-refusal
+  "While an administrator views the app as another user (`:viewing-as`, set
+   by the user module, BOU-868): a 403 where that user is an admin by
+   membership, or where the administrator themselves may not be (BOU-1004).
+   nil otherwise."
+  [membership-service request]
+  (when-let [admin (get-in request [:viewing-as :admin])]
+    (cond
+      (access/membership-admin? (:tenant-membership request))
+      (refused request "An administrator is not viewed as")
+
+      ;; Asked only when their own field or role does not settle it
+      (not (or (access/platform-admin? admin)
+               (access/same-id? (:tenant-id admin) (get-in request [:tenant :id]))
+               (ports/get-active-membership membership-service (:id admin) (get-in request [:tenant :id]))))
+      (refused request "A view stays within the tenants you reach"))))
+
 (defn wrap-tenant-membership
   "Ring middleware that enriches the request with :tenant-membership.
 
@@ -23,8 +52,10 @@
     (let [user-id   (get-in request [:user :id])
           tenant-id (get-in request [:tenant :id])]
       (if (and user-id tenant-id)
-        (let [membership (ports/get-active-membership membership-service user-id tenant-id)]
-          (handler (assoc request :tenant-membership membership)))
+        (let [membership (ports/get-active-membership membership-service user-id tenant-id)
+              request    (assoc request :tenant-membership membership)]
+          (or (viewing-refusal membership-service request)
+              (handler request)))
         (handler request)))))
 
 (defn wrap-tenant-scope
@@ -33,11 +64,5 @@
   [handler]
   (fn [request]
     (if (and (get-in request [:user :id]) (not (access/in-tenant-scope? request)))
-      ;; Encoded here, as the tenant middleware's refusals are: this may sit
-      ;; outside content negotiation
-      {:status  403
-       :headers {"Content-Type" "application/json"}
-       :body    (json/generate-string
-                 (errors/body :forbidden "Not a member of this tenant"
-                              {:correlation-id (:correlation-id request)}))}
+      (forbidden request "Not a member of this tenant")
       (handler request))))

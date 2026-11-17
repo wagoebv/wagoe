@@ -16,7 +16,9 @@
                                 "libs/tenant/test/wagoe/tenant/shell/tenant_middleware_test.clj"
                                 ["a-suspended-tenant-does-not-serve"]
                                 "libs/tenant/test/wagoe/tenant/shell/invite_service_test.clj"
-                                ["an-invite-binds-to-its-email-when-the-caller-names-one"]}}
+                                ["an-invite-binds-to-its-email-when-the-caller-names-one"]
+                                "libs/tenant/test/wagoe/tenant/shell/membership_middleware_test.clj"
+                                ["a-view-keeps-to-what-the-administrator-may-see"]}}
    "workflow"      {:scoped-by "tables in each tenant schema; tenant work refuses the shared tables"
                     :tests     {"libs/workflow/test/wagoe/workflow/shell/tenant_isolation_test.clj"
                                 ["a-tenant-sees-only-its-own-instances" "tenant-work-never-falls-back-to-public"]
