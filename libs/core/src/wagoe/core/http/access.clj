@@ -76,6 +76,17 @@
       (platform-admin? user) {}
       :else                  {:tenant-id (:tenant-id user)})))
 
+(defn refused-view
+  "`response`, marked as refusing an administrator's view as another user
+   there (BOU-1004): the user module, outermost, ends the view."
+  [response]
+  (assoc response ::view-refused true))
+
+(defn view-refused?
+  "Whether `response` refused a view as another user."
+  [response]
+  (boolean (::view-refused response)))
+
 (defn admin-reach
   "`tenant-reach` for an admin by role, who is one only where they are a tenant
    admin: a member of the resolved tenant who administers another gets none."

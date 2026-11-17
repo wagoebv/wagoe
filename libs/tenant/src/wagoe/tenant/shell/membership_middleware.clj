@@ -4,11 +4,17 @@
             [wagoe.core.http.errors :as errors]
             [wagoe.tenant.ports :as ports]))
 
-(defn- refused [request message]
+(defn- forbidden
+  "403 with `message`, encoded here, as the tenant middleware's refusals are:
+   this may sit outside content negotiation."
+  [request message]
   {:status  403
    :headers {"Content-Type" "application/json"}
    :body    (json/generate-string
              (errors/body :forbidden message {:correlation-id (:correlation-id request)}))})
+
+(defn- refused [request message]
+  (access/refused-view (forbidden request message)))
 
 (defn- viewing-refusal
   "While an administrator views the app as another user (`:viewing-as`, set
@@ -21,11 +27,10 @@
       (= :admin (some-> request :tenant-membership :role keyword))
       (refused request "An administrator is not viewed as")
 
-      (not (access/in-tenant-scope?
-            (assoc request
-                   :user admin
-                   :tenant-membership (ports/get-active-membership membership-service (:id admin)
-                                                                   (get-in request [:tenant :id])))))
+      ;; Asked only when their own field or role does not settle it
+      (not (or (access/platform-admin? admin)
+               (access/same-id? (:tenant-id admin) (get-in request [:tenant :id]))
+               (ports/get-active-membership membership-service (:id admin) (get-in request [:tenant :id]))))
       (refused request "A view stays within the tenants you reach"))))
 
 (defn wrap-tenant-membership
@@ -59,11 +64,5 @@
   [handler]
   (fn [request]
     (if (and (get-in request [:user :id]) (not (access/in-tenant-scope? request)))
-      ;; Encoded here, as the tenant middleware's refusals are: this may sit
-      ;; outside content negotiation
-      {:status  403
-       :headers {"Content-Type" "application/json"}
-       :body    (json/generate-string
-                 (errors/body :forbidden "Not a member of this tenant"
-                              {:correlation-id (:correlation-id request)}))}
+      (forbidden request "Not a member of this tenant")
       (handler request))))

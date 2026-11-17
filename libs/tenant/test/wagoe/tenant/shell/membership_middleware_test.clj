@@ -2,7 +2,9 @@
   "While an administrator views the app as another user (BOU-868), the tenant
    a request runs in refuses a view of its admin, or one the administrator
    could not see themselves (BOU-1004)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [cheshire.core :as json]
+            [clojure.test :refer [deftest is testing]]
+            [wagoe.core.http.access :as access]
             [wagoe.tenant.ports :as ports]
             [wagoe.tenant.shell.membership-middleware :as sut]))
 
@@ -27,8 +29,12 @@
       (let [r (run (memberships {[2 tenant] {:role :member}}) (assoc view :user ada))]
         (is (= 200 (:status r)))
         (is (= :member (get-in r [:membership :role])))))
-    (testing "an admin of this tenant by membership is not viewed as"
-      (is (= 403 (:status (run (memberships {[2 tenant] {:role :admin}}) (assoc view :user ada))))))
+    (testing "an admin of this tenant by membership is not viewed as, and the view ends"
+      (let [r (run (memberships {[2 tenant] {:role :admin}}) (assoc view :user ada))]
+        (is (= 403 (:status r)))
+        (is (= "forbidden" (get-in (json/parse-string (:body r) true) [:error :type])))
+        (is (access/view-refused? r))
+        (is (nil? (:membership r)) "the handler is not reached")))
     (testing "nor is a tenant the administrator may not use"
       (let [outsider {:id 3 :role :admin :tenant-id #uuid "b0000000-0000-0000-0000-00000000000b"}]
         (is (= 403 (:status (run (memberships {[2 tenant] {:role :member}})
