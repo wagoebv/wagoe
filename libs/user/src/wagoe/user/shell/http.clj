@@ -888,9 +888,6 @@
                            {:get {:handler (group-handlers/provider-members group-service)}})
                     (route "/:id/members/:user-id/remove"
                            {:post {:handler (group-handlers/remove-member user-service group-service)}})
-                    (when (satisfies? user-ports/IMembershipExpiry group-service)
-                      (route "/:id/members/:user-id/expire"
-                             {:post {:handler (group-handlers/expire-member user-service group-service)}}))
                     (route "/:id/roles"
                            {:post {:handler (group-handlers/add-role group-service)}})
                     (route "/:id/roles/:assignment-id/remove"
@@ -931,7 +928,10 @@
                    (route "/users/:id/grant/group"
                           {:post {:handler (rights-handlers/grant-group user-service group-service)}})
                    (route "/users/:id/revoke"
-                          {:get {:handler (rights-handlers/revoke-wizard user-service group-service)}})])}))
+                          {:get {:handler (rights-handlers/revoke-wizard user-service group-service)}})
+                   (when (group-service/ends-memberships? group-service)
+                     (route "/users/:id/revoke/expire"
+                            {:post {:handler (rights-handlers/revoke-on-day user-service group-service)}}))])}))
 
 (defn- export-response
   "`doc`, a user's data export, as a download, logged with who asked."

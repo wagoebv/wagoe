@@ -86,7 +86,9 @@
                   :scope      :user.groups/error-scope
                   :email      :user.groups/error-no-user
                   :user       :user.rights/user-not-found
-                  :expires-at :user.groups/error-expires-at} field)
+                  :expires-at :user.groups/error-expires-at
+                  :member     :user.revoke/error-not-member
+                  :ends-sooner :user.revoke/error-ends-sooner} field)
                 ({:not-found :user.groups/not-found} type)
                 (when (= [:conflict :name] [type field]) :user.groups/error-name-taken)
                 :user.groups/error-name)]
@@ -281,17 +283,6 @@
             (fn [id] (when-let [u (tenant-scope/reachable-user user-service request (path-uuid request :user-id))]
                        {:op :remove-member :group-id id :user-id (:id u)}))
             #(when % (ports/remove-group-member group-service (:group-id %) (:user-id %))))))
-
-(defn expire-member
-  "POST /:id/members/:user-id/expire — keep the membership until the date
-   posted, not for good (BOU-1001). Nothing changes until that day, so no
-   preview: the remove wizard showed what leaving does."
-  [user-service group-service]
-  (fn [request]
-    (change group-service request :user.revoke/flash-ends
-            (fn [id] (when-let [u (tenant-scope/reachable-user user-service request (path-uuid request :user-id))]
-                       {:group-id id :user-id (:id u) :expires-at (form-expiry request)}))
-            #(when % (ports/end-membership-at group-service (:group-id %) (:user-id %) (:expires-at %))))))
 
 (defn decode-scope
   "Scope `values` from a form, read as the declared scope schema reads a string."

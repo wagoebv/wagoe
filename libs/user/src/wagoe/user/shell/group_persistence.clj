@@ -257,10 +257,12 @@
     (insert-member! ctx group-id user-id nil))
 
   (remove-member [_ group-id user-id]
+    ;; An expired row is left to remove-expired, which audits it as the leave
     (pos? (db/execute-update! ctx {:delete-from :user_group_members
                                    :where       [:and [:= :group_id (id-str group-id)]
                                                  [:= :user_id (id-str user-id)]
-                                                 [:in :group_id (tenant-groups)]]})))
+                                                 [:in :group_id (tenant-groups)]
+                                                 [:or [:= :expires_at nil] [:> :expires_at (Instant/now)]]]})))
 
   (find-roles [_]
     (mapv db->role (db/execute-query! ctx {:select [:*] :from [:user_roles] :where (tenant-cond :tenant_id)
@@ -486,6 +488,15 @@
   (remove-expired [_ now]
     (-> (remove-expired-rows! ctx (expired-rows ctx now) now)
         (update :members (partial mapv #(dissoc % :id)))))
+
+  ports/IMembershipEnd
+  (end-member-at [_ group-id user-id expires-at]
+    (pos? (db/execute-update! ctx {:update :user_group_members
+                                   :set    {:expires_at expires-at}
+                                   :where  [:and [:= :group_id (id-str group-id)]
+                                            [:= :user_id (id-str user-id)]
+                                            [:in :group_id (tenant-groups)]
+                                            [:or [:= :expires_at nil] [:> :expires_at expires-at]]]})))
 
   ports/IExpiredAccess
   (find-expired [_ now]

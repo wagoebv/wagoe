@@ -39,19 +39,22 @@
   (str (rights-ui/group-path group-id) "/members/" user-id))
 
 (defn- end-on-form
-  "Leaving on a day instead: nothing changes until then."
-  [n group-id user-id expires-at]
+  "Leaving on a day instead: nothing changes until then. Refused, the wizard
+   for `permission` says why."
+  [n group-id user-id permission expires-at]
   (let [id (str "revoke-expires-at-" n)]
-    (apply-form (str (member-path group-id user-id) "/expire") {} :user.revoke/end-on
+    (apply-form (str (rights-ui/revoke-path user-id nil) "/expire")
+                {"group-id" group-id "permission" (group/permission-str permission)}
+                :user.revoke/end-on
                 [:p [:t :user.revoke/end-on-hint]]
-                [:label {:for id} [:t :user.groups/field-expires-at]]
+                [:label {:for id} [:t :user.revoke/field-ends-on]]
                 [:input {:type "date" :id id :name "expires-at" :class "input" :required true
                          :value (some-> expires-at rights-ui/expiry-date)}])))
 
 (defn- option
   "One ranked option, `n` its place. A refused one says why and offers
    nothing to apply. `expiry?`: a membership's end can be set."
-  [n {:keys [kind group assignment preview refused expires-at] :as o} user-id scope-info expiry?]
+  [n {:keys [kind group assignment preview refused expires-at] :as o} user-id permission scope-info expiry?]
   (rights-ui/section
    [:span (str n ". ") (title o)]
    {:class (str "revoke-option revoke-" (name kind))}
@@ -66,7 +69,7 @@
       (case kind
         :leave          (list (apply-form (str (member-path (:id group) user-id) "/remove")
                                           {"confirm" "true"} :user.revoke/remove-now)
-                              (when expiry? (end-on-form n (:id group) user-id expires-at)))
+                              (when expiry? (end-on-form n (:id group) user-id permission expires-at)))
         :end-assignment (apply-form (str (rights-ui/group-path (:id group)) "/roles/" (:id assignment) "/remove")
                                     {"confirm" "true"} :user.revoke/end-now))))))
 
@@ -117,5 +120,5 @@
 
         :else
         (list (blocked result (:id user))
-              (map-indexed (fn [i o] (option (inc i) o (:id user) scope-info (:expiry? opts))) options))))
+              (map-indexed (fn [i o] (option (inc i) o (:id user) permission scope-info (:expiry? opts))) options))))
      opts)))

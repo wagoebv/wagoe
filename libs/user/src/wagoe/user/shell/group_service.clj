@@ -798,24 +798,46 @@
                  (audit! audit-repository :group-join group [focal] grants
                          {:diffs diffs :metadata (expiry-metadata expires-at)})))))
 
+(defn ends-memberships?
+  "Whether `svc` can end a membership on a day (BOU-1001)."
+  [svc]
+  (boolean (and (satisfies? ports/IMembershipExpiry svc)
+                (:expiry? svc)
+                (satisfies? ports/IMembershipEnd (:group-repository svc)))))
+
 (defn- end-membership-at!
-  "Keep the user's stored membership of the group until `expires-at`: removed
-   and added again until then, in one transaction (BOU-1001)."
-  [{:keys [audit-repository] :as svc} group-id user-id expires-at]
+  "End the user's current stored membership of the group at `expires-at`,
+   earlier than it ends now; the row is kept (BOU-1001)."
+  [{:keys [audit-repository group-repository] :as svc} group-id user-id expires-at]
   (not-everyone! group-id)
+  (when-not (satisfies? ports/IMembershipEnd group-repository)
+    (throw (refused "This group repository cannot end a membership on a day" {:field :expires-at})))
   (when (nil? expires-at)
     (throw (refused "Pick the day the membership ends" {:field :expires-at})))
   (let [until (checked-expiry! svc expires-at)
-        {:keys [group focal grants]} (change-plan svc {:op :remove-member :group-id group-id :user-id user-id})]
-    ;; Rights change only on that day: the entry says until when, with no diff
-    (audited! svc
-              #(boolean (and focal
-                             (ports/remove-member % group-id user-id)
-                             (ports/insert-member-until % group-id user-id until)))
-              #(when %
-                 (audit! audit-repository :group-join group [focal] grants {:metadata (expiry-metadata until)})))))
+        {:keys [group focal grants]} (change-plan svc {:op :remove-member :group-id group-id :user-id user-id})
+        held  (when focal
+                (some #(when (and (= :member (:source %)) (access/same-id? group-id (:id %))) %)
+                      (ports/user-groups svc focal)))]
+    (cond
+      (nil? held)
+      (throw (not-found "No such membership" {:field :member}))
 
-(defn- offer
+      (and (:expires-at held) (not (.isBefore ^Instant until (:expires-at held))))
+      (throw (refused "The membership ends sooner already" {:field :ends-sooner})))
+    ;; Rights change only on that day, audited then as the leave; this entry says when
+    (audited! svc
+              #(ports/end-member-at % group-id user-id until)
+              #(when %
+                 (audit! audit-repository :group-join group [focal] grants
+                         {:metadata {:expires-at (str until) :membership-ends true}})))))
+
+(defn provider-group-names
+  "The group names the membership hook gives `user`."
+  [{:keys [membership user-repository]} user]
+  (or (provider-groups membership user-repository user) #{}))
+
+(defn offer
   "`option` with the preview of `change`, or with :refused, the refusal's
    ex-data, when the change would be refused: one bad option leaves the rest."
   [svc option change]

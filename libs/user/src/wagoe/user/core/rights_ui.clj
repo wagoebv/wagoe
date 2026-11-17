@@ -739,8 +739,11 @@
   "What a timeline entry did to the user's rights: each right gained and lost,
    for a change to Everyone how many users it changed, or the user's own role
    or sign-in."
-  [{:keys [action user-role added removed permissions affected-count]} scope-info]
+  [{:keys [action user-role added removed permissions affected-count ends-on]} scope-info]
   (cond
+    ends-on
+    [:span.timeline-ends-on [:t :user.timeline/ends-on {:date (subs (str ends-on) 0 (min 10 (count (str ends-on))))}]]
+
     (= :role-change action)
     (let [role #(if (str/blank? %) [:t :user.timeline/no-role] [:code %])]
       (list (role (:old user-role)) " → " (role (:new user-role))))

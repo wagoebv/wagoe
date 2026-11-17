@@ -600,6 +600,9 @@
  :user.revoke/end-on "Remove on this day"
  :user.revoke/end-on-hint "Or keep them in the group until a day: nothing changes until then, and on that day they lose what is shown above."
  :user.revoke/flash-ends "Membership now ends on the day given."
+ :user.revoke/field-ends-on "Ends on"
+ :user.revoke/error-not-member "They are not a member of that group, or not one you can end here."
+ :user.revoke/error-ends-sooner "Their membership ends on or before that day already."
  :user.access/page-title "Access overview"
  :user.access/nav-description "Which group holds what, module by module."
  :user.access/description "Each group's level per module. Open a cell for the assignments and permissions behind it."
@@ -653,6 +656,7 @@
  :user.timeline/no-role "none"
  :user.timeline/activated "Can sign in again"
  :user.timeline/deactivated "Can no longer sign in"
+ :user.timeline/ends-on "Membership now ends on {date}"
  :user/tab-sessions "Sessions"
  :admin/tab-details "Details"
 

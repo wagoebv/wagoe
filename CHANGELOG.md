@@ -50,7 +50,7 @@ for what is public API, what is internal, and how deprecations are announced.
 - **A user's Rights tab shows what they can and can't do** (BOU-1000): per module at a glance, every permission held or
   not with its reason, their roles, and whether they open the admin pages. Nothing to change in an app.
 - **Take a permission away from a user** (BOU-1001): a wizard ranks leaving a group or ending an assignment by what
-  else it takes, each previewed, or ends a membership on a day. New port `IMembershipExpiry`; nothing to change.
+  else it takes, each previewed, or ends a membership on a day. New ports `IMembershipExpiry`, `IMembershipEnd`.
 
 ### Changed
 

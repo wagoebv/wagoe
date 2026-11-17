@@ -336,6 +336,9 @@
     (is (not-any? #{:user.rights/why-not :user.rights/grant} (text held)))
     (is (contains? (hrefs held) (sut/explain-path 7 :orders/read nil)))
     (is (not (contains? (hrefs held) (sut/grant-path 7 :orders/read nil))))
+    (is (contains? (hrefs held) (sut/revoke-path 7 :orders/read)) "a held one can be taken away")
+    (is (some #{:user.rights/revoke} (text held)))
+    (is (not-any? #{:user.rights/revoke} (text missing)))
     (is (some #{:user.rights/why-not} (text missing)))
     (is (not-any? #{:user.rights/why} (text missing)))
     (is (contains? (hrefs missing) (sut/grant-path 7 :orders/delete nil)))))
@@ -391,3 +394,8 @@
 
 (deftest ^:unit an-app-without-permissions-says-so
   (is (some #{:user.permissions/empty} (glance (sut/rights-page {:id 1} [] [] {})))))
+
+(deftest ^:unit the-revoke-form-asks-a-permission-only
+  (let [form (sut/asking-form :revoke "/x" {:orders/read {}} [] {:permission :orders/read})]
+    (is (some #{:user.grant/submit} (text form)))
+    (is (not-any? #{:user.explain/record-hint :user.grant/scope-hint :user.explain/field-everywhere} (text form)))))

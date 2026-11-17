@@ -200,8 +200,8 @@ On the user's Rights tab, choose *Take it away* beside a permission they hold.
 Each option either removes them from a group that gives it or ends that group's
 assignment of the role. Each shows what else they lose and which other users it
 reaches. The option that takes least else comes first. Instead of removing them
-from a group now, you can pick the day their membership ends. Nothing changes
-until then.
+from a group now, you can pick an earlier day for their membership to end.
+Nothing changes until then, and their Rights tab shows the day.
 
 When the permission comes through *Everyone*, an identity provider or the
 platform admin role, the wizard says so and where to change it. When another
