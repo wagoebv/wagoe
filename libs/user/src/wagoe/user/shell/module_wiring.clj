@@ -178,7 +178,7 @@
 ;; =============================================================================
 
 (defmethod ig/init-key :wagoe/user-routes
-  [_ {:keys [user-service mfa-service config email-sender hooks group-service]}]
+  [_ {:keys [user-service mfa-service config email-sender hooks group-service membership-services]}]
   (log/info "Initializing user module routes"
             {:email-sender? (some? email-sender)})
   (require-protocols! "user service" user-service
@@ -187,7 +187,9 @@
   (require 'wagoe.user.shell.http)
   (let [user-routes-fn (ns-resolve 'wagoe.user.shell.http 'user-routes)
         ;; The user list filters on groups, roles and permissions (BOU-1002)
-        config-with-email (cond-> (assoc (landing/with-hooks (or config {}) hooks) :group-service group-service)
+        config-with-email (cond-> (assoc (landing/with-hooks (or config {}) hooks)
+                                         :group-service group-service
+                                         :membership-service (first membership-services))
                             email-sender
                             (assoc :email-sender email-sender
                                    :welcome-email-from (or (get-in config [:active :wagoe/email :from])
@@ -423,6 +425,8 @@
                                :email-sender (ig/ref :wagoe/email)
                                :hooks        (ig/ref :wagoe/auth-hooks)
                                :group-service (ig/ref :wagoe/user-group-service)
+                               ;; The tenant module's, when it is there (BOU-1004)
+                               :membership-services (ig/refset :wagoe/membership-service)
                                :config       config}
 
     :wagoe/user-group-repository {:ctx (ig/ref :wagoe/db-context)}

@@ -4,6 +4,30 @@
             [wagoe.core.http.errors :as errors]
             [wagoe.tenant.ports :as ports]))
 
+(defn- refused [request message]
+  {:status  403
+   :headers {"Content-Type" "application/json"}
+   :body    (json/generate-string
+             (errors/body :forbidden message {:correlation-id (:correlation-id request)}))})
+
+(defn- viewing-refusal
+  "While an administrator views the app as another user (`:viewing-as`, set
+   by the user module, BOU-868): a 403 where that user is an admin by
+   membership, or where the administrator themselves may not be (BOU-1004).
+   nil otherwise."
+  [membership-service request]
+  (when-let [admin (get-in request [:viewing-as :admin])]
+    (cond
+      (= :admin (some-> request :tenant-membership :role keyword))
+      (refused request "An administrator is not viewed as")
+
+      (not (access/in-tenant-scope?
+            (assoc request
+                   :user admin
+                   :tenant-membership (ports/get-active-membership membership-service (:id admin)
+                                                                   (get-in request [:tenant :id])))))
+      (refused request "A view stays within the tenants you reach"))))
+
 (defn wrap-tenant-membership
   "Ring middleware that enriches the request with :tenant-membership.
 
@@ -23,8 +47,10 @@
     (let [user-id   (get-in request [:user :id])
           tenant-id (get-in request [:tenant :id])]
       (if (and user-id tenant-id)
-        (let [membership (ports/get-active-membership membership-service user-id tenant-id)]
-          (handler (assoc request :tenant-membership membership)))
+        (let [membership (ports/get-active-membership membership-service user-id tenant-id)
+              request    (assoc request :tenant-membership membership)]
+          (or (viewing-refusal membership-service request)
+              (handler request)))
         (handler request)))))
 
 (defn wrap-tenant-scope

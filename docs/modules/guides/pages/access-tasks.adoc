@@ -200,10 +200,12 @@ for every signed-in user, today's and tomorrow's.
 To check what someone sees, open their Rights tab and choose *View as this
 user*. The app then shows their pages, menus and buttons, with their rights,
 for 30 minutes or until you choose *Stop* in the bar at the top. Nothing can be
-changed while you look: their forms and buttons show, switched off, and the
-server refuses any change. Starting and stopping are in the audit trail, with
-you as the one who did it. An administrator, yourself or a deactivated user
-cannot be viewed as, and you cannot view as someone while already doing so.
+changed while you look: their forms and buttons show, switched off, the server
+refuses any change, and no live connection opens. Starting and stopping are in
+the audit trail, with you as the one who did it. An administrator, also one of
+the tenant by membership, yourself or a deactivated user cannot be viewed as,
+and you cannot view as someone while already doing so. A view shows only
+tenants you may use yourself.
 
 == Take a permission away
 

@@ -251,8 +251,10 @@
    request on unauthenticated."
   [request]
   (when (and (:viewing-as request)
-             (view-as/writes? (:request-method request))
-             (not (view-as/allowed-writes (:uri request))))
+             ;; A socket's messages could write: none opens while viewing (BOU-1004)
+             (or (ring-ws/upgrade-request? request)
+                 (and (view-as/writes? (:request-method request))
+                      (not (view-as/allowed-writes (:uri request))))))
     (assoc (if (and (str/starts-with? (str (:uri request)) "/web/")
                     (nil? (get-in request [:headers "hx-request"])))
              (assoc (ring.util.response/redirect (back-path request) :see-other)

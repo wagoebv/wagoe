@@ -11,6 +11,7 @@
             [wagoe.user.shell.middleware :as middleware]
             [wagoe.user.shell.persistence :as persistence]
             [wagoe.user.shell.service :as user-service]
+            [wagoe.tenant.ports]
             [wagoe.user.shell.http]
             [wagoe.user.shell.web-handlers :as web-handlers])
   (:import [java.time Instant]
@@ -74,6 +75,8 @@
               (is (= "/web/orders?page=2" (get-in r [:headers "Location"])) "the path only, never another site")
               (is (= {:error :user.view-as/disabled} (:flash r)))))
           (is (= 403 (:status (send! svc token :post "/api/v1/orders"))) "an API call is a 403")
+          (is (= 403 (:status (send! svc token :get "/ws" {"upgrade" "websocket" "connection" "Upgrade"})))
+              "no socket opens: its messages could write (BOU-1004)")
           (is (= 200 (:status (send! svc token :post view-as/stop-path))))
           (is (= 200 (:status (send! svc token :post "/web/logout"))) "signing out ends it")
           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Not while viewing"
@@ -171,6 +174,16 @@
             start  #((web-handlers/start-view-as-handler svc {})
                      {:request-method :post :uri "/" :user admin :session session :headers {}
                       :path-params {:id (str (:id %))}})]
+        (testing "an admin of this tenant by membership is refused before anything is set (BOU-1004)"
+          (let [ms #_{:clj-kondo/ignore [:missing-protocol-method]}
+                (reify wagoe.tenant.ports/ITenantMembershipService
+                  (get-active-membership [_ user-id _] (when (= user-id (:id ada)) {:role :admin})))
+                t  (random-uuid)
+                r  ((web-handlers/start-view-as-handler svc {:membership-service ms})
+                    {:request-method :post :uri "/" :user admin :session session :headers {}
+                     :tenant {:id t} :path-params {:id (str (:id ada))}})]
+            (is (= :user.view-as/refused-admin (get-in r [:flash :error])))
+            (is (nil? (:view-as-user-id (session-of sessions token))))))
         (let [r (start other)]
           (is (= 303 (:status r)))
           (is (= (str "/web/users/" (:id other) "/rights") (get-in r [:headers "Location"])))

@@ -40,6 +40,7 @@
             [wagoe.user.shell.mfa-enrolment :as enrolment]
             [wagoe.user.shell.oidc :as oidc]
             [wagoe.user.shell.tenant-scope :as tenant-scope]
+            [wagoe.tenant.ports :as tenant-ports]
             [wagoe.user.shell.access-filter :as access-filter]
             [wagoe.user.shell.group-service :as group-service]
             [clojure.edn :as edn]
@@ -1913,10 +1914,16 @@
 (defn start-view-as-handler
   "POST /web/users/:id/view-as — an administrator views the app as the user,
    read-only, from where that user lands; refused, back to the user's Rights tab."
-  [user-service _config]
+  [user-service config]
   (fn [request]
-    (let [target-id (parse-uuid (str (get-in request [:path-params :id])))]
+    (let [target-id (parse-uuid (str (get-in request [:path-params :id])))
+          ms        (:membership-service config)
+          tenant-id (get-in request [:tenant :id])]
       (try
+        ;; An admin of this tenant by membership is an administrator here too (BOU-1004)
+        (when (and ms tenant-id target-id
+                   (= :admin (some-> (tenant-ports/get-active-membership ms target-id tenant-id) :role keyword)))
+          (throw (ex-info "An administrator is not viewed as" {:type :forbidden :reason :admin})))
         (user-ports/start-view-as user-service (:user request) (:session request) target-id)
         (response/redirect "/web" :see-other)
         (catch clojure.lang.ExceptionInfo e
