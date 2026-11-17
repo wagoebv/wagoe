@@ -8,6 +8,7 @@
             [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.toast :as toast]
+            [wagoe.shared.ui.core.view-as :as view-as]
             [wagoe.platform.core.csrf :as csrf]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.pages :as pages]
@@ -136,7 +137,8 @@
       extra-head
       (for [css-file css]
         [:link {:rel "stylesheet" :href css-file}])]
-     [:body body-attrs
+     [:body (cond-> body-attrs view-as/*viewing* (assoc :data-viewing-as "true"))
+      (view-as/bar)
       (when-not skip-header
         [:header.site-header
          (main-navigation {:user user
@@ -145,7 +147,7 @@
       [:main.main-content content]
       (toast/toast-region)
       (toast/flash-toasts flash)
-      (for [js-file js]
+      (for [js-file (cond-> (vec js) view-as/*viewing* (conj "/js/view-as.js"))]
         [:script {:src js-file :defer true}])]]))
 
 (defn pilot-page-layout

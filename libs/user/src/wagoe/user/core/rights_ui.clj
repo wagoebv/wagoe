@@ -951,7 +951,12 @@
                [n (str "/web/admin/users/" (:id user))]
                [[:t :user.rights/tab]]]
               n
-              [:a {:href (explain-path (:id user) nil nil) :class "btn btn-sm"} [:t :user.explain/open]])
+              [:a {:href (explain-path (:id user) nil nil) :class "btn btn-sm"} [:t :user.explain/open]]
+              ;; Read-only, as them; never as an administrator (BOU-868)
+              (when (and (not= :admin (some-> (:role user) keyword)) (:active user true))
+                [:form.view-as-start {:method "post" :action (str "/web/users/" (:id user) "/view-as")}
+                 (csrf/hidden-field)
+                 [:button {:type "submit" :class "btn btn-sm"} [:t :user.view-as/start]]]))
       (user-tabs (:id user) :rights)
       (when (:platform-admin? opts)
         [:div {:class "alert alert-info" :role "status"} [:t :user.rights/platform-admin-note]])

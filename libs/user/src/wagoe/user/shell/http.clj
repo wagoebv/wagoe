@@ -636,6 +636,19 @@
                :interceptors ['wagoe.user.shell.http-interceptors/require-authenticated
                               'wagoe.user.shell.http-interceptors/require-admin]
                :summary "Permanently delete user (admin)"}}]
+      ;; View the app as a user, read-only (BOU-868)
+      ["/users/:id/view-as"
+       {:no-doc     true
+        :authorization :self
+        :middleware [auth-middleware target-user user-middleware/require-admin-middleware]
+        :post {:handler (web-handlers/start-view-as-handler user-service config)
+               :summary "View the app as this user, read-only (admin)"}}]
+      ["/view-as/stop"
+       {:no-doc     true
+        :authorization :self
+        :middleware [auth-middleware]
+        :post {:handler (web-handlers/stop-view-as-handler user-service config)
+               :summary "Stop viewing as another user"}}]
        ;; Session management routes (user-specific, not duplicated in admin)
       ["/users/:id/sessions"
        {:no-doc     true

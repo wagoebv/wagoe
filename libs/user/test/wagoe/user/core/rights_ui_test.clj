@@ -1,5 +1,6 @@
 (ns wagoe.user.core.rights-ui-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [wagoe.user.core.grant-ui :as grant-ui]
             [wagoe.user.core.revoke-ui :as revoke-ui]
             [wagoe.user.core.rights-ui :as sut]))
@@ -419,3 +420,10 @@
     (is (some #{:common/role-user} txt))
     (is (some #{:common/role-admin} txt))
     (is (not-any? #{"admin" "user"} txt))))
+
+(deftest ^:unit a-user-not-an-administrator-can-be-viewed-as
+  ;; BOU-868
+  (let [actions #(pr-str (sut/rights-page % [] [] {:registry orders-registry :roles orders-roles}))]
+    (is (str/includes? (actions {:id 7 :name "Ada" :role :user :active true}) "/web/users/7/view-as"))
+    (is (not (str/includes? (actions {:id 7 :name "Ada" :role :admin :active true}) "/view-as")))
+    (is (not (str/includes? (actions {:id 7 :name "Ada" :role :user :active false}) "/view-as")))))

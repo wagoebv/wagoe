@@ -20,6 +20,7 @@
             [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.audit :as audit-core]
             [wagoe.user.core.mfa :as mfa-core]
+            [wagoe.user.core.view-as :as view-as]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.lockout :as lockout]
             [wagoe.user.ports :as ports]
@@ -78,9 +79,10 @@
     (f)))
 
 (defn request-audit-context
-  "The audit context of a Ring request: its signed-in user is the actor."
+  "The audit context of a Ring request: its signed-in user is the actor, the
+   administrator when they view the app as another user (BOU-868)."
   [request]
-  (let [actor (or (:user request) (get-in request [:session :user]))]
+  (let [actor (or (get-in request [:viewing-as :admin]) (:user request) (get-in request [:session :user]))]
     {:actor-id    (:id actor)
      :actor-email (:email actor)
      :ip-address  (client-ip/request-ip request)
@@ -904,6 +906,26 @@
      (fn [{:keys [params]}]
        (mapv :id (delete-users! this (:user-ids params) permanent?)))
      (observability this)))
+
+  ports/IViewAs
+  (start-view-as [_ admin session target-id]
+    (let [now    (current-timestamp)
+          target (some->> target-id (.find-user-by-id user-repository) user-core/without-credentials)]
+      (when-let [{:keys [error]} (view-as/refusal admin target session now)]
+        (throw (ex-info (:message error) error)))
+      (let [until (.plusSeconds ^java.time.Instant now (* 60 view-as/duration-minutes))]
+        (when-not (ports/set-view-as session-repository (:id session) (:id target) until)
+          (throw (ex-info "The session has ended" {:type :forbidden :reason :session})))
+        (.create-audit-log audit-repository (view-as/start-entry admin target until (effective-audit-context {})))
+        {:target target :until until})))
+
+  (stop-view-as [_ admin session]
+    (when-let [target-id (:view-as-user-id session)]
+      (ports/set-view-as session-repository (:id session) nil nil)
+      ;; A user deleted meanwhile ends the view all the same
+      (when-let [target (.find-user-by-id user-repository target-id)]
+        (.create-audit-log audit-repository (view-as/stop-entry admin target (effective-audit-context {})))
+        (user-core/without-credentials target))))
 
   ports/IUserSessionRevocation
   (revoke-sessions-except [this user-id keep-session-id]

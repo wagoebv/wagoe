@@ -1484,6 +1484,7 @@
    ["bulk-action" :common/audit-bulk-action]
    ["group-join" :common/audit-group-join] ["group-leave" :common/audit-group-leave]
    ["grant-add" :common/audit-grant-add] ["grant-remove" :common/audit-grant-remove]
+   ["view-as-start" :common/audit-view-as-start] ["view-as-stop" :common/audit-view-as-stop]
    ["data-export" :common/audit-data-export] ["mfa-disabled" :common/audit-mfa-disabled]])
 
 (defn audit-filters

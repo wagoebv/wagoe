@@ -123,6 +123,12 @@
   ;; Expiry hides a session from the reads above; this is what takes the row
   ;; out of the table, which nothing did until BOU-429. Returns the count.
 
+(defprotocol ISessionViewAs
+  (set-view-as [this session-id user-id until]))
+  ;; Sets whom the live session with that id views the app as, until `until`;
+  ;; nil and nil end it. Returns boolean: false for no such live session.
+  ;; BOU-868.
+
 (defprotocol IUserSessionInvalidation
   (invalidate-user-session [this user-id session-id]))
   ;; Sets :revoked-at on the session with that id, when it belongs to the user
@@ -455,6 +461,16 @@
   ;; permanently-delete-user would, or none: the admin guard judges the whole
   ;; set first (BOU-673). Returns the ids deleted; unknown ids are skipped.
   ;; Throws :conflict and :hard-deletion-not-allowed.
+
+(defprotocol IViewAs
+  (start-view-as [this admin session target-id])
+  ;; `admin`, signed in with `session`, views the app as the user `target-id`
+  ;; names, read-only, for view-as/duration-minutes; audited with `admin` as
+  ;; the actor. Throws :forbidden or :not-found as view-as/refusal says.
+  ;; Returns {:target user :until Instant}. BOU-868.
+
+  (stop-view-as [this admin session]))
+  ;; Ends what `session` views as, audited. Returns the user it viewed as, or nil.
 
 (defprotocol IUserSessionRevocation
   (revoke-user-session [this user-id session-id])
