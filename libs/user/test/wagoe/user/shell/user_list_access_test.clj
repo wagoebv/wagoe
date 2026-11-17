@@ -139,7 +139,7 @@
             dan   (user! "dan@a.test" {:tenant-id tenant})
             ada   (user! "ada@example.com")
             mine  (group-service/with-tenant tenant #(ports/create-group gsvc {:name "Finance"}))
-            other (ports/create-group gsvc {:name "Finance"})
+            other (ports/create-group gsvc {:name "Head office"})
             ask   #(page usvc gsvc boss % {:tenant {:id tenant}})]
         (group-service/with-tenant tenant
           #(do (ports/add-group-role gsvc (:id mine) {:role :invoice/editor :scope {}})
