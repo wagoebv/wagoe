@@ -612,6 +612,14 @@
                         (conj (let [q (:filter-name-or-email-contains options)]
                                 [:or (contains :a.email q) (contains :u.name q)]))
 
+                        ;; The ids an access filter admits (BOU-1002); none admits nobody.
+                        ;; ponytail: one bound parameter per id; past ~65k holders PostgreSQL
+                        ;; refuses it, a subquery on the holders' groups when that matters
+                        (contains? options :filter-ids)
+                        (conj (if-let [xs (seq (:filter-ids options))]
+                                [:in :a.id (mapv str xs)]
+                                [:= :a.id nil]))
+
                         (:exclude-group-members options)
                         (conj [:not [:in :a.id {:select [:user_id]
                                                 :from   [:user_group_members]

@@ -844,18 +844,9 @@
       (if-let [reach (when (access/admin? request) (core-access/admin-reach request))]
         (let [target (rights-target user-service request)
               t      (if target (:tenant-id target) (:tenant-id reach))]
-          (group-service/with-tenant t
-            #(do (when (and t group-service) (group-service/ensure-everyone! group-service))
-                 (handler request))))
+          (group-service/in-tenant group-service t #(handler request)))
         (access/forbidden-response "Admin role required" request
                                    (access/correlation-id request (str (random-uuid))))))))
-
-(defn- tenant-groups?
-  "Whether `group-service`'s repository keeps groups per tenant; one written
-   before BOU-996 does not, and its pages stay a platform admin's."
-  [group-service]
-  (let [repo (:group-repository group-service)]
-    (or (nil? repo) (satisfies? user-ports/ITenantGroups repo))))
 
 (defn group-routes
   "Groups, roles and permissions, mounted under /web/admin beside the admin UI,
@@ -864,7 +855,7 @@
    request names or of none (BOU-996). Absent when the web UI is switched off."
   [user-service group-service config]
   (let [guard [(user-middleware/flexible-authentication-middleware user-service)
-               (if (tenant-groups? group-service)
+               (if (group-service/tenant-groups? group-service)
                  (in-admins-tenant user-service group-service)
                  require-platform-admin-middleware)]
         route (fn [path methods] [path (assoc methods :no-doc true :authorization :self :middleware guard)])]

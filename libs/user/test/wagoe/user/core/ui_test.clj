@@ -85,6 +85,16 @@
           role-cell   (nth row 2)]
       (is (= [:t :common/role-user] (nth role-cell 2))))))
 
+(deftest ^:unit a-row-shows-the-users-groups-when-they-carry-them
+  ;; BOU-1002: Everyone left out; a group links only in the admin's tenant
+  (let [cell #(last (ui/user-row (assoc sample-user :groups %)))]
+    (is (= 4 (count (ui/user-row sample-user))) "no group service: no groups cell")
+    (is (= [[:a {:href "/web/admin/groups/1"} "Finance"] ", " "Ops"]
+           (cell [{:id 1 :name "Finance" :linked? true :source :member}
+                  {:id 2 :name "Ops" :source :provider}
+                  {:id 3 :name "Everyone" :linked? true :source :everyone}])))
+    (is (= [:span.empty-value "—"] (cell [])))))
+
 (deftest ^:unit users-table-test
   (testing "generates table with users wrapped in container"
     (let [table (ui/users-table sample-users)]

@@ -25,6 +25,7 @@
   ;; options: {:limit :offset :sort-by :sort-direction :filter-role
   ;;           :filter-active :filter-email-contains
   ;;           :filter-name-or-email-contains :exclude-group-members (a group id)
+  ;;           :filter-ids (the users an access filter admits, BOU-1002)
   ;;           :include-deleted?}
   ;; Returns {:users [...] :total-count n}. Soft-deleted users are excluded
   ;; unless :include-deleted? is true.

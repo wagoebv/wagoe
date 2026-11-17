@@ -176,6 +176,19 @@
  :user/button-apply-bulk        "Toepassen op geselecteerde"
 
  :user/filter-placeholder-email "E-mail zoeken..."
+ :user/column-groups "Groepen"
+ :user.list/filter-permission "Mag"
+ :user.list/any-permission "Elk recht"
+ :user.list/filter-group "Groep"
+ :user.list/any-group "Elke groep"
+ :user.list/filter-role "Heeft rol"
+ :user.list/any-role "Elke rol"
+ :user.list/via-everyone "Elke gebruiker heeft het: Iedereen geeft het."
+ :user.list/via-provider {:zero "Geen van hen via een identiteitsprovider." :one "{count} van hen via een identiteitsprovider." :many "{count} van hen via een identiteitsprovider."}
+ :user.list/via-platform-admin {:zero "Geen platformbeheerder, die door elke controle komt." :one "{count} platformbeheerder, die door elke controle komt." :many "{count} platformbeheerders, die door elke controle komen."}
+ :user.list/no-tenant "Buiten een tenant lezen de filters de groepen zonder tenant, dus staan alleen gebruikers zonder tenant in de lijst. Open een tenant om de gebruikers daarvan te filteren."
+ :user.list/any-scope "Wie het binnen een scope mag, telt mee."
+ :user.list/not-offered "Niet een van deze"
 
  :user/mfa-title               "Tweestapsverificatie"
  :user/mfa-prompt              "Voer de 6-cijferige code in vanuit uw authenticatie-app of gebruik een van uw back-upcodes."

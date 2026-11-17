@@ -640,10 +640,10 @@
   (list-users [this options]
     (service-interceptors/execute-service-operation
      :list-users
-     {:options options}
-     (fn [{:keys [params]}]
-       (let [{:keys [options]} params
-             result (.find-users user-repository options)
+     ;; An access filter's ids are logged as a count (BOU-1002)
+     {:options (cond-> options (:filter-ids options) (update :filter-ids count))}
+     (fn [_]
+       (let [result (.find-users user-repository options)
              users (:users result)
              total-count (:total-count result)
              cleaned-users (map #(dissoc % :password-hash) users)]

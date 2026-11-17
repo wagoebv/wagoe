@@ -20,6 +20,7 @@
             [wagoe.shared.ui.core.form :as form]
             [wagoe.shared.ui.core.htmx :as htmx]
             [wagoe.shared.ui.core.toast :as toast]
+            [wagoe.core.http.access :as core-access]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.web.table :as web-table]
@@ -38,6 +39,8 @@
             [wagoe.user.shell.mfa-enrolment :as enrolment]
             [wagoe.user.shell.oidc :as oidc]
             [wagoe.user.shell.tenant-scope :as tenant-scope]
+            [wagoe.user.shell.access-filter :as access-filter]
+            [wagoe.user.shell.group-service :as group-service]
             [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
@@ -325,37 +328,64 @@
                                   {:logo-url (get-in config [:wagoe/settings :logo-url])})))))))
 
 (defn- users-list
-  "The users table's users, table query, total and filters for `query-params`:
-   none for a caller who may list no one here."
-  [user-service request query-params]
+  "The users table's users, table query, total, filters and what the access
+   filters found for `query-params`: none for a caller who may list no one
+   here. With the group service in `config`, the users carry their groups and
+   the list can be filtered on a permission, group or role (BOU-1002), in the
+   groups of the tenant the caller reaches."
+  [user-service config request query-params & {:keys [choices?]}]
   (let [table-query (web-table/parse-table-query
                      query-params
                      {:default-sort      :created-at
                       :default-dir       :desc
                       :default-page-size 20})
-        filters     (web-table/parse-search-filters query-params)
-        opts        (tenant-scope/list-options request (build-user-list-opts table-query filters))
+        reach       (core-access/admin-reach request)
+        ;; Nobody to list here, or groups this caller may not see: no access filters
+        gs          (when (and reach (access-filter/offered? (:group-service config) (:user request)))
+                      (:group-service config))
+        access      (when gs (access-filter/parse query-params))
+        filters     (merge (web-table/parse-search-filters query-params) access)
+        tenant-id   (:tenant-id reach)
+        ;; Outside a tenant the filters read the groups of no tenant, so the list does too
+        no-tenant?  (and (seq access) (not (contains? reach :tenant-id)))
+        ;; One read of the tenant's groups for the filters and what they offer
+        [found choices] (when (and gs (or choices? (seq access)))
+                          (group-service/in-tenant gs tenant-id
+                                                   #(vector (when (seq access) (access-filter/find-users user-service gs tenant-id access))
+                                                            (when choices? (access-filter/choices gs)))))
+        opts        (tenant-scope/list-options request
+                                               (cond-> (build-user-list-opts table-query filters)
+                                                 no-tenant?           (assoc :filter-tenant-id nil)
+                                                 (some? (:ids found)) (assoc :filter-ids (:ids found))))
         result      (if opts (user-ports/list-users user-service opts) {:users [] :total-count 0})]
-    [(:users result) table-query (:total-count result) filters]))
+    [(cond->> (:users result) gs (access-filter/with-groups gs tenant-id))
+     table-query (:total-count result) filters
+     {:found      (:found found)
+      :no-tenant? no-tenant?
+      :choices    choices}]))
 
 (defn users-page-handler
   "Handler for the users listing page (GET /web/users), with shared search
    filters (q, role, status). The table's controls request this URL and push
    it, so the address bar holds sort, filters and page; they get the table
    fragment back."
-  [user-service _config]
+  [user-service config]
   (fn [request]
     (try
-      (let [[users table-query total-count filters] (users-list user-service request (:query-params request))]
+      (let [fragment? (htmx/fragment-request? (:headers request) ["users-table-container"])
+            ;; Only the full page shows the filters' choices
+            [users table-query total-count filters access]
+            (users-list user-service config request (:query-params request) :choices? (not fragment?))]
         ;; One URL, two bodies: a cache must not answer one with the other
         (-> (html-response request
-                           (if (htmx/fragment-request? (:headers request) ["users-table-container"])
-                             (user-ui/users-table-fragment users table-query total-count filters)
+                           (if fragment?
+                             (user-ui/users-table-fragment users table-query total-count filters access)
                              (user-ui/users-page users total-count
                                                  {:user        (:user request)
                                                   :flash       (:flash request)
                                                   :table-query table-query
-                                                  :filters     filters})))
+                                                  :filters     filters
+                                                  :access      access})))
             (response/header "Vary" "HX-Request, HX-Target")))
       (catch Exception e
         (if (htmx/fragment-request? (:headers request) ["users-table-container"])
@@ -918,11 +948,11 @@
 (defn users-table-fragment-handler
   "Handler for the users table fragment (GET /web/users/table), for callers
    that ask for the table alone. The table's own controls request /web/users."
-  [user-service _config]
+  [user-service config]
   (fn [request]
     (try
       (html-response request
-                     (apply user-ui/users-table-fragment (users-list user-service request (:query-params request))))
+                     (apply user-ui/users-table-fragment (users-list user-service config request (:query-params request))))
       (catch Exception e
         (server-error request e "Error in users-table-fragment-handler")))))
 
@@ -932,7 +962,7 @@
    Supports multiple actions: deactivate, activate, delete, role changes.
    Returns the updated users table fragment using the same query
    parameters and filters as the current view."
-  [user-service _config]
+  [user-service config]
   (fn [request]
     (try
       (let [form-params (:form-params request)
@@ -949,7 +979,8 @@
             ;; Merge query params from URL and hidden form fields to
             ;; preserve current filters and table state during bulk ops
             qp          (merge (:query-params request)
-                               (select-keys form-params ["q" "role" "status" "sort" "dir" "page" "page-size"]))]
+                               (select-keys form-params (into ["q" "role" "status" "sort" "dir" "page" "page-size"]
+                                                              access-filter/params)))]
         (when (or (empty? ids) (str/blank? (str action)))
           (throw (ex-info "No users selected or action missing"
                           {:type :bad-request})))
@@ -980,7 +1011,7 @@
           (throw (ex-info "Unsupported bulk action"
                           {:type :bad-request
                            :action action})))
-        (html-response request (apply user-ui/users-table-fragment (users-list user-service request qp))))
+        (html-response request (apply user-ui/users-table-fragment (users-list user-service config request qp))))
       (catch IllegalArgumentException _
         (-> (html-response request (ui/error-message [:t :user/error-invalid-user-id-bulk]) 400)
             (with-error-toast request :user/error-invalid-user-id-bulk)))
