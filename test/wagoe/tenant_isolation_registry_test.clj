@@ -57,6 +57,9 @@
                                  "a-tenants-admin-creates-users-in-their-tenant"
                                  "another-tenants-users-rights-are-not-found"
                                  "a-tenants-admin-manages-their-tenants-roles-and-groups"]
+                                "libs/user/test/wagoe/user/shell/user_list_access_test.clj"
+                                ["a-tenants-admin-filters-only-their-tenants-users-and-groups"
+                                 "an-admin-with-no-reach-here-gets-no-filters"]
                                 "libs/user/test/wagoe/user/shell/group_tenancy_test.clj"
                                 ["a-tenants-admin-sees-and-changes-only-their-tenants-groups"
                                  "a-group-takes-only-its-tenants-users"

@@ -187,6 +187,9 @@
  :user.list/via-everyone "Every user holds it: Everyone gives it."
  :user.list/via-provider {:zero "None of them through an identity provider." :one "{count} of them through an identity provider." :many "{count} of them through an identity provider."}
  :user.list/via-platform-admin {:zero "No platform admin, who passes every check." :one "{count} platform admin, who passes every check." :many "{count} platform admins, who pass every check."}
+ :user.list/no-tenant "Outside a tenant the filters read the groups of no tenant, so only users of no tenant are listed. Open a tenant to filter its users."
+ :user.list/any-scope "A user who may do it within a scope counts."
+ :user.list/not-offered "Not one of these"
 
  :user/mfa-title               "Two-Factor Authentication"
  :user/mfa-prompt              "Please enter the 6-digit code from your authenticator app or use one of your backup codes."

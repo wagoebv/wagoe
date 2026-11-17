@@ -11,11 +11,10 @@
             [wagoe.user.shell.group-service :as group-service]))
 
 (defn platform-admins
-  "The platform admins, who pass every check."
+  "The platform admins, who pass every check: admins of no tenant."
   [user-service]
-  ;; Paged: tenant admins share the role and would push platform admins past one page
   (->> (iterate #(+ % 100) 0)
-       (map #(:users (ports/list-users user-service {:filter-role :admin :filter-active true
+       (map #(:users (ports/list-users user-service {:filter-role :admin :filter-active true :filter-tenant-id nil
                                                      :sort-by :email :sort-direction :asc
                                                      :limit 100 :offset %})))
        (take-while seq)
@@ -28,7 +27,7 @@
   "Who the groups of `assignments`, as role-holders gives them, put the
    permission or role in: `:members`, stored and from the identity provider,
    `:provided` the latter, and `:everyone?` when Everyone gives it. A provider
-   group runs the membership hook for every active user."
+   group runs the membership hook for every active user of the tenant."
   [group-service assignments]
   (let [groups   (distinct (map :group-id (remove :everyone? assignments)))
         provided (ids (mapcat #(ports/provider-members group-service %) groups))]
@@ -44,29 +43,39 @@
         {:provided provided :members (into provided (ids (:members g)))}))))
 
 (defn- by-permission
-  "Who holds `permission`, through a group or as a platform admin."
-  [user-service group-service permission]
-  (let [roles (group-core/roles-holding (into {} (map (juxt :name identity)) (ports/list-roles group-service))
-                                        permission)
-        given (given-by group-service (ports/role-holders group-service roles))
-        admins (ids (platform-admins user-service))]
+  "Who holds `permission` through a group, in any scope, and, outside a
+   tenant, as a platform admin."
+  [user-service group-service permission platform?]
+  (let [roles  (group-core/roles-holding (into {} (map (juxt :name identity)) (ports/list-roles group-service))
+                                         permission)
+        given  (given-by group-service (ports/role-holders group-service roles))
+        admins (when platform? (ids (platform-admins user-service)))]
     (-> given
         (update :members into admins)
         (assoc :platform-admins admins))))
 
 (defn admitted
   "For `filters`, {:permission :group :role} as parsed, the user ids they all
-   admit as `:ids`, nil when any user may be, and per filter what it found:
-   {filter {:everyone? :provided :platform-admins :members}}. A group or role
-   that does not exist admits nobody."
-  [user-service group-service {:keys [permission group role]}]
-  (let [found (cond-> {}
-                permission (assoc :permission (by-permission user-service group-service permission))
+   admit as `:ids`, nil when any user may be, and what the permission filter
+   found among them: `:found` {:permission {:everyone? :provided
+   :platform-admins}}. Platform admins count only when `platform?`: a tenant
+   lists none. A group or role that does not exist admits nobody."
+  [user-service group-service {:keys [permission group role]} platform?]
+  (let [;; A provider group asks the membership hook for every user: once each
+        group-service (cond-> group-service (:membership group-service) (update :membership memoize))
+        found (cond-> {}
+                permission (assoc :permission (by-permission user-service group-service permission platform?))
                 group      (assoc :group (or (by-group group-service group) {:members #{}}))
                 role       (assoc :role (given-by group-service (ports/role-holders group-service #{role}))))
-        sets  (keep #(when-not (:everyone? %) (:members %)) (vals found))]
-    {:found found
-     :ids   (when (seq sets) (apply set/intersection sets))}))
+        sets  (keep #(when-not (:everyone? %) (:members %)) (vals found))
+        ids   (when (seq sets) (apply set/intersection sets))
+        among #(when % (cond-> % ids (set/intersection ids)))]
+    {:found (some-> (:permission found)
+                    (select-keys [:everyone? :provided :platform-admins])
+                    (update :provided among)
+                    (update :platform-admins among)
+                    (->> (hash-map :permission)))
+     :ids   ids}))
 
 (defn parse
   "The access filters `query-params` give, {:permission :group :has-role},
@@ -78,29 +87,47 @@
                  :when v]
              [k v])))
 
-(defn find-users
-  "`admitted` for `filters` as `parse` gives them, in the groups of
-   `tenant-id`."
-  [user-service group-service tenant-id {:keys [permission group has-role]}]
-  (group-service/with-tenant tenant-id
-    #(admitted user-service group-service
-               {:permission (group-core/parse-name permission)
-                :group      group
-                :role       (group-core/parse-name has-role)})))
+(defn offered?
+  "Whether the caller may filter on groups here: their groups are kept per
+   tenant, or they are a platform admin, as the group pages decide."
+  [group-service user]
+  (or (access/platform-admin? user)
+      (satisfies? ports/ITenantGroups (:group-repository group-service))))
 
-(defn choices
-  "What the filters offer in `tenant-id`: the declared permissions, the
-   groups and the roles, by name."
-  [group-service tenant-id]
+(defn in-tenant
+  "Call `f` in `tenant-id`'s groups, its Everyone made first, as the group
+   pages do: until then the no-tenant one stands in, which reads miss."
+  [group-service tenant-id f]
   (group-service/with-tenant tenant-id
     (fn []
       (when tenant-id (group-service/ensure-everyone! group-service))
-      {:permissions (sort (map group-core/permission-str (keys (some-> (:registry group-service) authz/permissions))))
-       :groups      (sort-by :name (map #(select-keys % [:id :name]) (ports/list-groups group-service)))
-       :roles       (sort (map (comp group-core/permission-str :name) (ports/list-roles group-service)))})))
+      (f))))
+
+(defn find-users
+  "`admitted` for `filters` as `parse` gives them, in the groups `in-tenant`
+   binds; `tenant-id` nil is a platform admin outside any tenant."
+  [user-service group-service tenant-id {:keys [permission group has-role]}]
+  (admitted user-service group-service
+            {:permission (group-core/parse-name permission)
+             :group      group
+             :role       (group-core/parse-name has-role)}
+            (nil? tenant-id)))
+
+(defn choices
+  "What the filters offer in the groups `in-tenant` binds: the declared
+   permissions, the groups and the roles, by name."
+  [group-service]
+  {:permissions (sort (map group-core/permission-str (keys (some-> (:registry group-service) authz/permissions))))
+   :groups      (sort-by :name (map #(select-keys % [:id :name]) (ports/list-groups group-service)))
+   :roles       (sort (map (comp group-core/permission-str :name) (ports/list-roles group-service)))})
 
 (defn with-groups
-  "`users`, each with `:groups`, those they are in, read in their own tenant."
-  [group-service users]
-  (mapv (fn [u] (assoc u :groups (group-service/with-tenant (:tenant-id u) #(ports/user-groups group-service u))))
-        users))
+  "`users`, each with `:groups`, those they are in, read in their own tenant;
+   a group of `tenant-id`, the one the caller works in, links to its page."
+  [group-service tenant-id users]
+  (let [group-service (cond-> group-service (:membership group-service) (update :membership memoize))]
+    (mapv (fn [u]
+            (let [here? (= (some-> (:tenant-id u) str) (some-> tenant-id str))]
+              (assoc u :groups (mapv #(assoc % :linked? here?)
+                                     (group-service/with-tenant (:tenant-id u) #(ports/user-groups group-service u))))))
+          users)))

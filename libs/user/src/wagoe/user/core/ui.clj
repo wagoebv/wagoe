@@ -64,15 +64,18 @@
 ;; =============================================================================
 
 (defn- groups-cell
-  "The groups a user is in, Everyone left out: every user is (BOU-1002)."
+  "The groups a user is in, Everyone left out: every user is (BOU-1002). A
+   group of the tenant the admin works in links to its page."
   [groups]
   (if-let [gs (seq (remove #(= :everyone (:source %)) groups))]
-    (interpose ", " (for [{:keys [id name]} gs] [:a {:href (str "/web/admin/groups/" id)} name]))
+    (interpose ", " (for [{:keys [id name linked?]} gs]
+                      (if linked? [:a {:href (str "/web/admin/groups/" id)} name] name)))
     [:span.empty-value "—"]))
 
 (defn user-row
-  "The cells of a user's row: name, email, role, status and groups, the
-   badges styled as the admin's enum cells.
+  "The cells of a user's row: name, email, role, status and, when the user
+   carries `:groups`, their groups; the badges styled as the admin's enum
+   cells.
 
    Args:
      user: User entity map (from User schema)
@@ -81,24 +84,30 @@
      Vector of cell values for table row (some as Hiccup structures)"
   [user]
   (let [admin?  (= :admin (:role user))
-        active? (boolean (:active user))]
-    [(:name user)
-     (:email user)
-     (ui/tone-badge (if admin? [:t :common/role-admin] [:t :common/role-user])
-                    (if admin? :info :neutral)
-                    "user-role-badge")
-     (ui/tone-badge (if active? [:t :user/badge-active] [:t :user/badge-inactive])
-                    (if active? :success :warning)
-                    "user-status-badge")
-     (groups-cell (:groups user))]))
+        active? (boolean (:active user))
+        cells   [(:name user)
+                 (:email user)
+                 (ui/tone-badge (if admin? [:t :common/role-admin] [:t :common/role-user])
+                                (if admin? :info :neutral)
+                                "user-role-badge")
+                 (ui/tone-badge (if active? [:t :user/badge-active] [:t :user/badge-inactive])
+                                (if active? :success :warning)
+                                "user-status-badge")]]
+    (cond-> cells (contains? user :groups) (conj (groups-cell (:groups user))))))
 
 (def ^:private user-columns
   ;; The columns of `user-row`, in its order
   [{:field :name :label [:t :common/column-name] :class "c-title"}
    {:field :email :label [:t :common/column-email]}
    {:field :role :label [:t :common/column-role] :sortable? false}
-   {:field :status :label [:t :common/column-status] :sortable? false}
-   {:field :groups :label [:t :user/column-groups] :sortable? false}])
+   {:field :status :label [:t :common/column-status] :sortable? false}])
+
+(def ^:private groups-column {:field :groups :label [:t :user/column-groups] :sortable? false})
+
+(defn- columns-for
+  "`user-columns`, and the groups when the users carry them."
+  [users]
+  (cond-> user-columns (some #(contains? % :groups) users) (conj groups-column)))
 
 (defn- user-table-row
   "A row that opens the user (admin-ux.js), with a box for bulk actions."
@@ -109,22 +118,30 @@
      (map (fn [{:keys [field] col-class :class} cell]
             [:td {:class (str "field-" (name field) (when col-class (str " " col-class)))}
              (if (= :name field) [:a {:href href} cell] cell)])
-          user-columns
+          (columns-for [user])
           (user-row user))
      [:td.actions-cell
       [:a.row-nav-hint {:href href :aria-label [:t :user/button-view-user]}
        (icons/icon :chevron-right {:size 14})]]]))
 
-(defn- permission-note
-  "Who the permission filter counts beyond the groups they were added to:
-   Everyone, an identity provider, platform admins (BOU-1002)."
-  [{:keys [everyone? provided platform-admins] :as found}]
-  (when found
-    [:div.users-permission-note {:class "alert alert-info" :role "status"}
-     (if everyone?
-       [:p [:t :user.list/via-everyone]]
-       (list [:p [:t :user.list/via-provider {:count (count provided)} (count provided)]]
-             [:p [:t :user.list/via-platform-admin {:count (count platform-admins)} (count platform-admins)]]))]))
+(defn- access-note
+  "What the access filters counted (BOU-1002): for a permission, whether
+   Everyone gives it, how many of the users listed get it from an identity
+   provider and, outside a tenant, as platform admins. Outside a tenant the
+   filters read the groups of no tenant only."
+  [{:keys [found no-tenant?]}]
+  (let [{:keys [everyone? provided platform-admins] :as p} (:permission found)]
+    (when (or p no-tenant?)
+      [:div.users-access-note {:class "alert alert-info" :role "status"}
+       (when no-tenant? [:p.users-no-tenant-note [:t :user.list/no-tenant]])
+       (when p
+         (list [:p.users-any-scope [:t :user.list/any-scope]]
+               (if everyone?
+                 [:p.users-via-everyone [:t :user.list/via-everyone]]
+                 (list [:p.users-via-provider [:t :user.list/via-provider {:count (count provided)} (count provided)]]
+                       (when platform-admins
+                         [:p.users-via-platform-admin
+                          [:t :user.list/via-platform-admin {:count (count platform-admins)} (count platform-admins)]])))))])))
 
 (defn users-table-fragment
   "Generate just the users table container fragment (for HTMX refresh).
@@ -134,6 +151,8 @@
      table-query: Normalized TableQuery (see wagoe.platform.shell.web.table)
      total-count: Total number of users
      filters:     Optional map of parsed search filters (see wagoe.platform.shell.web.table)
+     access:      Optional, what the access filters found and offer: {:found
+                  :no-tenant? :choices}, as the shell's users-list gives it
 
    Returns:
      Hiccup structure for users table container (no page layout)"
@@ -141,7 +160,7 @@
    (users-table-fragment users table-query total-count {}))
   ([users table-query total-count filters]
    (users-table-fragment users table-query total-count filters {}))
-  ([users table-query total-count filters {:keys [found]}]
+  ([users table-query total-count filters access]
    (let [base-url      "/web/users"
          hx-target     "#users-table-container"
          table-params  (table-ui/table-query->params table-query)
@@ -159,7 +178,7 @@
        ;; Outside .table-sort: a filter starts at page one, a bulk action stays
        (table-ui/hidden-inputs (select-keys table-params ["page"]))
        (table-ui/hidden-inputs filter-params)]
-      (permission-note (:permission found))
+      (access-note access)
       (if (empty? users)
         [:div.empty-state [:t :user/empty-state-no-users]]
         [:div.table-and-pagination
@@ -169,7 +188,7 @@
             :hx-target   hx-target
             :table-query table-query
             :filters     filters
-            :columns     user-columns
+            :columns     (columns-for users)
             :head-before [[:th.checkbox-header [:input (alpine/select-all-checkbox-attrs)]]]
             :head-after  [[:th.actions-header [:span.sr-only [:t :common/column-actions]]]]
             :rows        (for [user users
@@ -555,7 +574,11 @@
                                    :value       (get filters k)
                                    :label       label
                                    :placeholder all
-                                   :options     options
+                                   ;; A value not offered, such as another tenant's group, still shows
+                                   :options     (let [v (get filters k)]
+                                                  (cond->> options
+                                                    (and v (not-any? #(= v (str (first %))) options))
+                                                    (cons [v [:t :user.list/not-offered]])))
                                    :attrs       {:id (str "users-" (name k) "-filter") :class "select select-sm"}}))])]
      (admin-page
       [:t :user/page-users-title]

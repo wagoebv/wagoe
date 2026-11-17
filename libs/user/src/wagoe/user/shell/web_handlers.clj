@@ -338,18 +338,30 @@
                      {:default-sort      :created-at
                       :default-dir       :desc
                       :default-page-size 20})
-        gs          (:group-service config)
+        reach       (core-access/admin-reach request)
+        ;; Nobody to list here, or groups this caller may not see: no access filters
+        gs          (when (and reach (access-filter/offered? (:group-service config) (:user request)))
+                      (:group-service config))
         access      (when gs (access-filter/parse query-params))
         filters     (merge (web-table/parse-search-filters query-params) access)
-        tenant-id   (:tenant-id (core-access/admin-reach request))
-        found       (when (seq access) (access-filter/find-users user-service gs tenant-id access))
+        tenant-id   (:tenant-id reach)
+        ;; Outside a tenant the filters read the groups of no tenant, so the list does too
+        no-tenant?  (and (seq access) (not (contains? reach :tenant-id)))
+        ;; One read of the tenant's groups for the filters and what they offer
+        [found choices] (when gs
+                          (access-filter/in-tenant gs tenant-id
+                                                   #(vector (when (seq access) (access-filter/find-users user-service gs tenant-id access))
+                                                            (access-filter/choices gs))))
         opts        (tenant-scope/list-options request
                                                (cond-> (build-user-list-opts table-query filters)
+                                                 no-tenant?           (assoc :filter-tenant-id nil)
                                                  (some? (:ids found)) (assoc :filter-ids (:ids found))))
         result      (if opts (user-ports/list-users user-service opts) {:users [] :total-count 0})]
-    [(cond->> (:users result) gs (access-filter/with-groups gs))
+    [(cond->> (:users result) gs (access-filter/with-groups gs tenant-id))
      table-query (:total-count result) filters
-     {:found (:found found) :choices (when gs (access-filter/choices gs tenant-id))}]))
+     {:found      (:found found)
+      :no-tenant? no-tenant?
+      :choices    choices}]))
 
 (defn users-page-handler
   "Handler for the users listing page (GET /web/users), with shared search
