@@ -15,8 +15,9 @@ A *permission* is a keyword, `<module>/<action>`. A *role* bundles
 permissions. A *group* holds roles, each with an optional *scope* that narrows
 it to part of the data, such as one domain. A user holds the permissions of
 every role of every group they are in, plus those of the built-in group
-*Everyone*. A platform admin, a user with role `:admin` and no tenant, passes
-every check.
+*Everyone*. A platform admin, an administrator of no tenant, passes every
+check. *Administrator* is the user's field that opens the admin pages, stored
+as `:role :admin`; it is not one of these roles.
 
 == Modes
 
@@ -109,9 +110,11 @@ xref:access-tasks.adoc[Access tasks]:
 * `/web/admin/roles`: code roles, locked, and managed roles as a checklist of
   the registry, grouped by module.
 * `/web/admin/permissions`: every permission, and who holds it.
+* `/web/users`: the user list, filtered on what users can do, their groups
+  and roles. The admin's `/web/admin/users` redirects there, as
+  `:list-url` in `admin/users.edn` says.
 * A user's *Rights* tab: their groups, and each permission with the group,
-  role and scope it comes from. Add `:detail-tabs` to `admin/users.edn` to
-  show it beside the edit page.
+  role and scope it comes from.
 
 From code, `wagoe.user.ports/add-group-role` and `import-groups!` do the same;
 see xref:authentication.adoc[Authentication].

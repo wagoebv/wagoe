@@ -28,8 +28,8 @@
             "Table should have an email column")
         (is (some #(str/includes? % "name") headers)
             "Table should have a name column")
-        (is (some #(str/includes? % "role") headers)
-            "Table should have a role column")))))
+        (is (some #(str/includes? % "administrator") headers)
+            "Table should have the Administrator column (BOU-1003)")))))
 
 (deftest ^:integration ^:e2e list-hides-sensitive-fields
   (testing "Sensitive fields (password-hash, mfa-secret) are not shown in the table"

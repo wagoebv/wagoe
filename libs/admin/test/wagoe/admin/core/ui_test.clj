@@ -680,6 +680,12 @@
         (is (str/includes? s "{:count 3}"))
         (is (= 1 (count (re-seq #":admin/entity-card-count" s))))))))
 
+(deftest ^:unit an-entity-with-its-own-list-is-active-there
+  ;; BOU-1003
+  (is (= ["/web/users"]
+         (get-in (ui/nav [:users] {:users {:label "Users" :list-url "/web/users"}}) [:admin :items 0 :also])))
+  (is (nil? (get-in (ui/nav [:orders] {:orders {:label "Orders"}}) [:admin :items 0 :also]))))
+
 (deftest ^:unit an-entity-card-has-its-description
   (is (= "All the orders"
          (get-in (ui/nav [:orders] {:orders {:label "Orders" :description "All the orders"}})

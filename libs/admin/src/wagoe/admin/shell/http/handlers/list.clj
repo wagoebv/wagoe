@@ -152,31 +152,52 @@
        (apply admin-ui/entity-table args))
      [(admin-ui/record-count-badge total-count)])))
 
+(defn list-redirect
+  "Where the admin's list of an entity sends `user` instead, with
+   `query-string`: the entity's `:list-url` for an administrator; nil for
+   anyone else, who may reach the admin through a permission and not the
+   module's page (BOU-1003)."
+  [entity-config user query-string]
+  (when-let [url (and (permissions/is-admin? user) (:list-url entity-config))]
+    (str url (when query-string (str "?" query-string)))))
+
 (defn entity-list-handler
   "The entity list page: table, search, sorting, paging, filters. Its own
    controls request this URL and push it, so the address bar holds the list's
-   state; they get the table fragment back."
+   state; they get the table fragment back. An entity with `:list-url` has its
+   module's list instead, which this redirects an administrator to, the query
+   kept (BOU-1003); one reaching the admin through a permission keeps this list,
+   as the module's page may admit administrators only."
   [admin-service schema-provider config]
   (fn [request]
     (let [user (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)
-          state (list-state admin-service schema-provider config request user entity-name)]
+          ;; An unknown entity is list-state's 404, not a lookup's 500
+          list-url (when (ports/validate-entity-exists schema-provider entity-name)
+                     (list-redirect (ports/get-entity-config schema-provider entity-name) user (:query-string request)))
+          state (when-not list-url (list-state admin-service schema-provider config request user entity-name))]
       ;; One URL, two bodies: a cache must not answer one with the other
       (ring-response/header
-       (if (htmx/fragment-request? (:headers request) ["entity-table-container" "filter-table-container"])
+       (cond
+         list-url
+         (ring-response/redirect list-url :see-other)
+
+         (htmx/fragment-request? (:headers request) ["entity-table-container" "filter-table-container"])
          (table-fragment-response request entity-name state)
+
+         :else
          (let [{:keys [entity-config options records total-count table-query permissions display]} state
                entities (ports/list-available-entities schema-provider)
                entity-configs (into {} (map (fn [e] [e (ports/get-entity-config schema-provider e)])) entities)]
            (support/html-response request
                                   (admin-ui/admin-layout
                                    (admin-ui/entity-list-page entity-name records entity-config table-query
-                                                             total-count permissions
-                                                             (assoc options
-                                                                    :display display
-                                                                    :parent-trail (support/parent-trail
-                                                                                   admin-service schema-provider
-                                                                                   entity-name entity-config options)))
+                                                              total-count permissions
+                                                              (assoc options
+                                                                     :display display
+                                                                     :parent-trail (support/parent-trail
+                                                                                    admin-service schema-provider
+                                                                                    entity-name entity-config options)))
                                    {:user user
                                     :current-entity entity-name
                                     :entity-configs entity-configs

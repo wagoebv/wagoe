@@ -398,9 +398,11 @@
           (handler request)
           ;; User lacks required role
           (create-forbidden-response
-           (format "Role '%s' required. User has role '%s'"
-                   (str/join ", " (map name required-roles))
-                   (some-> user-role name))
+           (if (= #{:admin} required-roles)
+             "Administrator required"
+             (format "Role '%s' required. User has role '%s'"
+                     (str/join ", " (map name required-roles))
+                     (some-> user-role name)))
            :insufficient-role
            request)))
 

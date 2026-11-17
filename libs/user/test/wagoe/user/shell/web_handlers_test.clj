@@ -343,7 +343,7 @@
         location #(get-in (web-handlers/user-detail-redirect {:path-params {:id %}}) [:headers "Location"])]
     (is (= 302 (:status (web-handlers/user-detail-redirect {:path-params {:id id}}))))
     (is (= (str "/web/admin/users/" id) (location id)))
-    (is (= "/web/admin/users" (location "not-a-uuid")) "not an id: the list")))
+    (is (= "/web/users" (location "not-a-uuid")) "not an id: the list")))
 
 (deftest ^:contract create-user-page-handler-test
   (testing "renders create user page"
@@ -543,7 +543,7 @@
           response (handler request)]
 
       (is (= 200 (:status response)))
-      (is (= "/web/admin/users" (get-in response [:headers "HX-Redirect"])))))
+      (is (= "/web/users" (get-in response [:headers "HX-Redirect"])))))
 
   (testing "returns validation errors for invalid data"
     (let [service (create-mock-service)
@@ -700,7 +700,7 @@
 
       (is (= 200 (:status list-response)))
       (is (= 200 (:status create-response)))
-      (is (= "/web/admin/users" (get-in create-response [:headers "HX-Redirect"])))
+      (is (= "/web/users" (get-in create-response [:headers "HX-Redirect"])))
       (is (= ["integration@example.com"] (map :email (:users (ports/list-users service {}))))))))
 
 (deftest ^:contract ^:security login-cookie-secure-attribute-test
@@ -1061,3 +1061,10 @@
         (is (str/includes? body "/web/users/u1/explain?"))
         (is (str/includes? body "permission=invoice%2Fapprove"))
         (is (str/includes? body "scope.domain-id=4"))))))
+
+(deftest ^:unit a-permanent-delete-returns-to-the-one-user-list
+  ;; BOU-1003
+  (let [user     (create-test-user {})
+        response ((web-handlers/hard-delete-user-handler (create-mock-service {(:id user) user}) {})
+                  {:path-params {:id (str (:id user))} :user {:role :admin} :headers {}})]
+    (is (some #(= "/web/users" %) (vals (:headers response))) (pr-str (:headers response)))))

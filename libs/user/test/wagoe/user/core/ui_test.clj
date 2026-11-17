@@ -95,6 +95,13 @@
                   {:id 3 :name "Everyone" :linked? true :source :everyone}])))
     (is (= [:span.empty-value "—"] (cell [])))))
 
+(deftest ^:unit the-create-form-says-what-administrator-does
+  (is (str/includes? (pr-str (ui/create-user-page)) ":admin.users/role-help")))
+
+(deftest ^:unit the-sessions-crumb-goes-to-the-one-user-list
+  (is (str/includes? (pr-str (ui/user-sessions-page {:id 7 :name "Ada"} [] nil {:user {:role :admin}}))
+                     "{:href \"/web/users\"}")))
+
 (deftest ^:unit users-table-test
   (testing "generates table with users wrapped in container"
     (let [table (ui/users-table sample-users)]
@@ -461,7 +468,7 @@
       (let [content (str page)]
         (is (re-find #"page-create-user-title" content))
         (is (re-find #"form-create-title" content))
-        (is (re-find #"\[:a \{:href \"/web/admin/users\"\} \[:t :user/page-users-title\]\]" content)
+        (is (re-find #"\[:a \{:href \"/web/users\"\} \[:t :user/page-users-title\]\]" content)
             "the breadcrumb leads back to return-to"))))
 
   (testing "accepts data parameter"

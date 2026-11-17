@@ -8,7 +8,8 @@
              :entities [:users]          ; admin entities this module owns
              :items    [{:href \"/web/audit\" :label .. :icon :file-text
                          :access :platform-admin
-                         :description ..}]}}  ; optional, for dashboard cards
+                         :description ..     ; optional, for dashboard cards
+                         :also [\"/web/..\"]}]}}  ; optional, other paths it is active on
 
    An item with `:entity` (the admin contributes one per entity) is placed by
    module: its `:module`, else the group whose `:entities` names it, else
@@ -90,8 +91,9 @@
        (or (= href uri) (str/starts-with? (str uri) (str href "/")))))
 
 (defn for-user
-  "`groups` with only the items `user` may open. The item whose href is the
-   longest prefix of `uri` is `:active?`, and its group `:open?`."
+  "`groups` with only the items `user` may open. The item whose href, or one
+   of its `:also` paths, is the longest prefix of `uri` is `:active?`, and its
+   group `:open?`."
   [groups uri user]
   (let [groups (into []
                      (keep (fn [group]
@@ -99,10 +101,10 @@
                                (assoc group :items (vec items)))))
                      groups)
         active (->> (mapcat :items groups)
-                    (map :href)
-                    (filter #(prefix-of? % uri))
-                    (sort-by count >)
-                    first)
+                    (mapcat (fn [{:keys [href also]}] (for [p (cons href also) :when (prefix-of? p uri)] [p href])))
+                    (sort-by (comp count first) >)
+                    first
+                    second)
         mark   (fn [item] (cond-> item (= active (:href item)) (assoc :active? true)))]
     (mapv (fn [group]
             (let [items (mapv mark (:items group))]

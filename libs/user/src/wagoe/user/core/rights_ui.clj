@@ -30,6 +30,10 @@
 
 (defn group-path [group-id] (str groups-path "/" group-id))
 
+(def users-path
+  "The one user list (BOU-1003)."
+  "/web/users")
+
 (defn user-rights-path [user-id] (str "/web/users/" user-id "/rights"))
 
 (defn asking-params
@@ -744,9 +748,10 @@
     ends-on
     [:span.timeline-ends-on [:t :user.timeline/ends-on {:date (expiry-date ends-on)}]]
 
+    ;; The user's Administrator field, read as the user pages show it (BOU-1003)
     (= :role-change action)
-    (let [role #(if (str/blank? %) [:t :user.timeline/no-role] [:code %])]
-      (list (role (:old user-role)) " → " (role (:new user-role))))
+    (let [admin #(if (= "admin" (some-> % name)) [:t :common/role-admin] [:t :common/role-user])]
+      (list (admin (:old user-role)) " → " (admin (:new user-role))))
 
     (= :activate action)   [:t :user.timeline/activated]
     (= :deactivate action) [:t :user.timeline/deactivated]
@@ -942,7 +947,7 @@
     (page
      [:t :user.rights/page-title {:name n}]
      (list
-      (header [[[:t :user/page-users-title] "/web/admin/users"]
+      (header [[[:t :user/page-users-title] users-path]
                [n (str "/web/admin/users/" (:id user))]
                [[:t :user.rights/tab]]]
               n
@@ -1069,7 +1074,7 @@
     (page
      [:t :user.explain/page-title {:name n}]
      (list
-      (header [[[:t :user/page-users-title] "/web/admin/users"]
+      (header [[[:t :user/page-users-title] users-path]
                [n (str "/web/admin/users/" (:id user))]
                [[:t :user.rights/tab] (user-rights-path (:id user))]
                [[:t :user.explain/crumb]]]

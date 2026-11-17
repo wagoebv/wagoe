@@ -91,3 +91,11 @@
     (is (nav/allowed? #(= 1 (:id %)) {:id 1}))
     (is (not (nav/allowed? #(= 1 (:id %)) {:id 2})))
     (is (not (nav/allowed? (constantly true) nil)))))
+
+(deftest ^:unit an-item-is-active-on-its-also-paths
+  ;; BOU-1003: the admin's Users item, whose list is the user module's
+  (let [groups [{:id :user :items [{:href "/web/admin/users" :also ["/web/users"]} {:href "/web/admin/groups"}]}]
+        [g]    (nav/for-user groups "/web/users" {:role :admin})]
+    (is (:open? g))
+    (is (= ["/web/admin/users"] (map :href (filter :active? (:items g)))))
+    (is (empty? (filter :active? (:items (first (nav/for-user groups "/web/userz" {:role :admin}))))))))

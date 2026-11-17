@@ -36,6 +36,9 @@
   ;; auth_users and users atomically via register-user.
   :create-redirect-url "/web/users/new"
 
+  ;; No :list-url here, unlike dev (BOU-1003): the e2e suite checks the admin's
+  ;; generic list on this entity, which a redirect to /web/users would skip.
+
   ;; The user module's pages for a user, as tabs beside the edit page
   :detail-tabs wagoe.user.core.rights-ui/detail-tabs
 

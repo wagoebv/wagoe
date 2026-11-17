@@ -35,6 +35,10 @@
                                   :label  (introspection/plural-label entity-config entity)
                                   :icon   (keyword (or (:icon entity-config) "database"))
                                   :access :admin}
+                           ;; Its module's own list is this item's page too (BOU-1003)
+                           (:list-url entity-config)
+                           (assoc :also [(:list-url entity-config)])
+
                            ;; For its dashboard card
                            (:description entity-config)
                            (assoc :description (:description entity-config)))))}})

@@ -160,6 +160,7 @@
    [:description     {:optional true} :string]
    [:soft-delete     {:optional true} :boolean]
    [:create-redirect-url {:optional true} :any]
+   [:list-url {:optional true :description "A module's own list page; the admin's list sends administrators there"} :string]
    [:writer          {:optional true} :keyword]
    [:detail-tabs     {:optional true} [:or :symbol [:vector [:map {:closed true}
                                                             [:key {:optional true} :keyword]

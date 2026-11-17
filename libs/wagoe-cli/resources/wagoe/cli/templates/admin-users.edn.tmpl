@@ -38,6 +38,10 @@
   ;; auth_users and users atomically via register-user.
   :create-redirect-url "/web/users/new"
 
+  ;; One user list: the user module's, which filters on groups, roles and
+  ;; permissions. This list redirects there (BOU-1003).
+  :list-url "/web/users"
+
   ;; The user module's pages for a user, as tabs beside the edit page
   :detail-tabs wagoe.user.core.rights-ui/detail-tabs
 

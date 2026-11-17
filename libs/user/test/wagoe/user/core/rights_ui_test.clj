@@ -1,5 +1,7 @@
 (ns wagoe.user.core.rights-ui-test
   (:require [clojure.test :refer [deftest is testing]]
+            [wagoe.user.core.grant-ui :as grant-ui]
+            [wagoe.user.core.revoke-ui :as revoke-ui]
             [wagoe.user.core.rights-ui :as sut]))
 
 (defn- text
@@ -399,3 +401,21 @@
   (let [form (sut/asking-form :revoke "/x" {:orders/read {}} [] {:permission :orders/read})]
     (is (some #{:user.grant/submit} (text form)))
     (is (not-any? #{:user.explain/record-hint :user.grant/scope-hint :user.explain/field-everywhere} (text form)))))
+
+(deftest ^:unit the-users-crumb-goes-to-the-one-user-list
+  ;; BOU-1003
+  (let [ada {:id 7 :name "Ada"}]
+    (doseq [[n page] [["rights" (page-for [])]
+                      ["explain" (sut/explain-page ada nil {})]
+                      ["grant" (grant-ui/grant-page ada nil {})]
+                      ["revoke" (revoke-ui/revoke-page ada nil {})]]]
+      (is (contains? (hrefs page) "/web/users") n)
+      (is (not (contains? (hrefs page) "/web/admin/users")) n))))
+
+(deftest ^:unit the-timeline-shows-the-administrator-field-as-yes-and-no
+  (let [page (page-for [] {:changes [{:at (java.time.Instant/now) :action :role-change
+                                      :user-role {:old "user" :new "admin"}}]})
+        txt  (text page)]
+    (is (some #{:common/role-user} txt))
+    (is (some #{:common/role-admin} txt))
+    (is (not-any? #{"admin" "user"} txt))))
