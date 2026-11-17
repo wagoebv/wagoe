@@ -172,7 +172,9 @@
   (fn [request]
     (let [user (support/require-admin-user! request schema-provider)
           entity-name (support/get-entity-name request)
-          list-url (list-redirect (ports/get-entity-config schema-provider entity-name) user (:query-string request))
+          ;; An unknown entity is list-state's 404, not a lookup's 500
+          list-url (when (ports/validate-entity-exists schema-provider entity-name)
+                     (list-redirect (ports/get-entity-config schema-provider entity-name) user (:query-string request)))
           state (when-not list-url (list-state admin-service schema-provider config request user entity-name))]
       ;; One URL, two bodies: a cache must not answer one with the other
       (ring-response/header
@@ -190,12 +192,12 @@
            (support/html-response request
                                   (admin-ui/admin-layout
                                    (admin-ui/entity-list-page entity-name records entity-config table-query
-                                                             total-count permissions
-                                                             (assoc options
-                                                                    :display display
-                                                                    :parent-trail (support/parent-trail
-                                                                                   admin-service schema-provider
-                                                                                   entity-name entity-config options)))
+                                                              total-count permissions
+                                                              (assoc options
+                                                                     :display display
+                                                                     :parent-trail (support/parent-trail
+                                                                                    admin-service schema-provider
+                                                                                    entity-name entity-config options)))
                                    {:user user
                                     :current-entity entity-name
                                     :entity-configs entity-configs
