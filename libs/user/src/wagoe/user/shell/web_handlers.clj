@@ -30,6 +30,7 @@
             [wagoe.user.core.ui :as user-ui]
             [wagoe.user.core.user :as user-core]
             [wagoe.user.core.profile-ui :as profile-ui]
+            [wagoe.user.core.rights-ui :as rights-ui]
             [wagoe.user.ports :as user-ports]
             [wagoe.user.schema :as user-schema]
             [wagoe.email.ports :as email-ports]
@@ -398,7 +399,7 @@
   [request]
   (response/redirect (if-let [id (parse-uuid (get-in request [:path-params :id]))]
                        (str "/web/admin/users/" id)
-                       "/web/users")))
+                       rights-ui/users-path)))
 
 (defn create-user-page-handler
   "Handler for the create user page (GET /web/users/new).
@@ -411,7 +412,7 @@
   [config]
   (fn [request]
     (let [raw-return-to (get-in request [:query-params "return-to"])
-          return-to (safe-return-url raw-return-to "/web/users")
+          return-to (safe-return-url raw-return-to rights-ui/users-path)
           page-opts {:user (get request :user)
                      :flash (get request :flash)
                      :return-to return-to
@@ -1069,7 +1070,7 @@
   (fn [request]
     (let [form-data (:form-params request)
           raw-return-to (get form-data "return-to")
-          return-to (safe-return-url raw-return-to "/web/users")
+          return-to (safe-return-url raw-return-to rights-ui/users-path)
           send-welcome? (let [v (get form-data "send-welcome")]
                           (or (= "on" v) (= "true" v)
                               (and (sequential? v) (some #{"on" "true"} v))))
@@ -1156,7 +1157,7 @@
               (with-error-toast request :user/error-delete-admin-only))
           (do
             (user-ports/permanently-delete-user user-service uuid)
-            (redirect-with-toast request "/web/users" :success :user/toast-user-deleted))))
+            (redirect-with-toast request rights-ui/users-path :success :user/toast-user-deleted))))
       (catch IllegalArgumentException _
         (-> (html-response request (ui/error-message [:t :user/error-invalid-user-id]) 400)
             (with-error-toast request :user/error-invalid-user-id)))

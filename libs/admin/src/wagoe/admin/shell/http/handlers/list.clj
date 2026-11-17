@@ -190,12 +190,12 @@
            (support/html-response request
                                   (admin-ui/admin-layout
                                    (admin-ui/entity-list-page entity-name records entity-config table-query
-                                                              total-count permissions
-                                                              (assoc options
-                                                                     :display display
-                                                                     :parent-trail (support/parent-trail
-                                                                                    admin-service schema-provider
-                                                                                    entity-name entity-config options)))
+                                                             total-count permissions
+                                                             (assoc options
+                                                                    :display display
+                                                                    :parent-trail (support/parent-trail
+                                                                                   admin-service schema-provider
+                                                                                   entity-name entity-config options)))
                                    {:user user
                                     :current-entity entity-name
                                     :entity-configs entity-configs

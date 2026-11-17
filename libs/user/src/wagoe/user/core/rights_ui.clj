@@ -30,6 +30,10 @@
 
 (defn group-path [group-id] (str groups-path "/" group-id))
 
+(def users-path
+  "The one user list (BOU-1003)."
+  "/web/users")
+
 (defn user-rights-path [user-id] (str "/web/users/" user-id "/rights"))
 
 (defn asking-params
@@ -943,7 +947,7 @@
     (page
      [:t :user.rights/page-title {:name n}]
      (list
-      (header [[[:t :user/page-users-title] "/web/users"]
+      (header [[[:t :user/page-users-title] users-path]
                [n (str "/web/admin/users/" (:id user))]
                [[:t :user.rights/tab]]]
               n
@@ -1070,7 +1074,7 @@
     (page
      [:t :user.explain/page-title {:name n}]
      (list
-      (header [[[:t :user/page-users-title] "/web/users"]
+      (header [[[:t :user/page-users-title] users-path]
                [n (str "/web/admin/users/" (:id user))]
                [[:t :user.rights/tab] (user-rights-path (:id user))]
                [[:t :user.explain/crumb]]]

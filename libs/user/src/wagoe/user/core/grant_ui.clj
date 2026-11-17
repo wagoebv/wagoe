@@ -82,7 +82,7 @@
     (rights-ui/page
      [:t :user.grant/page-title {:name n}]
      (list
-      (rights-ui/header [[[:t :user/page-users-title] "/web/users"]
+      (rights-ui/header [[[:t :user/page-users-title] rights-ui/users-path]
                          [n (str "/web/admin/users/" (:id user))]
                          [[:t :user.rights/tab] (rights-ui/user-rights-path (:id user))]
                          [[:t :user.grant/crumb]]]

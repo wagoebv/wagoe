@@ -163,7 +163,7 @@
    (users-table-fragment users table-query total-count filters {}))
   ([users table-query total-count filters access]
    (let [columns       (columns-for users)
-         base-url      "/web/users"
+         base-url      rights-ui/users-path
          hx-target     "#users-table-container"
          table-params  (table-ui/table-query->params table-query)
          filter-params (table-ui/search-filters->params filters)]
@@ -227,7 +227,7 @@
                       :limit     20}
          total-count (count users)
          fragment    (users-table-fragment users table-query total-count {})]
-     (update fragment 1 assoc :hx-get "/web/users")))
+     (update fragment 1 assoc :hx-get rights-ui/users-path)))
   ([users table-query total-count]
    (users-table users table-query total-count {}))
   ([users table-query total-count filters]
@@ -379,7 +379,7 @@
       ;; outerHTML: the response is itself a #create-user-form, so an innerHTML
       ;; swap nests one inside the other and leaves a duplicate id behind
       ;; (BOU-381).
-      [:form {:hx-post   "/web/users"
+      [:form {:hx-post   rights-ui/users-path
               :hx-target "#create-user-form"
               :hx-swap   "outerHTML"
               :class     "entity-form"}
@@ -566,7 +566,7 @@
                        choices (into ["#users-permission-filter" "#users-group-filter" "#users-has-role-filter"]))
          ;; Page one, sorted as now, with the other filters' values
          filter-opts (fn [self]
-                       {:url        "/web/users"
+                       {:url        rights-ui/users-path
                         :hx-target  "#users-table-container"
                         :hx-include (str/join ", " (cons "#users-table-container .table-sort input" (remove #{self} ids)))})
          access-filter (fn [k label all options]
@@ -638,7 +638,7 @@
    Returns:
      Complete HTML page for creating users"
   [& [data errors opts]]
-  (let [return-to (or (:return-to opts) "/web/users")
+  (let [return-to (or (:return-to opts) rights-ui/users-path)
         policy    (or (:password-policy opts) default-password-policy)]
     (admin-page
      [:t :user/page-create-user-title]
@@ -1209,7 +1209,7 @@
      [:t :user/sessions-title]
      [:div.entity-detail-page.user-sessions-page
       (page-header
-       [[[:t :user/page-users-title] (when admin? "/web/users")]
+       [[[:t :user/page-users-title] (when admin? rights-ui/users-path)]
         [(:name user) (when admin? (str "/web/admin/users/" (:id user)))]
         [[:t :user/sessions-title]]]
        [(when (> (count sessions) 1)
