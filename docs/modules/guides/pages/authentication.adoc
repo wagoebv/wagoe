@@ -328,9 +328,9 @@ member holds the permissions of every role of every group they are in. How route
 and the admin enforce them, and how to switch an app on, is in
 xref:authorization.adoc[Authorization].
 
-The `:admin` role makes a platform admin and needs no group; a user has it or no role
-at all. Only a platform admin can give or take it. `:role :user` is still accepted and
-means no role.
+The user's *Administrator* field, stored as `:role :admin`, opens the admin pages and,
+outside a tenant, makes a platform admin; it needs no group. Only a platform admin can
+set or clear it. `:role :user` is still accepted and means not an administrator.
 
 Everyone is a built-in group: every signed-in user is in it, including users who sign
 up later. Give it the roles any user should have.

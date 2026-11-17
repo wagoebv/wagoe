@@ -36,7 +36,6 @@
  ;; :user is no role since BOU-771 (BOU-917)
  :common/role-user          "No"
  :common/role-admin         "Yes"
- :common/role-viewer        "Viewer"
 
  :common/option-yes         "Yes"
  :common/option-no          "No"
@@ -160,7 +159,7 @@
  :user/error-email-domain             "This email domain is not allowed"
  :user/error-email-admin-domain       "Administrators need an email address on an approved domain"
  :user/error-name-invalid-characters  "Only letters, spaces, hyphens, apostrophes and periods"
- :user/error-role-not-allowed         "This role cannot be assigned"
+ :user/error-role-not-allowed         "You cannot change whether this user is an administrator"
  :user/error-password-policy          "Does not meet the password requirements"
  :user/error-password-uppercase       "Must contain an uppercase letter"
  :user/error-password-lowercase       "Must contain a lowercase letter"
@@ -300,7 +299,7 @@
  :user/profile-card-info-title      "Profile Information"
  :user/profile-label-member-since   "Member since"
  :user/profile-email-note-readonly  "(cannot be changed)"
- :user/profile-role-note-admin-managed "(managed by admins)"
+ :user/profile-role-note-admin-managed "(set by administrators)"
  :user/button-save-changes          "Save Changes"
  :user/preferences-card-title       "Preferences"
  :user/preferences-label-date-format "Date Format"
@@ -666,7 +665,6 @@
  :user.timeline/empty "No changes recorded."
  :user.timeline/no-diff "Not recorded"
  :user.timeline/everyone {:one "Everyone: the rights of {count} user changed" :many "Everyone: the rights of {count} users changed"}
- :user.timeline/no-role "none"
  :user.timeline/activated "Can sign in again"
  :user.timeline/deactivated "Can no longer sign in"
  :user.timeline/ends-on "Membership now ends on {date}"
@@ -699,7 +697,7 @@
  :admin.users/field-email              "Email"
  :admin.users/field-name               "Name"
  :admin.users/field-role               "Administrator"
- :admin.users/role-help                "Opens the admin pages. When rights are enforced, an administrator outside any tenant passes every check. What a user may do comes from the roles their groups give, on the Rights tab."
+ :admin.users/role-help                "Opens the admin pages. Under enforced rights, what they may do there still comes from their groups."
  :admin.users/field-active             "Active"
  :admin.users/field-created            "Created"
  :admin.users/field-theme              "Theme"

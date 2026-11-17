@@ -1061,3 +1061,10 @@
         (is (str/includes? body "/web/users/u1/explain?"))
         (is (str/includes? body "permission=invoice%2Fapprove"))
         (is (str/includes? body "scope.domain-id=4"))))))
+
+(deftest ^:unit a-permanent-delete-returns-to-the-one-user-list
+  ;; BOU-1003
+  (let [user     (create-test-user {})
+        response ((web-handlers/hard-delete-user-handler (create-mock-service {(:id user) user}) {})
+                  {:path-params {:id (str (:id user))} :user {:role :admin} :headers {}})]
+    (is (some #(= "/web/users" %) (vals (:headers response))) (pr-str (:headers response)))))

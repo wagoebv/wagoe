@@ -10,7 +10,8 @@ xref:managing-access.adoc[Managing access].
 
 . Go to *Users* and choose *New User*.
 . Fill in name, email and a first password. The form lists the password rules.
-. Leave *Role* on *User*. *Admin* makes a platform admin.
+. Leave *Administrator* on *No*. *Yes* opens the admin pages, and outside a
+  tenant makes a platform admin.
 . Untick *Send Welcome Email* if you will pass the password on yourself.
 . Choose *Create User*.
 
@@ -203,8 +204,8 @@ reaches. The option that takes least else comes first. Instead of removing them
 from a group now, you can pick an earlier day for their membership to end.
 Nothing changes until then, and their Rights tab shows the day.
 
-When the permission comes through *Everyone*, an identity provider or the
-platform admin role, the wizard says so and where to change it. When another
+When the permission comes through *Everyone*, an identity provider or being
+a platform admin, the wizard says so and where to change it. When another
 group also gives it, the option says it is not enough on its own.
 
 == Check what someone may do

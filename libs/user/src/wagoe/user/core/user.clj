@@ -359,7 +359,7 @@
     {:error {:type    :forbidden
              :reason  :platform-admin-only
              :field   :role
-             :message "Only a platform admin sets or clears the admin role"}}))
+             :message "Only a platform admin makes a user an administrator or not"}}))
 
 (defn validate-email-domain
   "Pure function: Validate email domain against allowed domains.

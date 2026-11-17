@@ -404,9 +404,11 @@ service only with `:writer :user` and `:tenant-id :login-count :last-login` in
 `:readonly-fields` (BOU-665). Also new: `:detail-tabs
 wagoe.user.core.rights-ui/detail-tabs` for the Sessions and Rights tabs
 (BOU-775, BOU-787), `:icon :users` (BOU-809), `{:options-source :timezones}` on
-`:timezone` (BOU-804), and `:role` options without `:viewer` (step 5).
-`:user` keeps its `[:t :common/role-user]` label, which now reads "No role"
-(BOU-917).
+`:timezone` (BOU-804), `:role` options without `:viewer` (step 5), and
+`:list-url "/web/users"`, which sends the admin's user list to the one with
+access filters (BOU-1003). The field now reads *Administrator*, its options
+"Yes" and "No": the `:common/role-*` labels say that, so an app using them for
+its own roles needs its own keys (BOU-917, BOU-1003).
 
 ### 18. Config and environment
 

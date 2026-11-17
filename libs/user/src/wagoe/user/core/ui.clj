@@ -424,6 +424,7 @@
                                          [:admin [:t :common/role-admin]]]
                                         (or (:role data) :user))
                        (:role errors))
+        [:p.field-help [:t :admin.users/role-help]]
         (ui/form-field :send-welcome [:t :user/checkbox-send-welcome]
                        (ui/checkbox :send-welcome (get data :send-welcome true))
                        nil))

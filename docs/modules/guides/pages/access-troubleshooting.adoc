@@ -40,11 +40,11 @@ what the user may read. Assign `admin.<entity>/viewer`.
 They can read but not change:: They hold `viewer`, not `editor`. Buttons for
 changes they may not make are not shown.
 
-A tenant admin lost the admin:: The role Admin makes a platform admin only
-without a tenant. A tenant user with that role needs groups like anyone else.
+A tenant admin lost the admin:: *Administrator* makes a platform admin only
+without a tenant. A tenant administrator needs groups like anyone else.
 
 The Groups page answers Forbidden:: Users, groups, roles and permissions are
-managed by users with the role Admin only. That cannot be handed out through a
+managed by administrators only. Being one cannot be handed out through a
 group.
 
 == Locked out

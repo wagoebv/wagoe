@@ -95,6 +95,13 @@
                   {:id 3 :name "Everyone" :linked? true :source :everyone}])))
     (is (= [:span.empty-value "—"] (cell [])))))
 
+(deftest ^:unit the-create-form-says-what-administrator-does
+  (is (str/includes? (pr-str (ui/create-user-page)) ":admin.users/role-help")))
+
+(deftest ^:unit the-sessions-crumb-goes-to-the-one-user-list
+  (is (str/includes? (pr-str (ui/user-sessions-page {:id 7 :name "Ada"} [] nil {:user {:role :admin}}))
+                     "{:href \"/web/users\"}")))
+
 (deftest ^:unit users-table-test
   (testing "generates table with users wrapped in container"
     (let [table (ui/users-table sample-users)]
