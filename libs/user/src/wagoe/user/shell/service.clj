@@ -937,7 +937,8 @@
   ports/IJwtSessions
   (jwt-session-live? [_ user-id session-id]
     ;; ponytail: reads the user's active sessions per bearer request; a lookup by id if that shows
-    (boolean (some #(= (str session-id) (str (:id %))) (.find-sessions-by-user session-repository user-id))))
+    (let [sid (str session-id)]
+      (boolean (some #(= sid (str (:id %))) (.find-sessions-by-user session-repository user-id)))))
 
   ports/IUserSessionRevocation
   (revoke-sessions-except [this user-id keep-session-id]
