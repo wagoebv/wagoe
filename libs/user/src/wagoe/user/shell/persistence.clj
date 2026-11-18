@@ -433,54 +433,57 @@
                                 :error-message :error_message
                                 :created-at :created_at})))
 
+(defn read-json
+  "A JSON column's value as data, however the driver returns it: a string, a
+   PostgreSQL PGobject or an H2 CLOB."
+  [value]
+  (when value
+    (cond
+      (string? value)
+      (cheshire.core/parse-string value true)
+
+      ;; PostgreSQL returns PGobject for JSON/JSONB columns
+      ;; Use reflection to avoid compile-time dependency on PostgreSQL driver
+      (= "org.postgresql.util.PGobject" (.getName (class value)))
+      (cheshire.core/parse-string (.getValue value) true)
+
+      ;; H2 returns a CLOB for a JSON column
+      (instance? java.sql.Clob value)
+      (let [^java.sql.Clob clob value]
+        (cheshire.core/parse-string (.getSubString clob 1 (int (.length clob))) true))
+
+      ;; Already a map (shouldn't happen, but handle it)
+      (map? value)
+      value
+
+      :else
+      (throw (ex-info "Unexpected JSON field type"
+                      {:type (type value)
+                       :value value})))))
+
 (defn- db->audit-log-entity
   "Transform database record to audit log domain entity."
   [db-record]
-  (letfn [(parse-json-field [value]
-            ;; Handle both TEXT (string) and JSONB/JSON (PGobject) columns
-            (when value
-              (cond
-                (string? value)
-                (cheshire.core/parse-string value true)
-
-                ;; PostgreSQL returns PGobject for JSON/JSONB columns
-                ;; Use reflection to avoid compile-time dependency on PostgreSQL driver
-                (= "org.postgresql.util.PGobject" (.getName (class value)))
-                (cheshire.core/parse-string (.getValue value) true)
-
-                ;; H2 returns a CLOB for a JSON column
-                (instance? java.sql.Clob value)
-                (let [^java.sql.Clob clob value]
-                  (cheshire.core/parse-string (.getSubString clob 1 (int (.length clob))) true))
-
-                ;; Already a map (shouldn't happen, but handle it)
-                (map? value)
-                value
-
-                :else
-                (throw (ex-info "Unexpected JSON field type"
-                                {:type (type value)
-                                 :value value})))))]
-    (when db-record
-      (-> db-record
-          ;; Convert snake_case to kebab-case
-          (clojure.set/rename-keys {:actor_id :actor-id
-                                    :actor_email :actor-email
-                                    :target_user_id :target-user-id
-                                    :target_user_email :target-user-email
-                                    :ip_address :ip-address
-                                    :user_agent :user-agent
-                                    :error_message :error-message
-                                    :created_at :created-at})
-          (update :id type-conversion/string->uuid)
-          (update :action type-conversion/string->keyword)
-          (update :actor-id #(when % (type-conversion/string->uuid %)))
-          (update :target-user-id type-conversion/string->uuid)
-          (update :result type-conversion/string->keyword)
-          (update :created-at type-conversion/string->instant)
-          ;; Parse JSON fields - handles both TEXT and JSONB/JSON types
-          (update :changes parse-json-field)
-          (update :metadata parse-json-field)))))
+  (when db-record
+    (-> db-record
+        ;; Convert snake_case to kebab-case
+        (clojure.set/rename-keys {:actor_id :actor-id
+                                  :actor_email :actor-email
+                                  :target_user_id :target-user-id
+                                  :target_user_email :target-user-email
+                                  :ip_address :ip-address
+                                  :user_agent :user-agent
+                                  :error_message :error-message
+                                  :created_at :created-at})
+        (update :id type-conversion/string->uuid)
+        (update :action type-conversion/string->keyword)
+        (update :actor-id #(when % (type-conversion/string->uuid %)))
+        (update :target-user-id type-conversion/string->uuid)
+        (update :result type-conversion/string->keyword)
+        (update :created-at type-conversion/string->instant)
+        ;; Parse JSON fields - handles both TEXT and JSONB/JSON types
+        (update :changes read-json)
+        (update :metadata read-json))))
 
 ;; =============================================================================
 ;; User Repository Implementation

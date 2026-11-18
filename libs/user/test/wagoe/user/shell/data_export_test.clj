@@ -8,6 +8,8 @@
             [wagoe.platform.ports.privacy :as privacy]
             [wagoe.platform.shell.privacy :as platform-privacy]
             [wagoe.user.ports :as ports]
+            [wagoe.user.shell.audit-redaction :as audit-redaction]
+            [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.data-export :as sut]
             [wagoe.user.shell.group-persistence :as group-persistence]
             [wagoe.user.shell.http :as http]
@@ -25,7 +27,7 @@
                    :audit      (persistence/create-audit-repository ctx {:default-limit 20 :max-limit 100})
                    :identities (identity-persistence/create-identity-repository ctx)
                    :groups     (group-persistence/create-group-repository ctx)}]
-        (f (assoc repos :exporter (sut/map->UserDataExporter
+        (f (assoc repos :ctx ctx :exporter (sut/map->UserDataExporter
                                    {:user-repository     (:users repos)
                                     :session-repository  (:sessions repos)
                                     :audit-repository    (:audit repos)
@@ -167,3 +169,38 @@
         (is (= 1 (privacy/purge-before! policy (.minus now (Duration/ofDays 730)))))
         (is (= [(:id recent)] (map :id (:audit-logs (ports/find-audit-logs audit {:limit 10})))))
         (is (zero? (privacy/purge-before! policy (.minus now (Duration/ofDays 730)))))))))
+
+;; BOU-1013: a password change kept the old and the new hash in the log
+
+(deftest ^:integration ^:security a-password-change-leaves-no-hash-in-the-log-or-an-export
+  (with-repos
+    (fn [{:keys [users sessions audit exporter]}]
+      (let [svc (user-service/create-user-service users sessions audit {:password-policy {:min-length 12}} nil)
+            ada (ports/create-user users {:email "ada@example.com" :name "Ada" :role :user :active true
+                                          :password-hash (auth/hash-password "Correct-horse-battery-9")})]
+        (ports/change-password svc (:id ada) "Correct-horse-battery-9" "Another-horse-battery-7")
+        (let [logged   (ports/find-audit-logs-by-user audit (:id ada) {:limit 20})
+              exported (:audit-log (privacy/export-data exporter {:type :user :id (:id ada)}))]
+          (is (some #(= {:field "password-hash" :old "[REDACTED]" :new "[REDACTED]"} %)
+                    (mapcat (comp :fields :changes) logged))
+              "that it changed, and nothing more")
+          (is (not (re-find #"\$2a\$" (pr-str logged))))
+          (is (not (re-find #"\$2a\$" (json/generate-string exported)))))))))
+
+(deftest ^:integration ^:security the-migration-blanks-hashes-already-logged
+  (with-repos
+    (fn [{:keys [ctx users audit]}]
+      (let [ada   (user! users "ada@example.com" :user)
+            entry (ports/create-audit-log audit {:action :update :actor-id (:id ada) :actor-email "ada@example.com"
+                                                 :target-user-id (:id ada) :target-user-email "ada@example.com"
+                                                 :result :success
+                                                 :changes {:fields [{:field "password-hash" :old "$2a$12$old" :new "$2a$12$new"}
+                                                                    {:field "name" :old "Ada" :new "Ada L"}]}})]
+        (audit-redaction/redact! ctx)
+        (audit-redaction/redact! ctx)
+        (is (= [{:field "password-hash" :old "[REDACTED]" :new "[REDACTED]"}
+                {:field "name" :old "Ada" :new "Ada L"}]
+               (->> (ports/find-audit-logs-by-user audit (:id ada) {:limit 5})
+                    (filter #(= (:id entry) (:id %))) first :changes :fields))
+            "the hashes gone, the rest kept, and running it again changes nothing")))))
+

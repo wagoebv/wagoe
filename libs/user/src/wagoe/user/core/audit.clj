@@ -49,6 +49,21 @@
    :user-agent user-agent
    :result :success})
 
+(def ^:private secret-fields
+  "Fields an entry names as changed but never shows the values of: credentials,
+   which an export or anyone reading the log would otherwise get (BOU-1013)."
+  #{"password-hash" "mfa-secret" "mfa-backup-codes" "mfa-backup-codes-used"})
+
+(def redacted "[REDACTED]")
+
+(defn- hide-secret [{:keys [field] :as change}]
+  (cond-> change (secret-fields field) (assoc :old redacted :new redacted)))
+
+(defn redact-secret-changes
+  "`changes` with the values of credential fields replaced (BOU-1013)."
+  [changes]
+  (cond-> changes (:fields changes) (update :fields #(mapv hide-secret %))))
+
 (defn update-user-audit-entry
   "Create audit log entry for user update.
    
@@ -73,9 +88,9 @@
                         (fn [acc k new-val]
                           (let [old-val (get old-values k)]
                             (if (not= old-val new-val)
-                              (conj acc {:field (name k)
-                                         :old (str old-val)
-                                         :new (str new-val)})
+                              (conj acc (hide-secret {:field (name k)
+                                                      :old (str old-val)
+                                                      :new (str new-val)}))
                               acc)))
                         []
                         new-values)]
