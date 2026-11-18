@@ -112,9 +112,7 @@
     (is (empty? (writes (session 10 86400))) "accessed 10 s ago: no write")
     (is (= 1 (count (writes (session 120 86400)))) "two minutes ago: one")
     (is (= 1 (count (writes (session nil 86400)))) "never accessed: one")
-    (let [[written] (writes (session 10 3600))]
-      (is (some? written) "near expiry: extended, whatever the access time")
-      (is (.isAfter ^Instant (:expires-at written) (.plusSeconds now 3600))))))
+    (is (empty? (writes (session 10 3600))) "near expiry, within the minute: no write either (BOU-1007)")))
 
 (deftest ^:unit register-or-authenticate-user-test
   (testing "registers a brand new user when email does not exist yet"

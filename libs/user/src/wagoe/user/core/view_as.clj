@@ -2,7 +2,8 @@
   "An administrator viewing the app as another user, read-only (BOU-868): the
    session takes that user's rights for a while, and the administrator stays
    the actor of what is audited."
-  (:require [wagoe.user.core.user :as user-core]))
+  (:require [wagoe.user.core.session :as session]
+            [wagoe.user.core.user :as user-core]))
 
 (def duration-minutes
   "How long a view lasts before it ends by itself."
@@ -11,8 +12,9 @@
 (def stop-path "/web/view-as/stop")
 
 (def allowed-writes
-  "What a view may still post: stopping it, and signing out, which ends it."
-  #{stop-path "/web/logout"})
+  "What a view may still post: stopping it, signing out, which ends it, and
+   signing in again before the session ends (BOU-1007)."
+  #{stop-path "/web/logout" session/reauth-path})
 
 (defn active?
   "Whether `session` views the app as another user at `now`."

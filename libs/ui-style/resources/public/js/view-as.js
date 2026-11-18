@@ -9,7 +9,7 @@
   }
   function kept(el) {
     var form = el.closest('form');
-    return el.closest('#view-as-bar') || (form && (form.getAttribute('action') === '/web/logout' || (reads(form) && !el.matches(WRITES))));
+    return el.closest('#view-as-bar') || el.closest('#session-timeout') || (form && (form.getAttribute('action') === '/web/logout' || (reads(form) && !el.matches(WRITES))));
   }
   var bar = document.getElementById('view-as-bar');
   var title = bar ? bar.getAttribute('data-disabled-title') || '' : '';

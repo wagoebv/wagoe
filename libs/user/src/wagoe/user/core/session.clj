@@ -10,14 +10,40 @@
     {:valid? true :data session-data}
     {:valid? false :errors {:user-id "required"}}))
 
+(def extend-path
+  "Where the page says the user is still there (BOU-1007)."
+  "/web/session/extend")
+
+(def reauth-path
+  "Where the page signs the user in again before the session ends (BOU-1007)."
+  "/web/session/reauth")
+
+(def default-max-session-days
+  "How long a session lasts from sign-in, however it is used (BOU-1007)."
+  7)
+
+(defn max-days
+  "The days `auth-config` lets a session last, however it is used."
+  [auth-config]
+  (or (:max-session-days auth-config) default-max-session-days))
+
+(defn ends-at
+  "When `session` ends however it is used: `max-days` after sign-in. Nil for
+   one that does not say when it began."
+  [session max-days]
+  (some-> ^java.time.Instant (:created-at session) (.plusSeconds (* max-days 24 3600))))
+
 (defn is-session-valid?
-  "Check if session is valid: not nil, not revoked, and not expired."
-  [session current-time]
-  (cond
-    (nil? session) {:valid? false :reason :not-found}
-    (:revoked-at session) {:valid? false :reason :inactive}
-    (.isBefore (:expires-at session) current-time) {:valid? false :reason :expired}
-    :else {:valid? true}))
+  "Check if session is valid: not nil, not revoked, not expired, and within
+   `max-days` of sign-in (BOU-1007)."
+  [session current-time max-days]
+  (let [end (some-> session (ends-at max-days))]
+    (cond
+      (nil? session) {:valid? false :reason :not-found}
+      (:revoked-at session) {:valid? false :reason :inactive}
+      (.isBefore (:expires-at session) current-time) {:valid? false :reason :expired}
+      (and end (not (.isBefore ^java.time.Instant current-time end))) {:valid? false :reason :expired}
+      :else {:valid? true})))
 
 ;; A token is only as good as its user: a session or JWT is refused for the
 ;; reasons login is (BOU-668).
@@ -37,53 +63,18 @@
   [timestamp-ms nonce]
   (str "token-" timestamp-ms "-" nonce))
 
-(defn calculate-session-expiry
-  "Calculate session expiry instant. Remember-me sessions last 30 days, otherwise 24h."
-  ([created-at remember-me?]
-   (let [hours (if remember-me? (* 30 24) 24)]
-     (.plusSeconds created-at (* hours 3600))))
-  ([created-at remember-me? custom-hours]
-   (let [hours (or custom-hours (if remember-me? (* 30 24) 24))]
-     (.plusSeconds created-at (* hours 3600)))))
-
-(defn prepare-session-for-creation
-  "Assemble a complete session map from raw data, id, token, and timestamps."
-  ([session-data current-time session-id token]
-   (-> session-data
-       (assoc :id session-id)
-       (assoc :session-token token)
-       (assoc :created-at current-time)
-       (assoc :last-accessed-at current-time)
-       (assoc :expires-at (calculate-session-expiry current-time (get session-data :remember-me false)))
-       (assoc :ip-address (get-in session-data [:device-info :ip-address]))
-       (assoc :user-agent (get-in session-data [:device-info :user-agent]))))
-  ([session-data current-time session-id token session-policy]
-   (let [duration-hours (get session-policy :duration-hours 24)]
-     (-> session-data
-         (assoc :id session-id)
-         (assoc :session-token token)
-         (assoc :created-at current-time)
-         (assoc :last-accessed-at current-time)
-         (assoc :expires-at (.plusSeconds current-time (* duration-hours 3600)))
-         (assoc :ip-address (get-in session-data [:device-info :ip-address]))
-         (assoc :user-agent (get-in session-data [:device-info :user-agent]))))))
-
 ;; Session management
-(defn should-extend-session?
-  "Return true if session is close enough to expiry to warrant extension."
-  [session current-time extension-policy]
-  (let [time-until-expiry (.between java.time.temporal.ChronoUnit/SECONDS
-                                    current-time (:expires-at session))
-        extension-threshold (* (get extension-policy :extend-threshold-hours 2) 3600)]
-    (< time-until-expiry extension-threshold)))
-
 (defn update-session-access
-  "Update last-accessed-at and optionally extend expiry if near threshold."
-  [session current-time]
-  (let [updated-session (assoc session :last-accessed-at current-time)]
-    (if (should-extend-session? session current-time {:extend-threshold-hours 2})
-      (assoc updated-session :expires-at (calculate-session-expiry current-time false))
-      updated-session)))
+  "`session` used at `current-time`: it slides by its own :duration-hours, the
+   hours its sign-in got, never past `ends-at` (BOU-1007). One from before
+   then has none and slides 24 hours, as it did."
+  [session current-time max-days]
+  (let [hours (or (:duration-hours session) 24)
+        slid  ^java.time.Instant (.plusSeconds ^java.time.Instant current-time (* hours 3600))
+        end   (ends-at session max-days)]
+    (assoc session
+           :last-accessed-at current-time
+           :expires-at (if (and end (.isBefore end slid)) end slid))))
 
 (defn should-cleanup-session?
   "Return true if session has been expired longer than the grace period."
@@ -198,51 +189,14 @@
 ;; Additional Service Layer Functions
 ;; =============================================================================
 
-(defn should-update-access-time?
-  "Pure function: Determine if session access time should be updated.
-   
-   Args:
-     session: Current session entity
-     current-time: Current timestamp
-     update-policy: Map with access update configuration
-     
-   Returns:
-     Boolean indicating if access time should be updated
-     
-   Pure - business rule evaluation based on policy and time difference."
-  [session current-time update-policy]
-  (let [threshold-minutes (get update-policy :access-update-threshold-minutes 5)
-        threshold-seconds (* threshold-minutes 60)
-        last-accessed (:last-accessed-at session)
-        time-since-access (.between java.time.temporal.ChronoUnit/SECONDS
-                                    last-accessed current-time)]
-    (>= time-since-access threshold-seconds)))
-
 (defn session-access-write
   "The session to write for an access at `current-time`, or nil when nothing
-   needs writing. The access time is display-only — no idle timeout reads it —
-   so it is rewritten at most once a minute; an extended expiry always is
-   (BOU-666)."
-  [session current-time]
-  (let [updated (update-session-access session current-time)]
-    (when (or (not= (:expires-at updated) (:expires-at session))
-              (nil? (:last-accessed-at session))
-              (should-update-access-time? session current-time {:access-update-threshold-minutes 1}))
-      updated)))
-
-(defn prepare-session-for-access-update
-  "Pure function: Prepare session for access time update.
-   
-   Args:
-     session: Current session entity
-     current-time: Current timestamp
-     
-   Returns:
-     Session entity with updated access time
-     
-   Pure - data transformation only."
-  [session current-time]
-  (assoc session :last-accessed-at current-time))
+   needs writing: at most once a minute (BOU-666), so the expiry slides a
+   minute late at most (BOU-1007)."
+  [session current-time max-days]
+  (when (or (nil? (:last-accessed-at session))
+            (>= (.between java.time.temporal.ChronoUnit/SECONDS (:last-accessed-at session) current-time) 60))
+    (update-session-access session current-time max-days)))
 
 (defn prepare-session-for-invalidation
   "Pure function: Prepare session for invalidation.

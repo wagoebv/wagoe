@@ -150,7 +150,9 @@
    [:ip-address {:optional true} [:maybe :string]]
    ;; An administrator viewing the app as another user, until when (BOU-868)
    [:view-as-user-id {:optional true} [:maybe :uuid]]
-   [:view-as-until {:optional true} [:maybe inst?]]])
+   [:view-as-until {:optional true} [:maybe inst?]]
+   ;; The hours its sign-in got, which it slides by (BOU-1007)
+   [:duration-hours {:optional true} [:maybe :int]]])
 
 (def UserIdentity
   "Schema for a link between a user and an OpenID Connect (issuer, subject)."

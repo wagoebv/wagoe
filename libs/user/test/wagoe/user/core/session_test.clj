@@ -53,25 +53,25 @@
 
 (deftest ^:unit is-session-valid?-test
   (testing "nil session is not valid"
-    (let [result (session/is-session-valid? nil now)]
+    (let [result (session/is-session-valid? nil now 7)]
       (is (false? (:valid? result)))
       (is (= :not-found (:reason result)))))
 
   (testing "revoked session is not valid"
     (let [sess (make-session {:revoked-at now})
-          result (session/is-session-valid? sess later)]
+          result (session/is-session-valid? sess later 7)]
       (is (false? (:valid? result)))
       (is (= :inactive (:reason result)))))
 
   (testing "expired session is not valid"
     (let [sess (make-session {:expires-at now})
-          result (session/is-session-valid? sess later)]
+          result (session/is-session-valid? sess later 7)]
       (is (false? (:valid? result)))
       (is (= :expired (:reason result)))))
 
   (testing "valid non-expired, non-revoked session"
     (let [sess (make-session)
-          result (session/is-session-valid? sess now)]
+          result (session/is-session-valid? sess now 7)]
       (is (true? (:valid? result))))))
 
 ;; =============================================================================
@@ -91,92 +91,41 @@
       (is (not= t1 t3)))))
 
 ;; =============================================================================
-;; calculate-session-expiry
+;; Sliding by the session's own hours, within its last day (BOU-1007)
 ;; =============================================================================
 
-(deftest ^:unit calculate-session-expiry-test
-  (testing "standard session expires in 24 hours"
-    (let [expiry (session/calculate-session-expiry now false)]
-      (is (= (.plusSeconds now (* 24 3600)) expiry))))
+(defn- hours [h] (* h 3600))
 
-  (testing "remember-me session expires in 30 days"
-    (let [expiry (session/calculate-session-expiry now true)]
-      (is (= (.plusSeconds now (* 30 24 3600)) expiry))))
+(deftest ^:unit ^:security a-session-slides-by-its-own-hours
+  ;; It slid to now+24h whatever its policy gave it
+  (doseq [h [1 8 4 24]
+          :let [sess (make-session {:duration-hours h :expires-at (.plusSeconds now (hours h))})
+                used (session/update-session-access sess later 7)]]
+    (is (= later (:last-accessed-at used)))
+    (is (= (.plusSeconds later (hours h)) (:expires-at used)) (str h "h"))))
 
-  (testing "custom hours override remember-me"
-    (let [expiry (session/calculate-session-expiry now false 48)]
-      (is (= (.plusSeconds now (* 48 3600)) expiry)))))
+(deftest ^:unit ^:security a-session-never-slides-past-its-last-day
+  (let [sess (make-session {:duration-hours 24})
+        end  (session/ends-at sess 7)
+        late (.minusSeconds end (hours 2))]
+    (is (= (.plusSeconds now (hours (* 7 24))) end))
+    (is (= end (:expires-at (session/update-session-access sess late 7))) "capped, not slid 24h on")
+    (testing "and it is refused from then on, whatever its expiry says"
+      (let [beyond (assoc sess :expires-at (.plusSeconds end 60))]
+        (is (:valid? (session/is-session-valid? beyond (.minusSeconds end 1) 7)))
+        (is (= :expired (:reason (session/is-session-valid? beyond end 7))))))))
 
-;; =============================================================================
-;; prepare-session-for-creation
-;; =============================================================================
-
-(deftest ^:unit prepare-session-for-creation-test
-  (testing "sets all required fields"
-    (let [data {:user-id user-id
-                :remember-me false
-                :device-info {:ip-address "5.6.7.8" :user-agent "Firefox/100"}}
-          sess (session/prepare-session-for-creation data now session-id "tok-1")]
-      (is (= session-id (:id sess)))
-      (is (= "tok-1" (:session-token sess)))
-      (is (= now (:created-at sess)))
-      (is (= now (:last-accessed-at sess)))
-      (is (= "5.6.7.8" (:ip-address sess)))
-      (is (= "Firefox/100" (:user-agent sess)))
-      (is (some? (:expires-at sess)))))
-
-  (testing "with session policy uses custom duration"
-    (let [data {:user-id user-id :device-info {}}
-          policy {:duration-hours 8}
-          sess (session/prepare-session-for-creation data now session-id "tok-1" policy)]
-      (is (= (.plusSeconds now (* 8 3600)) (:expires-at sess))))))
-
-;; =============================================================================
-;; should-extend-session?
-;; =============================================================================
-
-(deftest ^:unit should-extend-session?-test
-  (testing "session near expiry should be extended"
-    ;; expires in 1 hour, threshold is 2 hours → should extend
-    (let [expires-soon (Instant/parse "2026-01-15T13:00:00Z")  ; 1h from now
-          sess (make-session {:expires-at expires-soon})
-          policy {:extend-threshold-hours 2}]
-      (is (true? (session/should-extend-session? sess now policy)))))
-
-  (testing "session not near expiry should not be extended"
-    ;; expires in 10 hours, threshold is 2 hours → don't extend
-    (let [expires-later (Instant/parse "2026-01-15T22:00:00Z")  ; 10h from now
-          sess (make-session {:expires-at expires-later})
-          policy {:extend-threshold-hours 2}]
-      (is (false? (session/should-extend-session? sess now policy))))))
-
-;; =============================================================================
-;; update-session-access
-;; =============================================================================
-
-(deftest ^:unit update-session-access-test
-  (testing "updates last-accessed-at"
-    (let [sess (make-session)
-          updated (session/update-session-access sess later)]
-      (is (= later (:last-accessed-at updated)))))
-
-  (testing "extends expiry when session is near expiry"
-    (let [expires-in-1h (Instant/parse "2026-01-15T13:00:00Z")
-          sess (make-session {:expires-at expires-in-1h})
-          updated (session/update-session-access sess now)]
-      ;; should-extend-session? fires → expires-at is recalculated
-      (is (.isAfter (:expires-at updated) expires-in-1h)))))
+(deftest ^:unit a-session-from-before-slides-24-hours-as-it-did
+  ;; No :duration-hours: what it was given is unknown. "Stay signed in" still keeps it
+  (is (= (.plusSeconds later (hours 24)) (:expires-at (session/update-session-access (make-session) later 7)))))
 
 (deftest ^:unit session-access-write-test
   (testing "nothing to write within a minute of the last access"
-    (is (nil? (session/session-access-write (make-session) (.plusSeconds now 59)))))
-  (testing "the access time after a minute"
-    (is (= (.plusSeconds now 60)
-           (:last-accessed-at (session/session-access-write (make-session) (.plusSeconds now 60))))))
-  (testing "an extended expiry, however recent the access"
-    (let [sess (make-session {:expires-at (.plusSeconds now 3600)})]
-      (is (.isAfter (:expires-at (session/session-access-write sess (.plusSeconds now 1)))
-                    (:expires-at sess))))))
+    (is (nil? (session/session-access-write (make-session) (.plusSeconds now 59) 7))))
+  (testing "after a minute the access time, and the expiry slid"
+    (let [w (session/session-access-write (make-session {:duration-hours 1}) (.plusSeconds now 60) 7)]
+      (is (= (.plusSeconds now 60) (:last-accessed-at w)))
+      (is (= (.plusSeconds now (+ 60 (hours 1))) (:expires-at w))))))
 
 ;; =============================================================================
 ;; should-cleanup-session?
@@ -368,33 +317,6 @@
     (let [d1 {:ip-address "1.1.1.1" :user-agent "Chrome/120.0.1"}
           d2 {:ip-address "1.1.1.1" :user-agent "Chrome/121.0.0"}]
       (is (true? (session/is-same-device? d1 d2))))))
-
-;; =============================================================================
-;; should-update-access-time?
-;; =============================================================================
-
-(deftest ^:unit should-update-access-time?-test
-  (testing "returns true when enough time has passed"
-    (let [last-access (Instant/parse "2026-01-15T11:50:00Z") ; 10 min ago
-          sess (make-session {:last-accessed-at last-access})
-          policy {:access-update-threshold-minutes 5}]
-      (is (true? (session/should-update-access-time? sess now policy)))))
-
-  (testing "returns false when not enough time has passed"
-    (let [last-access (Instant/parse "2026-01-15T11:58:00Z") ; 2 min ago
-          sess (make-session {:last-accessed-at last-access})
-          policy {:access-update-threshold-minutes 5}]
-      (is (false? (session/should-update-access-time? sess now policy))))))
-
-;; =============================================================================
-;; prepare-session-for-access-update / prepare-session-for-invalidation
-;; =============================================================================
-
-(deftest ^:unit prepare-session-for-access-update-test
-  (testing "sets last-accessed-at to current-time"
-    (let [sess (make-session)
-          updated (session/prepare-session-for-access-update sess later)]
-      (is (= later (:last-accessed-at updated))))))
 
 (deftest ^:unit prepare-session-for-invalidation-test
   (testing "sets revoked-at to current-time"

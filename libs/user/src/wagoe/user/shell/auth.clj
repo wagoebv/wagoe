@@ -12,6 +12,7 @@
    is delegated to wagoe.user.core.authentication."
   (:require [wagoe.user.core.authentication :as auth-core]
             [wagoe.user.core.mfa :as mfa-core]
+            [wagoe.user.core.session :as session-core]
             [wagoe.user.core.user :as user-core]
             [wagoe.user.shell.hooks :as hooks]
             [wagoe.user.ports :as ports]
@@ -163,6 +164,10 @@
    Returns:
      AuthenticationService instance"
   [user-repository session-repository mfa-service auth-config]
+  (when-some [days (:max-session-days auth-config)]
+    (when-not (pos-int? days)
+      (throw (ex-info ":max-session-days must be a positive whole number of days"
+                      {:type :configuration-error :max-session-days days}))))
   (->AuthenticationService user-repository session-repository mfa-service
                            (cond-> auth-config
                              (:mfa-required? auth-config)
@@ -193,9 +198,12 @@
         policy (auth-core/should-create-session? user login-risk auth-config)]
     {:policy  policy
      :session (when (:create-session? policy)
-                (let [hours   (:session-duration-hours policy)
+                ;; Never past the session's last day, nor its JWT (BOU-1007)
+                (let [hours   (min (:session-duration-hours policy)
+                               (* 24 (session-core/max-days auth-config)))
                       session (.create-session session-repository
                                                {:user-id       (:id user)
+                                                :duration-hours hours
                                                 :session-token (generate-session-token)
                                                 :expires-at    (.plus ^Instant current-time (Duration/ofHours hours))
                                                 :user-agent    (:user-agent login-context)

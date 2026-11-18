@@ -21,6 +21,7 @@
             [wagoe.shared.ui.core.htmx :as htmx]
             [wagoe.shared.ui.core.toast :as toast]
             [wagoe.core.http.access :as core-access]
+            [wagoe.platform.core.csrf :as csrf]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.web.table :as web-table]
@@ -447,6 +448,10 @@
          :registration?  (landing/registration? config)
          :oidc-providers (oidc-core/login-buttons (get-in config [:active :wagoe/user :oidc :providers]))))
 
+(def ^:private remember-seconds
+  "How long a remembered sign-in's cookie lasts."
+  (* 30 24 60 60))
+
 (defn- session-cookie [config session-token]
   {:value session-token :http-only true :secure (secure-cookies? config) :same-site :strict :path "/"})
 
@@ -530,7 +535,7 @@
                     remember? (:remember validated-data)
                       ;; Calculate cookie max-age based on remember-me checkbox
                       ;; 30 days if remember-me is checked, otherwise session cookie (no max-age)
-                    cookie-max-age (when remember? (* 30 24 60 60))]
+                    cookie-max-age (when remember? remember-seconds)]
                 (log/info "Login successful, setting cookie and redirecting"
                           {:user-id (:id user)
                            :remember? remember?
@@ -605,6 +610,46 @@
                            (layout/pilot-page-layout "Login error"
                                                      (ui/error-message [:t :common/error-generic]))
                            500)))))))
+
+(defn session-extend-handler
+  "GET /web/session/extend - the user is still there. Using the session slides
+   it; the middleware sends when it now ends. The CSRF token goes along: after
+   signing in again the page needs the new session's (BOU-1007)."
+  []
+  (fn [_request]
+    {:status 204 :headers (merge {"Cache-Control" "no-store"}
+                                 (some->> (csrf/current-token) (hash-map "X-CSRF-Token")))}))
+
+(defn session-reauth-handler
+  "POST /web/session/reauth - the signed-in user's password, and second factor
+   when theirs asks one, in a new session before theirs ends (BOU-1007). 204
+   with its cookie, else 401 with X-Session-Reauth `mfa` or `refused`. Counts
+   towards the sign-in lockout as a sign-in does."
+  [user-service config]
+  (fn [request]
+    ;; The session's own user: while viewing as another, the administrator
+    (let [user   (or (get-in request [:viewing-as :admin]) (:user request))
+          form   (:form-params request)
+          ;; Only this user's account, never another tenant's of the same email
+          result (user-ports/authenticate-user
+                  user-service
+                  (merge {:email         (:email user)
+                          :password      (get form "reauth-password")
+                          :mfa-code      (not-empty (get form "reauth-mfa-code"))
+                          :tenant-given? true
+                          :tenant-id     (some-> (:tenant-id user) str)}
+                         (login-context request)))]
+      (cond
+        (and (:authenticated result) (= (str (:id user)) (str (get-in result [:user :id]))))
+        (do (some->> (get-in request [:cookies "session-token" :value]) (user-ports/logout-user user-service))
+            {:status  204
+             ;; Remembered as at sign-in, which leaves the email cookie then
+             :cookies {"session-token" (cond-> (session-cookie config (get-in result [:session :session-token]))
+                                         (get-in request [:cookies "remembered-email" :value])
+                                         (assoc :max-age remember-seconds))}})
+
+        (:requires-mfa? result) {:status 401 :headers {"X-Session-Reauth" "mfa"}}
+        :else                   {:status 401 :headers {"X-Session-Reauth" "refused"}}))))
 
 (defn logout-handler
   "POST /web/logout - clear session cookie and redirect to home."

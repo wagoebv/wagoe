@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A session slid to 24 hours on use and never ended** (BOU-1007): it slides by its own hours now, up to
+  `:max-session-days` (7); the page asks before it ends. Sessions older than that end at upgrade.
 - **A JWT kept working after logout, a password change or "Revoke all sessions"** (BOU-1006), until it expired. It
   now ends with its session; old tokens are refused, so API clients sign in again. See `UPGRADING.md`.
 - **An admin of one tenant made admin-only workflow transitions in another** (BOU-1005), where they were only a

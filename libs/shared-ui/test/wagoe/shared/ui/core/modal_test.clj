@@ -24,6 +24,11 @@
   (testing ":open? marks it to open on arrival"
     (is (true? (:data-modal-show (second (modal/modal {:id "x" :open? true}))))))
 
+  (testing ":backdrop? false: a click outside does not close it (BOU-1007)"
+    (is (not-any? #(= "modal-backdrop" (:class (second %)))
+                  (nodes (modal/modal {:id "m" :backdrop? false}) :form)))
+    (is (some #(= "modal-backdrop" (:class (second %))) (nodes (modal/modal {:id "m"}) :form))))
+
   (testing "no close button when not closable, no label without a title"
     (let [m (modal/modal {:id "x" :closable? false})]
       (is (= 1 (count (nodes m :form))))

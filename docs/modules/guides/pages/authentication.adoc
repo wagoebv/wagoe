@@ -514,6 +514,19 @@ curl -X DELETE http://localhost:3000/api/v1/sessions/{session-token}
 The token in the path is the credential. A user's other sessions are listed and
 revoked on their *Sessions* tab in the web UI.
 
+A session lasts the hours its sign-in got: 24 by default (`:default-session-hours`),
+8 for an admin, 1 for a risky sign-in. Each request moves its end that far on, up
+to `:max-session-days` (7) after sign-in:
+
+[source,clojure]
+----
+:wagoe/user {:auth {:default-session-hours 24 :max-session-days 7}}
+----
+
+A signed-in page asks before the session ends: two minutes before, whether the
+user is still there; five minutes before its last day ends, for the password and
+second factor. Without an answer it signs out.
+
 The `jwtToken` from sign-in belongs to that session. It stops working when the
 session ends: on logout, a password change, gaining or losing admin, or "Revoke all
 sessions".
