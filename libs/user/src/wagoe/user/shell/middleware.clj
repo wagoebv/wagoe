@@ -308,7 +308,9 @@
                    :ends-at     (.toEpochMilli ^java.time.Instant ends-at)
                    :now         (System/currentTimeMillis)
                    :extend-path session-core/extend-path
-                   :reauth-path session-core/reauth-path}
+                   :reauth-path session-core/reauth-path
+                   :login-path  "/web/login"
+                   :logout-path "/web/logout"}
             resp  (binding [session-timeout/*session* timer] (with-viewing request f))]
         (cond-> resp
           ;; A handler that opened a new session says so itself

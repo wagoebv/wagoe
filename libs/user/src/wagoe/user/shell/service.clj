@@ -583,7 +583,7 @@
          ;; request (BOU-663).
          (when-let [session (.find-session-by-token session-repository session-token)]
            (let [current-time (current-timestamp)
-                 max-days (or (get-in auth-service [:auth-config :max-session-days]) session-core/default-max-session-days)
+                 max-days (session-core/max-days (:auth-config auth-service))
                  {:keys [valid? reason]} (session-core/is-session-valid? session current-time max-days)
                  user    (when valid? (.find-user-by-id user-repository (:user-id session)))
                  refusal (if valid? (session-core/account-refusal user) reason)]

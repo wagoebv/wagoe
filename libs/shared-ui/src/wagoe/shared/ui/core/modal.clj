@@ -27,11 +27,12 @@
      :open?       open as soon as it is in the page: for content an htmx
                   swap brings in
      :closable?   the corner close button (default true)
+     :backdrop?   a click outside closes it (default true)
      :close-label its accessible name (default [:t :common/button-close])
      :class       extra classes on the modal box
      :attrs       extra attributes on the <dialog>; a :class adds to \"modal\""
-  [{:keys [id title open? closable? close-label class attrs]
-    :or   {closable? true close-label [:t :common/button-close]}}
+  [{:keys [id title open? closable? backdrop? close-label class attrs]
+    :or   {closable? true backdrop? true close-label [:t :common/button-close]}}
    & body]
   (let [title-id (str id "-title")]
     [:dialog (cond-> (assoc attrs :id id :class (str/trim (str "modal " (:class attrs))))
@@ -48,8 +49,9 @@
               [:h3 {:id title-id :class "text-lg font-bold"} title])]
            body)
      ;; A click outside the box submits this form, which closes the dialog
-     [:form {:method "dialog" :class "modal-backdrop"}
-      [:button {:type "submit" :tabindex "-1"} close-label]]]))
+     (when backdrop?
+       [:form {:method "dialog" :class "modal-backdrop"}
+        [:button {:type "submit" :tabindex "-1"} close-label]])]))
 
 (defn confirm-modal
   "A modal that answers an htmx request carrying (confirm-attrs id): the

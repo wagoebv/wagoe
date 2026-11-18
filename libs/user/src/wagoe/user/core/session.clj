@@ -22,6 +22,11 @@
   "How long a session lasts from sign-in, however it is used (BOU-1007)."
   7)
 
+(defn max-days
+  "The days `auth-config` lets a session last, however it is used."
+  [auth-config]
+  (or (:max-session-days auth-config) default-max-session-days))
+
 (defn ends-at
   "When `session` ends however it is used: `max-days` after sign-in. Nil for
    one that does not say when it began."
@@ -29,17 +34,16 @@
   (some-> ^java.time.Instant (:created-at session) (.plusSeconds (* max-days 24 3600))))
 
 (defn is-session-valid?
-  "Check if session is valid: not nil, not revoked, not expired and, given
-   `max-days`, within that many days of sign-in (BOU-1007)."
-  ([session current-time] (is-session-valid? session current-time nil))
-  ([session current-time max-days]
-   (cond
-     (nil? session) {:valid? false :reason :not-found}
-     (:revoked-at session) {:valid? false :reason :inactive}
-     (.isBefore (:expires-at session) current-time) {:valid? false :reason :expired}
-     (some->> (when max-days (ends-at session max-days)) (.isBefore ^java.time.Instant current-time) not)
-     {:valid? false :reason :expired}
-     :else {:valid? true})))
+  "Check if session is valid: not nil, not revoked, not expired, and within
+   `max-days` of sign-in (BOU-1007)."
+  [session current-time max-days]
+  (let [end (some-> session (ends-at max-days))]
+    (cond
+      (nil? session) {:valid? false :reason :not-found}
+      (:revoked-at session) {:valid? false :reason :inactive}
+      (.isBefore (:expires-at session) current-time) {:valid? false :reason :expired}
+      (and end (not (.isBefore ^java.time.Instant current-time end))) {:valid? false :reason :expired}
+      :else {:valid? true})))
 
 ;; A token is only as good as its user: a session or JWT is refused for the
 ;; reasons login is (BOU-668).
@@ -58,37 +62,6 @@
   "Build a deterministic session token from a timestamp and nonce."
   [timestamp-ms nonce]
   (str "token-" timestamp-ms "-" nonce))
-
-(defn calculate-session-expiry
-  "Calculate session expiry instant. Remember-me sessions last 30 days, otherwise 24h."
-  ([created-at remember-me?]
-   (let [hours (if remember-me? (* 30 24) 24)]
-     (.plusSeconds created-at (* hours 3600))))
-  ([created-at remember-me? custom-hours]
-   (let [hours (or custom-hours (if remember-me? (* 30 24) 24))]
-     (.plusSeconds created-at (* hours 3600)))))
-
-(defn prepare-session-for-creation
-  "Assemble a complete session map from raw data, id, token, and timestamps."
-  ([session-data current-time session-id token]
-   (-> session-data
-       (assoc :id session-id)
-       (assoc :session-token token)
-       (assoc :created-at current-time)
-       (assoc :last-accessed-at current-time)
-       (assoc :expires-at (calculate-session-expiry current-time (get session-data :remember-me false)))
-       (assoc :ip-address (get-in session-data [:device-info :ip-address]))
-       (assoc :user-agent (get-in session-data [:device-info :user-agent]))))
-  ([session-data current-time session-id token session-policy]
-   (let [duration-hours (get session-policy :duration-hours 24)]
-     (-> session-data
-         (assoc :id session-id)
-         (assoc :session-token token)
-         (assoc :created-at current-time)
-         (assoc :last-accessed-at current-time)
-         (assoc :expires-at (.plusSeconds current-time (* duration-hours 3600)))
-         (assoc :ip-address (get-in session-data [:device-info :ip-address]))
-         (assoc :user-agent (get-in session-data [:device-info :user-agent]))))))
 
 ;; Session management
 (defn update-session-access
@@ -216,48 +189,14 @@
 ;; Additional Service Layer Functions
 ;; =============================================================================
 
-(defn should-update-access-time?
-  "Pure function: Determine if session access time should be updated.
-   
-   Args:
-     session: Current session entity
-     current-time: Current timestamp
-     update-policy: Map with access update configuration
-     
-   Returns:
-     Boolean indicating if access time should be updated
-     
-   Pure - business rule evaluation based on policy and time difference."
-  [session current-time update-policy]
-  (let [threshold-minutes (get update-policy :access-update-threshold-minutes 5)
-        threshold-seconds (* threshold-minutes 60)
-        last-accessed (:last-accessed-at session)
-        time-since-access (.between java.time.temporal.ChronoUnit/SECONDS
-                                    last-accessed current-time)]
-    (>= time-since-access threshold-seconds)))
-
 (defn session-access-write
   "The session to write for an access at `current-time`, or nil when nothing
    needs writing: at most once a minute (BOU-666), so the expiry slides a
    minute late at most (BOU-1007)."
   [session current-time max-days]
   (when (or (nil? (:last-accessed-at session))
-            (should-update-access-time? session current-time {:access-update-threshold-minutes 1}))
+            (>= (.between java.time.temporal.ChronoUnit/SECONDS (:last-accessed-at session) current-time) 60))
     (update-session-access session current-time max-days)))
-
-(defn prepare-session-for-access-update
-  "Pure function: Prepare session for access time update.
-   
-   Args:
-     session: Current session entity
-     current-time: Current timestamp
-     
-   Returns:
-     Session entity with updated access time
-     
-   Pure - data transformation only."
-  [session current-time]
-  (assoc session :last-accessed-at current-time))
 
 (defn prepare-session-for-invalidation
   "Pure function: Prepare session for invalidation.

@@ -200,7 +200,7 @@
      :session (when (:create-session? policy)
                 ;; Never past the session's last day, nor its JWT (BOU-1007)
                 (let [hours   (min (:session-duration-hours policy)
-                               (* 24 (or (:max-session-days auth-config) session-core/default-max-session-days)))
+                               (* 24 (session-core/max-days auth-config)))
                       session (.create-session session-repository
                                                {:user-id       (:id user)
                                                 :duration-hours hours

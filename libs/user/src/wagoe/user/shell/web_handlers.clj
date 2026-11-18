@@ -448,6 +448,10 @@
          :registration?  (landing/registration? config)
          :oidc-providers (oidc-core/login-buttons (get-in config [:active :wagoe/user :oidc :providers]))))
 
+(def ^:private remember-seconds
+  "How long a remembered sign-in's cookie lasts."
+  (* 30 24 60 60))
+
 (defn- session-cookie [config session-token]
   {:value session-token :http-only true :secure (secure-cookies? config) :same-site :strict :path "/"})
 
@@ -531,7 +535,7 @@
                     remember? (:remember validated-data)
                       ;; Calculate cookie max-age based on remember-me checkbox
                       ;; 30 days if remember-me is checked, otherwise session cookie (no max-age)
-                    cookie-max-age (when remember? (* 30 24 60 60))]
+                    cookie-max-age (when remember? remember-seconds)]
                 (log/info "Login successful, setting cookie and redirecting"
                           {:user-id (:id user)
                            :remember? remember?
@@ -613,8 +617,8 @@
    signing in again the page needs the new session's (BOU-1007)."
   []
   (fn [_request]
-    {:status 204 :headers (cond-> {"Cache-Control" "no-store"}
-                            (csrf/current-token) (assoc "X-CSRF-Token" (csrf/current-token)))}))
+    {:status 204 :headers (merge {"Cache-Control" "no-store"}
+                                 (some->> (csrf/current-token) (hash-map "X-CSRF-Token")))}))
 
 (defn session-reauth-handler
   "POST /web/session/reauth - the signed-in user's password, and second factor
@@ -642,7 +646,7 @@
              ;; Remembered as at sign-in, which leaves the email cookie then
              :cookies {"session-token" (cond-> (session-cookie config (get-in result [:session :session-token]))
                                          (get-in request [:cookies "remembered-email" :value])
-                                         (assoc :max-age (* 30 24 60 60)))}})
+                                         (assoc :max-age remember-seconds))}})
 
         (:requires-mfa? result) {:status 401 :headers {"X-Session-Reauth" "mfa"}}
         :else                   {:status 401 :headers {"X-Session-Reauth" "refused"}}))))
