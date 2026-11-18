@@ -64,7 +64,8 @@
 (defprotocol ITenantMembershipsOfUser
   "Its own protocol, as ITenantMembershipService is stable."
   (memberships-of-user [this user-id]
-    "The user's memberships in every tenant, whatever their status (BOU-1008)."))
+    "The user's memberships in every tenant but those revoked: an invited one
+     is theirs once they accept it (BOU-1008)."))
 
 (defprotocol ITenantInviteRepository
   (find-invite-by-id [this invite-id])

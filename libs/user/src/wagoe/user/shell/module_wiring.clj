@@ -308,9 +308,8 @@
   (identity-persistence/create-identity-repository ctx))
 
 (defmethod ig/init-key :wagoe/user-oidc
-  [_ {:keys [settings membership-services] :as opts}]
+  [_ {:keys [settings] :as opts}]
   (log/info "Initializing OIDC sign-in" {:providers (keys (:providers settings))})
-  (require-membership-lookup! membership-services)
   (oidc/create-oidc-client
    (assoc opts :secret (or (:state-secret settings) (user-auth/get-jwt-secret)))))
 

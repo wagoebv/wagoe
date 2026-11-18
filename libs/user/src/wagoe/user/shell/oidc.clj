@@ -40,7 +40,7 @@
    of forged tokens cannot turn into a stream of requests to the provider."
   30000)
 
-(defrecord OidcClient [settings auth-service audit-repository identity-repository key cache])
+(defrecord OidcClient [settings auth-service audit-repository identity-repository key cache memberships])
 
 ;; =============================================================================
 ;; Sealed cookies
@@ -273,7 +273,8 @@
                                               (when email-user
                                                 (some #(= (:iss claims) (:issuer %))
                                                       (ports/find-identities-by-user repo (:id email-user)))))
-                         :email-user-tenant-admin? (when email-user
+                         ;; Asked only when it could decide (BOU-1008)
+                         :email-user-tenant-admin? (when (and email-user (:link-by-email? p) (not= :admin (:role email-user)))
                                                      (memberships/admin-anywhere? (:memberships client) (:id email-user)))
                          :claims             claims
                          :provider           p}))]
@@ -413,8 +414,8 @@
     (when (< (count (str secret)) 32)
       (throw (ex-info "OIDC needs a secret of at least 32 characters for its cookies"
                       {:type :configuration-error})))
-    (assoc (->OidcClient (:ok r) auth-service audit-repository identity-repository
-                         (sealed/derive-key "wagoe.user.oidc" secret)
-                         (atom {}))
-           ;; The tenant module's, when on: whom a link by email must refuse (BOU-1008)
-           :memberships (first membership-services))))
+    (->OidcClient (:ok r) auth-service audit-repository identity-repository
+                  (sealed/derive-key "wagoe.user.oidc" secret)
+                  (atom {})
+                  ;; The tenant module's, when on: whom a link by email must refuse (BOU-1008)
+                  (first membership-services))))

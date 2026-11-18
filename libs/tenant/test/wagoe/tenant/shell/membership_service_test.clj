@@ -312,6 +312,6 @@
     (add! :active)
     (ports/create-membership repo {:id (UUID/randomUUID) :user-id (UUID/randomUUID) :tenant-id (UUID/randomUUID)
                                    :role :admin :status :active})
-    (is (= #{:active :invited :revoked} (set (map :status (ports/memberships-of-user service user-id)))))
-    (is (= 4 (count (ports/memberships-of-user service user-id))) "only this user's")))
+    (is (= [:active :active :invited] (sort (map :status (ports/memberships-of-user service user-id))))
+        "this user's, but not the revoked one")))
 

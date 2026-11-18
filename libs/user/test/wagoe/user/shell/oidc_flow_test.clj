@@ -2,8 +2,7 @@
   "OIDC sign-in end to end against a fake provider on a real socket: discovery,
    key set and token endpoint, with PKCE and client authentication checked the
    way a provider checks them."
-  (:require [wagoe.user.shell.memberships]
-            [buddy.core.codecs :as codecs]
+  (:require [buddy.core.codecs :as codecs]
             [buddy.core.hash :as hash]
             [buddy.core.keys :as keys]
             [buddy.sign.jwt :as jwt]
@@ -354,7 +353,7 @@
       (is (str/includes? (:body resp) "oidc-admin-link-refused"))
       (is (empty? (ports/find-identities-by-user (:identities a) (:id ada))))
       (testing "an invited admin membership counts: it is theirs once accepted"
-        (with-redefs [wagoe.user.shell.memberships/of-user
+        (with-redefs [tenant-ports/memberships-of-user
                       (fn [_ _] [{:tenant-id (random-uuid) :role :admin :status :invited}])]
           (is (str/includes? (:body (sign-in! a)) "oidc-admin-link-refused"))))
       (reset! role :member)

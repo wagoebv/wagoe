@@ -195,7 +195,7 @@
 
   ports/ITenantMembershipsOfUser
   (memberships-of-user [_ user-id]
-    (ports/find-memberships-by-user membership-repository user-id)))
+    (into [] (remove #(= :revoked (:status %))) (ports/find-memberships-by-user membership-repository user-id))))
 
 (defn create-membership-service
   [membership-repository logger metrics-emitter error-reporter]

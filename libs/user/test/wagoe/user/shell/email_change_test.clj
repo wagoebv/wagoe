@@ -24,9 +24,9 @@
      :admin (user! "admin@a.example" {:role :admin :tenant-id tenant-a})
      :root  (user! "root@example.com" {:role :admin})}))
 
-(defn- change-email [svc actor target]
+(defn- change-email [svc actor target & [email]]
   (try (service/with-audit-context {:actor-id (:id actor) :actor-email (:email actor)}
-         #(ports/update-user-profile svc {:id (:id target) :email "taken-over@evil.example"}))
+         #(ports/update-user-profile svc {:id (:id target) :email (or email "taken-over@evil.example")}))
        :changed
        (catch clojure.lang.ExceptionInfo e (:reason (ex-data e)))))
 
@@ -42,19 +42,21 @@
   ;; An invited membership is theirs once they accept it
   (let [{:keys [svc ada admin]} (setup [{:tenant-id tenant-b :role :admin :status :invited}])]
     (is (= :member-of-another-tenant (change-email svc admin ada))))
-  (let [{:keys [svc ada admin]} (setup [{:tenant-id tenant-b :role :admin :status :revoked}])]
-    (is (= :changed (change-email svc admin ada)))))
+  (let [{:keys [svc ada admin]} (setup [])]
+    (is (= :changed (change-email svc admin ada)) "the module leaves a revoked one out")))
 
-(deftest ^:unit ^:security an-email-change-drops-the-oidc-links
+(deftest ^:unit ^:security an-email-someone-else-changes-drops-the-oidc-links
   ;; One made while the address was someone else's must not outlive it
   (let [links (atom #{["https://idp" "s-1"]})
         ids   #_{:clj-kondo/ignore [:missing-protocol-method]}
         (reify ports/IUserIdentityRepository
           (find-identities-by-user [_ _] (map (fn [[i s]] {:issuer i :subject s}) @links))
           (unlink-identity [_ i s] (swap! links disj [i s]) true))
-        {:keys [svc ada]} (setup [])
+        {:keys [svc ada admin]} (setup [])
         svc (assoc svc :identities ids)]
     (is (= :changed (change-email svc ada ada)))
+    (is (seq @links) "their own change keeps them: an account made by OIDC has no other way in")
+    (is (= :changed (change-email svc admin ada "theirs@evil.example")))
     (is (empty? @links))))
 
 (deftest ^:unit a-tenants-admin-still-changes-the-email-of-their-own-tenants-users

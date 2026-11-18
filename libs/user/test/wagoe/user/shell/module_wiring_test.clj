@@ -168,6 +168,6 @@
 (deftest ^:unit ^:security a-membership-service-that-cannot-list-a-users-memberships-refuses-to-boot
   (let [m #_{:clj-kondo/ignore [:missing-protocol-method]} (reify wagoe.tenant.ports/ITenantMembershipService)]
     (is (= "WGE-107: the membership service does not implement ITenantMembershipsOfUser"
-           (try (ig/init-key :wagoe/user-oidc {:settings {} :membership-services #{m}}) nil
+           (try (#'sut/require-membership-lookup! #{m}) nil
                 (catch clojure.lang.ExceptionInfo e (ex-message e)))))))
 
