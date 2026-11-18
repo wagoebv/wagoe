@@ -23,6 +23,7 @@
             [wagoe.user.core.view-as :as view-as]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.lockout :as lockout]
+            [wagoe.user.shell.memberships :as memberships]
             [wagoe.user.ports :as ports]
             [wagoe.tenant.ports :as tenant-ports]
             [wagoe.platform.core.database.constraint :as constraint]
@@ -173,6 +174,22 @@
   [before after]
   (or (user-core/admin-changes? before after)
       (user-core/deactivates? before after)))
+
+(defn- check-email-change!
+  "Refuse an email change by someone other than the user or a platform admin
+   when the user is a member of another tenant: an admin of their own tenant
+   would otherwise point it at an address they hold, then sign in by it
+   through OIDC with that membership (BOU-1008)."
+  [{:keys [user-repository memberships]} old-user input actor-id]
+  (when (and old-user
+             (contains? input :email)
+             (not= (str (:email input)) (str (:email old-user)))
+             actor-id
+             (not= (str actor-id) (str (:id old-user)))
+             (not (access/platform-admin? (.find-user-by-id user-repository actor-id)))
+             (memberships/elsewhere? memberships old-user))
+    (throw (ex-info "This user's email is theirs or a platform admin's to change: they are a member of another tenant"
+                    {:type :forbidden :reason :member-of-another-tenant}))))
 
 (defn- check-admin-change!
   "Throw :forbidden when the bound actor, not a platform admin, sets or clears
@@ -670,6 +687,7 @@
              ;; promotion would read as their own.
              audit-ctx (effective-audit-context {})
              _ (check-admin-change! user-repository old-user input)
+             _ (check-email-change! this old-user input (:actor-id audit-ctx))
              ;; A partial update is validated with the stored values of the
              ;; required keys, but writes only its own: a stale role written
              ;; back would undo a concurrent promotion unguarded (BOU-685).

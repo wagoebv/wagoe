@@ -150,7 +150,7 @@
 
 (defmethod ig/init-key :wagoe/user-service
   [_ {:keys [user-repository session-repository audit-repository validation-config auth-service
-             logger metrics-emitter error-reporter tenants]}]
+             logger metrics-emitter error-reporter tenants membership-services]}]
   (log/info "Initializing user service")
   (require-protocols! "user repository" user-repository
                       {"ILoginAttempts" [ports/ILoginAttempts ['claim-login-attempts 'release-login-attempt]]
@@ -165,7 +165,9 @@
                   :metrics-emitter metrics-emitter
                   :error-reporter  error-reporter
                   ;; The tenant module's, when on: names the tenants a sign-in chooses among (BOU-995)
-                  :tenants         (first tenants)})]
+                  :tenants         (first tenants)
+                  ;; And whose email a tenant's admin may not change (BOU-1008)
+                  :memberships     (first membership-services)})]
     (log/info "User service initialized")
     service))
 
@@ -420,7 +422,8 @@
                                :logger             (ig/ref :wagoe/logging)
                                :metrics-emitter    (ig/ref :wagoe/metrics)
                                :error-reporter     (ig/ref :wagoe/error-reporting)
-                               :tenants            (ig/refset :wagoe/tenant-service)}
+                               :tenants            (ig/refset :wagoe/tenant-service)
+                               :membership-services (ig/refset :wagoe/membership-service)}
     :wagoe/user-routes        {:user-service (ig/ref :wagoe/user-service)
                                :mfa-service  (ig/ref :wagoe/mfa-service)
                                :email-sender (ig/ref :wagoe/email)
@@ -508,7 +511,8 @@
                   :wagoe/user-oidc        {:settings            (:oidc settings)
                                            :auth-service        (ig/ref :wagoe/auth-service)
                                            :audit-repository    (ig/ref :wagoe/audit-repository)
-                                           :identity-repository (ig/ref :wagoe/user-identity-repository)}
+                                           :identity-repository (ig/ref :wagoe/user-identity-repository)
+                                           :membership-services (ig/refset :wagoe/membership-service)}
                   :wagoe/user-oidc-routes {:oidc   (ig/ref :wagoe/user-oidc)
                                            :hooks  (ig/ref :wagoe/auth-hooks)
                                            :config config})

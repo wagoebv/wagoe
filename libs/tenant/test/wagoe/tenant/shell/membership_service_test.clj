@@ -298,3 +298,19 @@
       (ports/invite-user service tenant-b (UUID/randomUUID) :admin)
       (let [results (ports/list-tenant-members service tenant-a {})]
         (is (= 1 (count results)))))))
+
+(deftest ^:unit active-memberships-of-user-are-every-tenants-active-ones
+  ;; BOU-1008: whom an OIDC link by email, and a tenant admin's email change, must spare
+  (let [repo    (->MockMembershipRepository (atom {}))
+        service (sut/create-membership-service repo mock-logger mock-metrics-emitter mock-error-reporter)
+        user-id (UUID/randomUUID)
+        add!    (fn [status] (ports/create-membership repo {:id (UUID/randomUUID) :user-id user-id
+                                                            :tenant-id (UUID/randomUUID) :role :admin :status status}))]
+    (add! :active)
+    (add! :invited)
+    (add! :revoked)
+    (add! :active)
+    (ports/create-membership repo {:id (UUID/randomUUID) :user-id (UUID/randomUUID) :tenant-id (UUID/randomUUID)
+                                   :role :admin :status :active})
+    (is (= [:active :active] (map :status (ports/active-memberships-of-user service user-id))))))
+

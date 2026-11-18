@@ -191,7 +191,11 @@
         (:options params)))
      {:logger          logger
       :metrics-emitter metrics-emitter
-      :error-reporter  error-reporter})))
+      :error-reporter  error-reporter}))
+
+  ports/ITenantMembershipsOfUser
+  (active-memberships-of-user [_ user-id]
+    (filterv membership-core/active-member? (ports/find-memberships-by-user membership-repository user-id))))
 
 (defn create-membership-service
   [membership-repository logger metrics-emitter error-reporter]

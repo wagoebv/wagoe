@@ -112,6 +112,10 @@
       (is (= :oidc/admin-link-refused
              (get-in (sut/resolve-account {:email-user (assoc ada :role :admin) :claims claims :provider provider})
                      [:error :type]))))
+    (testing "nor one who administers a tenant by membership (BOU-1008)"
+      (is (= :oidc/admin-link-refused
+             (get-in (sut/resolve-account {:email-user ada :email-user-tenant-admin? true :claims claims :provider provider})
+                     [:error :type]))))
     (testing ":trust-email? treats an email with no email_verified as verified"
       (is (= {:action :link :user ada}
              (sut/resolve-account {:email-user ada :claims (dissoc claims :email_verified)

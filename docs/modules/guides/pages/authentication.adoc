@@ -211,7 +211,9 @@ Which account a sign-in belongs to:
   email change at the provider.
 . Otherwise, with `:link-by-email?`, the account with the token's email, and only when
   the provider marks that email verified. The link is stored from then on. An
-  administrator account is never linked this way; the sign-in is refused.
+  administrator account, or one that administers a tenant by membership, is never
+  linked this way; the sign-in is refused. Only the user or a platform admin changes
+  the email of a user who is a member of another tenant.
 . Otherwise, with `:auto-create?`, a new account with no role and no usable password. Its
   rights come from Everyone and the identity provider's groups. `:default-role` is
   ignored.
