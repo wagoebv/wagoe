@@ -1,26 +1,34 @@
 (ns wagoe.user.shell.jwt-secret
   "Where the user module reads and checks JWT_SECRET. Auth signs with it and MFA
    derives its encryption key from it, so both refuse the same secrets (BOU-977)."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [wagoe.config :as config]
+            [wagoe.core.utils.secret-keys :as secret-keys]))
 
 (def ^:private min-length
   "A short HMAC key materially weakens signing, so anything shorter is refused."
   32)
 
-(defn- validate
-  "`secret` when valid, else a WGE-103 :configuration-error."
-  [secret]
+(defn validate
+  "`secret` when valid, else a WGE-103 :configuration-error. Outside dev, test
+   and local, a published example value is refused too: anyone could sign a
+   token with it (BOU-1014)."
+  ([secret] (validate secret (config/dev-like?)))
+  ([secret dev-like?]
   (if-let [problem (cond
                      (str/blank? secret)
                      "JWT_SECRET environment variable not configured. Set JWT_SECRET before starting the application."
 
                      (< (count secret) min-length)
-                     (str "JWT_SECRET must be at least " min-length " characters (HMAC key strength)."))]
+                     (str "JWT_SECRET must be at least " min-length " characters (HMAC key strength).")
+
+                     (and (not dev-like?) (secret-keys/placeholder-secret? secret))
+                     "JWT_SECRET is an example value from the docs or a template. Generate one: openssl rand -base64 32")]
     (throw (ex-info (str "WGE-103: " problem)
                     {:type :configuration-error
                      :wagoe/error-code "WGE-103"
                      :required-env-var "JWT_SECRET"}))
-    secret))
+    secret)))
 
 (def ^:private secret
   "Read and checked once per process: the environment cannot change within a JVM."

@@ -13,16 +13,18 @@ metadata:
   name: wagoe-secrets
 type: Opaque
 stringData:
-  # Replace with real values (or source from your secret manager / sealed-secrets).
-  JWT_SECRET: "change-me-min-32-chars-................"
+  # Empty on purpose: nothing starts until real values are set (BOU-1014).
+  # Generate each with `openssl rand -base64 32`, or source them from your
+  # secret manager / sealed-secrets.
+  JWT_SECRET: ""
   # POSTGRES_PASSWORD, not DB_PASSWORD — the prod profile reads POSTGRES_*.
   # With the wrong name the pods fail at :wagoe/db-context with "Invalid
   # database configuration", which is what these manifests did until BOU-89.
-  POSTGRES_PASSWORD: "change-me"
-  REDIS_PASSWORD: "change-me"
+  POSTGRES_PASSWORD: ""
+  REDIS_PASSWORD: ""
   # Only consumed by a Deployment running `service <module>`; harmless
   # elsewhere. At least 32 characters — the endpoint refuses to start otherwise.
-  RPC_SERVICE_KEY: "change-me-min-32-chars-................"
+  RPC_SERVICE_KEY: ""
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -147,7 +149,8 @@ spec:
           # --requirepass from the same Secret the app reads. Without it the
           # app pods authenticate with REDIS_PASSWORD against a server that
           # wants none, and the AUTH error names Redis rather than the mismatch.
-          command: ["sh", "-c", 'exec redis-server --requirepass "$REDIS_PASSWORD"']
+          # An empty password would mean none: refuse to start instead.
+          command: ["sh", "-c", '[ -n "$REDIS_PASSWORD" ] || { echo "REDIS_PASSWORD is empty" >&2; exit 1; }; exec redis-server --requirepass "$REDIS_PASSWORD"']
           env:
             - name: REDIS_PASSWORD
               valueFrom:

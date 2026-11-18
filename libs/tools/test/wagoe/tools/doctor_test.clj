@@ -212,6 +212,14 @@
       (is (re-find #"10 characters" (:msg (first result)))
           "the message should say how short it actually is")))
 
+  (testing "an example value fails outside dev, test and local, as the runtime refuses it (BOU-1014)"
+    (let [user {:wagoe/user-auth {:enabled? true}}
+          ex   "change-me-to-a-32-char-minimum-secret"]
+      (is (= :error (:level (first (doctor/check-jwt-secret user {"JWT_SECRET" ex "WAG_ENV" "prod"})))))
+      (is (re-find #"example value" (:msg (first (doctor/check-jwt-secret user {"JWT_SECRET" ex "WAG_ENV" "prod"})))))
+      (is (= :pass (:level (first (doctor/check-jwt-secret user {"JWT_SECRET" ex})))) "dev by default")
+      (is (= :pass (:level (first (doctor/check-jwt-secret user {"JWT_SECRET" ex "WAG_ENV" "test"})))))))
+
   (testing "the suggested fix is itself long enough to be valid"
     ;; The old suggestion was `your-32-char-secret` — 19 characters, i.e. a
     ;; value this very check would reject.

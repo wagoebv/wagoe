@@ -192,7 +192,12 @@
 
 (deftest ^:security ^:unit a-service-key-must-be-worth-having
   (testing "a key of the required length is accepted"
-    (is (nil? (rpc/service-key-problem (apply str (repeat 32 "a"))))))
+    (is (nil? (rpc/service-key-problem "q8Zt0n4mR2vJ7kPa1sXc9LbW3eYh6GdUf5Ni")))
+    (is (nil? (rpc/service-key-problem (apply str (repeat 32 "a")) true)) "in dev, any long key"))
+
+  (testing "outside dev, a published example value is refused (BOU-1014)"
+    (is (re-find #"example value" (rpc/service-key-problem "change-me-min-32-chars-................")))
+    (is (re-find #"example value" (rpc/service-key-problem (apply str (repeat 32 "a"))))))
 
   (testing "a short key is refused, with the requirement in the message"
     ;; This endpoint invokes port methods; a key someone typed by hand guards

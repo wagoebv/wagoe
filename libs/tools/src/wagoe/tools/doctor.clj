@@ -18,7 +18,8 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [wagoe.tools.report :as report]
-            [wagoe.tools.secret-keys :as secret-keys]))
+            [wagoe.tools.secret-keys :as secret-keys]
+            [wagoe.tools.text :as text]))
 
 ;; =============================================================================
 ;; Known valid providers
@@ -315,6 +316,14 @@
          :msg   (str "JWT_SECRET is " (count secret) " characters; the user module "
                      "requires at least " jwt-secret-min-length
                      " and will refuse to start")
+         :fix   jwt-secret-fix}]
+
+       ;; As the runtime refuses outside dev, test and local (BOU-1014)
+       (and (not (#{"" "dev" "test" "local"} (text/lower-case (str/trim (str (get env-map "WAG_ENV"))))))
+            (secret-keys/placeholder-secret? secret))
+       [{:id    :jwt-secret
+         :level :error
+         :msg   "JWT_SECRET is an example value from the docs or a template; the user module will refuse to start"
          :fix   jwt-secret-fix}]
 
        :else

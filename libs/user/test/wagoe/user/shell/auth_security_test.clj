@@ -23,6 +23,17 @@
       (is (= 32 (count secret)))
       (is (= secret (#'jwt-secret/validate secret))))))
 
+(deftest ^:unit ^:security a-published-example-secret-is-refused-outside-dev
+  ;; BOU-1014: these pass the length check, and anyone can read them
+  (doseq [secret ["change-me-to-a-32-char-minimum-secret" "change-me-min-32-chars-................"
+                  "dev-secret-minimum-32-characters" "dev-secret-at-least-32-characters-long"
+                  "change-me-to-a-strong-secret-at-least-32-characters"]]
+    (is (re-find #"example value" (ex-message (try (jwt-secret/validate secret false) nil
+                                                   (catch clojure.lang.ExceptionInfo e e))))
+        secret)
+    (is (= secret (jwt-secret/validate secret true)) (str "in dev: " secret)))
+  (is (= "q8Zt0n4mR2vJ7kPa1sXc9LbW3eYh6GdUf5Ni" (jwt-secret/validate "q8Zt0n4mR2vJ7kPa1sXc9LbW3eYh6GdUf5Ni" false))))
+
 (deftest ^:unit ^:security jwt-algorithm-pinning-test
   ;; Relies on JWT_SECRET being set for the test run (>= 32 chars).
   (let [user {:id (UUID/randomUUID) :email "user@example.com" :role :user}]
