@@ -21,7 +21,9 @@
     :authentication  {:middleware [(user-middleware/authenticate-if-present
                                     #_{:clj-kondo/ignore [:missing-protocol-method]}
                                     (reify user-ports/IUserService
-                                      (get-user-by-id [_ _] (assoc user :active true))))]}}))
+                                      (get-user-by-id [_ _] (assoc user :active true))
+                                      user-ports/IJwtSessions
+                                      (jwt-session-live? [_ _ _] true)))]}}))
 
 (defn- upgrade [query]
   {:request-method :get
@@ -32,7 +34,7 @@
 (deftest ^:unit ^:security a-websocket-upgrade-authenticates-with-its-token
   (let [h (handler)]
     (testing "a valid token reaches the upgrade"
-      (let [resp (h (upgrade (str "token=" (auth/create-jwt-token user 1))))]
+      (let [resp (h (upgrade (str "token=" (auth/create-jwt-token user 1 (random-uuid)))))]
         (is (contains? resp ::ring-ws/listener) (pr-str (dissoc resp :body)))))
 
     (testing "no token, or a bad one, is refused before the upgrade"
@@ -40,5 +42,5 @@
       (is (= 401 (:status (h (upgrade "token=not-a-jwt"))))))
 
     (testing "a token in the query string authenticates nothing but an upgrade"
-      (is (= 401 (:status (h (dissoc (upgrade (str "token=" (auth/create-jwt-token user 1)))
+      (is (= 401 (:status (h (dissoc (upgrade (str "token=" (auth/create-jwt-token user 1 (random-uuid))))
                                      :headers))))))))

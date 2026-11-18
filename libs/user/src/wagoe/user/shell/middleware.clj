@@ -110,7 +110,8 @@
 (def ^:private refusal-messages
   {:user-not-found "User not found"
    :user-inactive  "Account is deactivated"
-   :user-deleted   "User not found"})
+   :user-deleted   "User not found"
+   :session-ended  "Session has ended"})
 
 (defn- jwt-user
   "`{:user u}` for the user a bearer token authenticates as `(user-of claims)`,
@@ -155,7 +156,16 @@
   []
   (when (compare-and-set! claims-only-warned? false true)
     (log/warn (str "jwt-authentication-middleware and protect-with-jwt without a user service"
-                   " are deprecated: a deactivated user's JWT passes. Pass the user service (BOU-682)."))))
+                   " are deprecated: a deactivated user's JWT, or one whose session ended, passes. Pass the user service (BOU-682)."))))
+
+(defonce ^:private no-jwt-sessions-warned? (atom false))
+
+(defn- warn-no-jwt-sessions!
+  "Once per process: without IJwtSessions a revoked session's JWT cannot be
+   told apart, so every JWT is refused (BOU-1006)."
+  []
+  (when (compare-and-set! no-jwt-sessions-warned? false true)
+    (log/warn "WGE-107: the user service does not implement IJwtSessions; every JWT is refused (BOU-1006)")))
 
 (defn jwt-authentication-middleware
   "Middleware that validates JWT tokens from Authorization header.
@@ -163,8 +173,8 @@
    Extracts Bearer token, validates it, and adds user information to request.
    On validation failure, returns 401 response.
 
-   The token's user is read and refused when gone or inactive: a JWT cannot be
-   revoked (BOU-668).
+   The token's user is read and refused when gone or inactive (BOU-668), and
+   the token when its session has ended (BOU-1006).
 
    Deprecated: the 1-arity, without `user-service`, trusts the token's claims,
    so a deactivated user passes until the token expires (BOU-682).
@@ -179,10 +189,19 @@
    (warn-claims-only!)
    (jwt-middleware claims-user handler))
   ([user-service handler]
-   (jwt-middleware (fn [claims]
-                     (let [user (ports/get-user-by-id user-service (type-conv/string->uuid (:sub claims)))]
-                       (or (session-core/account-refusal user) (without-credentials user))))
-                   handler)))
+   ;; Fails closed: the user module refuses to boot without IJwtSessions, and
+   ;; a service wired some other way gets no JWT through (WGE-107)
+   (let [live? (if (satisfies? ports/IJwtSessions user-service)
+                 #(and %2 (ports/jwt-session-live? user-service %1 %2))
+                 (do (warn-no-jwt-sessions!) (constantly false)))]
+     (jwt-middleware (fn [claims]
+                       (let [id   (type-conv/string->uuid (:sub claims))
+                             user (ports/get-user-by-id user-service id)]
+                         (or (session-core/account-refusal user)
+                             ;; The token ends with its session (BOU-1006)
+                             (when-not (live? id (:sid claims)) :session-ended)
+                             (without-credentials user))))
+                     handler))))
 
 ;; =============================================================================
 ;; Session Authentication Middleware

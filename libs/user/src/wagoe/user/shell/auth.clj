@@ -91,16 +91,21 @@
    Returns:
      JWT token string
      
-   Side effects: Crypto operations, time-dependent"
-  [user session-duration-hours]
-  (let [now (Instant/now)
-        exp (.plus now (Duration/ofHours session-duration-hours))
-        claims {:sub (str (:id user))
-                :email (:email user)
-                :role (name (or (:role user) :user))
-                :iat (.getEpochSecond now)
-                :exp (.getEpochSecond exp)}]
-    (jwt/sign claims (get-jwt-secret) {:alg jwt-alg})))
+   Side effects: Crypto operations, time-dependent
+
+   `session-id` goes in as :sid; the JWT middleware refuses a token whose
+   session has ended, and one without a sid (BOU-1006)."
+  ([user session-duration-hours] (create-jwt-token user session-duration-hours nil))
+  ([user session-duration-hours session-id]
+   (let [now (Instant/now)
+         exp (.plus now (Duration/ofHours session-duration-hours))
+         claims (cond-> {:sub (str (:id user))
+                         :email (:email user)
+                         :role (name (or (:role user) :user))
+                         :iat (.getEpochSecond now)
+                         :exp (.getEpochSecond exp)}
+                  session-id (assoc :sid (str session-id)))]
+     (jwt/sign claims (get-jwt-secret) {:alg jwt-alg}))))
 
 (defn validate-jwt-token
   "Shell function: Validate and decode JWT token.
@@ -195,7 +200,7 @@
                                                 :expires-at    (.plus ^Instant current-time (Duration/ofHours hours))
                                                 :user-agent    (:user-agent login-context)
                                                 :ip-address    (:ip-address login-context)})]
-                  (assoc session :jwt-token (create-jwt-token user hours))))}))
+                  (assoc session :jwt-token (create-jwt-token user hours (:id session)))))}))
 
 (defn verify-second-factor!
   "Check the TOTP or backup `code` for `user`, spending a backup code. The

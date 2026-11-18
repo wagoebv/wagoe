@@ -65,6 +65,14 @@ only a member. The workflow API is fixed. A module scaffolded with
 - In `shell/<entity>_workflow.clj`, `transition-<entity>-workflow!` takes
   `roles (vec (:roles actor))` instead of the actor's `:role`.
 
+### 5. A JWT ends with its session (BOU-1006)
+
+A `jwtToken` carries the id of the session it was issued with, and is refused
+once that session ends. Tokens issued before the upgrade carry none: API
+clients sign in again. A user service of your own must implement
+`IJwtSessions`: the user module refuses to boot without it (WGE-107), and the
+JWT middleware built on one without it refuses every JWT.
+
 ## 1.1.x → 1.2.0
 
 Mostly security. Steps 1 to 4 change what an existing app does at runtime;

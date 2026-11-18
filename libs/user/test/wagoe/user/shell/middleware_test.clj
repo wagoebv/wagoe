@@ -55,7 +55,9 @@
   (let [by-id (into {} (map (juxt :id identity)) stored)]
     #_{:clj-kondo/ignore [:missing-protocol-method]}
     (reify wagoe.user.ports/IUserService
-      (get-user-by-id [_ id] (get by-id id)))))
+      (get-user-by-id [_ id] (get by-id id))
+      wagoe.user.ports/IJwtSessions
+      (jwt-session-live? [_ _ _] true))))
 
 (deftest ^:unit jwt-authentication-rejects-a-token-it-did-not-issue
   ;; validate-jwt-token answers {:valid? false :error ...} on failure — a map,
@@ -87,7 +89,7 @@
   ;; produced {:id nil :email nil :role nil}.
   (let [id      (java.util.UUID/randomUUID)
         user    {:id id :email "real@example.com" :role :admin :active true}
-        token   (wagoe.user.shell.auth/create-jwt-token user 1)
+        token   (wagoe.user.shell.auth/create-jwt-token user 1 (java.util.UUID/randomUUID))
         handler (sut/jwt-authentication-middleware (users user) echo-user-handler)
         resp    (handler {:uri "/x" :headers {"authorization" (str "Bearer " token)}})]
     (is (= 200 (:status resp)))
@@ -98,11 +100,10 @@
         "and the role comes back a keyword, as the rest of the codebase uses it")))
 
 (deftest ^:unit ^:security jwt-authentication-refuses-a-deactivated-or-gone-user
-  ;; A JWT cannot be revoked; the user it names is read, as a session's is
-  ;; (BOU-668).
+  ;; The user a JWT names is read, as a session's is (BOU-668).
   (let [id    (java.util.UUID/randomUUID)
         user  {:id id :email "real@example.com" :role :user}
-        token (wagoe.user.shell.auth/create-jwt-token user 1)
+        token (wagoe.user.shell.auth/create-jwt-token user 1 (java.util.UUID/randomUUID))
         call  (fn [svc]
                 ((sut/jwt-authentication-middleware svc echo-user-handler)
                  {:uri "/x" :headers {"authorization" (str "Bearer " token)}}))]
@@ -151,7 +152,7 @@
   ;; encoded the shape BOU-374 turned out to be a bug.
   (let [id      (java.util.UUID/randomUUID)
         user    {:id id :email "a@b.c" :role :admin :active true}
-        token   (wagoe.user.shell.auth/create-jwt-token user 1)
+        token   (wagoe.user.shell.auth/create-jwt-token user 1 (java.util.UUID/randomUUID))
         handler ((sut/authenticate-if-present (users user)) echo-handler)
         request (:body (handler {:uri     "/x"
                                  :headers {"authorization" (str "Bearer " token)}}))]
@@ -261,11 +262,13 @@
   ;; logged as an authentication failure.
   (let [id      (java.util.UUID/randomUUID)
         user    {:id id :email "real@example.com" :role :user :active true}
-        token   (wagoe.user.shell.auth/create-jwt-token user 1)
+        token   (wagoe.user.shell.auth/create-jwt-token user 1 (java.util.UUID/randomUUID))
         service #_{:clj-kondo/ignore [:missing-protocol-method]}
         (reify wagoe.user.ports/IUserService
           (get-user-by-id [_ _] user)
-          (validate-session [_ _] {:user-id id :user user}))
+          (validate-session [_ _] {:user-id id :user user})
+          wagoe.user.ports/IJwtSessions
+          (jwt-session-live? [_ _ _] true))
         jwt     {:uri "/api/x" :request-method :post :headers {"authorization" (str "Bearer " token)}}
         session {:uri "/api/x" :request-method :post :cookies {"session-token" {:value "tok"}}}]
     (doseq [[label thrown status] [["a :conflict" (ex-info "Email taken" {:type :conflict}) 409]
@@ -315,3 +318,12 @@
     (sut/jwt-authentication-middleware echo-user-handler)
     (is (= 1 (count (filter #(and (= :warn (:level %)) (str/includes? (str (:message %)) "deprecated"))
                             (log-test/the-log)))))))
+
+(deftest ^:unit ^:security a-service-without-jwt-sessions-lets-no-jwt-through
+  ;; Fails closed: it cannot tell a revoked session's token apart (BOU-1006)
+  (let [user  {:id (java.util.UUID/randomUUID) :email "a@b.c" :role :user :active true}
+        token (wagoe.user.shell.auth/create-jwt-token user 1 (java.util.UUID/randomUUID))
+        svc   #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify wagoe.user.ports/IUserService (get-user-by-id [_ _] user))]
+    (is (= 401 (:status ((sut/jwt-authentication-middleware svc echo-user-handler)
+                         {:uri "/x" :headers {"authorization" (str "Bearer " token)}}))))))
