@@ -77,11 +77,13 @@
   (let [user      (:user request)
         tenant-id (get-in request [:tenant :id])]
     (cond
-      (nil? user)              []
-      (tenant-admin? request)  [:admin]
-      (and tenant-id (not (same-id? (:tenant-id user) tenant-id)))
-      (filterv some? [(some-> request :tenant-membership :role keyword)])
-      :else                    (filterv some? [(some-> (:role user) keyword)]))))
+      (nil? user)             []
+      (tenant-admin? request) [:admin]
+      :else
+      (let [role (if (and tenant-id (not (same-id? (:tenant-id user) tenant-id)))
+                   (:role (:tenant-membership request))
+                   (:role user))]
+        (if role [(keyword role)] [])))))
 
 (defn tenant-reach
   "Whose data `request` may reach: `{}` for every tenant's (a platform admin with
