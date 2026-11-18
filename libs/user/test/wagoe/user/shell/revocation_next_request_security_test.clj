@@ -173,6 +173,17 @@
     (ports/change-password svc (:id user) "Correct-horse-battery-9" "Another-horse-battery-7")
     (is (= 401 (bearer! svc jwt)))))
 
+(deftest ^:security ^:unit the-jwt-sign-in-issues-ends-with-its-session
+  (let [{:keys [users sessions audit]} (stores)
+        svc (service/create-user-service users sessions audit {:password-policy {:min-length 12}}
+                                         (auth/create-authentication-service users sessions nil {}))
+        _  (ports/register-user svc {:email "ada@example.com" :name "Ada Lovelace" :role :user
+                                     :password "Correct-horse-battery-9"})
+        {:keys [session]} (ports/authenticate-user svc {:email "ada@example.com" :password "Correct-horse-battery-9"})]
+    (is (= 200 (bearer! svc (:jwt-token session))))
+    (ports/logout-user svc (:session-token session))
+    (is (= 401 (bearer! svc (:jwt-token session))))))
+
 (deftest ^:security ^:unit a-jwt-without-a-session-is-refused
   (let [st (stores) svc (replica st)
         [user token] (sign-in! svc st)]

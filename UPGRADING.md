@@ -70,7 +70,8 @@ only a member. The workflow API is fixed. A module scaffolded with
 A `jwtToken` carries the id of the session it was issued with, and is refused
 once that session ends. Tokens issued before the upgrade carry none: API
 clients sign in again. A user service of your own must implement
-`IJwtSessions`, or boot stops with WGE-107.
+`IJwtSessions`: the user module refuses to boot without it (WGE-107), and the
+JWT middleware built on one without it refuses every JWT.
 
 ## 1.1.x → 1.2.0
 

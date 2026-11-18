@@ -53,7 +53,7 @@
 
 (defn- token-for [user]
   (swap! jwt-users assoc (:id user) (assoc user :active true))
-  (auth-shell/create-jwt-token user 1))
+  (auth-shell/create-jwt-token user 1 (UUID/randomUUID)))
 
 (def ^:private user-service
   "Knows one session, for one admin, and the JWT users."
@@ -63,7 +63,9 @@
     (validate-session [_ token]
       (when (= session-token token)
         {:user-id session-user-id :session-token token
-         :user {:id session-user-id :email "session@example.com" :role :admin :active true}}))))
+         :user {:id session-user-id :email "session@example.com" :role :admin :active true}}))
+    user-ports/IJwtSessions
+    (jwt-session-live? [_ _ _] true)))
 
 (def ^:private readers
   "The scope each user's :workflow/read grant has, by id."

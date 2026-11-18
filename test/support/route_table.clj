@@ -92,12 +92,6 @@
            (f))
          (finally (ig/halt! system)))))))
 
-(defn bearer
-  "Headers that sign a request in as `user`, a map of `:id`, `:email`, `:role`."
-  [{:keys [id email role]}]
-  {"authorization"
-   (str "Bearer " (auth/create-jwt-token {:id id :email email :role (keyword role)} 1))})
-
 (def http-methods [:get :head :post :put :patch :delete])
 
 (defn route-table
@@ -158,3 +152,14 @@
                                 :else          (slurp body))
                           true)
        (catch Exception _ ::not-json)))
+
+(defn bearer
+  "Headers that sign a request in as `user`. One with a `:password`, a real
+   row, signs in through the API as a client does: a JWT ends with its session
+   (BOU-1006). Otherwise a token, `:id` `:email` `:role`, of a session nobody holds."
+  [{:keys [id email role password]}]
+  {"authorization"
+   (str "Bearer "
+        (if password
+          (:jwtToken (decoded (call :post "/api/v1/auth/login" (json/generate-string {:email email :password password}))))
+          (auth/create-jwt-token {:id id :email email :role (keyword role)} 1 (random-uuid))))})

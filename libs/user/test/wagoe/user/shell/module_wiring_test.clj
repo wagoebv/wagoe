@@ -146,3 +146,11 @@
                           {:active {:wagoe/settings {:features {:user-web-ui {:enabled? false}}}}}))))
   (testing "one implementing them all boots"
     (is (nil? (boot-error :wagoe/user-group-routes (group-service-without nil))))))
+
+(deftest ^:unit ^:security a-user-service-without-jwt-sessions-refuses-to-boot
+  ;; Without it the JWT middleware lets no token through (BOU-1006)
+  (let [svc #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify wagoe.user.ports/IUserDeletion wagoe.user.ports/IUserSessionRevocation)]
+    (is (= "WGE-107: the user service does not implement IJwtSessions"
+           (try (ig/init-key :wagoe/user-routes {:user-service svc :config {}}) nil
+                (catch clojure.lang.ExceptionInfo e (ex-message e)))))))

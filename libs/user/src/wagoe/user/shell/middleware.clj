@@ -158,6 +158,16 @@
     (log/warn (str "jwt-authentication-middleware and protect-with-jwt without a user service"
                    " are deprecated: a deactivated user's JWT passes. Pass the user service (BOU-682)."))))
 
+(defonce ^:private no-jwt-sessions-warned? (atom false))
+
+(defn- refuse-without-jwt-sessions
+  "Answers no for every token's session, warning once: without IJwtSessions a
+   revoked session's JWT cannot be told apart (BOU-1006)."
+  [_ _]
+  (when (compare-and-set! no-jwt-sessions-warned? false true)
+    (log/warn "WGE-107: the user service does not implement IJwtSessions; every JWT is refused (BOU-1006)"))
+  false)
+
 (defn jwt-authentication-middleware
   "Middleware that validates JWT tokens from Authorization header.
    
@@ -180,10 +190,11 @@
    (warn-claims-only!)
    (jwt-middleware claims-user handler))
   ([user-service handler]
-   ;; A service without IJwtSessions is refused at boot (WGE-107)
+   ;; Fails closed: the user module refuses to boot without IJwtSessions, and
+   ;; a service wired some other way gets no JWT through (WGE-107)
    (let [live? (if (satisfies? ports/IJwtSessions user-service)
                  #(and %2 (ports/jwt-session-live? user-service %1 %2))
-                 (constantly true))]
+                 refuse-without-jwt-sessions)]
      (jwt-middleware (fn [claims]
                        (let [id   (type-conv/string->uuid (:sub claims))
                              user (ports/get-user-by-id user-service id)]
