@@ -327,11 +327,12 @@
         move     (fn [user]
                    (let [response (post (str "/workflow/instances/" (:id (new-instance)) "/transition")
                                         {:transition "delivered"}
-                                        (token-for (merge {:id (UUID/randomUUID) :email "a@example.com"} user)))]
-                     [(:status response) (get-in (body-data response) [:audit-entry :actor-roles])]))]
+                                        (token-for (merge {:id (UUID/randomUUID) :email "a@example.com"} user)))
+                         body     (body-data response)]
+                     [(:status response) (or (get-in body [:audit-entry :actor-roles]) (get-in body [:error :type]))]))]
     (binding [*tenancy* {:tenant {:id tenant-a} :tenant-membership {:status :active :role :member}}]
       (testing "an admin of tenant B, a member of A, is refused A's admin-only transition"
-        (is (= 422 (first (move {:role :admin :tenant-id tenant-b}))))))
+        (is (= [422 "insufficient-permissions"] (move {:role :admin :tenant-id tenant-b})))))
     (binding [*tenancy* {:tenant {:id tenant-a} :tenant-membership {:status :active :role :admin}}]
       (testing "an admin of A by membership makes it, recorded as an admin"
         (is (= [200 ["admin"]] (move {:role :user :tenant-id tenant-b})))))

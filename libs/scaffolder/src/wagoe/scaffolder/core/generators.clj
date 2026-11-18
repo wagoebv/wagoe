@@ -248,7 +248,8 @@
                  "  (transition-" e " [this id transition actor]\n"
                  "    \"Move the " e "'s " (get-in entity [:workflow :field]) " along its workflow. The result, with\n"
                  "     the " e " as it is now on success, its :workflow saying what the actor\n"
-                 "     may do next; nil when there is no such " e ".\"))\n"
+                 "     may do next; nil when there is no such " e ". `actor` is the user, with\n"
+                 "     :roles, those held where the request runs.\"))\n"
                  "\n"
                  "(defprotocol I" entity-name "Workflow\n"
                  "  \"The " e "'s " (get-in entity [:workflow :field]) " workflow, as the service drives it.\"\n"
@@ -266,8 +267,9 @@
                  "    \"Remove the workflow of a deleted " e ".\")\n"
                  "\n"
                  "  (transition-" e "-workflow! [this id transition actor]\n"
-                 "    \"Run `transition` as `actor`, starting the workflow if it has none. On\n"
-                 "     success the result carries :available-transitions, the actor's next.\"))\n")
+                 "    \"Run `transition` as `actor`, its :roles those held where the request runs,\n"
+                 "     starting the workflow if it has none. On success the result carries\n"
+                 "     :available-transitions, the actor's next.\"))\n")
             ")\n"))}))
 
 (defn generate-ports-file
@@ -1453,8 +1455,8 @@ DROP TABLE IF EXISTS %s;
          "    ;; has none yet.\n"
          "    (let [[tx]     (joined store)\n"
          "          instance (ports/start-" e "-workflow! this id)\n"
-         "          ;; Held where the request runs, from the routes; else the actor's own\n"
-         "          roles    (or (:roles actor) (filterv some? [(some-> (:role actor) keyword)]))\n"
+         "          ;; Held where the request runs, from the routes; none without them\n"
+         "          roles    (vec (:roles actor))\n"
          "          result   (workflow/transition! engine tx {:instance-id (:id instance)\n"
          "                                                    :transition  transition\n"
          "                                                    :actor-id    (:id actor)\n"
