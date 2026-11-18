@@ -183,7 +183,8 @@
             {:email-sender? (some? email-sender)})
   (require-protocols! "user service" user-service
                       {"IUserDeletion"          [ports/IUserDeletion ['delete-user 'delete-users]]
-                       "IUserSessionRevocation" [ports/IUserSessionRevocation ['revoke-user-session 'revoke-sessions-except]]})
+                       "IUserSessionRevocation" [ports/IUserSessionRevocation ['revoke-user-session 'revoke-sessions-except]]
+                       "IJwtSessions"           [ports/IJwtSessions ['jwt-session-live?]]})
   (require 'wagoe.user.shell.http)
   (let [user-routes-fn (ns-resolve 'wagoe.user.shell.http 'user-routes)
         ;; The user list filters on groups, roles and permissions (BOU-1002)

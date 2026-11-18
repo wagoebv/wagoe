@@ -481,6 +481,12 @@
   ;; As logout-user-everywhere, keeping keep-session-id when it is one of the
   ;; user's live sessions; nil keeps none. Returns the count revoked.
 
+(defprotocol IJwtSessions
+  (jwt-session-live? [this user-id session-id]))
+  ;; Whether `session-id`, the sid a JWT carries, is one of the user's active
+  ;; sessions. A JWT ends with its session: logout, a password change,
+  ;; revoke-all and gaining or losing admin all end it (BOU-1006).
+
 (defprotocol IUserAccountRecovery
   "What an admin does for a user who cannot sign in. Each change is audited
    with the admin as actor."

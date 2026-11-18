@@ -934,6 +934,11 @@
         (.create-audit-log audit-repository (audit-core/view-as-stop-audit-entry admin target (effective-audit-context {})))
         (user-core/without-credentials target))))
 
+  ports/IJwtSessions
+  (jwt-session-live? [_ user-id session-id]
+    ;; ponytail: reads the user's active sessions per bearer request; a lookup by id if that shows
+    (boolean (some #(= (str session-id) (str (:id %))) (.find-sessions-by-user session-repository user-id))))
+
   ports/IUserSessionRevocation
   (revoke-sessions-except [this user-id keep-session-id]
     (service-interceptors/execute-service-operation

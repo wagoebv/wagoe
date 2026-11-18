@@ -514,6 +514,10 @@ curl -X DELETE http://localhost:3000/api/v1/sessions/{session-token}
 The token in the path is the credential. A user's other sessions are listed and
 revoked on their *Sessions* tab in the web UI.
 
+The `jwtToken` from sign-in belongs to that session. It stops working when the
+session ends: on logout, a password change, gaining or losing admin, or "Revoke all
+sessions".
+
 [#csrf]
 == CSRF protection
 

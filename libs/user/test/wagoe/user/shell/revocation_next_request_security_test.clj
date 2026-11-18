@@ -128,15 +128,59 @@
     (deactivate-in-store! st user)
     (is (= 200 (:status (hit))) "the landing page, not a redirect")))
 
+(defn- bearer!
+  "Sends one request with `jwt` as bearer token. Returns the response status."
+  [svc jwt]
+  (:status ((middleware/jwt-authentication-middleware svc (constantly {:status 200}))
+            {:uri "/x" :headers {"authorization" (str "Bearer " jwt)}})))
+
+(defn- jwt-for
+  "A JWT bound to the session `token` names, as sign-in issues one."
+  [{:keys [sessions]} user token]
+  (auth/create-jwt-token user 1 (:id (ports/find-session-by-token sessions token))))
+
 (deftest ^:security ^:unit a-deactivated-users-jwt-is-refused
   (let [st (stores) svc (replica st)
-        [user _] (sign-in! svc st)
-        token (auth/create-jwt-token user 1)
-        call  #((middleware/jwt-authentication-middleware svc (constantly {:status 200}))
-                {:uri "/x" :headers {"authorization" (str "Bearer " token)}})]
-    (is (= 200 (:status (call))))
+        [user token] (sign-in! svc st)
+        jwt (jwt-for st user token)]
+    (is (= 200 (bearer! svc jwt)))
     (ports/deactivate-user svc (:id user))
-    (is (= 401 (:status (call))))))
+    (is (= 401 (bearer! svc jwt)))))
+
+;; BOU-1006: a JWT ends with the session it was issued with.
+
+(deftest ^:security ^:unit logout-ends-the-jwt
+  (let [st (stores) svc (replica st)
+        [user token] (sign-in! svc st)
+        jwt (jwt-for st user token)]
+    (is (= 200 (bearer! svc jwt)))
+    (ports/logout-user svc token)
+    (is (= 401 (bearer! svc jwt)))))
+
+(deftest ^:security ^:unit revoke-all-ends-the-jwt
+  (let [st (stores) svc (replica st)
+        [user token] (sign-in! svc st)
+        jwt (jwt-for st user token)]
+    (is (= 200 (bearer! svc jwt)))
+    (ports/logout-user-everywhere svc (:id user))
+    (is (= 401 (bearer! svc jwt)))))
+
+(deftest ^:security ^:unit a-password-change-ends-the-jwt
+  (let [st (stores) svc (replica st)
+        [user token] (sign-in! svc st)
+        jwt (jwt-for st user token)]
+    (is (= 200 (bearer! svc jwt)))
+    (ports/change-password svc (:id user) "Correct-horse-battery-9" "Another-horse-battery-7")
+    (is (= 401 (bearer! svc jwt)))))
+
+(deftest ^:security ^:unit a-jwt-without-a-session-is-refused
+  (let [st (stores) svc (replica st)
+        [user token] (sign-in! svc st)]
+    (is (= 401 (bearer! svc (auth/create-jwt-token user 1))) "no sid")
+    (is (= 401 (bearer! svc (auth/create-jwt-token user 1 (UUID/randomUUID)))) "an unknown sid")
+    (let [other (ports/register-user svc {:email "bob@example.com" :name "Bob" :role :user
+                                          :password "Correct-horse-battery-9"})]
+      (is (= 401 (bearer! svc (jwt-for st other token))) "another user's session"))))
 
 ;; BOU-681: deactivation is not a delete.
 

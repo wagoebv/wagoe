@@ -110,7 +110,8 @@
 (def ^:private refusal-messages
   {:user-not-found "User not found"
    :user-inactive  "Account is deactivated"
-   :user-deleted   "User not found"})
+   :user-deleted   "User not found"
+   :session-ended  "Session has ended"})
 
 (defn- jwt-user
   "`{:user u}` for the user a bearer token authenticates as `(user-of claims)`,
@@ -163,8 +164,8 @@
    Extracts Bearer token, validates it, and adds user information to request.
    On validation failure, returns 401 response.
 
-   The token's user is read and refused when gone or inactive: a JWT cannot be
-   revoked (BOU-668).
+   The token's user is read and refused when gone or inactive (BOU-668), and
+   the token when its session has ended (BOU-1006).
 
    Deprecated: the 1-arity, without `user-service`, trusts the token's claims,
    so a deactivated user passes until the token expires (BOU-682).
@@ -179,10 +180,18 @@
    (warn-claims-only!)
    (jwt-middleware claims-user handler))
   ([user-service handler]
-   (jwt-middleware (fn [claims]
-                     (let [user (ports/get-user-by-id user-service (type-conv/string->uuid (:sub claims)))]
-                       (or (session-core/account-refusal user) (without-credentials user))))
-                   handler)))
+   ;; A service without IJwtSessions is refused at boot (WGE-107)
+   (let [live? (if (satisfies? ports/IJwtSessions user-service)
+                 #(and %2 (ports/jwt-session-live? user-service %1 %2))
+                 (constantly true))]
+     (jwt-middleware (fn [claims]
+                       (let [id   (type-conv/string->uuid (:sub claims))
+                             user (ports/get-user-by-id user-service id)]
+                         (or (session-core/account-refusal user)
+                             ;; The token ends with its session (BOU-1006)
+                             (when-not (live? id (:sid claims)) :session-ended)
+                             (without-credentials user))))
+                     handler))))
 
 ;; =============================================================================
 ;; Session Authentication Middleware

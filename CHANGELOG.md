@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A JWT kept working after logout, a password change or "Revoke all sessions"** (BOU-1006), until it expired. It
+  now ends with its session; old tokens are refused, so API clients sign in again. See `UPGRADING.md`.
 - **An admin of one tenant made admin-only workflow transitions in another** (BOU-1005), where they were only a
   member. A transition now takes the roles held where the request runs; patch a scaffolded workflow, see `UPGRADING.md`.
 - **A published example JWT_SECRET or RPC service key booted in production** (BOU-1014): anyone could sign tokens
