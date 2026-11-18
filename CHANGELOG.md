@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **An admin of one tenant made admin-only workflow transitions in another** (BOU-1005), where they were only a
+  member. A transition now takes the roles held where the request runs; patch a scaffolded workflow, see `UPGRADING.md`.
 - **Creating a user told a tenant's admin that an email existed in another tenant** (BOU-995). An email is unique per
   tenant now: the same email in two tenants is two accounts. Sign-in takes the tenant from the URL or asks; see `UPGRADING.md`.
 - **Roles and groups were one set for every tenant** (BOU-996): only a platform admin could manage them. Each tenant

@@ -320,6 +320,28 @@
       (testing "an admin by membership reads"
         (is (= allowed (reads-of (statuses {:role :user :tenant-id tenant-b}))))))))
 
+(deftest ^:unit ^:security an-admin-elsewhere-transitions-here-only-as-what-they-are-here
+  ;; BOU-1005: their own role was taken as their role in every tenant
+  (let [tenant-a (UUID/randomUUID)
+        tenant-b (UUID/randomUUID)
+        move     (fn [user]
+                   (let [response (post (str "/workflow/instances/" (:id (new-instance)) "/transition")
+                                        {:transition "delivered"}
+                                        (token-for (merge {:id (UUID/randomUUID) :email "a@example.com"} user)))
+                         body     (body-data response)]
+                     [(:status response) (or (get-in body [:audit-entry :actor-roles]) (get-in body [:error :type]))]))]
+    (binding [*tenancy* {:tenant {:id tenant-a} :tenant-membership {:status :active :role :member}}]
+      (testing "an admin of tenant B, a member of A, is refused A's admin-only transition"
+        (is (= [422 "insufficient-permissions"] (move {:role :admin :tenant-id tenant-b})))))
+    (binding [*tenancy* {:tenant {:id tenant-a} :tenant-membership {:status :active :role :admin}}]
+      (testing "an admin of A by membership makes it, recorded as an admin"
+        (is (= [200 ["admin"]] (move {:role :user :tenant-id tenant-b})))))
+    (binding [*tenancy* {:tenant {:id tenant-a}}]
+      (testing "A's own admin makes it"
+        (is (= 200 (first (move {:role :admin :tenant-id tenant-a})))))
+      (testing "and so does a platform admin"
+        (is (= 200 (first (move {:role :admin}))))))))
+
 ;; =============================================================================
 ;; The body
 ;; =============================================================================

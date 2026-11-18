@@ -248,7 +248,8 @@
                  "  (transition-" e " [this id transition actor]\n"
                  "    \"Move the " e "'s " (get-in entity [:workflow :field]) " along its workflow. The result, with\n"
                  "     the " e " as it is now on success, its :workflow saying what the actor\n"
-                 "     may do next; nil when there is no such " e ".\"))\n"
+                 "     may do next; nil when there is no such " e ". `actor` is the user, with\n"
+                 "     :roles, those held where the request runs.\"))\n"
                  "\n"
                  "(defprotocol I" entity-name "Workflow\n"
                  "  \"The " e "'s " (get-in entity [:workflow :field]) " workflow, as the service drives it.\"\n"
@@ -266,8 +267,9 @@
                  "    \"Remove the workflow of a deleted " e ".\")\n"
                  "\n"
                  "  (transition-" e "-workflow! [this id transition actor]\n"
-                 "    \"Run `transition` as `actor`, starting the workflow if it has none. On\n"
-                 "     success the result carries :available-transitions, the actor's next.\"))\n")
+                 "    \"Run `transition` as `actor`, its :roles those held where the request runs,\n"
+                 "     starting the workflow if it has none. On success the result carries\n"
+                 "     :available-transitions, the actor's next.\"))\n")
             ")\n"))}))
 
 (defn generate-ports-file
@@ -1453,7 +1455,8 @@ DROP TABLE IF EXISTS %s;
          "    ;; has none yet.\n"
          "    (let [[tx]     (joined store)\n"
          "          instance (ports/start-" e "-workflow! this id)\n"
-         "          roles    (filterv some? [(some-> (:role actor) keyword)])\n"
+         "          ;; Held where the request runs, from the routes; none without them\n"
+         "          roles    (vec (:roles actor))\n"
          "          result   (workflow/transition! engine tx {:instance-id (:id instance)\n"
          "                                                    :transition  transition\n"
          "                                                    :actor-id    (:id actor)\n"
@@ -1627,14 +1630,16 @@ DROP TABLE IF EXISTS %s;
   (str (str/trimr source) "\n\n" section))
 
 (defn- api-requires
-  "The ns requires the API section below needs."
-  [base-ns module-name]
-  [(str "[" base-ns "." module-name ".ports :as ports]")
-   (str "[" base-ns "." module-name ".schema :as schema]")
-   "[malli.core :as m]"
-   "[malli.error :as me]"
-   "[malli.json-schema :as json-schema]"
-   "[malli.transform :as mt]"])
+  "The ns requires the API section below needs for `entity`."
+  [base-ns module-name entity]
+  (cond-> [(str "[" base-ns "." module-name ".ports :as ports]")
+           (str "[" base-ns "." module-name ".schema :as schema]")
+           "[malli.core :as m]"
+           "[malli.error :as me]"
+           "[malli.json-schema :as json-schema]"
+           "[malli.transform :as mt]"]
+    ;; A transition's roles are those held where the request runs (BOU-1005)
+    (:workflow entity) (conj "[wagoe.core.http.access :as access]")))
 
 (defn- ns-form
   "An ns form with a docstring and `requires`, one per line."
@@ -1808,7 +1813,8 @@ DROP TABLE IF EXISTS %s;
                 "                           (nil? id)         (not-found)\n"
                 "                           (nil? transition) (invalid {:transition [\"missing\"]})\n"
                 "                           :else\n"
-                "                           (let [result (ports/transition-" e " service id transition (:user request))]\n"
+                "                           (let [result (ports/transition-" e " service id transition\n"
+                "                                                                (assoc (:user request) :roles (access/roles-here request)))]\n"
                 "                             (cond\n"
                 "                               (nil? result)      (not-found)\n"
                 "                               (:success? result) {:status 200 :body (:" e " result)}\n"
@@ -1861,7 +1867,7 @@ DROP TABLE IF EXISTS %s;
     (str (ns-form (str base-ns "." module-name ".shell." e "-http")
                   (str "HTTP " (if http "API" "pages") " for " (:entity-name entity) ", mounted by the "
                        module-name " module's routes.")
-                  (concat (when http (api-requires base-ns module-name))
+                  (concat (when http (api-requires base-ns module-name entity))
                           (when web [(str "[" base-ns "." module-name "." handlers " :as " handlers-alias "]")])))
          "\n"
          (when http (api-section entity (public? ctx)))
@@ -1887,7 +1893,7 @@ DROP TABLE IF EXISTS %s;
                   (str "HTTP routes for " module-name " module.")
                   ;; Only what is used: an unused require is a clj-kondo
                   ;; warning, and `bb check` fails on those (BOU-267).
-                  (concat (when http (api-requires base-ns module-name))
+                  (concat (when http (api-requires base-ns module-name entity))
                           (when web [(str "[" base-ns "." module-name ".shell.web-handlers :as web-handlers]")])))
          "\n"
          (when http (str (api-section entity public?) "\n"))

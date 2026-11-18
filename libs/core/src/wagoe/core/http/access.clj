@@ -69,6 +69,22 @@
           (and (admin? request) (same-id? (:tenant-id user) tenant-id)))
       (admin? request))))
 
+(defn roles-here
+  "The roles the caller holds where the request runs (BOU-1005): `:admin` only
+   where they are an admin (`tenant-admin?`); in another tenant they are a
+   member of, that membership's role; otherwise their own role."
+  [request]
+  (let [user      (:user request)
+        tenant-id (get-in request [:tenant :id])]
+    (cond
+      (nil? user)             []
+      (tenant-admin? request) [:admin]
+      :else
+      (let [role (if (and tenant-id (not (same-id? (:tenant-id user) tenant-id)))
+                   (:role (:tenant-membership request))
+                   (:role user))]
+        (if role [(keyword role)] [])))))
+
 (defn tenant-reach
   "Whose data `request` may reach: `{}` for every tenant's (a platform admin with
    no tenant resolved), `{:tenant-id t}` for one tenant's, t nil for no tenant's,

@@ -52,6 +52,19 @@ writer sees the data. A form only posts its fields, so it needs no change; code
 that calls the service with snake_case or extra keys must pass the kebab-case
 field names only.
 
+### 4. A scaffolded workflow takes the roles held in the tenant (BOU-1005)
+
+A workflow transition took the caller's own role in every tenant, so an admin
+of one tenant made another tenant's admin-only transitions where they were
+only a member. The workflow API is fixed. A module scaffolded with
+`--workflow` before this release needs two one-line changes:
+
+- In its transition route, pass the roles held where the request runs:
+  `(assoc (:user request) :roles (access/roles-here request))`, with
+  `[wagoe.core.http.access :as access]` in the ns.
+- In `shell/<entity>_workflow.clj`, `transition-<entity>-workflow!` takes
+  `roles (vec (:roles actor))` instead of the actor's `:role`.
+
 ## 1.1.x → 1.2.0
 
 Mostly security. Steps 1 to 4 change what an existing app does at runtime;

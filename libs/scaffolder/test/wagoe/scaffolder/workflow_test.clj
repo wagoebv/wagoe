@@ -180,6 +180,14 @@
         (is (not (str/includes? src "{:from :entered :to :paid")))
         (is (str/includes? src "register-workflow!") "registered through the port")))
 
+    (testing "a transition takes the roles held where the request runs, never the caller's own (BOU-1005)"
+      (let [route (some (fn [[_ c]] (when (str/includes? c "/transition\"") c)) on-disk)
+            wf    (at "src/bou569g/billing/shell/invoice_workflow.clj")]
+        (is (str/includes? route "(access/roles-here request)"))
+        (is (str/includes? route "[wagoe.core.http.access :as access]"))
+        (is (str/includes? wf "(:roles actor)"))
+        (is (not (str/includes? wf "(:role actor)")) "no role from anywhere else")))
+
     (testing "status is a column, and no request can set it"
       (let [schema (at "src/bou569g/billing/schema.clj")
             section (fn [nm] (second (re-find (re-pattern (str "(?s)\\(def " nm "\n(.*?)\\]\\)")) schema)))]

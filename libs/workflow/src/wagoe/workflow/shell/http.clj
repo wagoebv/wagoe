@@ -65,11 +65,12 @@
    `:user` is where the authentication middleware puts the caller. This read
    `:identity` and `[:session :user]`, which nothing has set since BOU-373 —
    so every request arrived with no actor and no roles, and any transition
-   with `:required-permissions` was permanently refused (BOU-478)."
+   with `:required-permissions` was permanently refused (BOU-478). The roles
+   are those held where the request runs: an admin of another tenant is only
+   what their membership makes them here (BOU-1005)."
   [request]
-  (let [user (:user request)]
-    {:actor-id    (:id user)
-     :actor-roles (filterv identity [(keyword (:role user))])}))
+  {:actor-id    (get-in request [:user :id])
+   :actor-roles (access/roles-here request)})
 
 (defn- instance->response
   "Render a WorkflowInstance as a JSON-friendly map.

@@ -55,3 +55,20 @@
   (testing "without a tenant, the global role"
     (is (access/tenant-admin? {:user {:role :admin}}))
     (is (not (access/tenant-admin? {:user {:role :user}})))))
+
+(deftest ^:unit roles-here-are-those-held-where-the-request-runs
+  ;; BOU-1005
+  (let [a #uuid "a0000000-0000-0000-0000-00000000000a"
+        b #uuid "b0000000-0000-0000-0000-00000000000b"]
+    (is (= [] (access/roles-here {})))
+    (is (= [:admin] (access/roles-here {:user {:role :admin}})) "a platform admin")
+    (is (= [:admin] (access/roles-here {:user {:role :admin :tenant-id a} :tenant {:id a}})) "their tenant's admin")
+    (is (= [:user] (access/roles-here {:user {:role :user :tenant-id a} :tenant {:id a}})))
+    (is (= [:member] (access/roles-here {:user {:role :admin :tenant-id b} :tenant {:id a}
+                                      :tenant-membership {:role :member}}))
+        "another tenant's admin is a member here")
+    (is (= [:admin] (access/roles-here {:user {:role :user :tenant-id b} :tenant {:id a}
+                                     :tenant-membership {:role :admin}}))
+        "an admin here by membership")
+    (is (= [] (access/roles-here {:user {:role :admin :tenant-id b} :tenant {:id a}}))
+        "no membership here: no role")))
