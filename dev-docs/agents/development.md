@@ -296,7 +296,7 @@ not collide with a dev server on 3000).
 
 **Environment Variables**:
 ```bash
-export JWT_SECRET="dev-secret-minimum-32-characters"
+export JWT_SECRET="dev-secret-minimum-32-characters"   # dev and test only; refused in prod
 export DB_PASSWORD="dev_password"
 ```
 

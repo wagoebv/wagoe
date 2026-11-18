@@ -8,8 +8,8 @@
             [clojure.test :refer [deftest is testing]])
   (:import (java.util UUID)))
 
-(defn- refusal [secret]
-  (try (#'jwt-secret/validate secret) nil
+(defn- refusal [& validate-args]
+  (try (apply jwt-secret/validate validate-args) nil
        (catch clojure.lang.ExceptionInfo e e)))
 
 (deftest ^:unit ^:security jwt-secret-validation-test
@@ -21,7 +21,20 @@
   (testing "a >= 32 character secret is accepted"
     (let [secret "this-secret-is-exactly-32-chars!"]
       (is (= 32 (count secret)))
-      (is (= secret (#'jwt-secret/validate secret))))))
+      (is (= secret (jwt-secret/validate secret))))))
+
+(deftest ^:unit ^:security a-published-example-secret-is-refused-outside-dev
+  ;; BOU-1014: these pass the length check, and anyone can read them
+  (doseq [secret ["change-me-to-a-32-char-minimum-secret" "change-me-min-32-chars-................"
+                  "dev-secret-minimum-32-characters" "dev-secret-at-least-32-characters-long"
+                  "CHANGEME-to-a-strong-secret-of-32-characters" "your-production-secret-min-32-chars"
+                  "at-least-32-characters-............."
+                  (apply str (repeat 40 "ab"))]
+          :let [e (refusal secret false)]]
+    (is (re-find #"example value" (str (some-> e ex-message))) secret)
+    (is (= "WGE-103" (:wagoe/error-code (ex-data e))) secret)
+    (is (= secret (jwt-secret/validate secret true)) (str "in dev: " secret)))
+  (is (= "q8Zt0n4mR2vJ7kPa1sXc9LbW3eYh6GdUf5Ni" (jwt-secret/validate "q8Zt0n4mR2vJ7kPa1sXc9LbW3eYh6GdUf5Ni" false))))
 
 (deftest ^:unit ^:security jwt-algorithm-pinning-test
   ;; Relies on JWT_SECRET being set for the test run (>= 32 chars).

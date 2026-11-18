@@ -13,8 +13,8 @@
 
  "WGE-103" {:code        "WGE-103"
             :category    :config
-            :title       "Missing or Short JWT Secret"
-            :description "JWT_SECRET is not set, or shorter than 32 characters, but the user module is active."
+            :title       "Missing, Short or Example JWT Secret"
+            :description "JWT_SECRET is not set, shorter than 32 characters, or outside dev an example value from the docs, but the user module is active."
             :fix         "export JWT_SECRET=\"$(openssl rand -base64 32)\""}
 
  "WGE-104" {:code        "WGE-104"

@@ -521,7 +521,7 @@
            (when (#{:sqlite :h2} (:database spec))
              (into ["# Database file (prod profile only)"]
                    (concat (map #(str % "=") (get component-env-vars (:database spec))) [""])))
-           ["# Security" "JWT_SECRET=change-me-to-a-32-char-secret" ""]
+           ["# Security" "# Empty until set, so nothing starts without one: openssl rand -base64 32" "JWT_SECRET=" ""]
            (when-not (contains? #{nil :none} (:ai-provider spec))
              (let [provider (:ai-provider spec)]
                (into [(str "# AI Provider (" (name provider) ")")]

@@ -714,7 +714,7 @@
         (is (contains? dev :wagoe/product) "integrate-written key survives")
         (is (contains? test :wagoe/product))
         (is (= :ollama (get-in dev [:wagoe/ai-service :provider])) "what was asked is written")
-        (is (str/includes? env-ex "JWT_SECRET=change-me-to-a-32-char-minimum-secret"))
+        (is (re-find #"(?m)JWT_SECRET=$" env-ex) "empty, so nothing starts without one (BOU-1014)")
         (is (str/includes? env-ex "OLLAMA_URL=")))
       (finally (fs/delete-tree dir)))))
 

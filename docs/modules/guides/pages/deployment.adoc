@@ -17,7 +17,7 @@ This produces `target/wagoe-*.jar`.
 
 [source,bash]
 ----
-export JWT_SECRET="your-production-secret-min-32-chars"
+export JWT_SECRET="$(openssl rand -base64 32)"
 export WAG_ENV="production"
 export POSTGRES_HOST="db.example.com" POSTGRES_DB="myapp" POSTGRES_USER="myapp"
 export POSTGRES_PASSWORD="..."

@@ -8,7 +8,8 @@
 
    FC/IS: shell. The envelope contract is pure and lives in
    `wagoe.platform.core.rpc`."
-  (:require [wagoe.core.utils.text :as text]
+  (:require [wagoe.config :as config]
+            [wagoe.core.utils.text :as text]
             [wagoe.platform.core.http.problem-details :as problem-details]
             [wagoe.platform.core.rpc :as rpc]
             [clojure.string]
@@ -161,7 +162,7 @@
      (rpc-app payments-ports/IPaymentProvider provider {:service-key key})"
   [protocol implementation {:keys [service-key auth] :as _opts}]
   (when-not (= auth :none)
-    (when-let [problem (rpc/service-key-problem service-key)]
+    (when-let [problem (rpc/service-key-problem service-key (config/dev-like?))]
       ;; At construction, not per request: a service that cannot authenticate
       ;; callers must fail to start rather than come up serving port methods to
       ;; anyone who can reach the port.

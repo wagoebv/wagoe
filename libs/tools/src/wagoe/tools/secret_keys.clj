@@ -29,3 +29,15 @@
   "True when key `k` names a secret."
   [k]
   (secret-name? (normalize k)))
+
+(def ^:private placeholder-marker
+  "What the shipped examples and docs write in place of a secret."
+  #"change-?me|your-|at-least|minimum|min-32|32-char|^dev-secret")
+
+(defn placeholder-secret?
+  "True when `secret` is a published example value rather than a real secret:
+   one phrased as the examples and docs phrase theirs, or a few characters
+   repeated (BOU-1014)."
+  [secret]
+  (let [s (text/lower-case (str secret))]
+    (boolean (or (re-find placeholder-marker s) (< (count (set s)) 6)))))

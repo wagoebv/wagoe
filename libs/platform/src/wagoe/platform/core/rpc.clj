@@ -12,7 +12,8 @@
    `…rpc.server` for that.
 
    FC/IS: pure. Everything here is data in, data out."
-  (:require [wagoe.core.utils.text :as text]
+  (:require [wagoe.core.utils.secret-keys :as secret-keys]
+            [wagoe.core.utils.text :as text]
             [clojure.string :as str]))
 
 ;; =============================================================================
@@ -165,15 +166,19 @@
   32)
 
 (defn service-key-problem
-  "Why `service-key` is unusable, or nil if it is fine."
-  [service-key]
+  "Why `service-key` is unusable, or nil if it is fine. Unless `dev-like?`, a
+   published example value is unusable too (BOU-1014)."
+  [service-key dev-like?]
   (cond
     (not (string? service-key))
     "The RPC service key must be a string"
 
     (< (count service-key) min-service-key-length)
     (str "The RPC service key must be at least " min-service-key-length
-         " characters; this endpoint invokes port methods directly")))
+         " characters; this endpoint invokes port methods directly")
+
+    (and (not dev-like?) (secret-keys/placeholder-secret? service-key))
+    "The RPC service key is an example value from the docs or a template. Generate one: openssl rand -base64 32"))
 
 (defn service-key-matches?
   "Whether `presented` is `expected`, compared in constant time.

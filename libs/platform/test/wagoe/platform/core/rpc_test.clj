@@ -192,16 +192,22 @@
 
 (deftest ^:security ^:unit a-service-key-must-be-worth-having
   (testing "a key of the required length is accepted"
-    (is (nil? (rpc/service-key-problem (apply str (repeat 32 "a"))))))
+    (is (nil? (rpc/service-key-problem "q8Zt0n4mR2vJ7kPa1sXc9LbW3eYh6GdUf5Ni" false)))
+    (is (nil? (rpc/service-key-problem (apply str (repeat 32 "a")) true)) "in dev, any long key"))
+
+  (testing "outside dev, a published example value is refused (BOU-1014)"
+    (doseq [k ["change-me-min-32-chars-................" "at-least-32-characters-............."
+               "dev-secret-at-least-32-characters-long" (apply str (repeat 32 "a"))]]
+      (is (re-find #"example value" (rpc/service-key-problem k false)) k)))
 
   (testing "a short key is refused, with the requirement in the message"
     ;; This endpoint invokes port methods; a key someone typed by hand guards
     ;; the ability to create payments.
-    (is (re-find #"at least 32" (rpc/service-key-problem "short"))))
+    (is (re-find #"at least 32" (rpc/service-key-problem "short" false))))
 
   (testing "a missing key is refused"
-    (is (some? (rpc/service-key-problem nil)))
-    (is (some? (rpc/service-key-problem 12345)))))
+    (is (some? (rpc/service-key-problem nil false)))
+    (is (some? (rpc/service-key-problem 12345 false)))))
 
 (deftest ^:security ^:unit key-comparison-does-not-leak-a-prefix
   (let [key (apply str (repeat 40 "k"))]

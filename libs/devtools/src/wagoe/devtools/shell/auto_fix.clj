@@ -66,8 +66,8 @@
 
 (defmethod run-action! :set-jwt
   [_ _params]
-  ;; At least 32 characters, or WGE-103 refuses the secret this fix writes.
-  (let [secret (str "dev-secret-" (java.util.UUID/randomUUID))]
+  ;; Random and 64 characters, so WGE-103 accepts it in every profile (BOU-1014).
+  (let [secret (str/replace (str (random-uuid) (random-uuid)) "-" "")]
     (write-env-var! "JWT_SECRET" secret)))
 
 (defmethod run-action! :integrate-module

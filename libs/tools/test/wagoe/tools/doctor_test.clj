@@ -212,6 +212,16 @@
       (is (re-find #"10 characters" (:msg (first result)))
           "the message should say how short it actually is")))
 
+  (testing "an example value fails outside dev, test and local, as the runtime refuses it (BOU-1014)"
+    (let [user {:wagoe/user-auth {:enabled? true}}
+          ex   "change-me-to-a-32-char-minimum-secret"]
+      (is (re-find #"example value" (:msg (first (doctor/check-jwt-secret user {"JWT_SECRET" ex} #{} "prod")))))
+      (is (= :pass (:level (first (doctor/check-jwt-secret user {"JWT_SECRET" ex})))) "dev by default")
+      (doseq [[profile level] {"prod" :error "acc" :error "dev" :pass "test" :pass "local" :pass}]
+        (is (= level (:level (first (doctor/check-jwt-secret user {"JWT_SECRET" ex} #{} profile)))) profile))
+      (is (= :pass (:level (first (doctor/check-jwt-secret user {"JWT_SECRET" ex "WAG_ENV" "prod"}))))
+          "the --env profile decides, not the shell's WAG_ENV")))
+
   (testing "the suggested fix is itself long enough to be valid"
     ;; The old suggestion was `your-32-char-secret` — 19 characters, i.e. a
     ;; value this very check would reject.
@@ -592,3 +602,13 @@
           (is (empty? (clojure.set/difference accepted claimed))
               (str path " accepts " (pr-str (clojure.set/difference accepted claimed))
                    " which doctor would reject")))))))
+
+(deftest ^:unit check-rpc-service-key-test
+  ;; Mirrors what a service refuses at boot (BOU-1014)
+  (let [check #(:level (first (doctor/check-rpc-service-key {"RPC_SERVICE_KEY" %1} %2)))]
+    (is (empty? (doctor/check-rpc-service-key {} "prod")) "unset: no RPC in this deployment")
+    (is (re-find #"5 characters" (:msg (first (doctor/check-rpc-service-key {"RPC_SERVICE_KEY" "short"} "dev")))))
+    (is (= :error (check "short" "dev")))
+    (is (= :error (check "change-me-min-32-chars-................" "prod")))
+    (is (= :pass (check "change-me-min-32-chars-................" "dev")))
+    (is (= :pass (check "q8Zt0n4mR2vJ7kPa1sXc9LbW3eYh6GdUf5Ni" "prod")))))

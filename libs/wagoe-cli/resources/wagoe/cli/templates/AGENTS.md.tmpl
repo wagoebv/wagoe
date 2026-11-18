@@ -278,7 +278,7 @@ Tag tests with metadata:
 ### Start and access the system
 
 ```bash
-export JWT_SECRET="dev-secret-minimum-32-characters"
+export JWT_SECRET="dev-secret-minimum-32-characters"   # dev and test only; refused in prod
 bb repl
 ```
 
