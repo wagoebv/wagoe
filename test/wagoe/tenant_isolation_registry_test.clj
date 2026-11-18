@@ -23,7 +23,8 @@
                     :tests     {"libs/workflow/test/wagoe/workflow/shell/tenant_isolation_test.clj"
                                 ["a-tenant-sees-only-its-own-instances" "tenant-work-never-falls-back-to-public"]
                                 "libs/workflow/test/wagoe/workflow/shell/http_test.clj"
-                                ["every-api-route-refuses-a-caller-outside-the-tenant"]}}
+                                ["every-api-route-refuses-a-caller-outside-the-tenant"
+                                 "an-admin-elsewhere-transitions-here-only-as-what-they-are-here"]}}
    "jobs"          {:scoped-by "a job enqueued in a tenant carries it and runs in its schema (:wagoe/in-tenant)"
                     :tests     {"test/wagoe/tenant_jobs_test.clj"
                                 ["a-tenant-job-reads-its-tenants-schema"]
