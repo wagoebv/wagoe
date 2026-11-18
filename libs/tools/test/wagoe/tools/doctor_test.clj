@@ -217,8 +217,7 @@
           ex   "change-me-to-a-32-char-minimum-secret"]
       (is (re-find #"example value" (:msg (first (doctor/check-jwt-secret user {"JWT_SECRET" ex} #{} "prod")))))
       (is (= :pass (:level (first (doctor/check-jwt-secret user {"JWT_SECRET" ex})))) "dev by default")
-      (doseq [[profile level] {"prod" :error "acc" :error "production" :error
-                               "dev" :pass "development" :pass "test" :pass "testing" :pass "local" :pass}]
+      (doseq [[profile level] {"prod" :error "acc" :error "dev" :pass "test" :pass "local" :pass}]
         (is (= level (:level (first (doctor/check-jwt-secret user {"JWT_SECRET" ex} #{} profile)))) profile))
       (is (= :pass (:level (first (doctor/check-jwt-secret user {"JWT_SECRET" ex "WAG_ENV" "prod"}))))
           "the --env profile decides, not the shell's WAG_ENV")))
@@ -608,6 +607,7 @@
   ;; Mirrors what a service refuses at boot (BOU-1014)
   (let [check #(:level (first (doctor/check-rpc-service-key {"RPC_SERVICE_KEY" %1} %2)))]
     (is (empty? (doctor/check-rpc-service-key {} "prod")) "unset: no RPC in this deployment")
+    (is (re-find #"5 characters" (:msg (first (doctor/check-rpc-service-key {"RPC_SERVICE_KEY" "short"} "dev")))))
     (is (= :error (check "short" "dev")))
     (is (= :error (check "change-me-min-32-chars-................" "prod")))
     (is (= :pass (check "change-me-min-32-chars-................" "dev")))

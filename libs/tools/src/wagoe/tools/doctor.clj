@@ -18,8 +18,7 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [wagoe.tools.report :as report]
-            [wagoe.tools.secret-keys :as secret-keys]
-            [wagoe.tools.text :as text]))
+            [wagoe.tools.secret-keys :as secret-keys]))
 
 ;; =============================================================================
 ;; Known valid providers
@@ -282,13 +281,21 @@
   ;; is 19 characters — the gate was handing out a value the runtime rejects.
   "export JWT_SECRET=\"$(openssl rand -base64 32)\"")
 
-(def ^:private dev-like-profiles
-  "Profiles where the runtime accepts an example secret, aliases included, as
-   `wagoe.config/dev-like?` (tools has no config dependency)."
-  #{"" "dev" "development" "test" "testing" "local"})
+(defn- weak-secret
+  "The error a set `secret` in `var-name` gets for what the runtime refuses at
+   boot: under 32 characters, or an example value outside dev, test and local
+   (BOU-1014). Nil when it would boot. `profile` names a config directory, so
+   it is never an alias."
+  [id var-name secret profile fix what]
+  (cond
+    (< (count secret) jwt-secret-min-length)
+    {:id id :level :error :fix fix
+     :msg (str var-name " is " (count secret) " characters; " what " requires at least "
+               jwt-secret-min-length " and will refuse to start")}
 
-(defn- dev-like? [profile]
-  (contains? dev-like-profiles (text/lower-case (str/trim (str profile)))))
+    (and (not (#{"dev" "test" "local"} profile)) (secret-keys/placeholder-secret? secret))
+    {:id id :level :error :fix fix
+     :msg (str var-name " is an example value from the docs or a template; " what " will refuse to start")}))
 
 (defn check-jwt-secret
   "Check that JWT_SECRET is set and long enough when the user module is active.
@@ -320,43 +327,19 @@
          :msg   "JWT_SECRET not set (required by user module)"
          :fix   jwt-secret-fix}]
 
-       (< (count secret) jwt-secret-min-length)
-       [{:id    :jwt-secret
-         :level :error
-         :msg   (str "JWT_SECRET is " (count secret) " characters; the user module "
-                     "requires at least " jwt-secret-min-length
-                     " and will refuse to start")
-         :fix   jwt-secret-fix}]
-
-       (and (not (dev-like? profile)) (secret-keys/placeholder-secret? secret))
-       [{:id    :jwt-secret
-         :level :error
-         :msg   "JWT_SECRET is an example value from the docs or a template; the user module will refuse to start"
-         :fix   jwt-secret-fix}]
-
        :else
-       [{:id :jwt-secret :level :pass :msg "JWT_SECRET is set"}]))))
+       [(or (weak-secret :jwt-secret "JWT_SECRET" secret profile jwt-secret-fix "the user module")
+            {:id :jwt-secret :level :pass :msg "JWT_SECRET is set"})]))))
 
 (defn check-rpc-service-key
   "When RPC_SERVICE_KEY is set, fail what a service refuses at boot: under 32
    characters, or outside a dev-like `profile` an example value (BOU-1014)."
   [env-map profile]
-  (let [k   (get env-map "RPC_SERVICE_KEY")
-        fix "export RPC_SERVICE_KEY=\"$(openssl rand -base64 32)\""]
-    (cond
-      (str/blank? k) []
-
-      (< (count k) jwt-secret-min-length)
-      [{:id :rpc-service-key :level :error :fix fix
-        :msg (str "RPC_SERVICE_KEY is " (count k) " characters; a service requires at least "
-                  jwt-secret-min-length " and will refuse to start")}]
-
-      (and (not (dev-like? profile)) (secret-keys/placeholder-secret? k))
-      [{:id :rpc-service-key :level :error :fix fix
-        :msg "RPC_SERVICE_KEY is an example value from the docs or a template; a service will refuse to start"}]
-
-      :else
-      [{:id :rpc-service-key :level :pass :msg "RPC_SERVICE_KEY is set"}])))
+  (let [k (get env-map "RPC_SERVICE_KEY")]
+    (when-not (str/blank? k)
+      [(or (weak-secret :rpc-service-key "RPC_SERVICE_KEY" k profile
+                        "export RPC_SERVICE_KEY=\"$(openssl rand -base64 32)\"" "a service")
+           {:id :rpc-service-key :level :pass :msg "RPC_SERVICE_KEY is set"})])))
 
 (defn check-admin-parity
   "Check that admin entity config files exist in both dev and test."

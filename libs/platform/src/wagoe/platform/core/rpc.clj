@@ -168,18 +168,17 @@
 (defn service-key-problem
   "Why `service-key` is unusable, or nil if it is fine. Unless `dev-like?`, a
    published example value is unusable too (BOU-1014)."
-  ([service-key] (service-key-problem service-key false))
-  ([service-key dev-like?]
-   (cond
-     (not (string? service-key))
-     "The RPC service key must be a string"
+  [service-key dev-like?]
+  (cond
+    (not (string? service-key))
+    "The RPC service key must be a string"
 
-     (< (count service-key) min-service-key-length)
-     (str "The RPC service key must be at least " min-service-key-length
-          " characters; this endpoint invokes port methods directly")
+    (< (count service-key) min-service-key-length)
+    (str "The RPC service key must be at least " min-service-key-length
+         " characters; this endpoint invokes port methods directly")
 
-     (and (not dev-like?) (secret-keys/placeholder-secret? service-key))
-     "The RPC service key is an example value from the docs or a template. Generate one: openssl rand -base64 32")))
+    (and (not dev-like?) (secret-keys/placeholder-secret? service-key))
+    "The RPC service key is an example value from the docs or a template. Generate one: openssl rand -base64 32"))
 
 (defn service-key-matches?
   "Whether `presented` is `expected`, compared in constant time.
