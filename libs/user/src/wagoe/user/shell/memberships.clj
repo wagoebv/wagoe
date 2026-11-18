@@ -5,10 +5,11 @@
             [wagoe.tenant.ports :as tenant-ports]))
 
 (defn of-user
-  "The user's active memberships in every tenant; none without the module."
+  "The user's memberships in every tenant but those revoked: an invited one is
+   theirs once they accept it. None without the module."
   [membership-service user-id]
   (when (satisfies? tenant-ports/ITenantMembershipsOfUser membership-service)
-    (tenant-ports/active-memberships-of-user membership-service user-id)))
+    (remove #(= :revoked (keyword (:status %))) (tenant-ports/memberships-of-user membership-service user-id))))
 
 (defn admin-anywhere?
   "Whether the user administers some tenant through a membership."

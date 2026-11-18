@@ -191,6 +191,15 @@
     (throw (ex-info "This user's email is theirs or a platform admin's to change: they are a member of another tenant"
                     {:type :forbidden :reason :member-of-another-tenant}))))
 
+(defn- unlink-identities!
+  "Drop the user's OIDC links when their email changed: one made while the
+   address was someone else's must not outlive it (BOU-1008). They link again
+   by signing in."
+  [{:keys [identities]} user-id]
+  (when identities
+    (doseq [{:keys [issuer subject]} (.find-identities-by-user identities user-id)]
+      (.unlink-identity identities issuer subject))))
+
 (defn- check-admin-change!
   "Throw :forbidden when the bound actor, not a platform admin, sets or clears
    :admin. Without an actor (the CLI, a migration) it is allowed."
@@ -722,7 +731,9 @@
                ;; The row the guard judged, when it locked.
                old-user (or before old-user)
                ;; A partial update returns the whole user, as the port promises.
-               after (some->> result (merge old-user))]
+               after (some->> result (merge old-user))
+               _     (when (and after old-user (not= (:email after) (:email old-user)))
+                       (unlink-identities! this (:id old-user)))]
 
            ;; 4. Audit the other fields. Only the audit trail reads them, so a
            ;;    failed write warns; role and active were audited with the write.
@@ -1013,7 +1024,9 @@
      validation-config: Map containing validation policies and settings
      auth-service: Implementation of IAuthenticationService
      observability: Optional {:logger :metrics-emitter :error-reporter}; each
-                    operation logs, counts and reports through what it holds
+                    operation logs, counts and reports through what it holds.
+                    Also :tenants, :memberships and :identities, the tenant
+                    module's services and the OIDC links, when they are on
 
    Returns:
      UserService instance

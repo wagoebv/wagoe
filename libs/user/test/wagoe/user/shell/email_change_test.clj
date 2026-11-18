@@ -16,7 +16,7 @@
         svc   (service/create-user-service
                users (mem/->MemorySessionRepository (atom {})) (mem/->MemoryAuditRepository (atom [])) {} nil
                {:memberships (reify tenant-ports/ITenantMembershipsOfUser
-                               (active-memberships-of-user [_ _] elsewhere))})
+                               (memberships-of-user [_ _] elsewhere))})
         user! (fn [email m] (ports/create-user users (merge {:email email :name email :role :user :active true
                                                              :password-hash "x"} m)))]
     {:svc   svc
@@ -37,6 +37,25 @@
     (testing "the user themself, or a platform admin, still can"
       (is (= :changed (change-email svc ada ada)))
       (is (= :changed (change-email svc root ada))))))
+
+(deftest ^:unit ^:security an-invitation-elsewhere-counts-a-revoked-membership-does-not
+  ;; An invited membership is theirs once they accept it
+  (let [{:keys [svc ada admin]} (setup [{:tenant-id tenant-b :role :admin :status :invited}])]
+    (is (= :member-of-another-tenant (change-email svc admin ada))))
+  (let [{:keys [svc ada admin]} (setup [{:tenant-id tenant-b :role :admin :status :revoked}])]
+    (is (= :changed (change-email svc admin ada)))))
+
+(deftest ^:unit ^:security an-email-change-drops-the-oidc-links
+  ;; One made while the address was someone else's must not outlive it
+  (let [links (atom #{["https://idp" "s-1"]})
+        ids   #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify ports/IUserIdentityRepository
+          (find-identities-by-user [_ _] (map (fn [[i s]] {:issuer i :subject s}) @links))
+          (unlink-identity [_ i s] (swap! links disj [i s]) true))
+        {:keys [svc ada]} (setup [])
+        svc (assoc svc :identities ids)]
+    (is (= :changed (change-email svc ada ada)))
+    (is (empty? @links))))
 
 (deftest ^:unit a-tenants-admin-still-changes-the-email-of-their-own-tenants-users
   (let [{:keys [svc ada admin]} (setup [{:tenant-id tenant-a :role :member}])]

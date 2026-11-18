@@ -2,7 +2,8 @@
   "OIDC sign-in end to end against a fake provider on a real socket: discovery,
    key set and token endpoint, with PKCE and client authentication checked the
    way a provider checks them."
-  (:require [buddy.core.codecs :as codecs]
+  (:require [wagoe.user.shell.memberships]
+            [buddy.core.codecs :as codecs]
             [buddy.core.hash :as hash]
             [buddy.core.keys :as keys]
             [buddy.sign.jwt :as jwt]
@@ -346,12 +347,16 @@
   (testing "on, but the account administers a tenant by membership (BOU-1008)"
     (let [role  (atom :admin)
           a     (app :memberships (reify tenant-ports/ITenantMembershipsOfUser
-                                    (active-memberships-of-user [_ _] [{:tenant-id (random-uuid) :role @role}])))
+                                    (memberships-of-user [_ _] [{:tenant-id (random-uuid) :role @role :status :active}])))
           ada   (add-user! a)
           resp  (sign-in! a)]
       (is (= 403 (:status resp)))
       (is (str/includes? (:body resp) "oidc-admin-link-refused"))
       (is (empty? (ports/find-identities-by-user (:identities a) (:id ada))))
+      (testing "an invited admin membership counts: it is theirs once accepted"
+        (with-redefs [wagoe.user.shell.memberships/of-user
+                      (fn [_ _] [{:tenant-id (random-uuid) :role :admin :status :invited}])]
+          (is (str/includes? (:body (sign-in! a)) "oidc-admin-link-refused"))))
       (reset! role :member)
       (is (some? (session-token (sign-in! a))) "a member by membership is linked as before"))))
 
