@@ -30,13 +30,14 @@
   [k]
   (secret-name? (normalize k)))
 
+(def ^:private placeholder-marker
+  "What the shipped examples and docs write in place of a secret."
+  #"change-?me|your-|at-least|minimum|min-32|32-char|^dev-secret")
+
 (defn placeholder-secret?
   "True when `secret` is a published example value rather than a real secret:
-   one naming change-me or starting with dev-secret, as the shipped examples
-   and docs do, or one of few distinct characters (BOU-1014)."
+   one phrased as the examples and docs phrase theirs, or a few characters
+   repeated (BOU-1014)."
   [secret]
   (let [s (text/lower-case (str secret))]
-    (boolean (or (str/includes? s "change-me")
-                 (str/includes? s "changeme")
-                 (str/starts-with? s "dev-secret")
-                 (< (count (set s)) 10)))))
+    (boolean (or (re-find placeholder-marker s) (< (count (set s)) 6)))))

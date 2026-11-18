@@ -8,6 +8,7 @@
   (:require [wagoe.platform.core.rpc :as rpc]
             [wagoe.platform.shell.rpc.client :as client]
             [wagoe.platform.shell.rpc.server :as server]
+            [wagoe.config :as config]
             [wagoe.payments.ports :as pay-ports]
             [wagoe.payments.shell.adapters.mock :as mock]
             [clj-http.client :as http]
@@ -773,6 +774,14 @@
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"at least 32"
                             (server/rpc-handler pay-ports/IPaymentProvider provider
                                                 {:service-key "short"}))))
+
+    (testing "outside dev an example key is refused, in dev it is not (BOU-1014)"
+      (let [opts {:service-key "change-me-min-32-chars-................"}]
+        (with-redefs [config/dev-like? (constantly false)]
+          (is (thrown-with-msg? clojure.lang.ExceptionInfo #"example value"
+                                (server/rpc-app pay-ports/IPaymentProvider provider opts))))
+        (with-redefs [config/dev-like? (constantly true)]
+          (is (fn? (server/rpc-app pay-ports/IPaymentProvider provider opts))))))
 
     (testing "and rpc-app refuses too, since that is the documented path"
       (is (thrown? clojure.lang.ExceptionInfo

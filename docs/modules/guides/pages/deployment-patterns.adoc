@@ -168,7 +168,7 @@ fly postgres create --name my-wagoe-app-db
 fly postgres attach my-wagoe-app-db
 
 # 4. Set secrets
-fly secrets set JWT_SECRET="your-secret-32-chars-min" POSTGRES_PASSWORD="..."
+fly secrets set JWT_SECRET="$(openssl rand -base64 32)" POSTGRES_PASSWORD="..."
 
 # 5. Deploy
 fly deploy

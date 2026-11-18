@@ -8,7 +8,7 @@ user registration, login, JWT tokens, sessions, and multi-factor authentication.
 
 [source,bash]
 ----
-export JWT_SECRET="minimum-32-character-secret-key"
+export JWT_SECRET="$(openssl rand -base64 32)"
 ----
 
 The JWT secret must be at least 32 characters. Tests that exercise auth also require this variable:

@@ -89,7 +89,7 @@ Wagoe Config Doctor — dev
 
   ✓ env-refs             All #env references resolved or have defaults
   ✗ jwt-secret           JWT_SECRET not set (required by user module)
-                         Fix: export JWT_SECRET="your-32-char-secret"
+                         Fix: export JWT_SECRET="$(openssl rand -base64 32)"
   ✓ providers            All provider values are known
   ⚠ admin-parity         dev/admin/users.edn has :split-table-update, test does not
   ✓ prod-placeholders    Placeholder check skipped (non-production env)

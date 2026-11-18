@@ -15,26 +15,27 @@
    token with it (BOU-1014)."
   ([secret] (validate secret (config/dev-like?)))
   ([secret dev-like?]
-  (if-let [problem (cond
-                     (str/blank? secret)
-                     "JWT_SECRET environment variable not configured. Set JWT_SECRET before starting the application."
+   (if-let [problem (cond
+                      (str/blank? secret)
+                      "JWT_SECRET environment variable not configured. Set JWT_SECRET before starting the application."
 
-                     (< (count secret) min-length)
-                     (str "JWT_SECRET must be at least " min-length " characters (HMAC key strength).")
+                      (< (count secret) min-length)
+                      (str "JWT_SECRET must be at least " min-length " characters (HMAC key strength).")
 
-                     (and (not dev-like?) (secret-keys/placeholder-secret? secret))
-                     "JWT_SECRET is an example value from the docs or a template. Generate one: openssl rand -base64 32")]
-    (throw (ex-info (str "WGE-103: " problem)
-                    {:type :configuration-error
-                     :wagoe/error-code "WGE-103"
-                     :required-env-var "JWT_SECRET"}))
-    secret)))
+                      (and (not dev-like?) (secret-keys/placeholder-secret? secret))
+                      "JWT_SECRET is an example value from the docs or a template. Generate one: openssl rand -base64 32")]
+     (throw (ex-info (str "WGE-103: " problem)
+                     {:type :configuration-error
+                      :wagoe/error-code "WGE-103"
+                      :required-env-var "JWT_SECRET"}))
+     secret)))
 
 (def ^:private secret
   "Read and checked once per process: the environment cannot change within a JVM."
   (delay (validate (System/getenv "JWT_SECRET"))))
 
 (defn value
-  "The validated JWT_SECRET. Throws WGE-103 when it is missing or short."
+  "The validated JWT_SECRET. Throws WGE-103 when it is missing, short or, outside
+   dev, an example value."
   []
   @secret)

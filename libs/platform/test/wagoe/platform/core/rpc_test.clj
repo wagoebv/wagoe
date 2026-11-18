@@ -196,8 +196,9 @@
     (is (nil? (rpc/service-key-problem (apply str (repeat 32 "a")) true)) "in dev, any long key"))
 
   (testing "outside dev, a published example value is refused (BOU-1014)"
-    (is (re-find #"example value" (rpc/service-key-problem "change-me-min-32-chars-................")))
-    (is (re-find #"example value" (rpc/service-key-problem (apply str (repeat 32 "a"))))))
+    (doseq [k ["change-me-min-32-chars-................" "at-least-32-characters-............."
+               "dev-secret-at-least-32-characters-long" (apply str (repeat 32 "a"))]]
+      (is (re-find #"example value" (rpc/service-key-problem k)) k)))
 
   (testing "a short key is refused, with the requirement in the message"
     ;; This endpoint invokes port methods; a key someone typed by hand guards

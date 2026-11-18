@@ -282,6 +282,14 @@
   ;; is 19 characters — the gate was handing out a value the runtime rejects.
   "export JWT_SECRET=\"$(openssl rand -base64 32)\"")
 
+(def ^:private dev-like-profiles
+  "Profiles where the runtime accepts an example secret, aliases included, as
+   `wagoe.config/dev-like?` (tools has no config dependency)."
+  #{"" "dev" "development" "test" "testing" "local"})
+
+(defn- dev-like? [profile]
+  (contains? dev-like-profiles (text/lower-case (str/trim (str profile)))))
+
 (defn check-jwt-secret
   "Check that JWT_SECRET is set and long enough when the user module is active.
 
@@ -291,9 +299,11 @@
    with `JWT_SECRET must be at least 32 characters` (BOU-250).
 
    `code-modules` are the modules the app enables in code, through
-   :extra-modules — where a generated project enables user (BOU-591)."
+   :extra-modules — where a generated project enables user (BOU-591).
+   Outside a dev-like `profile` an example value fails, as at runtime (BOU-1014)."
   ([active-config env-map] (check-jwt-secret active-config env-map #{}))
-  ([active-config env-map code-modules]
+  ([active-config env-map code-modules] (check-jwt-secret active-config env-map code-modules "dev"))
+  ([active-config env-map code-modules profile]
    (let [user-active? (some (fn [k]
                               (and (keyword? k)
                                    (str/starts-with? (name k) "user")
@@ -318,9 +328,7 @@
                      " and will refuse to start")
          :fix   jwt-secret-fix}]
 
-       ;; As the runtime refuses outside dev, test and local (BOU-1014)
-       (and (not (#{"" "dev" "test" "local"} (text/lower-case (str/trim (str (get env-map "WAG_ENV"))))))
-            (secret-keys/placeholder-secret? secret))
+       (and (not (dev-like? profile)) (secret-keys/placeholder-secret? secret))
        [{:id    :jwt-secret
          :level :error
          :msg   "JWT_SECRET is an example value from the docs or a template; the user module will refuse to start"
@@ -328,6 +336,27 @@
 
        :else
        [{:id :jwt-secret :level :pass :msg "JWT_SECRET is set"}]))))
+
+(defn check-rpc-service-key
+  "When RPC_SERVICE_KEY is set, fail what a service refuses at boot: under 32
+   characters, or outside a dev-like `profile` an example value (BOU-1014)."
+  [env-map profile]
+  (let [k   (get env-map "RPC_SERVICE_KEY")
+        fix "export RPC_SERVICE_KEY=\"$(openssl rand -base64 32)\""]
+    (cond
+      (str/blank? k) []
+
+      (< (count k) jwt-secret-min-length)
+      [{:id :rpc-service-key :level :error :fix fix
+        :msg (str "RPC_SERVICE_KEY is " (count k) " characters; a service requires at least "
+                  jwt-secret-min-length " and will refuse to start")}]
+
+      (and (not (dev-like? profile)) (secret-keys/placeholder-secret? k))
+      [{:id :rpc-service-key :level :error :fix fix
+        :msg "RPC_SERVICE_KEY is an example value from the docs or a template; a service will refuse to start"}]
+
+      :else
+      [{:id :rpc-service-key :level :pass :msg "RPC_SERVICE_KEY is set"}])))
 
 (defn check-admin-parity
   "Check that admin entity config files exist in both dev and test."
@@ -673,7 +702,8 @@
          (check-secret-refs config-text env-map)
          (check-plaintext-secrets config-text env)
          (check-providers active)
-         (check-jwt-secret active env-map (code-enabled-modules (root-dir)))
+         (check-jwt-secret active env-map (code-enabled-modules (root-dir)) env)
+         (check-rpc-service-key env-map env)
          ;; It compares dev with test, so it says nothing about another
          ;; profile and named the wrong two under --env prod (BOU-597).
          (when (#{"dev" "test"} env)

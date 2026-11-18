@@ -93,7 +93,7 @@
           env-file (io/file (System/getProperty "user.dir") ".env")]
       (is (str/includes? output "Written to .env"))
       (is (str/includes? output "Restart the REPL"))
-      (is (str/includes? (slurp env-file) "JWT_SECRET=\"dev-secret-")))))
+      (is (re-find #"JWT_SECRET=\"[0-9a-f]{64}\"" (slurp env-file))))))
 
 (deftest ^:integration set-env-reads-required-env-var-test
   (testing ":set-env reads :required-env-var from ex-data params"

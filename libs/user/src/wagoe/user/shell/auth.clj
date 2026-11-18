@@ -63,7 +63,7 @@
   :hs256)
 
 (defn get-jwt-secret
-  "The validated JWT_SECRET. Throws WGE-103 when it is missing or short."
+  "The validated JWT_SECRET. Throws WGE-103 as `jwt-secret/value` does."
   []
   (jwt-secret/value))
 
