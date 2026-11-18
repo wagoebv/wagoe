@@ -306,13 +306,15 @@
     (if (and expires-at ends-at)
       (let [timer {:expires-at  (.toEpochMilli ^java.time.Instant expires-at)
                    :ends-at     (.toEpochMilli ^java.time.Instant ends-at)
+                   :now         (System/currentTimeMillis)
                    :extend-path session-core/extend-path
                    :reauth-path session-core/reauth-path}
             resp  (binding [session-timeout/*session* timer] (with-viewing request f))]
         (cond-> resp
           ;; A handler that opened a new session says so itself
           (map? resp) (update :headers #(merge {"X-Session-Expires" (str (:expires-at timer))
-                                                "X-Session-Ends"    (str (:ends-at timer))}
+                                                "X-Session-Ends"    (str (:ends-at timer))
+                                                "X-Session-Now"     (str (:now timer))}
                                                %))))
       (with-viewing request f))))
 

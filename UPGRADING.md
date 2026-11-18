@@ -73,14 +73,14 @@ clients sign in again. A user service of your own must implement
 `IJwtSessions`: the user module refuses to boot without it (WGE-107), and the
 JWT middleware built on one without it refuses every JWT.
 
-
 ### 6. A session slides by its own hours, at most a week (BOU-1007)
 
 A session slid to 24 hours whenever under 2 remained, and never ended. It
 slides by the hours its sign-in got now, up to `:max-session-days` (7) after
-sign-in, and a signed-in page asks before it ends. Sessions opened before the
-upgrade keep their expiry and end within a day. A page of your own layout
-gets the dialog only through `page-layout`.
+sign-in, and a signed-in page asks before it ends. A session opened before the
+upgrade slides 24 hours as it did, but one opened more than
+`:max-session-days` ago ends at the upgrade: those users sign in again. A page
+of your own layout gets the dialog only through `page-layout`.
 
 ## 1.1.x → 1.2.0
 

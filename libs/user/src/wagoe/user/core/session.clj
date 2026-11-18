@@ -94,14 +94,14 @@
 (defn update-session-access
   "`session` used at `current-time`: it slides by its own :duration-hours, the
    hours its sign-in got, never past `ends-at` (BOU-1007). One from before
-   then has none and keeps its expiry."
+   then has none and slides 24 hours, as it did."
   [session current-time max-days]
-  (let [used (assoc session :last-accessed-at current-time)]
-    (if-let [hours (:duration-hours session)]
-      (let [slid ^java.time.Instant (.plusSeconds ^java.time.Instant current-time (* hours 3600))
-            end  (ends-at session max-days)]
-        (assoc used :expires-at (if (and end (.isBefore end slid)) end slid)))
-      used)))
+  (let [hours (or (:duration-hours session) 24)
+        slid  ^java.time.Instant (.plusSeconds ^java.time.Instant current-time (* hours 3600))
+        end   (ends-at session max-days)]
+    (assoc session
+           :last-accessed-at current-time
+           :expires-at (if (and end (.isBefore end slid)) end slid))))
 
 (defn should-cleanup-session?
   "Return true if session has been expired longer than the grace period."

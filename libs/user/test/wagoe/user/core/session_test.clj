@@ -156,9 +156,9 @@
         (is (:valid? (session/is-session-valid? beyond (.minusSeconds end 1) 7)))
         (is (= :expired (:reason (session/is-session-valid? beyond end 7))))))))
 
-(deftest ^:unit a-session-from-before-keeps-its-expiry
-  ;; No :duration-hours: what it was given is unknown, so it does not slide
-  (is (= far (:expires-at (session/update-session-access (make-session) later 7)))))
+(deftest ^:unit a-session-from-before-slides-24-hours-as-it-did
+  ;; No :duration-hours: what it was given is unknown. "Stay signed in" still keeps it
+  (is (= (.plusSeconds later (hours 24)) (:expires-at (session/update-session-access (make-session) later 7)))))
 
 (deftest ^:unit session-access-write-test
   (testing "nothing to write within a minute of the last access"

@@ -621,6 +621,7 @@
  :user.view-as/stop "Stop"
  :user.session/title "Still there?"
  :user.session/idle "Your session ends soon. You will be signed out in"
+ :user.session/sign-in-again "Signed in another way? Sign in again"
  :user.session/stay "Stay signed in"
  :user.session/reauth "Your session has reached its longest. Enter your password to go on, or you will be signed out in"
  :user.session/password "Password"

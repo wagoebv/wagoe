@@ -613,7 +613,8 @@
    signing in again the page needs the new session's (BOU-1007)."
   []
   (fn [_request]
-    {:status 204 :headers (if-let [t (csrf/current-token)] {"X-CSRF-Token" t} {})}))
+    {:status 204 :headers (cond-> {"Cache-Control" "no-store"}
+                            (csrf/current-token) (assoc "X-CSRF-Token" (csrf/current-token)))}))
 
 (defn session-reauth-handler
   "POST /web/session/reauth - the signed-in user's password, and second factor
@@ -622,20 +623,26 @@
    towards the sign-in lockout as a sign-in does."
   [user-service config]
   (fn [request]
-    (let [user   (:user request)
+    ;; The session's own user: while viewing as another, the administrator
+    (let [user   (or (get-in request [:viewing-as :admin]) (:user request))
           form   (:form-params request)
+          ;; Only this user's account, never another tenant's of the same email
           result (user-ports/authenticate-user
                   user-service
-                  (cond-> (merge {:email    (:email user)
-                                  :password (get form "password")
-                                  :mfa-code (not-empty (get form "mfa-code"))}
-                                 (login-context request))
-                    (:tenant-id user) (assoc :tenant-id (str (:tenant-id user)))))]
+                  (merge {:email         (:email user)
+                          :password      (get form "reauth-password")
+                          :mfa-code      (not-empty (get form "reauth-mfa-code"))
+                          :tenant-given? true
+                          :tenant-id     (some-> (:tenant-id user) str)}
+                         (login-context request)))]
       (cond
         (and (:authenticated result) (= (str (:id user)) (str (get-in result [:user :id]))))
         (do (some->> (get-in request [:cookies "session-token" :value]) (user-ports/logout-user user-service))
             {:status  204
-             :cookies {"session-token" (session-cookie config (get-in result [:session :session-token]))}})
+             ;; Remembered as at sign-in, which leaves the email cookie then
+             :cookies {"session-token" (cond-> (session-cookie config (get-in result [:session :session-token]))
+                                         (get-in request [:cookies "remembered-email" :value])
+                                         (assoc :max-age (* 30 24 60 60)))}})
 
         (:requires-mfa? result) {:status 401 :headers {"X-Session-Reauth" "mfa"}}
         :else                   {:status 401 :headers {"X-Session-Reauth" "refused"}}))))

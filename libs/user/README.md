@@ -59,6 +59,7 @@ Complete user management and authentication system with MFA support, session man
 ;; config.edn, under :active. JWT_SECRET (≥ 32 chars) comes from the environment.
 {:wagoe/user
  {:auth {:default-session-hours      24
+         :max-session-days           7    ; a session slides, never past this (BOU-1007)
          :max-failed-attempts        5
          :lockout-duration-minutes   15
          :mfa-reset-enrolment-hours  72}}}

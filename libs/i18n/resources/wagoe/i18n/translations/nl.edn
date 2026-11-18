@@ -620,6 +620,7 @@
  :user.view-as/stop "Stoppen"
  :user.session/title "Nog daar?"
  :user.session/idle "Je sessie loopt bijna af. Je wordt uitgelogd over"
+ :user.session/sign-in-again "Op een andere manier ingelogd? Log opnieuw in"
  :user.session/stay "Blijf ingelogd"
  :user.session/reauth "Je sessie heeft haar maximale duur bereikt. Vul je wachtwoord in om door te gaan, anders word je uitgelogd over"
  :user.session/password "Wachtwoord"
