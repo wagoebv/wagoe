@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A password change wrote the old and new hash into the audit log and data exports** (BOU-1013). An entry now says
+  only that it changed; a migration blanks logged hashes. Exports built before keep them until they expire.
 - **A session slid to 24 hours on use and never ended** (BOU-1007): it slides by its own hours now, up to
   `:max-session-days` (7); the page asks before it ends. Sessions older than that end at upgrade.
 - **A JWT kept working after logout, a password change or "Revoke all sessions"** (BOU-1006), until it expired. It

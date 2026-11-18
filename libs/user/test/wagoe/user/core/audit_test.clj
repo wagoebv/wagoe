@@ -365,52 +365,6 @@
       (is (nil? (:user-agent entry))))))
 
 ;; =============================================================================
-;; Sanitize Audit Metadata Tests
-;; =============================================================================
-
-(deftest ^:unit sanitize-audit-metadata-test
-  (testing "Removes sensitive fields from metadata"
-    (let [metadata {:username "testuser"
-                    :password "secret123"
-                    :email "user@example.com"
-                    :role "admin"}
-          sanitized (audit/sanitize-audit-metadata metadata)]
-
-      (is (contains? sanitized :username))
-      (is (contains? sanitized :email))
-      (is (contains? sanitized :role))
-      (is (not (contains? sanitized :password)))))
-
-  (testing "Removes specific sensitive fields from metadata"
-    (let [metadata {:username "testuser"
-                    :password "secret123"
-                    :password-hash "$2a$..."
-                    :session-token "sess456"
-                    :reset-token "reset789"
-                    :email "user@example.com"
-                    :role "admin"}
-          sanitized (audit/sanitize-audit-metadata metadata)]
-
-      ;; These should remain
-      (is (contains? sanitized :username))
-      (is (contains? sanitized :email))
-      (is (contains? sanitized :role))
-
-      ;; These should be removed
-      (is (not (contains? sanitized :password)))
-      (is (not (contains? sanitized :password-hash)))
-      (is (not (contains? sanitized :session-token)))
-      (is (not (contains? sanitized :reset-token)))))
-
-  (testing "Returns empty map for empty input"
-    (let [sanitized (audit/sanitize-audit-metadata {})]
-      (is (empty? sanitized))))
-
-  (testing "Returns nil for nil input"
-    (let [sanitized (audit/sanitize-audit-metadata nil)]
-      (is (nil? sanitized)))))
-
-;; =============================================================================
 ;; Rights timeline (BOU-855)
 ;; =============================================================================
 
@@ -469,3 +423,24 @@
     (is (= [:activate] (map :action (audit/account-audit-entries ctx (assoc before :active false) {:active true}))))
     (is (nil? (audit/profile-audit-entry ctx before (assoc before :role :admin :updated-at "now")))
         "role alone is the account entry's, not the profile's")))
+
+;; BOU-1013: credentials are named as changed, never shown
+(deftest ^:unit ^:security credential-values-never-reach-an-entry
+  (let [entry (audit/update-user-audit-entry
+               test-actor-id test-actor-email test-target-id test-target-email
+               {:password-hash "$2a$old" :mfa-secret "s1" :name "Ada"}
+               {:password-hash "$2a$new" :mfa-secret "s2" :name "Ada L"
+                :mfa-backup-codes ["c1"] :mfa-backup-codes-used ["c0"]}
+               nil nil)
+        by-field (into {} (map (juxt :field identity)) (get-in entry [:changes :fields]))]
+    (doseq [f ["password-hash" "mfa-secret" "mfa-backup-codes" "mfa-backup-codes-used"]]
+      (is (= {:field f :old "[REDACTED]" :new "[REDACTED]"} (by-field f)) f))
+    (is (= {:field "name" :old "Ada" :new "Ada L"} (by-field "name")))
+    (is (not (re-find #"\$2a\$|s1|s2|c0|c1" (pr-str (dissoc by-field "name")))))))
+
+(deftest ^:unit redact-secret-changes-test
+  (let [changes {:fields [{:field "password-hash" :old "$2a$x" :new "$2a$y"} {:field "role" :old "user" :new "admin"}]}]
+    (is (= {:fields [{:field "password-hash" :old "[REDACTED]" :new "[REDACTED]"} {:field "role" :old "user" :new "admin"}]}
+           (audit/redact-secret-changes changes)))
+    (is (= {:created true} (audit/redact-secret-changes {:created true})) "no :fields: as it was")))
+

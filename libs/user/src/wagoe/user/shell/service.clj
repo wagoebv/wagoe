@@ -850,8 +850,8 @@
                                 actor-email
                                 user-id           ; target-user-id
                                 (:email user)     ; target-user-email
-                                user              ; old user data (without exposing password hash)
-                                updated-user      ; new user data
+                                (select-keys user [:password-hash])
+                                (select-keys updated-user [:password-hash])
                                 ip-address
                                 user-agent)]
                (.create-audit-log audit-repository audit-entry))
