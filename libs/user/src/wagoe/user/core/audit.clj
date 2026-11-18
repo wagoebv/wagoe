@@ -13,7 +13,8 @@
    - Business rules for what gets audited and how"
   (:require [clojure.edn :as edn]
             [wagoe.user.core.group :as group]
-            [wagoe.user.core.user :as user]))
+            [wagoe.user.core.user :as user]
+            [wagoe.user.schema :as schema]))
 
 ;; =============================================================================
 ;; Pure Audit Entry Creation Functions
@@ -49,40 +50,29 @@
    :user-agent user-agent
    :result :success})
 
-(def ^:private secret-fields
-  "Fields an entry names as changed but never shows the values of: credentials,
-   which an export or anyone reading the log would otherwise get (BOU-1013)."
-  #{"password-hash" "mfa-secret" "mfa-backup-codes" "mfa-backup-codes-used"})
+(def ^:private credential-field?
+  "Fields an entry names as changed but never shows the values of, which an
+   export or anyone reading the log would otherwise get (BOU-1013)."
+  (set (map name schema/credential-fields)))
 
-(def redacted "[REDACTED]")
+(def ^:private redacted "[REDACTED]")
 
-(defn- hide-secret [{:keys [field] :as change}]
-  (cond-> change (secret-fields field) (assoc :old redacted :new redacted)))
+(defn- hide-secret
+  ([change] (hide-secret credential-field? change))
+  ([secret? {:keys [field] :as change}]
+   (cond-> change (secret? field) (assoc :old redacted :new redacted))))
 
 (defn redact-secret-changes
-  "`changes` with the values of credential fields replaced (BOU-1013)."
-  [changes]
-  (cond-> changes (:fields changes) (update :fields #(mapv hide-secret %))))
+  "`changes` with the values of credential fields, or of those `secret?` names,
+   replaced (BOU-1013)."
+  ([changes] (redact-secret-changes changes credential-field?))
+  ([changes secret?]
+   (cond-> changes
+     (:fields changes) (update :fields #(mapv (partial hide-secret (some-fn credential-field? secret?)) %)))))
 
 (defn update-user-audit-entry
-  "Create audit log entry for user update.
-   
-   Args:
-     actor-id: UUID of user who performed the action
-     actor-email: Email of actor
-     target-user-id: UUID of user being updated
-     target-user-email: Email of user being updated
-     old-values: Map of old field values
-     new-values: Map of new field values
-     ip-address: Optional IP address
-     user-agent: Optional user agent string
-     
-   Returns:
-     Audit log entity map
-     
-   Example:
-     (update-user-audit-entry actor-id \"admin@example.com\" user-id \"user@example.com\"
-                             {:role :user} {:role :admin} \"192.168.1.1\" nil)"
+  "The audit entry for `old-values` becoming `new-values`: each changed field,
+   a credential's values replaced (BOU-1013)."
   [actor-id actor-email target-user-id target-user-email old-values new-values ip-address user-agent]
   (let [changed-fields (reduce-kv
                         (fn [acc k new-val]
@@ -390,20 +380,6 @@
        (contains? audit-entry :target-user-id)
        (contains? audit-entry :target-user-email)
        (contains? audit-entry :result)))
-
-(defn sanitize-audit-metadata
-  "Remove sensitive data from audit metadata before persistence.
-   
-   Pure function that filters out password fields, tokens, etc.
-   
-   Args:
-     metadata: Metadata map that may contain sensitive data
-     
-   Returns:
-     Sanitized metadata map"
-  [metadata]
-  (when metadata
-    (dissoc metadata :password :password-hash :session-token :reset-token)))
 
 ;; =============================================================================
 ;; Groups

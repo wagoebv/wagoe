@@ -433,11 +433,13 @@
        (:send-welcome value) (assoc :send-welcome (:sendWelcome value))
        (:sendWelcome value) (dissoc :sendWelcome))))
 
+(def credential-fields
+  "A user's credentials: never in an API response, an audit entry or an export."
+  #{:password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used})
+
 (def ^:private sensitive-fields
-  "Fields that should never be exposed in API responses."
-  #{:password-hash :passwordHash
-    :mfa-secret :mfaSecret
-    :mfa-backup-codes :mfaBackupCodes})
+  "`credential-fields` as an API response may name them too."
+  (into credential-fields #{:passwordHash :mfaSecret :mfaBackupCodes :mfaBackupCodesUsed}))
 
 (defn user-specific-kebab->camel
   "Transforms user-specific kebab-case internal keys to camelCase API keys.

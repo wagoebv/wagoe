@@ -20,6 +20,9 @@
    - Shell handles all I/O and external systems
    - Clean boundary between functional and imperative code"
   (:require [wagoe.core.utils.type-conversion :as type-conversion]
+            [wagoe.user.core.audit :as audit-core]
+            [wagoe.core.utils.pii-redaction :as pii]
+            [wagoe.core.utils.secret-keys :as secret-keys]
             [wagoe.core.utils.text :as text]
             [wagoe.platform.database :as db]
             [next.jdbc.transaction :as jdbc-tx]
@@ -432,6 +435,15 @@
                                 :user-agent :user_agent
                                 :error-message :error_message
                                 :created-at :created_at})))
+
+(def ^:private credential-names (set (map name user-schema/credential-fields)))
+
+(defn- secret-field?
+  "A field naming a credential or a secret, however it is cased: password_hash,
+   mfaBackupCodes, resetToken."
+  [field]
+  (let [n (secret-keys/normalize field)]
+    (or (contains? credential-names n) (pii/sensitive-key-name? #{} n))))
 
 (defn read-json
   "A JSON column's value as data, however the driver returns it: a string, a
@@ -1337,7 +1349,8 @@
      :create-audit-log
      {:audit-entity audit-entity}
      (fn [{:keys [params]}]
-       (let [audit-entity (:audit-entity params)
+       ;; Whoever built the entry, no credential's value is stored (BOU-1013)
+       (let [audit-entity (update (:audit-entity params) :changes #(some-> % (audit-core/redact-secret-changes secret-field?)))
              now (java.time.Instant/now)
              audit-with-metadata (-> audit-entity
                                      (assoc :id (or (:id audit-entity) (UUID/randomUUID)))

@@ -2,6 +2,7 @@
   "A user's data export and the audit-log retention policy, on the engine
    WAGOE_TEST_DB names."
   (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [reitit.ring :as ring]
             [support.test-db :as test-db]
@@ -28,11 +29,11 @@
                    :identities (identity-persistence/create-identity-repository ctx)
                    :groups     (group-persistence/create-group-repository ctx)}]
         (f (assoc repos :ctx ctx :exporter (sut/map->UserDataExporter
-                                   {:user-repository     (:users repos)
-                                    :session-repository  (:sessions repos)
-                                    :audit-repository    (:audit repos)
-                                    :identity-repository (:identities repos)
-                                    :group-repository    (:groups repos)})))))))
+                                            {:user-repository     (:users repos)
+                                             :session-repository  (:sessions repos)
+                                             :audit-repository    (:audit repos)
+                                             :identity-repository (:identities repos)
+                                             :group-repository    (:groups repos)})))))))
 
 (defn- user! [users email role]
   (ports/create-user users {:email email :name email :role role :active true
@@ -184,8 +185,24 @@
           (is (some #(= {:field "password-hash" :old "[REDACTED]" :new "[REDACTED]"} %)
                     (mapcat (comp :fields :changes) logged))
               "that it changed, and nothing more")
-          (is (not (re-find #"\$2a\$" (pr-str logged))))
-          (is (not (re-find #"\$2a\$" (json/generate-string exported)))))))))
+          (doseq [h [(:password-hash ada) (:password-hash (ports/find-user-by-id users (:id ada)))]]
+            (is (not (str/includes? (pr-str logged) h)) "neither hash in the log")
+            (is (not (str/includes? (json/generate-string exported) h)) "nor in an export")))))))
+
+(deftest ^:integration ^:security the-audit-log-stores-no-secret-whoever-builds-the-entry
+  (with-repos
+    (fn [{:keys [users audit]}]
+      (let [ada (user! users "ada@example.com" :user)]
+        (ports/create-audit-log audit {:action :update :actor-id (:id ada) :actor-email "ada@example.com"
+                                       :target-user-id (:id ada) :target-user-email "ada@example.com"
+                                       :result :success
+                                       :changes {:fields [{:field "password_hash" :old "h1" :new "h2"}
+                                                          {:field "mfaBackupCodes" :old "c1" :new "c2"}
+                                                          {:field "resetToken" :old "t1" :new "t2"}
+                                                          {:field "name" :old "Ada" :new "Ada L"}]}})
+        (let [fields (-> (ports/find-audit-logs-by-user audit (:id ada) {:limit 5}) first :changes :fields)]
+          (is (= ["[REDACTED]" "[REDACTED]" "[REDACTED]" "Ada"] (map :old fields)))
+          (is (= "Ada L" (:new (last fields)))))))))
 
 (deftest ^:integration ^:security the-migration-blanks-hashes-already-logged
   (with-repos

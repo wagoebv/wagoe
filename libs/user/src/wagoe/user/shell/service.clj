@@ -850,7 +850,7 @@
                                 actor-email
                                 user-id           ; target-user-id
                                 (:email user)     ; target-user-email
-                                user              ; old user data (without exposing password hash)
+                                user              ; old user data; the entry hides the hash
                                 updated-user      ; new user data
                                 ip-address
                                 user-agent)]

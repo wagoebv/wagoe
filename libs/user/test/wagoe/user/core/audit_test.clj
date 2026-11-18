@@ -365,52 +365,6 @@
       (is (nil? (:user-agent entry))))))
 
 ;; =============================================================================
-;; Sanitize Audit Metadata Tests
-;; =============================================================================
-
-(deftest ^:unit sanitize-audit-metadata-test
-  (testing "Removes sensitive fields from metadata"
-    (let [metadata {:username "testuser"
-                    :password "secret123"
-                    :email "user@example.com"
-                    :role "admin"}
-          sanitized (audit/sanitize-audit-metadata metadata)]
-
-      (is (contains? sanitized :username))
-      (is (contains? sanitized :email))
-      (is (contains? sanitized :role))
-      (is (not (contains? sanitized :password)))))
-
-  (testing "Removes specific sensitive fields from metadata"
-    (let [metadata {:username "testuser"
-                    :password "secret123"
-                    :password-hash "$2a$..."
-                    :session-token "sess456"
-                    :reset-token "reset789"
-                    :email "user@example.com"
-                    :role "admin"}
-          sanitized (audit/sanitize-audit-metadata metadata)]
-
-      ;; These should remain
-      (is (contains? sanitized :username))
-      (is (contains? sanitized :email))
-      (is (contains? sanitized :role))
-
-      ;; These should be removed
-      (is (not (contains? sanitized :password)))
-      (is (not (contains? sanitized :password-hash)))
-      (is (not (contains? sanitized :session-token)))
-      (is (not (contains? sanitized :reset-token)))))
-
-  (testing "Returns empty map for empty input"
-    (let [sanitized (audit/sanitize-audit-metadata {})]
-      (is (empty? sanitized))))
-
-  (testing "Returns nil for nil input"
-    (let [sanitized (audit/sanitize-audit-metadata nil)]
-      (is (nil? sanitized)))))
-
-;; =============================================================================
 ;; Rights timeline (BOU-855)
 ;; =============================================================================
 
