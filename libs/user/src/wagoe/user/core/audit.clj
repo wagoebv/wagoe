@@ -14,7 +14,9 @@
   (:require [clojure.edn :as edn]
             [wagoe.user.core.group :as group]
             [wagoe.user.core.user :as user]
-            [wagoe.user.schema :as schema]))
+            [wagoe.user.schema :as schema]
+            [wagoe.core.utils.pii-redaction :as pii]
+            [wagoe.core.utils.secret-keys :as secret-keys]))
 
 ;; =============================================================================
 ;; Pure Audit Entry Creation Functions
@@ -50,25 +52,22 @@
    :user-agent user-agent
    :result :success})
 
-(def ^:private credential-field?
-  "Fields an entry names as changed but never shows the values of, which an
-   export or anyone reading the log would otherwise get (BOU-1013)."
-  (set (map name schema/credential-fields)))
+(def ^:private credential-names (set (map name schema/credential-fields)))
 
 (def ^:private redacted "[REDACTED]")
 
-(defn- hide-secret
-  ([change] (hide-secret credential-field? change))
-  ([secret? {:keys [field] :as change}]
-   (cond-> change (secret? field) (assoc :old redacted :new redacted))))
+(defn- secret-field?
+  "Whether `field` names a credential or a secret, however it is cased:
+   password_hash, mfaBackupCodes, resetToken."
+  [field]
+  (pii/sensitive-key-name? credential-names (secret-keys/normalize field)))
 
 (defn redact-secret-changes
-  "`changes` with the values of credential fields, or of those `secret?` names,
-   replaced (BOU-1013)."
-  ([changes] (redact-secret-changes changes credential-field?))
-  ([changes secret?]
-   (cond-> changes
-     (:fields changes) (update :fields #(mapv (partial hide-secret (some-fn credential-field? secret?)) %)))))
+  "`changes` with the values of the fields naming a secret replaced: an entry
+   says a credential changed, never what to (BOU-1013)."
+  [changes]
+  (cond-> changes
+    (:fields changes) (update :fields (partial mapv #(cond-> % (secret-field? (:field %)) (assoc :old redacted :new redacted))))))
 
 (defn update-user-audit-entry
   "The audit entry for `old-values` becoming `new-values`: each changed field,
@@ -78,9 +77,9 @@
                         (fn [acc k new-val]
                           (let [old-val (get old-values k)]
                             (if (not= old-val new-val)
-                              (conj acc (hide-secret {:field (name k)
-                                                      :old (str old-val)
-                                                      :new (str new-val)}))
+                              (conj acc {:field (name k)
+                                         :old (str old-val)
+                                         :new (str new-val)})
                               acc)))
                         []
                         new-values)]
@@ -89,7 +88,7 @@
      :actor-email actor-email
      :target-user-id target-user-id
      :target-user-email target-user-email
-     :changes {:fields changed-fields}
+     :changes (redact-secret-changes {:fields changed-fields})
      :metadata {:field-count (count changed-fields)}
      :ip-address ip-address
      :user-agent user-agent
