@@ -1,0 +1,280 @@
+{:date "2026-11-18",
+ :git-sha "644748a013f27ecc93c7b3eb025f0ed7cdab9b10",
+ :provider "ollama",
+ :model "qwen2.5-coder:7b",
+ :label "Ollama",
+ :status :ran,
+ :prompts
+ [{:generated? true,
+   :steps
+   {:generate {:status :pass, :ms 60511},
+    :integrate {:status :pass, :ms 212},
+    :compiles {:status :pass, :ms 7122},
+    :tests {:status :pass, :ms 16815},
+    :check-fcis {:status :pass, :ms 190},
+    :check-deps
+    {:status :skipped,
+     :reason
+     "check:deps is monorepo-only; a generated project has no libs/"},
+    :migrate {:status :pass, :ms 7559},
+    :boot {:status :pass, :ms 15519}},
+   :duration-ms 108160,
+   :module "product",
+   :prompt "product module with name, price, stock",
+   :id :product,
+   :expectations
+   [{:id :no-protocol-interop, :pass? true, :hits []}
+    {:id :no-request-identity, :pass? true, :hits []}
+    {:id :fields, :pass? true, :missing []}],
+   :files
+   ["migrations/20261118132524-create-products.down.sql"
+    "migrations/20261118132524-create-products.up.sql"
+    "resources/conf/dev/admin/products.edn"
+    "resources/conf/dev/config.edn"
+    "resources/conf/test/admin/products.edn"
+    "resources/conf/test/config.edn"
+    "resources/seeds/dev.edn"
+    "src/eval_app/product/core/product.clj"
+    "src/eval_app/product/core/ui.clj"
+    "src/eval_app/product/ports.clj"
+    "src/eval_app/product/schema.clj"
+    "src/eval_app/product/shell/http.clj"
+    "src/eval_app/product/shell/module_wiring.clj"
+    "src/eval_app/product/shell/persistence.clj"
+    "src/eval_app/product/shell/service.clj"
+    "src/eval_app/product/shell/web_handlers.clj"
+    "test/eval_app/product/core/product_test.clj"
+    "test/eval_app/product/shell/product_repository_test.clj"
+    "test/eval_app/product/shell/service_test.clj"],
+   :edits 0,
+   :mergeable? true,
+   :tokens nil}
+  {:generated? true,
+   :steps
+   {:generate {:status :pass, :ms 55384},
+    :integrate {:status :pass, :ms 223},
+    :compiles {:status :pass, :ms 7288},
+    :tests {:status :pass, :ms 17236},
+    :check-fcis {:status :pass, :ms 202},
+    :check-deps
+    {:status :skipped,
+     :reason
+     "check:deps is monorepo-only; a generated project has no libs/"},
+    :migrate {:status :pass, :ms 7650},
+    :boot {:status :pass, :ms 14770}},
+   :duration-ms 103012,
+   :module "invoice",
+   :prompt
+   "invoice module: number, customer, line items, total in cents, due date, status draft→sent→paid",
+   :id :invoice,
+   :expectations
+   [{:id :no-protocol-interop, :pass? true, :hits []}
+    {:id :no-request-identity, :pass? true, :hits []}
+    {:id :fields, :pass? true, :missing []}
+    {:id :line-items, :pass? true}
+    {:id :workflow, :pass? true}],
+   :files
+   ["migrations/20261118132702-create-invoices.down.sql"
+    "migrations/20261118132702-create-invoices.up.sql"
+    "migrations/20261118132706-create-invoice-line-items.down.sql"
+    "migrations/20261118132706-create-invoice-line-items.up.sql"
+    "resources/conf/dev/admin/invoice-line-items.edn"
+    "resources/conf/dev/admin/invoices.edn"
+    "resources/conf/dev/config.edn"
+    "resources/conf/test/admin/invoice-line-items.edn"
+    "resources/conf/test/admin/invoices.edn"
+    "resources/conf/test/config.edn"
+    "resources/seeds/dev.edn"
+    "src/eval_app/invoice/core/invoice.clj"
+    "src/eval_app/invoice/core/invoice_line_item.clj"
+    "src/eval_app/invoice/core/invoice_line_item_ui.clj"
+    "src/eval_app/invoice/core/ui.clj"
+    "src/eval_app/invoice/ports.clj"
+    "src/eval_app/invoice/schema.clj"
+    "src/eval_app/invoice/shell/http.clj"
+    "src/eval_app/invoice/shell/invoice_line_item_http.clj"
+    "src/eval_app/invoice/shell/invoice_line_item_persistence.clj"
+    "src/eval_app/invoice/shell/invoice_line_item_service.clj"
+    "src/eval_app/invoice/shell/invoice_line_item_web_handlers.clj"
+    "src/eval_app/invoice/shell/module_wiring.clj"
+    "src/eval_app/invoice/shell/persistence.clj"
+    "src/eval_app/invoice/shell/service.clj"
+    "src/eval_app/invoice/shell/web_handlers.clj"
+    "test/eval_app/invoice/core/invoice_line_item_test.clj"
+    "test/eval_app/invoice/core/invoice_test.clj"
+    "test/eval_app/invoice/shell/invoice_line_item_repository_test.clj"
+    "test/eval_app/invoice/shell/invoice_line_item_service_test.clj"
+    "test/eval_app/invoice/shell/invoice_repository_test.clj"
+    "test/eval_app/invoice/shell/service_test.clj"],
+   :edits 0,
+   :mergeable? true,
+   :tokens nil}
+  {:generated? true,
+   :steps
+   {:generate {:status :pass, :ms 41128},
+    :integrate {:status :pass, :ms 196},
+    :compiles {:status :pass, :ms 7115},
+    :tests {:status :pass, :ms 16291},
+    :check-fcis {:status :pass, :ms 192},
+    :check-deps
+    {:status :skipped,
+     :reason
+     "check:deps is monorepo-only; a generated project has no libs/"},
+    :migrate {:status :pass, :ms 7326},
+    :boot {:status :pass, :ms 14582}},
+   :duration-ms 87073,
+   :module "order",
+   :prompt
+   "order module: an order has a reference and a placed-at time, and has many order lines, at least one; each line has a product name and a quantity",
+   :id :order,
+   :expectations
+   [{:id :no-protocol-interop, :pass? true, :hits []}
+    {:id :no-request-identity, :pass? true, :hits []}
+    {:id :has-many, :pass? true}
+    {:id :min-one, :pass? true}],
+   :files
+   ["migrations/20261118132832-create-orders.down.sql"
+    "migrations/20261118132832-create-orders.up.sql"
+    "migrations/20261118132836-create-order-lines.down.sql"
+    "migrations/20261118132836-create-order-lines.up.sql"
+    "resources/conf/dev/admin/order-lines.edn"
+    "resources/conf/dev/admin/orders.edn"
+    "resources/conf/dev/config.edn"
+    "resources/conf/test/admin/order-lines.edn"
+    "resources/conf/test/admin/orders.edn"
+    "resources/conf/test/config.edn"
+    "resources/seeds/dev.edn"
+    "src/eval_app/order/core/order.clj"
+    "src/eval_app/order/core/order_line.clj"
+    "src/eval_app/order/core/order_line_ui.clj"
+    "src/eval_app/order/core/ui.clj"
+    "src/eval_app/order/ports.clj"
+    "src/eval_app/order/schema.clj"
+    "src/eval_app/order/shell/http.clj"
+    "src/eval_app/order/shell/module_wiring.clj"
+    "src/eval_app/order/shell/order_line_http.clj"
+    "src/eval_app/order/shell/order_line_persistence.clj"
+    "src/eval_app/order/shell/order_line_service.clj"
+    "src/eval_app/order/shell/order_line_web_handlers.clj"
+    "src/eval_app/order/shell/persistence.clj"
+    "src/eval_app/order/shell/service.clj"
+    "src/eval_app/order/shell/web_handlers.clj"
+    "test/eval_app/order/core/order_line_test.clj"
+    "test/eval_app/order/core/order_test.clj"
+    "test/eval_app/order/shell/order_line_repository_test.clj"
+    "test/eval_app/order/shell/order_line_service_test.clj"
+    "test/eval_app/order/shell/order_repository_test.clj"
+    "test/eval_app/order/shell/service_test.clj"],
+   :edits 0,
+   :mergeable? true,
+   :tokens nil}
+  {:failure {:expectation :storage-port, :repair-diff ""},
+   :generated? true,
+   :steps
+   {:generate {:status :pass, :ms 33510},
+    :integrate {:status :pass, :ms 209},
+    :compiles {:status :pass, :ms 6576},
+    :tests {:status :pass, :ms 16397},
+    :check-fcis {:status :pass, :ms 163},
+    :check-deps
+    {:status :skipped,
+     :reason
+     "check:deps is monorepo-only; a generated project has no libs/"},
+    :migrate {:status :pass, :ms 7715},
+    :boot {:status :pass, :ms 15355}},
+   :duration-ms 85615,
+   :module "document",
+   :before-repair
+   {:steps
+    {:compiles {:status :pass, :ms 6576},
+     :tests {:status :pass, :ms 16397},
+     :check-fcis {:status :pass, :ms 163},
+     :check-deps
+     {:status :skipped,
+      :reason
+      "check:deps is monorepo-only; a generated project has no libs/"},
+     :migrate {:status :pass, :ms 7715},
+     :boot {:status :pass, :ms 15355}},
+    :expectations
+    [{:id :no-protocol-interop, :pass? true, :hits []}
+     {:id :no-request-identity, :pass? true, :hits []}
+     {:id :fields, :pass? true, :missing []}
+     {:id :storage-port, :pass? false}]},
+   :prompt
+   "document module with a title, a description and an uploaded attachment file stored with wagoe-storage",
+   :id :document,
+   :expectations
+   [{:id :no-protocol-interop, :pass? true, :hits []}
+    {:id :no-request-identity, :pass? true, :hits []}
+    {:id :fields, :pass? true, :missing []}
+    {:id :storage-port, :pass? false}],
+   :files
+   ["migrations/20261118132956-create-documents.down.sql"
+    "migrations/20261118132956-create-documents.up.sql"
+    "resources/conf/dev/admin/documents.edn"
+    "resources/conf/dev/config.edn"
+    "resources/conf/test/admin/documents.edn"
+    "resources/conf/test/config.edn"
+    "resources/seeds/dev.edn"
+    "src/eval_app/document/core/document.clj"
+    "src/eval_app/document/core/ui.clj"
+    "src/eval_app/document/ports.clj"
+    "src/eval_app/document/schema.clj"
+    "src/eval_app/document/shell/http.clj"
+    "src/eval_app/document/shell/module_wiring.clj"
+    "src/eval_app/document/shell/persistence.clj"
+    "src/eval_app/document/shell/service.clj"
+    "src/eval_app/document/shell/web_handlers.clj"
+    "test/eval_app/document/core/document_test.clj"
+    "test/eval_app/document/shell/document_repository_test.clj"
+    "test/eval_app/document/shell/service_test.clj"],
+   :edits nil,
+   :mergeable? false,
+   :tokens nil}
+  {:generated? true,
+   :steps
+   {:generate {:status :pass, :ms 36341},
+    :integrate {:status :pass, :ms 187},
+    :compiles {:status :pass, :ms 6758},
+    :tests {:status :pass, :ms 16170},
+    :check-fcis {:status :pass, :ms 218},
+    :check-deps
+    {:status :skipped,
+     :reason
+     "check:deps is monorepo-only; a generated project has no libs/"},
+    :migrate {:status :pass, :ms 7693},
+    :boot {:status :pass, :ms 15243}},
+   :duration-ms 82866,
+   :module "klant",
+   :prompt
+   "klantmodule met naam, e-mailadres, telefoonnummer en een vlag of de klant actief is",
+   :id :klant,
+   :expectations
+   [{:id :no-protocol-interop, :pass? true, :hits []}
+    {:id :no-request-identity, :pass? true, :hits []}
+    {:id :email, :pass? true}
+    {:id :phone, :pass? true}],
+   :files
+   ["migrations/20261118133124-create-klants.down.sql"
+    "migrations/20261118133124-create-klants.up.sql"
+    "resources/conf/dev/admin/klants.edn"
+    "resources/conf/dev/config.edn"
+    "resources/conf/test/admin/klants.edn"
+    "resources/conf/test/config.edn"
+    "resources/seeds/dev.edn"
+    "src/eval_app/klant/core/klant.clj"
+    "src/eval_app/klant/core/ui.clj"
+    "src/eval_app/klant/ports.clj"
+    "src/eval_app/klant/schema.clj"
+    "src/eval_app/klant/shell/http.clj"
+    "src/eval_app/klant/shell/module_wiring.clj"
+    "src/eval_app/klant/shell/persistence.clj"
+    "src/eval_app/klant/shell/service.clj"
+    "src/eval_app/klant/shell/web_handlers.clj"
+    "test/eval_app/klant/core/klant_test.clj"
+    "test/eval_app/klant/shell/klant_repository_test.clj"
+    "test/eval_app/klant/shell/service_test.clj"],
+   :edits 0,
+   :mergeable? true,
+   :tokens nil}],
+ :summary {:mergeable 4, :of 5, :median-edits 0.0}}
