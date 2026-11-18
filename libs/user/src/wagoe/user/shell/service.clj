@@ -583,7 +583,8 @@
          ;; request (BOU-663).
          (when-let [session (.find-session-by-token session-repository session-token)]
            (let [current-time (current-timestamp)
-                 {:keys [valid? reason]} (session-core/is-session-valid? session current-time)
+                 max-days (get-in auth-service [:auth-config :max-session-days] session-core/default-max-session-days)
+                 {:keys [valid? reason]} (session-core/is-session-valid? session current-time max-days)
                  user    (when valid? (.find-user-by-id user-repository (:user-id session)))
                  refusal (if valid? (session-core/account-refusal user) reason)]
              (when refusal
@@ -592,11 +593,13 @@
                                {:type :session-invalid
                                 :reason refusal})))
              ;; The user rides along, so the middleware need not read it again.
-             (let [to-write (session-core/session-access-write session current-time)]
+             ;; :ends-at tells the page when to ask for the password (BOU-1007)
+             (let [to-write (session-core/session-access-write session current-time max-days)]
                (assoc (or (some->> to-write (.update-session session-repository))
                           to-write
                           session)
-                      :user (user-core/without-credentials user)))))))
+                      :user (user-core/without-credentials user)
+                      :ends-at (session-core/ends-at session max-days)))))))
      ;; Runs on every authenticated request: metrics, but no three log lines.
      (dissoc (observability this) :logger)))
 

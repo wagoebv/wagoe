@@ -10,6 +10,7 @@
             [wagoe.user.core.session :as session-core]
             [wagoe.user.core.user :as user-core]
             [wagoe.user.core.view-as :as view-as]
+            [wagoe.shared.ui.core.session-timeout :as session-timeout]
             [wagoe.shared.ui.core.view-as :as view-as-ui]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.service :as user-service]
@@ -296,6 +297,25 @@
       (f))
     (f)))
 
+(defn- with-page-session
+  "Call `f` as `with-viewing` does, with when the session ends bound for the
+   page's dialog and sent as headers for a page that swaps only a part
+   (BOU-1007)."
+  [request f]
+  (let [{:keys [expires-at ends-at]} (:session request)]
+    (if (and expires-at ends-at)
+      (let [timer {:expires-at  (.toEpochMilli ^java.time.Instant expires-at)
+                   :ends-at     (.toEpochMilli ^java.time.Instant ends-at)
+                   :extend-path session-core/extend-path
+                   :reauth-path session-core/reauth-path}
+            resp  (binding [session-timeout/*session* timer] (with-viewing request f))]
+        (cond-> resp
+          ;; A handler that opened a new session says so itself
+          (map? resp) (update :headers #(merge {"X-Session-Expires" (str (:expires-at timer))
+                                                "X-Session-Ends"    (str (:ends-at timer))}
+                                               %))))
+      (with-viewing request f))))
+
 (defn session-authentication-middleware
   "Middleware that validates session tokens and updates session access time.
    
@@ -315,7 +335,7 @@
       (let [{:keys [user session refusal viewing-as]} (session-user user-service session-token request)
             request (cond-> (assoc request :user user :session session :auth-type :session)
                       viewing-as (assoc :viewing-as viewing-as))]
-        (or refusal (read-only-refusal request) (with-viewing request #(handler request))))
+        (or refusal (read-only-refusal request) (with-page-session request #(handler request))))
 
       ;; No session token provided
       (do
@@ -390,7 +410,7 @@
         ;; A change while viewing as another user is refused, not passed on
         (if (::read-only answered)
           answered
-          (let [response (with-viewing request #(handler request))]
+          (let [response (with-page-session request #(handler request))]
             (if (and (:viewing-as request) (core-access/view-refused? response))
               (end-refused-view user-service request response)
               response)))))))

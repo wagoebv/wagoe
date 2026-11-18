@@ -132,51 +132,41 @@
       (is (= (.plusSeconds now (* 8 3600)) (:expires-at sess))))))
 
 ;; =============================================================================
-;; should-extend-session?
+;; Sliding by the session's own hours, within its last day (BOU-1007)
 ;; =============================================================================
 
-(deftest ^:unit should-extend-session?-test
-  (testing "session near expiry should be extended"
-    ;; expires in 1 hour, threshold is 2 hours → should extend
-    (let [expires-soon (Instant/parse "2026-01-15T13:00:00Z")  ; 1h from now
-          sess (make-session {:expires-at expires-soon})
-          policy {:extend-threshold-hours 2}]
-      (is (true? (session/should-extend-session? sess now policy)))))
+(defn- hours [h] (* h 3600))
 
-  (testing "session not near expiry should not be extended"
-    ;; expires in 10 hours, threshold is 2 hours → don't extend
-    (let [expires-later (Instant/parse "2026-01-15T22:00:00Z")  ; 10h from now
-          sess (make-session {:expires-at expires-later})
-          policy {:extend-threshold-hours 2}]
-      (is (false? (session/should-extend-session? sess now policy))))))
+(deftest ^:unit ^:security a-session-slides-by-its-own-hours
+  ;; It slid to now+24h whatever its policy gave it
+  (doseq [h [1 8 4 24]
+          :let [sess (make-session {:duration-hours h :expires-at (.plusSeconds now (hours h))})
+                used (session/update-session-access sess later 7)]]
+    (is (= later (:last-accessed-at used)))
+    (is (= (.plusSeconds later (hours h)) (:expires-at used)) (str h "h"))))
 
-;; =============================================================================
-;; update-session-access
-;; =============================================================================
+(deftest ^:unit ^:security a-session-never-slides-past-its-last-day
+  (let [sess (make-session {:duration-hours 24})
+        end  (session/ends-at sess 7)
+        late (.minusSeconds end (hours 2))]
+    (is (= (.plusSeconds now (hours (* 7 24))) end))
+    (is (= end (:expires-at (session/update-session-access sess late 7))) "capped, not slid 24h on")
+    (testing "and it is refused from then on, whatever its expiry says"
+      (let [beyond (assoc sess :expires-at (.plusSeconds end 60))]
+        (is (:valid? (session/is-session-valid? beyond (.minusSeconds end 1) 7)))
+        (is (= :expired (:reason (session/is-session-valid? beyond end 7))))))))
 
-(deftest ^:unit update-session-access-test
-  (testing "updates last-accessed-at"
-    (let [sess (make-session)
-          updated (session/update-session-access sess later)]
-      (is (= later (:last-accessed-at updated)))))
-
-  (testing "extends expiry when session is near expiry"
-    (let [expires-in-1h (Instant/parse "2026-01-15T13:00:00Z")
-          sess (make-session {:expires-at expires-in-1h})
-          updated (session/update-session-access sess now)]
-      ;; should-extend-session? fires → expires-at is recalculated
-      (is (.isAfter (:expires-at updated) expires-in-1h)))))
+(deftest ^:unit a-session-from-before-keeps-its-expiry
+  ;; No :duration-hours: what it was given is unknown, so it does not slide
+  (is (= far (:expires-at (session/update-session-access (make-session) later 7)))))
 
 (deftest ^:unit session-access-write-test
   (testing "nothing to write within a minute of the last access"
-    (is (nil? (session/session-access-write (make-session) (.plusSeconds now 59)))))
-  (testing "the access time after a minute"
-    (is (= (.plusSeconds now 60)
-           (:last-accessed-at (session/session-access-write (make-session) (.plusSeconds now 60))))))
-  (testing "an extended expiry, however recent the access"
-    (let [sess (make-session {:expires-at (.plusSeconds now 3600)})]
-      (is (.isAfter (:expires-at (session/session-access-write sess (.plusSeconds now 1)))
-                    (:expires-at sess))))))
+    (is (nil? (session/session-access-write (make-session) (.plusSeconds now 59) 7))))
+  (testing "after a minute the access time, and the expiry slid"
+    (let [w (session/session-access-write (make-session {:duration-hours 1}) (.plusSeconds now 60) 7)]
+      (is (= (.plusSeconds now 60) (:last-accessed-at w)))
+      (is (= (.plusSeconds now (+ 60 (hours 1))) (:expires-at w))))))
 
 ;; =============================================================================
 ;; should-cleanup-session?

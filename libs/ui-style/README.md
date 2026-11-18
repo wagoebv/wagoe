@@ -58,6 +58,7 @@ Contains:
   - `resources/public/js/forms.js`
   - `resources/public/js/keyboard.js`
   - `resources/public/js/view-as.js` (loaded only while an administrator views the app as a user)
+  - `resources/public/js/session-timeout.js` (loaded on a signed-in page: asks before the session ends)
 
 Build from monorepo root:
 

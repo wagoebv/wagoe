@@ -8,6 +8,7 @@
             [wagoe.shared.ui.core.home :as home]
             [wagoe.shared.ui.core.icons :as icons]
             [wagoe.shared.ui.core.toast :as toast]
+            [wagoe.shared.ui.core.session-timeout :as session-timeout]
             [wagoe.shared.ui.core.view-as :as view-as]
             [wagoe.platform.core.csrf :as csrf]
             [wagoe.platform.core.http.access :as access]
@@ -147,7 +148,10 @@
       [:main.main-content content]
       (toast/toast-region)
       (toast/flash-toasts flash)
-      (for [js-file (cond-> (vec js) view-as/*viewing* (conj "/js/view-as.js"))]
+      (session-timeout/dialog)
+      (for [js-file (cond-> (vec js)
+                      view-as/*viewing*          (conj "/js/view-as.js")
+                      session-timeout/*session*  (conj "/js/session-timeout.js"))]
         [:script {:src js-file :defer true}])]]))
 
 (defn pilot-page-layout

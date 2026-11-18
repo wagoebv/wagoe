@@ -63,7 +63,7 @@ tables and buttons a base style (`resources/tailwind/pilot-rules.css`).
   `user-menu.css`, `profile.css`, and two compiled files: `daisy-admin.css` (`:pilot`'s daisyUI/Tailwind) and
   `wagoe-admin.css` (all of `:admin-pilot`).
 - **JS** (`js/`): `theme.js`, `components.js`, `admin-ux.js`, `forms.js`,
-  `keyboard.js`, `init.js`, `view-as.js` (only while viewing as a user), plus vendored `alpine.min.js`, `htmx.min.js` and
+  `keyboard.js`, `init.js`, `view-as.js` (only while viewing as a user), `session-timeout.js` (on a signed-in page), plus vendored `alpine.min.js`, `htmx.min.js` and
   `htmx-ext-sse.min.js` (htmx's `sse` extension, 2.2.4; must load after htmx).
   `admin-ux.js` keeps `window.AdminUX.showToast` and the `.flash-messages`
   banner deprecated until 2.0; both feed the toast region. Send

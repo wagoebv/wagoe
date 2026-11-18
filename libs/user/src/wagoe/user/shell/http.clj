@@ -579,6 +579,19 @@
         :post {:middleware [auth-middleware]
                :handler    (web-handlers/logout-handler user-service config)
                :summary    "Logout current user"}}]
+      ;; The dialog before a session ends (BOU-1007)
+      ["/session/extend"
+       {:no-doc true
+        :authorization :signed-in
+        :get  {:middleware [auth-middleware]
+               :handler    (web-handlers/session-extend-handler)
+               :summary    "Keep the session: the user is still there"}}]
+      ["/session/reauth"
+       {:no-doc true
+        :authorization :signed-in
+        :post {:middleware [auth-middleware]
+               :handler    (web-handlers/session-reauth-handler user-service config)
+               :summary    "Sign in again before the session ends"}}]
       (when-let [handler (landing/dashboard-handler config)]
         ["/dashboard"
          {:no-doc     true

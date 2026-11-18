@@ -196,6 +196,7 @@
                 (let [hours   (:session-duration-hours policy)
                       session (.create-session session-repository
                                                {:user-id       (:id user)
+                                                :duration-hours hours
                                                 :session-token (generate-session-token)
                                                 :expires-at    (.plus ^Instant current-time (Duration/ofHours hours))
                                                 :user-agent    (:user-agent login-context)

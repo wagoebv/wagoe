@@ -21,6 +21,7 @@
             [wagoe.shared.ui.core.htmx :as htmx]
             [wagoe.shared.ui.core.toast :as toast]
             [wagoe.core.http.access :as core-access]
+            [wagoe.platform.core.csrf :as csrf]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.shell.web.table :as web-table]
@@ -605,6 +606,39 @@
                            (layout/pilot-page-layout "Login error"
                                                      (ui/error-message [:t :common/error-generic]))
                            500)))))))
+
+(defn session-extend-handler
+  "GET /web/session/extend - the user is still there. Using the session slides
+   it; the middleware sends when it now ends. The CSRF token goes along: after
+   signing in again the page needs the new session's (BOU-1007)."
+  []
+  (fn [_request]
+    {:status 204 :headers (if-let [t (csrf/current-token)] {"X-CSRF-Token" t} {})}))
+
+(defn session-reauth-handler
+  "POST /web/session/reauth - the signed-in user's password, and second factor
+   when theirs asks one, in a new session before theirs ends (BOU-1007). 204
+   with its cookie, else 401 with X-Session-Reauth `mfa` or `refused`. Counts
+   towards the sign-in lockout as a sign-in does."
+  [user-service config]
+  (fn [request]
+    (let [user   (:user request)
+          form   (:form-params request)
+          result (user-ports/authenticate-user
+                  user-service
+                  (cond-> (merge {:email    (:email user)
+                                  :password (get form "password")
+                                  :mfa-code (not-empty (get form "mfa-code"))}
+                                 (login-context request))
+                    (:tenant-id user) (assoc :tenant-id (str (:tenant-id user)))))]
+      (cond
+        (and (:authenticated result) (= (str (:id user)) (str (get-in result [:user :id]))))
+        (do (some->> (get-in request [:cookies "session-token" :value]) (user-ports/logout-user user-service))
+            {:status  204
+             :cookies {"session-token" (session-cookie config (get-in result [:session :session-token]))}})
+
+        (:requires-mfa? result) {:status 401 :headers {"X-Session-Reauth" "mfa"}}
+        :else                   {:status 401 :headers {"X-Session-Reauth" "refused"}}))))
 
 (defn logout-handler
   "POST /web/logout - clear session cookie and redirect to home."

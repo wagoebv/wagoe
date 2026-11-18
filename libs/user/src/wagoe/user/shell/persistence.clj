@@ -379,7 +379,8 @@
                                 :user-agent :user_agent
                                 :ip-address :ip_address
                                 :last-accessed-at :last_accessed_at
-                                :revoked-at :revoked_at})))
+                                :revoked-at :revoked_at
+                                :duration-hours :duration_hours})))
 
 (defn- db->session-entity
   "Transform database record to session domain entity."
@@ -396,7 +397,8 @@
                                   :last_accessed_at :last-accessed-at
                                   :revoked_at :revoked-at
                                   :view_as_user_id :view-as-user-id
-                                  :view_as_until :view-as-until})
+                                  :view_as_until :view-as-until
+                                  :duration_hours :duration-hours})
         (update :id type-conversion/string->uuid)
         (update :user-id type-conversion/string->uuid)
         (update :expires-at type-conversion/string->instant)
