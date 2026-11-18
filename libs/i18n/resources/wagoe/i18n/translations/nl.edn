@@ -206,6 +206,7 @@
  :user/oidc-failed             "Inloggen via die aanbieder is niet gelukt. Probeer het opnieuw."
  :user/oidc-no-account         "Er hoort geen account bij deze aanmelding. Vraag een beheerder om toegang."
  :user/oidc-admin-link-refused "Beheerdersaccounts worden niet via e-mail gekoppeld. Log in met uw wachtwoord."
+ :user/oidc-self-registered-link-refused "Een account dat op deze site is geregistreerd wordt niet via e-mail gekoppeld. Log in met uw wachtwoord."
  :user/oidc-account-unavailable "Dit account kan nu niet inloggen."
  :user/oidc-mfa-invalid        "Ongeldige code"
  :user/mfa-enrolment-required  "Voor deze aanmelding is tweestapsverificatie nodig, maar die is voor uw account niet ingesteld. Vraag een beheerder."

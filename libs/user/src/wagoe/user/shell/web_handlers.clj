@@ -777,6 +777,7 @@
                            :not-found                 [404 [:t :user/oidc-failed]]
                            :oidc/no-account           [403 [:t :user/oidc-no-account]]
                            :oidc/admin-link-refused   [403 [:t :user/oidc-admin-link-refused]]
+                           :oidc/self-registered-link-refused [403 [:t :user/oidc-self-registered-link-refused]]
                            :oidc/account-unavailable  [403 [:t :user/oidc-account-unavailable]]
                            :oidc/mfa-enrolment-required [403 [:t :user/mfa-enrolment-required]]
                            (:oidc/http-error :oidc/discovery-failed :oidc/token-exchange-failed)
@@ -943,7 +944,8 @@
       (if-not valid?
         (rerender validation-errors 400)
         (try
-          (let [user-result (user-ports/register-user user-service prepared-data)
+          ;; Nobody proved this email: OIDC never links to it by email (BOU-1009)
+          (let [user-result (user-ports/register-user user-service (assoc prepared-data :self-registered true))
                 ;; Automatically authenticate the newly registered user
                 auth-data {:email (:email user-result)
                            :password (get prepared-data :password)

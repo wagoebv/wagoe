@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **Someone could register a victim's email and keep the account the victim later linked by OIDC** (BOU-1009). An
+  account made at `/web/register` is never linked by email; see `UPGRADING.md` for accounts made before.
 - **A tenant admin could take over a member of another tenant** (BOU-1008) by changing their email and signing in
   through OIDC. Such links are refused, and only the user or a platform admin changes that email.
 - **A password change wrote the old and new hash into the audit log and data exports** (BOU-1013). An entry now says

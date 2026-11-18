@@ -302,6 +302,12 @@
       (error :oidc/admin-link-refused
              "An administrator account is not linked by email; link it by signing in another way")
 
+      ;; Nor one registered here: nobody proved its email, and whoever chose its
+      ;; password keeps it (BOU-1009)
+      (and email-user email (:link-by-email? provider) (:self-registered email-user))
+      (error :oidc/self-registered-link-refused
+             "An account registered here is not linked by email; sign in with its password")
+
       (and email-user email (:link-by-email? provider) (not email-user-linked?))
       {:action :link :user email-user}
 

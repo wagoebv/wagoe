@@ -239,3 +239,15 @@
     (is (some? (ports/get-user-by-email svc "y@example.com")) "one account: that one")
     (register! svc "y@example.com" pw-a tenant-b)
     (is (nil? (ports/get-user-by-email svc "y@example.com")) "several: none, not any")))
+
+(deftest ^:integration ^:security a-registration-is-marked-self-registered
+  ;; OIDC never links to it by email: nobody proved the address (BOU-1009)
+  (let [svc   (user-service)
+        _     ((web-handlers/register-submit-handler svc {})
+               {:form-params {"name" "Zed" "email" "z@example.com" "password" pw-a}
+                :headers {"user-agent" "test"} :remote-addr "127.0.0.1"})
+        _     (register! svc "y@example.com" pw-a nil)
+        read  #(auth/account-in-tenant (:user-repository svc) nil %)]
+    (is (true? (:self-registered (read "z@example.com"))) "registered at /web/register")
+    (is (not (:self-registered (read "y@example.com"))) "made by an admin or the API")))
+

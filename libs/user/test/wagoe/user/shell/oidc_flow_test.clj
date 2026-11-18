@@ -343,6 +343,14 @@
       (is (= 403 (:status resp)))
       (is (str/includes? (:body resp) "oidc-admin-link-refused"))
       (is (empty? (ports/find-identities-by-user (:identities a) (:id admin))))))
+  (testing "on, but the account was registered here: whoever chose its password keeps it (BOU-1009)"
+    (let [a    (app)
+          ada  (add-user! a :self-registered true)
+          resp (sign-in! a)]
+      (is (= 403 (:status resp)))
+      (is (str/includes? (:body resp) "oidc-self-registered-link-refused"))
+      (is (nil? (session-token resp)))
+      (is (empty? (ports/find-identities-by-user (:identities a) (:id ada))))))
   (testing "on, but the account administers a tenant by membership (BOU-1008)"
     (let [role  (atom :admin)
           a     (app :memberships (reify tenant-ports/ITenantMembershipsOfUser
