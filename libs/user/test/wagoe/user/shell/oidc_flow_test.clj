@@ -12,6 +12,7 @@
             [ring.adapter.jetty :as jetty]
             [ring.middleware.params :refer [wrap-params]]
             [ring.util.codec :as codec]
+            [wagoe.tenant.ports :as tenant-ports]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.in-memory-repository-test :as mem]
@@ -141,7 +142,7 @@
 (defn- app
   "`:user-settings` merge into `:wagoe/user`, `:auth-config` is the auth
    service's; the other options configure the provider."
-  [& {:keys [user-settings auth-config] :as opts}]
+  [& {:keys [user-settings auth-config memberships] :as opts}]
   (reset! idp {})
   (let [users      (mem/->MemoryUserRepository (atom {}))
         sessions   (mem/->MemorySessionRepository (atom {}))
@@ -151,13 +152,14 @@
                                                        (or auth-config {}))
         provider   (merge {:issuer *issuer* :client-id "app" :client-secret "app-secret"
                            :link-by-email? true}
-                          (dissoc opts :user-settings :auth-config))
+                          (dissoc opts :user-settings :auth-config :memberships))
         _          (swap! idp assoc :client-secret (:client-secret provider))
         settings   {:base-url  "http://localhost:3000"
                     :providers {:fake provider}}
         client     (oidc/create-oidc-client {:settings settings :secret (apply str (repeat 40 "s"))
                                              :auth-service auth-svc :audit-repository audit
-                                             :identity-repository identities})
+                                             :identity-repository identities
+                                             :membership-services (when memberships #{memberships})})
         config     {:active {:wagoe/user (merge {:oidc settings} user-settings)}}]
     {:users users :sessions sessions :audit audit :identities identities :client client
      :user-service (service/create-user-service users sessions audit {} auth-svc)
@@ -340,7 +342,22 @@
           resp  (sign-in! a)]
       (is (= 403 (:status resp)))
       (is (str/includes? (:body resp) "oidc-admin-link-refused"))
-      (is (empty? (ports/find-identities-by-user (:identities a) (:id admin)))))))
+      (is (empty? (ports/find-identities-by-user (:identities a) (:id admin))))))
+  (testing "on, but the account administers a tenant by membership (BOU-1008)"
+    (let [role  (atom :admin)
+          a     (app :memberships (reify tenant-ports/ITenantMembershipsOfUser
+                                    (memberships-of-user [_ _] [{:tenant-id (random-uuid) :role @role :status :active}])))
+          ada   (add-user! a)
+          resp  (sign-in! a)]
+      (is (= 403 (:status resp)))
+      (is (str/includes? (:body resp) "oidc-admin-link-refused"))
+      (is (empty? (ports/find-identities-by-user (:identities a) (:id ada))))
+      (testing "an invited admin membership counts: it is theirs once accepted"
+        (with-redefs [tenant-ports/memberships-of-user
+                      (fn [_ _] [{:tenant-id (random-uuid) :role :admin :status :invited}])]
+          (is (str/includes? (:body (sign-in! a)) "oidc-admin-link-refused"))))
+      (reset! role :member)
+      (is (some? (session-token (sign-in! a))) "a member by membership is linked as before"))))
 
 (deftest ^:integration ^:security trust-email-stands-in-for-email-verified
   (testing "no email_verified claim: refused unless the provider is trusted"

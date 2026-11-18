@@ -23,6 +23,7 @@
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.lockout :as lockout]
+            [wagoe.user.shell.memberships :as memberships]
             [wagoe.user.shell.sealed :as sealed])
   (:import (java.net URLEncoder)
            (java.nio.charset StandardCharsets)
@@ -39,7 +40,7 @@
    of forged tokens cannot turn into a stream of requests to the provider."
   30000)
 
-(defrecord OidcClient [settings auth-service audit-repository identity-repository key cache])
+(defrecord OidcClient [settings auth-service audit-repository identity-repository key cache memberships])
 
 ;; =============================================================================
 ;; Sealed cookies
@@ -272,6 +273,9 @@
                                               (when email-user
                                                 (some #(= (:iss claims) (:issuer %))
                                                       (ports/find-identities-by-user repo (:id email-user)))))
+                         ;; Asked only when it could decide (BOU-1008)
+                         :email-user-tenant-admin? (when (and email-user (:link-by-email? p) (not= :admin (:role email-user)))
+                                                     (memberships/admin-anywhere? (:memberships client) (:id email-user)))
                          :claims             claims
                          :provider           p}))]
       (case (:action decision)
@@ -403,7 +407,7 @@
 
    `secret` keys the sealed cookies; the wiring passes JWT_SECRET unless the
    settings carry :state-secret."
-  [{:keys [settings secret auth-service audit-repository identity-repository]}]
+  [{:keys [settings secret auth-service audit-repository identity-repository membership-services]}]
   (let [r (oidc/normalize-settings settings)]
     (when (:error r)
       (throw (ex-info (get-in r [:error :message]) (:error r))))
@@ -412,4 +416,6 @@
                       {:type :configuration-error})))
     (->OidcClient (:ok r) auth-service audit-repository identity-repository
                   (sealed/derive-key "wagoe.user.oidc" secret)
-                  (atom {}))))
+                  (atom {})
+                  ;; The tenant module's, when on: whom a link by email must refuse (BOU-1008)
+                  (first membership-services))))

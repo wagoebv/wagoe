@@ -279,7 +279,8 @@
    In order: the account already linked to (iss, sub); the account with the
    token's verified email, when the provider allows linking by email and that
    account has no link at this issuer yet — a second subject for the same email
-   is the address changing hands, and never an administrator; a new account,
+   is the address changing hands, and never an administrator, of the app or of
+   a tenant (:email-user-tenant-admin?); a new account,
    when it allows creating one. Nothing else — an unverified email never
    selects or creates an account.
 
@@ -288,14 +289,16 @@
      {:action :link   :user u}
      {:action :create :user-data {…}}
      {:error {:type :oidc/no-account …}}"
-  [{:keys [linked-user email-user email-user-linked? claims provider]}]
+  [{:keys [linked-user email-user email-user-linked? email-user-tenant-admin? claims provider]}]
   (let [email (verified-email claims provider)]
     (cond
       linked-user
       {:action :login :user linked-user}
 
-      ;; An email match must never hand out an administrator account.
-      (and email-user email (:link-by-email? provider) (= :admin (:role email-user)))
+      ;; An email match must never hand out an administrator account, nor one
+      ;; that administers a tenant by membership (BOU-1008).
+      (and email-user email (:link-by-email? provider)
+           (or (= :admin (:role email-user)) email-user-tenant-admin?))
       (error :oidc/admin-link-refused
              "An administrator account is not linked by email; link it by signing in another way")
 

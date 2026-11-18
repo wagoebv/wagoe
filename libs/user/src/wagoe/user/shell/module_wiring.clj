@@ -4,7 +4,8 @@
   This namespace owns all Integrant init/halt methods for user-specific
   components so that shared system wiring does not depend directly on
   user shell namespaces."
-  (:require [wagoe.user.ports :as ports]
+  (:require [wagoe.tenant.ports :as tenant-ports]
+            [wagoe.user.ports :as ports]
             [wagoe.user.shell.persistence :as user-persistence]
             [wagoe.user.shell.auth-persistence :as auth-persistence]
             [wagoe.user.shell.service :as user-service]
@@ -33,6 +34,15 @@
     (when-not (satisfies? proto component)
       (throw (ex-info (str "WGE-107: the " what " does not implement " proto-name)
                       {:type :configuration-error :wagoe/error-code "WGE-107" :missing methods})))))
+
+(defn- require-membership-lookup!
+  "Refuse to boot on a membership service that cannot list a user's
+   memberships: without it a link by email and an email change would spare no
+   tenant's admin (BOU-1008). None, without the tenant module, is fine."
+  [membership-services]
+  (when-let [m (first membership-services)]
+    (require-protocols! "membership service" m
+                        {"ITenantMembershipsOfUser" [tenant-ports/ITenantMembershipsOfUser ['memberships-of-user]]})))
 
 ;; =============================================================================
 ;; User Repository
@@ -150,13 +160,14 @@
 
 (defmethod ig/init-key :wagoe/user-service
   [_ {:keys [user-repository session-repository audit-repository validation-config auth-service
-             logger metrics-emitter error-reporter tenants]}]
+             logger metrics-emitter error-reporter tenants membership-services identity-repositories]}]
   (log/info "Initializing user service")
   (require-protocols! "user repository" user-repository
                       {"ILoginAttempts" [ports/ILoginAttempts ['claim-login-attempts 'release-login-attempt]]
                        "IAdminLock"     [ports/IAdminLock ['with-admins-locked]]})
   (require-protocols! "session repository" session-repository
                       {"IUserSessionInvalidation" [ports/IUserSessionInvalidation ['invalidate-user-session]]})
+  (require-membership-lookup! membership-services)
   ;; Observability rides on the service: its operations and the user handlers
   ;; build their interceptor :system from it.
   (let [service (user-service/create-user-service
@@ -165,7 +176,11 @@
                   :metrics-emitter metrics-emitter
                   :error-reporter  error-reporter
                   ;; The tenant module's, when on: names the tenants a sign-in chooses among (BOU-995)
-                  :tenants         (first tenants)})]
+                  :tenants         (first tenants)
+                  ;; And whose email a tenant's admin may not change (BOU-1008)
+                  :memberships     (first membership-services)
+                  ;; The OIDC links an email change drops, when OIDC is on (BOU-1008)
+                  :identities      (first identity-repositories)})]
     (log/info "User service initialized")
     service))
 
@@ -420,7 +435,9 @@
                                :logger             (ig/ref :wagoe/logging)
                                :metrics-emitter    (ig/ref :wagoe/metrics)
                                :error-reporter     (ig/ref :wagoe/error-reporting)
-                               :tenants            (ig/refset :wagoe/tenant-service)}
+                               :tenants            (ig/refset :wagoe/tenant-service)
+                               :membership-services (ig/refset :wagoe/membership-service)
+                               :identity-repositories (ig/refset :wagoe/user-identity-repository)}
     :wagoe/user-routes        {:user-service (ig/ref :wagoe/user-service)
                                :mfa-service  (ig/ref :wagoe/mfa-service)
                                :email-sender (ig/ref :wagoe/email)
@@ -508,7 +525,8 @@
                   :wagoe/user-oidc        {:settings            (:oidc settings)
                                            :auth-service        (ig/ref :wagoe/auth-service)
                                            :audit-repository    (ig/ref :wagoe/audit-repository)
-                                           :identity-repository (ig/ref :wagoe/user-identity-repository)}
+                                           :identity-repository (ig/ref :wagoe/user-identity-repository)
+                                           :membership-services (ig/refset :wagoe/membership-service)}
                   :wagoe/user-oidc-routes {:oidc   (ig/ref :wagoe/user-oidc)
                                            :hooks  (ig/ref :wagoe/auth-hooks)
                                            :config config})

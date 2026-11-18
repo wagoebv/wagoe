@@ -191,7 +191,11 @@
         (:options params)))
      {:logger          logger
       :metrics-emitter metrics-emitter
-      :error-reporter  error-reporter})))
+      :error-reporter  error-reporter}))
+
+  ports/ITenantMembershipsOfUser
+  (memberships-of-user [_ user-id]
+    (into [] (remove #(= :revoked (:status %))) (ports/find-memberships-by-user membership-repository user-id))))
 
 (defn create-membership-service
   [membership-repository logger metrics-emitter error-reporter]

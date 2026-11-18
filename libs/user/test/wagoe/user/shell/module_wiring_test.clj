@@ -1,5 +1,6 @@
 (ns wagoe.user.shell.module-wiring-test
-  (:require [wagoe.user.shell.module-wiring :as sut]
+  (:require [wagoe.tenant.ports]
+            [wagoe.user.shell.module-wiring :as sut]
             [clojure.test :refer [deftest is testing]]
             [clojure.tools.logging.test :as log-test]
             [wagoe.user.shell.auth-persistence]
@@ -154,3 +155,19 @@
     (is (= "WGE-107: the user service does not implement IJwtSessions"
            (try (ig/init-key :wagoe/user-routes {:user-service svc :config {}}) nil
                 (catch clojure.lang.ExceptionInfo e (ex-message e)))))))
+
+(deftest ^:unit ^:security the-membership-service-reaches-the-user-service-and-oidc
+  ;; Without it a link by email, and an email change, spare no tenant's admin (BOU-1008)
+  (let [{:keys [components]} (sut/ig-config {:oidc {:providers {:google {:issuer "https://accounts.google.com"
+                                                                         :client-id "x" :client-secret "y"}}}}
+                                            {:config {}})]
+    (is (= (ig/refset :wagoe/membership-service) (get-in components [:wagoe/user-service :membership-services])))
+    (is (= (ig/refset :wagoe/membership-service) (get-in components [:wagoe/user-oidc :membership-services])))
+    (is (= (ig/refset :wagoe/user-identity-repository) (get-in components [:wagoe/user-service :identity-repositories])))))
+
+(deftest ^:unit ^:security a-membership-service-that-cannot-list-a-users-memberships-refuses-to-boot
+  (let [m #_{:clj-kondo/ignore [:missing-protocol-method]} (reify wagoe.tenant.ports/ITenantMembershipService)]
+    (is (= "WGE-107: the membership service does not implement ITenantMembershipsOfUser"
+           (try (#'sut/require-membership-lookup! #{m}) nil
+                (catch clojure.lang.ExceptionInfo e (ex-message e)))))))
+

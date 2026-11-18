@@ -23,6 +23,7 @@
             [wagoe.user.core.view-as :as view-as]
             [wagoe.user.shell.auth :as auth-shell]
             [wagoe.user.shell.lockout :as lockout]
+            [wagoe.user.shell.memberships :as memberships]
             [wagoe.user.ports :as ports]
             [wagoe.tenant.ports :as tenant-ports]
             [wagoe.platform.core.database.constraint :as constraint]
@@ -173,6 +174,28 @@
   [before after]
   (or (user-core/admin-changes? before after)
       (user-core/deactivates? before after)))
+
+(defn- check-email-change!
+  "Refuse an email change by someone other than the user or a platform admin
+   when the user is a member of another tenant: an admin of their own tenant
+   would otherwise point it at an address they hold, then sign in by it
+   through OIDC with that membership (BOU-1008)."
+  [user-repository memberships old-user]
+  (when-let [actor-id (:actor-id *audit-context*)]
+    (when (and (not (access/same-id? actor-id (:id old-user)))
+               (memberships/elsewhere? memberships old-user)
+               (not (access/platform-admin? (.find-user-by-id user-repository actor-id))))
+      (throw (ex-info "This user's email is theirs or a platform admin's to change: they are a member of another tenant"
+                      {:type :forbidden :reason :member-of-another-tenant})))))
+
+(defn- unlink-identities!
+  "Drop the user's OIDC links when someone else changed their email: one made
+   while the address was that someone's must not outlive it (BOU-1008). They
+   link again by signing in."
+  [{:keys [identities]} user-id]
+  (when identities
+    (doseq [{:keys [issuer subject]} (.find-identities-by-user identities user-id)]
+      (.unlink-identity identities issuer subject))))
 
 (defn- check-admin-change!
   "Throw :forbidden when the bound actor, not a platform admin, sets or clears
@@ -670,6 +693,8 @@
              ;; promotion would read as their own.
              audit-ctx (effective-audit-context {})
              _ (check-admin-change! user-repository old-user input)
+             email-changed? (and old-user (contains? input :email) (not= (:email input) (:email old-user)))
+             _ (when email-changed? (check-email-change! user-repository (:memberships this) old-user))
              ;; A partial update is validated with the stored values of the
              ;; required keys, but writes only its own: a stale role written
              ;; back would undo a concurrent promotion unguarded (BOU-685).
@@ -688,7 +713,7 @@
          ;; The database's refusal names no column on MySQL, so the email is
          ;; checked first, in the shape the platform gives a named one; a form
          ;; shows it on its field (BOU-673). The constraint stays the backstop.
-         (when-let [other (when (and old-user (not= (:email merged) (:email old-user)))
+         (when-let [other (when email-changed?
                             (auth-shell/account-in-tenant user-repository (:tenant-id old-user) (:email merged)))]
            (when (not= (:id other) (:id input))
              (throw (ex-info "Another record already has this email"
@@ -704,7 +729,10 @@
                ;; The row the guard judged, when it locked.
                old-user (or before old-user)
                ;; A partial update returns the whole user, as the port promises.
-               after (some->> result (merge old-user))]
+               after (some->> result (merge old-user))
+               _     (when (and after email-changed?
+                                (not (access/same-id? (:actor-id *audit-context*) (:id old-user))))
+                       (unlink-identities! this (:id old-user)))]
 
            ;; 4. Audit the other fields. Only the audit trail reads them, so a
            ;;    failed write warns; role and active were audited with the write.
@@ -995,7 +1023,9 @@
      validation-config: Map containing validation policies and settings
      auth-service: Implementation of IAuthenticationService
      observability: Optional {:logger :metrics-emitter :error-reporter}; each
-                    operation logs, counts and reports through what it holds
+                    operation logs, counts and reports through what it holds.
+                    Also :tenants, :memberships and :identities, the tenant
+                    module's services and the OIDC links, when they are on
 
    Returns:
      UserService instance
