@@ -207,18 +207,21 @@ jobs:
       # else the source-of-truth in libs/core/build.clj.
       - name: Determine version
         id: version
+        shell: bash
         env:
           INPUT_VERSION: ${{ github.event.inputs.version }}
+          EVENT: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "$INPUT_VERSION" ]; then
+          if [ "$EVENT" = "workflow_dispatch" ] && [ -n "$INPUT_VERSION" ]; then
             version="$INPUT_VERSION"
-          elif [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
             version="${GITHUB_REF#refs/tags/}"
           else
             version="$(grep -m1 'def version' libs/core/build.clj | sed -E 's/.*"([^"]+)".*/\1/')"
           fi
           # A tag or input is text a shell would run: only a version gets through
-          if ! printf '%s' "$version" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?'; then
+          # The whole value, not any one line of it.
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::not a version: $version"; exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -303,6 +306,20 @@ jobs:
       - name: Hash the installer
         run: cd scripts && sha256sum install.sh > install.sh.sha256
 
+      # The release notes are this version's CHANGELOG section (BOU-1030), cut
+      # as release-check/changelog-section cuts it; release:check already
+      # refused a version without one.
+      - name: Release notes from CHANGELOG.md
+        shell: bash
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          {
+            printf '## Wagoe Framework %s\n\nAll libraries published to Clojars.\n\n' "$VERSION"
+            printf '```clojure\ncom.wagoe/wagoe-platform {:mvn/version "%s"}\n```\n\n' "$VERSION"
+            awk -v h="## [$VERSION]" 'index($0, h) == 1 {on = 1; next} on && /^## \[/ {exit} on' CHANGELOG.md
+          } > release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
@@ -311,16 +328,7 @@ jobs:
           files: |
             scripts/install.sh
             scripts/install.sh.sha256
-          body: |
-            ## Wagoe Framework ${{ needs.publish.outputs.version }}
-
-            All libraries published to Clojars.
-
-            ```clojure
-            com.wagoe/wagoe-platform {:mvn/version "${{ needs.publish.outputs.version }}"}
-            ```
-
-            See [CHANGELOG.md](https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md) for details.
+          body_path: release-notes.md
           draft: false
           # scripts/install.sh installs /releases/latest, which skips
           # prereleases. A version with a stage (1.1.0-rc-1) is a prerelease,
