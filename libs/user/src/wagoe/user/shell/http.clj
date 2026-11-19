@@ -232,7 +232,7 @@
     (if-let [token (or (user-middleware/extract-session-token request)
                        (get-in request [:body-params :token]))]
       (handler (assoc-in request [:parameters :path :token] token))
-      (throw (ex-info "No session token presented" {:type :session-not-found})))))
+      (throw (ex-info "No session token presented" {:type :not-found})))))
 
 (defn invalidate-session-handler
   "DELETE /api/sessions/:token - Invalidate session using interceptor pipeline."
