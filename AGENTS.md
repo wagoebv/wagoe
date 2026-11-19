@@ -111,7 +111,8 @@ Incubating ports may change in a minor release; document under `### Changed`.
 ```bash
 bb test:services up       # Redis + MySQL; PostgreSQL suites use embedded PG
 bb test:all               # main, tools, agents, wagoe-cli and wagoe-mcp
-bb check                 # registered quality gates
+bb check                 # pre-push gate: quality gates, CSS build, tests of what changed
+bb check-full            # gates + bb test:all + bb e2e, what CI on main runs
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
 ```
 

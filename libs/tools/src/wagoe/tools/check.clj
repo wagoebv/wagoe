@@ -6,6 +6,7 @@
 ;; Usage (via bb.edn task):
 ;;   bb check                      # Run all quality checks
 ;;   bb check --quick              # Run only FC/IS and dependency checks
+;;   bb check --gates              # Every check except the test rows
 ;;   bb check --fix                # Pass --fix to kondo linter
 ;;   bb check --ci                 # Exit non-zero on any check failure
 ;;   bb check --help               # Print usage
@@ -65,6 +66,26 @@
    fails (BOU-572)."
   []
   (System/exit (:exit (process/shell {:continue true} (str/join " " (linting-cmd))))))
+
+(def ^:private ui-assets
+  "Committed UI assets the build must leave in place."
+  ["libs/ui-style/resources/public/css/daisy-admin.css"
+   "libs/ui-style/resources/public/css/wagoe-admin.css"
+   "libs/ui-style/resources/public/js/theme.js"
+   "libs/ui-style/resources/public/js/htmx.min.js"])
+
+(defn css
+  "Rebuild the CSS and fail when the committed bundles differ from it.
+   Tailwind scans the Clojure sources for class names, so any code change can
+   change the bundle; this failed 2 of 30 red CI runs (BOU-1023)."
+  []
+  (let [sh   #(:exit (apply process/shell {:continue true} %&))
+        exit (if (pos? (sh "npm" "run" "build:css"))
+               1
+               (sh "git" "diff" "--exit-code" "--" "libs/ui-style/resources/public/css"))
+        gone (remove #(.exists (io/file %)) ui-assets)]
+    (doseq [f gone] (println (red (str "missing: " f))))
+    (System/exit (if (and (zero? exit) (empty? gone)) 0 1))))
 
 (def all-checks
   [{:id    :fcis
@@ -187,6 +208,10 @@
     :scope :monorepo
     :label "Docs drift (real aliases, no tracker ids)"
     :cmd   ["bb" "docs:lint"]}
+   {:id    :links
+    :scope :any
+    :label "AGENTS and docs links"
+    :cmd   ["bb" "check-links"]}
    {:id    :linting
     :scope :any
     :label "Linting"
@@ -199,7 +224,24 @@
    {:id    :doctor
     :scope :any
     :label "Config doctor"
-    :cmd   ["bb" "doctor" "--ci"]}])
+    :cmd   ["bb" "doctor" "--ci"]}
+   ;; :test rows make `bb check` the pre-push gate: what CI would fail, found
+   ;; before the push (BOU-1024). `--gates` leaves them out.
+   {:id    :css
+    :scope :monorepo
+    :kind  :test
+    :label "Compiled CSS matches its sources"
+    :cmd   ["bb" "check:css"]}
+   {:id    :tests
+    :scope :monorepo
+    :kind  :test
+    :label "Tests: changed libraries, :app, :security"
+    :cmd   ["bb" "test:changed"]}])
+
+(def ^:private dev-jwt-secret
+  "What CI and `bb test:all` use. Without it the doctor row failed every local
+   run in this repo, since no developer config sets JWT_SECRET."
+  "dev-secret-at-least-32-characters-long")
 
 (def quick-check-ids
   "Check IDs included in --quick mode."
@@ -238,14 +280,16 @@
 
 (defn- run-check
   "Run a single check subprocess. Returns a result map with :id, :label, :exit, :duration-ms, and :output."
-  [{:keys [id label cmd]} opts]
+  [{:keys [id label cmd kind]} opts]
   (let [cmd (if (and (= id :linting) (:fix opts))
               (conj (vec cmd) "--fix")
               cmd)
         start   (System/currentTimeMillis)
-        result  (process/shell {:continue true
-                                :out :string
-                                :err :string}
+        env     (when (and (framework-repo?) (str/blank? (System/getenv "JWT_SECRET")))
+                  {"JWT_SECRET" dev-jwt-secret})
+        ;; Test rows run for minutes; stream them rather than sit silent.
+        result  (process/shell (cond-> {:continue true :extra-env env}
+                                 (not= :test kind) (assoc :out :string :err :string))
                                (str/join " " cmd))
         end     (System/currentTimeMillis)]
     {:id          id
@@ -281,11 +325,12 @@
 
 (defn- parse-args [args]
   (loop [[flag & more :as remaining] args
-         opts {:quick false :fix false :ci false}]
+         opts {:quick false :gates false :fix false :ci false}]
     (cond
       (empty? remaining) opts
       (or (= flag "--help") (= flag "-h")) (assoc opts :help true)
       (= flag "--quick") (recur more (assoc opts :quick true))
+      (= flag "--gates") (recur more (assoc opts :gates true))
       (= flag "--fix")   (recur more (assoc opts :fix true))
       (= flag "--ci")    (recur more (assoc opts :ci true))
       :else              (recur more opts))))
@@ -296,6 +341,7 @@
   (println "Usage:")
   (println "  bb check                 Run all quality checks")
   (println "  bb check --quick         Run the quick subset (fast)")
+  (println "  bb check --gates         Every check except the test rows")
   (println "  bb check --fix           Pass --fix to kondo linter")
   (println "  bb check --ci            Accepted, no longer needed — a failure always exits non-zero")
   (println)
@@ -316,9 +362,9 @@
     (when (:help opts)
       (print-help)
       (System/exit 0))
-    (let [selected (if (:quick opts)
-                     (filter #(contains? quick-check-ids (:id %)) all-checks)
-                     all-checks)
+    (let [selected (cond (:quick opts) (filter #(contains? quick-check-ids (:id %)) all-checks)
+                         (:gates opts) (remove #(= :test (:kind %)) all-checks)
+                         :else         all-checks)
           [checks skipped] (applicable-checks selected (framework-repo?))
           _       (do (println)
                       (println (bold "Wagoe Quality Check"))

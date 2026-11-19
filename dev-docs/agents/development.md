@@ -136,6 +136,11 @@ bb install-hooks                                   # Configure git hooks path to
 bb scripts/docs_lint.clj                           # Run documentation drift linter directly
 
 # Quality Gates (all run in CI + check:fcis/check:ports run in pre-commit)
+bb check                                           # Pre-push gate: every gate, the CSS build and bb test:changed
+bb check --gates                                   # Gates only, as CI's Babashka Gates job runs them
+bb check-full                                      # bb check --gates + bb test:all + bb e2e
+bb test:changed                                    # Suites of the libs changed since origin/main, plus :app and :security
+bb check:css                                       # Rebuild the CSS; fail when the committed bundles differ (needs npm ci)
 bb check:fcis                                      # FC/IS enforcement: core/ must not import shell/IO/logging/DB, throw, or hold mutable state
 bb check:placeholder-tests                         # Detect (is true) placeholder assertions in tests
 bb check:deps                                      # Declared wagoe deps = used ones, both ways; cycles; undeclared third-party deps

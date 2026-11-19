@@ -44,6 +44,8 @@
             [wagoe.tools.check-tests :as check-tests]
             [wagoe.tools.docs-lint :as docs-lint]
             [wagoe.tools.doctor :as doctor]
+            [wagoe.tools.dev :as dev]
+            [wagoe.tools.test-all :as test-all]
             [agents-gen :as agents-gen]))
 
 ;; =============================================================================
@@ -914,7 +916,7 @@
   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
     :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary
     :doc-counts :branch-protection :versions :changelog :isolation
-    :error-shape :jdk :roadmap :ports-diff})
+    :error-shape :jdk :roadmap :ports-diff :links :tests})
 
 ;; =============================================================================
 ;; check:roadmap
@@ -1420,14 +1422,36 @@
       (let [n (count (filter #(= ":version" (:what %)) (check-versions/version-sources)))]
         (is (<= 20 n) (str "only " n " per-module :version entries scanned"))))))
 
+;; =============================================================================
+;; check-links and test:changed (BOU-1024)
+;; =============================================================================
+
+(deftest ^:unit links-gate-fires-test
+  (let [d (temp-dir "links" 1)
+        f (io/file d "AGENTS.md")]
+    (try
+      (spit f "[ok](AGENTS.md) [gone](missing.md)")
+      (is (= ["missing.md"] (map :link (:broken (#'dev/check-file f)))))
+      (finally (delete-tree! d)))))
+
+(deftest ^:unit tests-gate-fires-test
+  (let [cmds (fn [libs] (map :cmd (test-all/changed-surfaces libs #{"app" "user" "core"})))]
+    (testing "a changed library runs its suite, with :app and every :security test"
+      (is (= [["clojure" "-M:test:test/all" ":app" ":user"]
+              ["clojure" "-M:test:test/all" "--focus-meta" ":security"]]
+             (cmds #{"user"}))))
+    (testing "a standalone library runs its own surface"
+      (is (some #{["bb" "test:tools"]} (cmds #{"tools"}))))
+    (testing "a library with no suite still runs :app and :security"
+      (is (= 2 (count (cmds #{"e2e"})))))))
+
 (def gates-without-firing-tests
   "Gates that cannot yet be proven to fire, each with the reason.
 
-   Empty as of BOU-250 — every gate in `all-checks` is now proven. Kept rather
-   than deleted because it is the honest place for the next gate that arrives
-   without a seam: the alternative is quietly leaving it out of both lists,
-   which the test below forbids. An entry here is a to-do, not an exemption."
-  {})
+   Kept as the honest place for a gate that arrives without a seam: the
+   alternative is quietly leaving it out of both lists, which the test below
+   forbids. An entry here is a to-do, not an exemption."
+  {:css "Shells out to npm and git diff; no seam. CI's Build UI Assets job ran the same commands and failed 2 of 30 red runs (BOU-1023)."})
 
 (deftest ^:unit every-gate-is-accounted-for-test
   (let [declared (set (map :id check/all-checks))

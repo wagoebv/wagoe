@@ -73,6 +73,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`bb check` is the pre-push gate** (BOU-1024): gates, the CSS build and the tests of what changed (`bb test:changed`);
+  `--gates` skips the tests, `bb check-full` adds `bb test:all` and `bb e2e`. Run `npm ci` once for the CSS row.
 - **A user's Rights tab shows what they can and can't do** (BOU-1000): per module at a glance, every permission held or
   not with its reason, their roles, and whether they open the admin pages. Nothing to change in an app.
 - **View the app as a user, read-only** (BOU-868): from their Rights tab, for 30 minutes; every change is refused

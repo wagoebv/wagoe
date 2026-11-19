@@ -23,6 +23,7 @@
             [babashka.process :as process]
             [clojure.string :as str]
             [wagoe.tools.ansi :refer [bold green red yellow dim]]
+            [wagoe.tools.ci-changes :as ci-changes]
             [wagoe.tools.test-services :as test-services]))
 
 ;; =============================================================================
@@ -172,6 +173,49 @@
     (println (format "  %-52s %s   %s" (str host ":" port " (" (name id) ")")
                      "bb test:services up"
                      (dim (str/join ", " needed-by))))))
+
+(defn- suite-ids
+  "Suite ids tests.edn declares, as strings."
+  []
+  (set (map second (re-seq #":id\s+:([a-z0-9-]+)" (slurp "tests.edn")))))
+
+(def ^:private standalone
+  "Library → the surfaces its change runs, for libraries outside tests.edn."
+  {"tools" #{:tools :agents} "config" #{:config} "wagoe-cli" #{:wagoe-cli} "wagoe-mcp" #{:wagoe-mcp}})
+
+(defn changed-surfaces
+  "What `bb check` runs for `libs`, the libraries a diff touches: their suites
+   plus :app, every :security test, and any standalone surface they own. The
+   app and security suites caught 5 of 12 real CI failures (BOU-1023)."
+  [libs suites]
+  (let [ids (into #{} (mapcat standalone) libs)]
+    (into [{:id    :main
+            :label "changed suites + :app"
+            :dir   "."
+            :cmd   (into ["clojure" main-suite-aliases]
+                         (map #(str ":" %))
+                         (sort (conj (set (filter suites libs)) "app")))}
+           {:id    :security
+            :label ":security tests"
+            :dir   "."
+            :cmd   ["clojure" main-suite-aliases "--focus-meta" ":security"]}]
+          (filter (comp ids :id))
+          surfaces)))
+
+(defn changed-main
+  "`bb test:changed [base-ref]`: the tests of what changed since
+   origin/<base-ref>, default main."
+  [& [base-ref]]
+  (let [base  (or base-ref "main")
+        libs  (ci-changes/libs-for (ci-changes/dependency-graph ".")
+                                   (ci-changes/changed-files base))]
+    (if (empty? libs)
+      (println (dim (str "No code changed since origin/" base "; no tests to run.")))
+      (do
+        (println (bold (str "Testing what changed since origin/" base ": "))
+                 (str/join " " (sort libs)))
+        (test-services/print-preflight)
+        (System/exit (if (pos? (report (mapv run-surface (changed-surfaces libs (suite-ids))))) 1 0))))))
 
 (defn -main [& args]
   (if (some #{"--list"} args)

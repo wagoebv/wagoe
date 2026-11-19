@@ -4,7 +4,7 @@ Read when directed by [AGENTS.md](../../AGENTS.md). Paths in commands and inline
 
 ## Quality Gates
 
-Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) to prevent regressions caught during QA review (PRs #108–#116). `bb check` runs the full set — currently 22 — and `wagoe.tools.check/all-checks` is its registry; the table below covers the ones with non-obvious rules.
+Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) to prevent regressions caught during QA review (PRs #108–#116). `bb check` runs the full set — currently 25 — and `wagoe.tools.check/all-checks` is its registry. `bb check --gates` leaves out the two test rows (CSS build, `bb test:changed`) and is what CI runs; `bb check-full` adds `bb test:all` and `bb e2e`. The smokes (first-run, web crawl, examples) stay CI-only; the table below covers the ones with non-obvious rules.
 
 | Gate | Command | What it catches | Hard fail? |
 |------|---------|-----------------|------------|
