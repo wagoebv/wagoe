@@ -52,7 +52,7 @@ Review every changed `deps.edn` (root, `libs/*`, aliases), `bb.edn`, and any ven
 5. **Exclusions.** A bump must not drop an `:exclusions` entry that exists to keep a vulnerable transitive version out. The embedded-postgres exclusion of `org.postgresql/postgresql` (BOU-618) is one.
 6. **Source and trust.** A new Maven repository, an artifact from an unfamiliar group, a fork, or a library that has been abandoned for years: say what it is and who publishes it.
 7. **Necessity.** A new dependency for something a few lines or an existing library already does widens the attack surface. Say so (SUGGESTION).
-8. **Assets.** JS or CSS from a CDN needs a pinned version and an `integrity` hash. GitHub Actions in `.github/workflows/` are pinned to tags today (`actions/checkout@v6`): an action from a new third party is worth a note asking for a SHA pin.
+8. **Assets.** JS or CSS from a CDN needs a pinned version and an `integrity` hash. Every GitHub Action in `.github/` is pinned to a commit SHA with its version in a comment, and `workflow-pins-test` refuses a tag (BOU-1017); a download a workflow runs is checked against a SHA-256.
 
 `bb check:deps` already fails on a third-party namespace required but not declared. Do not repeat what it checks.
 

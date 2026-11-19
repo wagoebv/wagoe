@@ -1,0 +1,7 @@
+# Moves the SHA pins and their version comments forward (BOU-1017)
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

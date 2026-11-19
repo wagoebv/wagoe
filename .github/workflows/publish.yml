@@ -168,7 +168,15 @@ jobs:
         uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
         with:
           cli: 1.12.6.1673
-          bb: 1.13.229
+
+      # bb runs `bb deploy` with the Clojars credentials, and its release
+      # assets can be replaced upstream: fetched by digest, not by version.
+      - name: Install Babashka
+        run: |
+          curl -fsSL -o /tmp/bb.tgz https://github.com/babashka/babashka/releases/download/v1.13.229/babashka-1.13.229-linux-amd64.tar.gz
+          echo "a98c90a0530943dfa9a0b03bcccbc2030777a6ce094af303d5bb47d77e193299  /tmp/bb.tgz" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin" && tar -xzf /tmp/bb.tgz -C "$HOME/.local/bin" bb
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Cache dependencies
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
@@ -205,6 +213,10 @@ jobs:
           else
             version="$(grep -m1 'def version' libs/core/build.clj | sed -E 's/.*"([^"]+)".*/\1/')"
           fi
+          # A tag or input is text a shell would run: only a version gets through
+          if ! printf '%s' "$version" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?'; then
+            echo "::error::not a version: $version"; exit 1
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Resolved release version: $version"
 
@@ -212,7 +224,9 @@ jobs:
       # 'version ahead of source' failure that froze a stale jar under an immutable
       # Clojars coordinate. Aborts before any deploy on mismatch.
       - name: Guard — source version matches the release
-        run: bb deploy --check-versions "${{ steps.version.outputs.version }}"
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: bb deploy --check-versions "$VERSION"
 
       # Every release closes the known security issues (BOU-899): none open in
       # Linear, check:vulns green on this commit, and a ### Security section in
@@ -221,7 +235,8 @@ jobs:
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: bb release:check "${{ steps.version.outputs.version }}"
+          VERSION: ${{ steps.version.outputs.version }}
+        run: bb release:check "$VERSION"
 
       # Deploy only artifacts not yet on Clojars at this version. Clojars
       # coordinates are immutable, so a re-run after a partial/transient failure
@@ -241,9 +256,11 @@ jobs:
         run: bb deploy --verify
 
       - name: Summary
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           echo "## ✅ Publish Complete" >> "$GITHUB_STEP_SUMMARY"
-          echo "Version **${{ steps.version.outputs.version }}** — all libraries published to Clojars and verified." >> "$GITHUB_STEP_SUMMARY"
+          echo "Version **$VERSION** — all libraries published to Clojars and verified." >> "$GITHUB_STEP_SUMMARY"
 
   # A fresh checkout of the tag, so what is signed is the committed installer,
   # not a file the publish job's third-party setup could have touched.

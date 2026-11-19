@@ -344,10 +344,12 @@ no-API trade the rest of that gate makes.
 ----
 publish:                         # environment `release`; contents + checks: read
 - Guard: CI passed on the commit # Waits up to 25 min for "All Tests Passed"
-- Setup Clojure + Babashka       # DeLaGuardo/setup-clojure with an exact bb
+- Setup Java 21                  # The JDK the artifacts are compiled with
+- Setup Clojure; Babashka        # bb fetched by SHA-256, not by version
 - Cache ~/.m2 and ~/.gitlibs     # Speeds up subsequent runs
-- npm ci + npm run build:css     # Builds Tailwind CSS for ui-style jar
+- Setup Node + npm ci + build:css # Builds Tailwind CSS for ui-style jar
 - bb deploy --check-versions NEW # Every build.clj carries the release version
+- bb release:check NEW           # No open security issue, no known vulnerability
 - bb deploy --missing            # Deploys what is not yet on Clojars, in order
 - bb deploy --verify             # Every artifact landed
 attest:                          # tag pushes; id-token + attestations: write
@@ -358,8 +360,8 @@ release:                         # tag pushes; contents: write only
 
 Every action is pinned to a commit SHA with its version in a comment, since a
 tag can be moved to other code (BOU-1017); `workflow-pins-test` refuses one
-that is not. To update one, resolve the new tag's commit
-(`gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`) and replace both.
+that is not. Dependabot moves the pins forward; by hand, resolve the new tag's
+commit (`gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`) and replace both.
 
 ---
 
