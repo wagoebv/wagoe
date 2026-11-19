@@ -32,7 +32,6 @@
     (is (empty? (unpinned (slurp (str f)))) (str f))))
 
 (deftest ^:unit ^:security publish-fetches-bb-by-digest
-  ;; A release asset can be replaced under its version; publish holds the Clojars credentials
   (let [publish (slurp (str (fs/path github-dir "workflows" "publish.yml")))]
     (is (not (re-find #"(?m)^\s+bb:" publish)) "no bb: input to setup-clojure")
     (is (re-find #"sha256sum -c" publish))))
