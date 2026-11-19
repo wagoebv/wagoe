@@ -190,35 +190,61 @@
 
 (defn changed-surfaces
   "What `bb check` runs for `libs`, the libraries a diff touches: their suites
-   plus :app, every :security test, and any standalone surface they own. The
-   app and security suites caught 5 of 12 real CI failures (BOU-1023)."
+   plus :app, the :security tests of every other suite, and any standalone
+   surface they own. The app and security suites caught 5 of 12 real CI
+   failures (BOU-1023)."
   [libs lib-suites]
-  (let [ids (into #{} (mapcat standalone) libs)]
-    (into [{:id    :main
-            :label "changed suites + :app"
-            :dir   "."
-            :cmd   (into ["clojure" main-suite-aliases]
-                         (map #(str ":" %))
-                         (sort (conj (set (keep lib-suites libs)) "app")))}
-           {:id    :security
-            :label ":security tests"
-            :dir   "."
-            :cmd   ["clojure" main-suite-aliases "--focus-meta" ":security"]}]
-          (filter (comp ids :id))
-          surfaces)))
+  (let [ids    (into #{} (mapcat standalone) libs)
+        run    (conj (set (keep lib-suites libs)) "app")
+        suites (map #(str ":" %) (sort run))]
+    (-> [{:id    :main
+          :label "changed suites + :app"
+          :dir   "."
+          :cmd   (into ["clojure" main-suite-aliases] suites)}]
+        ;; The main run already holds its suites' security tests.
+        (cond-> (not= run (conj (set (vals lib-suites)) "app"))
+          (conj {:id    :security
+                 :label ":security tests of the other suites"
+                 :dir   "."
+                 :cmd   (into ["clojure" main-suite-aliases "--focus-meta" ":security"]
+                              (mapcat #(vector "--skip" %))
+                              suites)}))
+        (into (filter (comp ids :id)) surfaces))))
+
+(defn- git-lines [& args]
+  (let [{:keys [exit out err]} (apply process/shell {:out :string :err :string :continue true} "git" args)]
+    (when-not (zero? exit)
+      (throw (ex-info (str "git " (str/join " " args) " failed: " err) {:type :internal-error})))
+    (remove str/blank? (str/split-lines out))))
+
+(defn- local-changes
+  "Paths changed since the merge base with origin/<base>: commits, the working
+   tree and untracked files, so a check before a commit sees the edit too."
+  [base]
+  (let [merge-base (first (git-lines "merge-base" (str "origin/" base) "HEAD"))]
+    (distinct (concat (git-lines "diff" "--name-only" merge-base)
+                      (git-lines "ls-files" "--others" "--exclude-standard")))))
+
+(defn local-libs
+  "Libraries whose suites `bb check` runs for `paths`; nil when no code changed.
+   Unlike CI, a change outside libs/ selects no library: CI on main runs
+   everything, and here that cost 30 minutes per push (BOU-1024)."
+  [graph paths]
+  (when-not (or (empty? paths) (ci-changes/docs-only? paths))
+    (let [lib-paths (filter #(str/starts-with? % "libs/") paths)]
+      (if (seq lib-paths) (ci-changes/libs-to-test graph lib-paths) #{}))))
 
 (defn changed-main
   "`bb test:changed [base-ref]`: the tests of what changed since
    origin/<base-ref>, default main."
   [& [base-ref]]
-  (let [base  (or base-ref "main")
-        libs  (ci-changes/libs-for (ci-changes/dependency-graph ".")
-                                   (ci-changes/changed-files base))]
-    (if (empty? libs)
+  (let [base (or base-ref "main")
+        libs (local-libs (ci-changes/dependency-graph ".") (local-changes base))]
+    (if (nil? libs)
       (println (dim (str "No code changed since origin/" base "; no tests to run.")))
       (do
         (println (bold (str "Testing what changed since origin/" base ": "))
-                 (str/join " " (sort libs)))
+                 (if (seq libs) (str/join " " (sort libs)) "no library, so :app and :security"))
         (test-services/print-preflight)
         (System/exit (if (pos? (report (mapv run-surface (changed-surfaces libs (lib-suites))))) 1 0))))))
 

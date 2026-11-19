@@ -70,8 +70,8 @@
                  :task (apply doctor-env/-main *command-line-args*)}
   check         {:doc "Pre-push gate: every quality gate, the CSS build and the tests of what changed (bb check [--gates] [--quick] [--fix])"
                  :task (apply check/-main *command-line-args*)}
-  check-full    {:doc "Everything CI on main runs locally: `bb check --gates`, `bb test:all` and `bb e2e`; smokes stay CI-only (bb check-full)"
-                 :task (run! shell ["bb check --gates" "bb test:all" "bb e2e"])}
+  check-full    {:doc "The gates, the CSS build, `bb test:all` and `bb e2e`, stopping at the first failure; smokes stay CI-only (bb check-full)"
+                 :task (run! shell ["bb check --gates" "bb check:css" "bb test:all" "bb e2e"])}
   ;; Not part of `bb check`: it lints the whole classpath (~3s) and needs deps
   ;; resolved, while `bb check` runs on every commit. Run it once per project
   ;; and again after dependency changes — .clj-kondo/imports/ is committed.

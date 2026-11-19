@@ -153,20 +153,12 @@
             (throw (ex-info (str "ci.yml: " (name job) " is gated on no library: " gate)
                             {:type :validation-error}))))))
 
-(defn changed-files [base-ref]
+(defn- changed-files [base-ref]
   (let [{:keys [exit out err]} (process/shell {:out :string :err :string :continue true}
                                               "git" "diff" "--name-only" (str "origin/" base-ref "...HEAD"))]
     (when-not (zero? exit)
       (throw (ex-info (str "git diff against " base-ref " failed: " err) {:type :internal-error})))
     (remove str/blank? (str/split-lines out))))
-
-(defn libs-for
-  "Libraries whose tests run for `paths`: all of them when `paths` is nil (no
-   base ref, a push to main), none for a docs-only diff."
-  [graph paths]
-  (cond (nil? paths)       (set (keys graph))
-        (docs-only? paths) #{}
-        :else              (libs-to-test graph paths)))
 
 (defn -main
   "No base ref (a push to main) always means everything."
@@ -175,7 +167,9 @@
         libs  (set (keys graph))
         paths (when-not (str/blank? base-ref) (changed-files base-ref))
         code? (or (nil? paths) (not (docs-only? paths)))
-        run   (libs-for graph paths)
+        run   (cond (nil? paths) libs
+                    code?        (libs-to-test graph paths)
+                    :else        #{})
         smoke? (or (nil? paths) (first-run? paths))
         gated (gated-jobs (slurp ".github/workflows/ci.yml") libs)
         skip  (cond-> (keep (fn [[job lib]] (when-not (run lib) job)) gated)

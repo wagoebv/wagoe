@@ -7,7 +7,7 @@ Use this checklist before merging documentation changes to keep docs concise, ac
 
 == Pre-Merge Checks
 
-1. Run `bb docs:lint` (CI runs `clojure -M:docs-lint`). It must pass, and your change should add no new warnings to `build/docs-lint/report.txt`.
+1. Run `bb docs:lint` (CI runs it in `bb check --gates`). It must pass, and your change should add no new warnings to `build/docs-lint/report.txt`.
 2. Run `bb check-links` and confirm zero broken links.
 3. Validate any command examples you changed.
 4. Verify module paths use the library-split layout:

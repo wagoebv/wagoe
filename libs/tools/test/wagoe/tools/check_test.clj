@@ -239,6 +239,23 @@
 ;; Argument parsing
 ;; =============================================================================
 
+(deftest ^:unit select-checks-test
+  (let [ids (fn [opts] (set (map :id (check/select-checks opts check/all-checks))))]
+    (testing "--gates leaves out exactly the test rows"
+      (is (= (disj (set (map :id check/all-checks)) :css :tests) (ids {:gates true}))))
+    (testing "--quick wins over --gates"
+      (is (= check/quick-check-ids (ids {:quick true :gates true}))))
+    (testing "a plain run selects every row"
+      (is (= (set (map :id check/all-checks)) (ids {}))))))
+
+(deftest ^:unit check-env-test
+  (testing "the framework repo gets a dev JWT_SECRET only when none is set"
+    (is (= {"JWT_SECRET" test-all/dev-jwt-secret} (check/check-env true nil)))
+    (is (= {"JWT_SECRET" test-all/dev-jwt-secret} (check/check-env true "")))
+    (is (nil? (check/check-env true "mine"))))
+  (testing "a generated project keeps its own"
+    (is (nil? (check/check-env false nil)))))
+
 (deftest ^:unit parse-args-test
   (testing "defaults when no args"
     (let [opts (#'check/parse-args [])]

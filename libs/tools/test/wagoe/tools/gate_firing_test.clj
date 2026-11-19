@@ -916,7 +916,7 @@
   #{:hygiene :deps :fcis :placeholder-tests :docs-lint
     :test-meta :test-tags :ports :poms :agents :doctor :linting :no-boundary
     :doc-counts :branch-protection :versions :changelog :isolation
-    :error-shape :jdk :roadmap :ports-diff :links :tests})
+    :error-shape :jdk :roadmap :ports-diff :links :tests :css})
 
 ;; =============================================================================
 ;; check:roadmap
@@ -1436,14 +1436,35 @@
 
 (deftest ^:unit tests-gate-fires-test
   (let [cmds (fn [libs] (map :cmd (test-all/changed-surfaces libs {"user" "user" "core" "core"})))]
-    (testing "a changed library runs its suite, with :app and every :security test"
+    (testing "a changed library runs its suite with :app, then the other suites' :security tests"
       (is (= [["clojure" "-M:test:test/all" ":app" ":user"]
-              ["clojure" "-M:test:test/all" "--focus-meta" ":security"]]
+              ["clojure" "-M:test:test/all" "--focus-meta" ":security" "--skip" ":app" "--skip" ":user"]]
              (cmds #{"user"}))))
-    (testing "a standalone library runs its own surface"
-      (is (some #{["bb" "test:tools"]} (cmds #{"tools"}))))
+    (testing "a standalone library runs its own surfaces"
+      (is (= [["bb" "test:tools"] ["bb" "test:agents"]] (drop 2 (cmds #{"tools"})))))
     (testing "a library with no suite still runs :app and :security"
-      (is (= 2 (count (cmds #{"e2e"})))))))
+      (is (= ["clojure" "-M:test:test/all" ":app"] (first (cmds #{"e2e"}))))
+      (is (= 2 (count (cmds #{"e2e"})))))
+    (testing "when every suite runs, its :security tests ran with it"
+      (is (= [["clojure" "-M:test:test/all" ":app" ":core" ":user"]] (cmds #{"user" "core"}))))))
+
+(deftest ^:unit css-gate-fires-test
+  (let [result (atom nil)
+        run    (fn [exits present]
+                 (with-out-str
+                   (reset! result (check/css-exit #(get exits (first %&) 0) (constantly present)))))]
+    (testing "a failed build fails"
+      (run {"npm" 1} true)
+      (is (= 1 @result)))
+    (testing "bundles that differ from the commit fail"
+      (run {"git" 1} true)
+      (is (= 1 @result)))
+    (testing "a hand-kept asset gone from the commit fails"
+      (run {} false)
+      (is (= 1 @result)))
+    (testing "a clean rebuild passes"
+      (run {} true)
+      (is (= 0 @result)))))
 
 (def gates-without-firing-tests
   "Gates that cannot yet be proven to fire, each with the reason.
@@ -1451,7 +1472,7 @@
    Kept as the honest place for a gate that arrives without a seam: the
    alternative is quietly leaving it out of both lists, which the test below
    forbids. An entry here is a to-do, not an exemption."
-  {:css "Shells out to npm and git; no seam."})
+  {})
 
 (deftest ^:unit every-gate-is-accounted-for-test
   (let [declared (set (map :id check/all-checks))

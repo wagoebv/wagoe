@@ -4,11 +4,11 @@
 ;; Unified Quality Check — aggregates all quality checks into one command.
 ;;
 ;; Usage (via bb.edn task):
-;;   bb check                      # Run all quality checks
+;;   bb check                      # Every check: the pre-push gate
 ;;   bb check --quick              # Run only FC/IS and dependency checks
 ;;   bb check --gates              # Every check except the test rows
 ;;   bb check --fix                # Pass --fix to kondo linter
-;;   bb check --ci                 # Exit non-zero on any check failure
+;;   bb check --ci                 # Accepted, no effect
 ;;   bb check --help               # Print usage
 
 (ns wagoe.tools.check
@@ -42,16 +42,15 @@
         (into (vec (sub-dirs "src")) (sub-dirs "test"))))))
 
 (def ^:private top-level-lint-paths
-  "Non-lib source roots to lint, matching the ci.yml lint job.
+  "Non-lib source roots to lint. CI lints through this list too, via
+   `bb check --gates`.
 
    `dev` and `scripts` are not optional extras. Leaving them out made this
    check lint *less* than CI: a var defined in dev/ looked unresolved from a
    test that uses it, so `bb check` reported a warning CI did not — and, worse,
    a genuine error in dev/, scripts/ or examples/ would pass locally and only
    surface in CI. ci.yml's own comment records that this exact gap once hid a
-   dev/ arity error.
-
-   Keep this in step with the `--lint` paths in .github/workflows/ci.yml."
+   dev/ arity error."
   ["src" "test" "dev" "scripts" "examples/todo/src" "examples/stores/src" "examples/stores/test"])
 
 (defn linting-cmd
@@ -68,15 +67,30 @@
   []
   (System/exit (:exit (process/shell {:continue true} (str/join " " (linting-cmd))))))
 
+(def ^:private ui-public "libs/ui-style/resources/public")
+
+(def ^:private hand-kept-assets
+  "Committed assets the CSS build does not produce, so a diff cannot see them go."
+  ["js/theme.js" "js/htmx.min.js"])
+
+(defn css-exit
+  "Exit status of the CSS row, running commands through `sh`. Diffs against
+   HEAD so a staged but uncommitted rebuild still fails."
+  [sh exists?]
+  (cond (pos? (sh "npm" "run" "build:css")) 1
+        (pos? (sh "git" "diff" "--exit-code" "HEAD" "--" ui-public))
+        (do (println (red "The rebuilt CSS differs from the commit: commit the rebuilt bundles.")) 1)
+        :else (let [gone (remove #(exists? (str ui-public "/" %)) hand-kept-assets)]
+                (doseq [f gone] (println (red (str "missing: " ui-public "/" f))))
+                (if (seq gone) 1 0))))
+
 (defn css
   "Rebuild the CSS and fail when the committed bundles differ from it.
    Tailwind scans the Clojure sources for class names, so any code change can
    change the bundle; this failed 2 of 30 red CI runs (BOU-1023)."
   []
-  (let [sh #(:exit (apply process/shell {:continue true} %&))]
-    (System/exit (if (pos? (sh "npm" "run" "build:css"))
-                   1
-                   (sh "git" "diff" "--exit-code" "--" "libs/ui-style/resources/public")))))
+  (System/exit (css-exit #(:exit (apply process/shell {:continue true} %&))
+                         #(.exists (io/file %)))))
 
 (def all-checks
   [{:id    :fcis
@@ -236,7 +250,7 @@
 (defn framework-repo?
   "True when running inside the Wagoe monorepo rather than a generated project.
 
-   Eleven checks only mean something here: doc-counts and poms compare against
+   These checks only mean something here: doc-counts and poms compare against
    wagoe.tools.deploy/all-libs, agents diffs the agents knowledge base,
    no-boundary is a rename gate for this repo's own history, docs:lint runs from
    the dev/ path, and deps walks libs/*, which a generated project does not
@@ -264,6 +278,20 @@
 ;; Check execution
 ;; =============================================================================
 
+(defn check-env
+  "Extra env for a check row: the dev JWT_SECRET in the framework repo when none
+   is set, since no dev config here sets one and the doctor row failed without it."
+  [framework? jwt-secret]
+  (when (and framework? (str/blank? jwt-secret))
+    {"JWT_SECRET" test-all/dev-jwt-secret}))
+
+(defn select-checks
+  "The rows a run with `opts` selects from `checks`."
+  [opts checks]
+  (cond (:quick opts) (filter #(contains? quick-check-ids (:id %)) checks)
+        (:gates opts) (remove #(= :test (:kind %)) checks)
+        :else         checks))
+
 (defn- run-check
   "Run a single check subprocess. Returns a result map with :id, :label, :exit, :duration-ms, and :output."
   [{:keys [id label cmd kind]} opts]
@@ -271,19 +299,18 @@
               (conj (vec cmd) "--fix")
               cmd)
         start   (System/currentTimeMillis)
-        ;; The doctor row failed every local run here: no dev config sets it.
-        env     (when (and (framework-repo?) (str/blank? (System/getenv "JWT_SECRET")))
-                  {"JWT_SECRET" test-all/dev-jwt-secret})
+        stream? (= :test kind)
         ;; Test rows run for minutes; stream them rather than sit silent.
-        result  (process/shell (cond-> {:continue true :extra-env env}
-                                 (not= :test kind) (assoc :out :string :err :string))
+        result  (process/shell (cond-> {:continue  true
+                                        :extra-env (check-env (framework-repo?) (System/getenv "JWT_SECRET"))}
+                                 (not stream?) (assoc :out :string :err :string))
                                (str/join " " cmd))
         end     (System/currentTimeMillis)]
     {:id          id
      :label       label
      :exit        (:exit result)
      :duration-ms (- end start)
-     :output      (str (:out result) (:err result))}))
+     :output      (if stream? "" (str (:out result) (:err result)))}))
 
 (defn- format-duration
   "Format milliseconds as seconds with one decimal place."
@@ -299,10 +326,10 @@
     (println (str icon " " padded " (" duration ")"))
     (when (not (zero? exit))
       (let [lines    (str/split-lines (str/trim output))
-            ;; Show a brief summary — last few meaningful lines
-            summary  (->> lines
-                          (remove str/blank?)
-                          (take-last 10))]
+            ;; The last few lines locally; all of them in CI, where this is
+            ;; the only log of a gate that now shares one step with the rest.
+            summary  (cond->> (remove str/blank? lines)
+                       (str/blank? (System/getenv "CI")) (take-last 10))]
         (doseq [line summary]
           (println (dim (str "  " line))))))))
 
@@ -349,9 +376,7 @@
     (when (:help opts)
       (print-help)
       (System/exit 0))
-    (let [selected (cond (:quick opts) (filter #(contains? quick-check-ids (:id %)) all-checks)
-                         (:gates opts) (remove #(= :test (:kind %)) all-checks)
-                         :else         all-checks)
+    (let [selected (select-checks opts all-checks)
           [checks skipped] (applicable-checks selected (framework-repo?))
           _       (do (println)
                       (println (bold "Wagoe Quality Check"))
@@ -370,7 +395,9 @@
       (println)
       (println (str "Summary: " (green (str passed " passed"))
                     ", " (red (str failed " failed"))
-                    " (" total " total)"))
+                    " (" total " total)"
+                    (when (pos? failed)
+                      (str " — " (str/join ", " (keep #(when-not (zero? (:exit %)) (name (:id %))) results))))))
       ;; Name the skipped checks. A shorter list with no explanation is
       ;; indistinguishable from a clean run, which is how a gate stops being a
       ;; gate without anyone noticing.

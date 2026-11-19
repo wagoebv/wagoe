@@ -15,6 +15,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+# Read-only by default; no job writes to the repository.
+permissions:
+  contents: read
+
 # `github.event.pull_request.number` was dead under a push-only trigger and
 # always fell through to github.ref. With pull_request wired up it finally does
 # what it says: successive pushes to one PR cancel the previous run.
@@ -70,7 +74,9 @@ jobs:
 
       - name: Code or docs only
         id: classify
-        run: bb ci:changes "${{ github.base_ref }}"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: bb ci:changes "$BASE_REF"
 
   warm-deps:
     name: Warm Dependency Cache
@@ -121,11 +127,11 @@ jobs:
         run: bb check:css
 
   # =============================================================================
-  # Babashka gates — one job, one step per gate
+  # Babashka gates — `bb check --gates`, the registry a developer runs locally
   #
   # These were 20 jobs of ~10s each, and the plan runs 20 jobs at a time: each
-  # took a slot that a JVM job was queued for (BOU-527). Every step runs even
-  # when an earlier one fails, so one push shows every failing gate by name.
+  # took a slot that a JVM job was queued for (BOU-527). bb check runs every
+  # gate even when an earlier one fails, and names each failure (BOU-1024).
   # =============================================================================
   checks:
     name: Babashka Gates
@@ -140,11 +146,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Linting and docs-lint run in `bb check`, so this job needs the JVM.
+      # The linting row runs clj-kondo on the JVM.
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
         with:
-          aliases: -M:clj-kondo -M:docs-lint
+          aliases: -M:clj-kondo
+
+      - name: Setup Babashka
+        uses: DeLaGuardo/setup-clojure@13.6.1
+        with:
+          bb: latest
 
       - name: Clear clj-kondo cache
         run: rm -rf .clj-kondo/.cache/* 2>/dev/null || true

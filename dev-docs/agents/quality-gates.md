@@ -4,7 +4,11 @@ Read when directed by [AGENTS.md](../../AGENTS.md). Paths in commands and inline
 
 ## Quality Gates
 
-Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) to prevent regressions caught during QA review (PRs #108–#116). `bb check` runs the full set — currently 25 — and `wagoe.tools.check/all-checks` is its registry. `bb check --gates` leaves out the two test rows (CSS build, `bb test:changed`) and is what CI runs; `bb check-full` adds `bb test:all` and `bb e2e`. The smokes (first-run, web crawl, examples) stay CI-only; the table below covers the ones with non-obvious rules.
+Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit) to prevent regressions caught during QA review (PRs #108–#116). `bb check` runs the full set — currently 25 — and `wagoe.tools.check/all-checks` is its registry. `bb check --gates` leaves out the two test rows (CSS build, `bb test:changed`) and is what CI runs; `bb check-full` adds the CSS build, `bb test:all` and `bb e2e` and stops at the first failure. The smokes (first-run, web crawl, examples) stay CI-only.
+
+`bb test:changed` tests what differs from `origin/main`, committed or not: the suites of the changed libraries, `:app`, and the `:security` tests of every other suite. A change outside `libs/` selects no library; CI on main runs everything. Before the first run: `npm ci` and `bb test:services up`. Measured on 19-11-2026: gates 46 s, a one-library change about 5 minutes in all (BOU-1024).
+
+The table below covers the gates with non-obvious rules.
 
 | Gate | Command | What it catches | Hard fail? |
 |------|---------|-----------------|------------|
