@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **The publish job ran third-party actions by tag next to the Clojars credentials** (BOU-1017). Every workflow
+  action is pinned to a commit and bb to a version; attesting and releasing the installer are their own jobs.
 - **A TOTP code could sign in twice in its 30 s window** (BOU-1016), so a relayed code also opened a parallel login.
   Each window's code is accepted once now. A user repository of your own implements `ITotpSteps`; see `UPGRADING.md`.
 - **`/api/v1/sessions/{token}` put a live session token in URLs and the logs** (BOU-1015). Use `GET`/`DELETE

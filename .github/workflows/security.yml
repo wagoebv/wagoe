@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # The shared setup: pinned JDK and CLI, the warm CI cache, and the
       # retrying prefetch; the scan resolves every deps.edn and alias.
@@ -42,9 +42,9 @@ jobs:
           also-warm: libs/*
 
       - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
+        uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
         with:
-          bb: latest
+          bb: 1.13.229
 
       - name: Scan every deps.edn
         shell: bash
