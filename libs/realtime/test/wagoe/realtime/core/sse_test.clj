@@ -43,3 +43,24 @@
   (is (= ["a"] (sse/request-topics {"topic" "a"})))
   (is (= ["a" "b"] (sse/request-topics {"topic" ["a" "b"]})))
   (is (= [] (sse/request-topics {}))))
+
+(deftest ^:unit ^:security roles-are-those-held-in-the-connections-tenant
+  ;; BOU-1010: a home tenant's admin is no admin in another tenant
+  (let [a (random-uuid) b (random-uuid)
+        admin-of-a {:id (random-uuid) :role :admin :tenant-id a}]
+    (is (= #{:admin} (sse/roles-in {:user admin-of-a} a)) "at home")
+    (is (= #{:admin} (sse/roles-in {:user admin-of-a} nil)) "in no tenant")
+    (is (= #{:viewer} (sse/roles-in {:user admin-of-a :tenant-membership {:role "viewer"}} b)) "elsewhere: the membership's")
+    (is (= #{} (sse/roles-in {:user admin-of-a} b)) "elsewhere, without one")
+    (is (= #{:admin} (sse/roles-in {:user {:id (random-uuid) :role :admin}} b)) "a platform admin")
+    (is (= #{:admin} (sse/roles-in {:user {:id (random-uuid) :role :user :tenant-id a}
+                                    :tenant-membership {:role :admin}} b))
+        "an admin by membership")
+    (is (= #{:user :admin} (sse/roles-in {:user {:id (random-uuid) :role :user :tenant-id a}
+                                          :tenant-membership {:role "admin"}} a))
+        "at home, an admin membership there too, as roles-here has it")
+    (is (= #{:admin} (sse/roles-in {:user (assoc admin-of-a :tenant-id (str a))} a)) "a string tenant id")
+    (is (= #{:admin} (sse/roles-in {:user {:id (random-uuid) :role "admin"}} b)) "a platform admin, role a string")
+    (is (= #{:viewer} (sse/roles-in {:user {:id (random-uuid) :role :user :roles [:admin]}
+                                     :tenant-membership {:role :viewer}} b))
+        "platform admin is read from :role, as connection-tenant reads it")))

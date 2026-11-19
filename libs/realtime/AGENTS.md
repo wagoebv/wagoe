@@ -42,7 +42,9 @@ The sender's tenant is the tenant bound on the sending thread, else the
 message's `:tenant-id`, so a tenant's request cannot name another; a message
 with neither reaches every tenant. A connection's is the identity's
 `:tenant-id`, which a WebSocket gets only when the `IJWTVerifier` returns it
-(BOU-947, BOU-986).
+(BOU-947, BOU-986). Its `:roles` are those held in that tenant: an SSE stream
+takes them from `sse/roles-in`, and a verifier returning `:tenant-id` must
+return the roles held there, not the user's own elsewhere (BOU-1010).
 
 ## Connection Lifecycle
 

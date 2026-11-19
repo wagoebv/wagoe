@@ -103,7 +103,9 @@
                     {:type :configuration-error :wagoe/error-code "WGE-107" :missing ['connect-identified]})))
   (fn [request]
     (let [tenant   (sse/connection-tenant request)
+          ;; Role messages reach only the roles held in that tenant (BOU-1010)
           identity (some-> (sse/user-identity (:user request))
+                           (assoc :roles (sse/roles-in request tenant))
                            (cond-> tenant (assoc :tenant-id tenant)))
           decision (if identity
                      (sse/subscription-decision (sse/request-topics (:query-params request))

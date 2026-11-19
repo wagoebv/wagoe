@@ -30,15 +30,16 @@
         (string? x) (parse-uuid x)
         :else       nil))
 
+(defn- own-roles [user]
+  (into #{} (comp (remove nil?) (map keyword)) (or (seq (:roles user)) [(:role user)])))
+
 (defn user-identity
   "The connection identity for a signed-in user (`:user` on the request), or
    nil when there is none or its id is not a UUID."
   [user]
   (when-let [id (->uuid (:id user))]
     {:user-id id
-     :roles   (into #{}
-                    (comp (remove nil?) (map keyword))
-                    (or (seq (:roles user)) [(:role user)]))
+     :roles   (own-roles user)
      :email   (:email user)}))
 
 (defn connection-tenant
@@ -54,6 +55,24 @@
                  (and (nil? own) (= :admin (some-> (:role user) keyword)))))
       resolved
       own)))
+
+(defn roles-in
+  "The roles `user` holds in `tenant`, the connection's (BOU-1010): in their
+   own tenant, or none, their own, `:admin` too by an admin membership there;
+   in another, the role of their membership there, or `:admin` for a platform
+   admin. A home tenant's admin is no admin elsewhere. `tenant` is what
+   `connection-tenant` gives, so `:tenant-membership` is the membership in it.
+   The rule of `wagoe.core.http.access/roles-here`."
+  [{:keys [user tenant-membership]} tenant]
+  (let [membership (some-> (:role tenant-membership) keyword)]
+    (cond
+      (or (nil? tenant) (= (str tenant) (str (:tenant-id user))))
+      (cond-> (own-roles user) (= :admin membership) (conj :admin))
+
+      (and (nil? (:tenant-id user)) (= :admin (some-> (:role user) keyword)))
+      #{:admin}
+
+      :else (if membership #{membership} #{}))))
 
 (defn request-topics
   "The `topic` query parameter as a vector of topic names; repeated params

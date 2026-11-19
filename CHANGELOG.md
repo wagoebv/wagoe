@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A tenant's admin streaming in another tenant got that tenant's admin messages** (BOU-1010). An SSE stream now
+  holds the roles held in its tenant: there, a membership's role, or `:admin` for a platform admin.
 - **Someone could register a victim's email and keep the account the victim later linked by OIDC** (BOU-1009). An
   account made at `/web/register` is never linked by email; see `UPGRADING.md` for accounts made before.
 - **A tenant admin could take over a member of another tenant** (BOU-1008) by changing their email and signing in
