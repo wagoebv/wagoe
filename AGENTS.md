@@ -118,7 +118,7 @@ clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
 
 Run `bb test:all` and the kondo lint before committing or claiming the codebase is green.
 `clojure -M:test` alone misses standalone surfaces. `bb test:all --list` explains
-coverage; e2e is separate (`bb e2e`, requires Chromium) and blocks PR merges in CI.
+coverage; e2e is separate (`bb e2e`, requires Chromium) and runs in CI on main only.
 Adapter sweeps fail if backing services are missing.
 
 For targeted runs use `clojure -M:test:test/all :<suite>`; on Apple Silicon add

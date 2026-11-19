@@ -1,9 +1,9 @@
 (ns wagoe.tools.ci-changes
   "Which CI jobs a pull request needs. `bb ci:changes <base-ref>` writes to
    $GITHUB_OUTPUT: `code`, false when only docs no code test reads changed
-   (BOU-615); `libs`, the libraries whose tests run; `first-run`, whether
-   First-Run Smoke does; `full`, whether the main-only jobs do (a push to
-   main, BOU-1026); `skip-jobs`, the jobs that therefore do not."
+   (BOU-615); `libs`, the libraries whose tests run; `full`, whether the
+   main-only jobs do (a push to main, BOU-1026); `skip-jobs`, the jobs that
+   therefore do not."
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
             [clj-yaml.core :as yaml]
@@ -33,22 +33,6 @@
    not docs-only: run everything rather than guess."
   [paths]
   (boolean (and (seq paths) (every? docs-only-path? paths))))
-
-(def first-run-paths
-  "What First-Run Smoke tests that no other job does: the installer, the CLI
-   and tools a new project uses, the quickstart page it runs verbatim, and
-   the AI commands and scaffolder from a generated project (BOU-405).
-   Booting a generated app is covered by Example Smoke and MySQL Smoke."
-  [#"^scripts/(install|first-run-smoke)\.sh$"
-   #"^libs/(wagoe-cli|tools|ai|scaffolder)/"
-   #"^docs/modules/getting-started/"
-   #"^\.github/workflows/ci\.yml$"])
-
-(defn first-run?
-  "Whether a PR changing `paths` needs First-Run Smoke. An empty diff does."
-  [paths]
-  (boolean (or (empty? paths)
-               (some (fn [p] (some #(re-find % p) first-run-paths)) paths))))
 
 (def false-edges
   "Uses that do not load the other library in a test run. Each one cut here
@@ -177,28 +161,32 @@
       (throw (ex-info (str "git diff against " base-ref " failed: " err) {:type :internal-error})))
     (remove str/blank? (str/split-lines out))))
 
-(defn -main
-  "No base ref (a push to main) always means everything."
-  [& [base-ref]]
-  (let [graph (dependency-graph ".")
-        libs  (set (keys graph))
-        paths (when-not (str/blank? base-ref) (changed-files base-ref))
+(defn plan
+  "{:code :libs :full :skip-jobs} for `paths`, the files a pull request
+   changes, or nil for a push to main, which runs everything."
+  [graph jobs paths]
+  (let [libs  (set (keys graph))
         full? (nil? paths)
         code? (or full? (not (docs-only? paths)))
         run   (cond full? libs
                     code? (libs-to-test graph paths)
-                    :else #{})
-        smoke? (or full? (first-run? paths))
-        ci    (:jobs (yaml/parse-string (slurp ".github/workflows/ci.yml")))
-        gated (gated-jobs ci libs)
-        skip  (cond-> (keep (fn [[job lib]] (when-not (run lib) job)) gated)
-                (not smoke?) (conj "first-run-smoke")
-                (not full?)  (into (main-only-jobs ci)))
-        lines [(str "code=" code?)
-               (str "libs=" (str/join " " (sort run)))
-               (str "first-run=" smoke?)
-               (str "full=" full?)
-               (str "skip-jobs=" (str/join " " (sort skip)))]]
+                    :else #{})]
+    {:code      code?
+     :libs      run
+     :full      full?
+     :skip-jobs (cond-> (set (keep (fn [[job lib]] (when-not (run lib) job)) (gated-jobs jobs libs)))
+                  (not full?) (into (main-only-jobs jobs)))}))
+
+(defn -main
+  [& [base-ref]]
+  (let [{:keys [code libs full skip-jobs]}
+        (plan (dependency-graph ".")
+              (:jobs (yaml/parse-string (slurp ".github/workflows/ci.yml")))
+              (when-not (str/blank? base-ref) (changed-files base-ref)))
+        lines [(str "code=" code)
+               (str "libs=" (str/join " " (sort libs)))
+               (str "full=" full)
+               (str "skip-jobs=" (str/join " " (sort skip-jobs)))]]
     (run! println lines)
     (when-let [out (System/getenv "GITHUB_OUTPUT")]
       (spit out (str (str/join "\n" lines) "\n") :append true))))

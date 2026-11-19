@@ -25,8 +25,8 @@ found only by remembering to run an extra command.
 `bb test:all` runs all of them, prints a per-surface summary, and exits non-zero
 if any fails. `bb test:all --list` shows the set, including what is deliberately
 excluded (`e2e`, which needs Chromium installed — run it with `bb e2e`, which
-starts a server on :3100 and tears it down). CI runs e2e on every pull request
-and a red e2e test blocks the merge.
+starts a server on :3100 and tears it down). CI runs e2e on every push to main
+(BOU-1026); run `bb e2e` yourself for UI changes.
 
 None of the surfaces enumerate namespaces: the standalone libs let kaocha
 discover `test/`, and the rest discover from disk. An earlier `bb test:wagoe-cli`

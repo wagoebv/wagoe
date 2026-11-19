@@ -134,9 +134,12 @@
                       (recur (into seen nxt)
                              (mapcat #(get graph % #{}) nxt)))))
         parked  (set (for [[k v] jobs :when (disabled? v)] (name k)))
-        ;; A job that needs the summary reports on its result; it runs after
-        ;; the merge gate, not in it (BOU-1026: announcing a red main).
-        after   (set (for [[k v] graph :when (contains? v (name summary-job-key))] k))
+        ;; A push-only job that needs the summary reports on its result; it
+        ;; runs after the merge gate, not in it (BOU-1026: announcing a red main).
+        after   (set (for [[k v] jobs
+                           :when (and (contains? (needs-of v) (name summary-job-key))
+                                      (str/includes? (str (:if v)) "github.event_name == 'push'"))]
+                       (name k)))
         all     (set (keys graph))
         ;; Only jobs the summary actually reaches: one outside the gate is
         ;; already reported as unguarded, and `continue-on-error` on something
