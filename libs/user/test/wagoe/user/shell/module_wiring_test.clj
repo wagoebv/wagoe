@@ -171,3 +171,16 @@
            (try (#'sut/require-membership-lookup! #{m}) nil
                 (catch clojure.lang.ExceptionInfo e (ex-message e)))))))
 
+(deftest ^:unit ^:security linking-by-email-with-open-registration-warns-at-boot
+  ;; Accounts registered before BOU-1009 carry no mark
+  (let [warn! #'sut/warn-unmarked-registrations!
+        on    {:providers {:google {:link-by-email? true} :azure {}}}]
+    (log-test/with-log
+      (warn! on true)
+      (is (log-test/logged? 'wagoe.user.shell.module-wiring :warn #"BOU-1009")))
+    (log-test/with-log
+      (warn! on false)
+      (warn! {:providers {:google {}}} true)
+      (is (not (log-test/logged? 'wagoe.user.shell.module-wiring :warn #"BOU-1009"))
+          "registration off, or no provider linking by email"))))
+

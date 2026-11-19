@@ -345,7 +345,8 @@
       (is (empty? (ports/find-identities-by-user (:identities a) (:id admin))))))
   (testing "on, but the account was registered here: whoever chose its password keeps it (BOU-1009)"
     (let [a    (app)
-          ada  (add-user! a :self-registered true)
+          ada  (ports/register-user (:user-service a) {:email "ada@example.com" :name "Ada"
+                                                       :password "Correct-horse-battery-9" :self-registered true})
           resp (sign-in! a)]
       (is (= 403 (:status resp)))
       (is (str/includes? (:body resp) "oidc-self-registered-link-refused"))

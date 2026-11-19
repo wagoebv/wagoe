@@ -307,9 +307,18 @@
   [_ {:keys [ctx]}]
   (identity-persistence/create-identity-repository ctx))
 
+(defn- warn-unmarked-registrations!
+  "Linking by email with registration open: accounts registered before
+   BOU-1009 carry no mark, so OIDC still links them by email."
+  [settings registration?]
+  (when-let [ps (and registration? (seq (keep (fn [[id p]] (when (:link-by-email? p) id)) (:providers settings))))]
+    (log/warn "OIDC links by email while /web/register is open; accounts registered before BOU-1009 are not marked and stay linkable. See UPGRADING (BOU-1009)."
+              {:providers (vec ps)})))
+
 (defmethod ig/init-key :wagoe/user-oidc
-  [_ {:keys [settings] :as opts}]
+  [_ {:keys [settings registration?] :as opts}]
   (log/info "Initializing OIDC sign-in" {:providers (keys (:providers settings))})
+  (warn-unmarked-registrations! settings registration?)
   (oidc/create-oidc-client
    (assoc opts :secret (or (:state-secret settings) (user-auth/get-jwt-secret)))))
 
@@ -523,6 +532,7 @@
       (seq (get-in settings [:oidc :providers]))
       (-> (update :components assoc
                   :wagoe/user-oidc        {:settings            (:oidc settings)
+                                           :registration?       (landing/registration? config)
                                            :auth-service        (ig/ref :wagoe/auth-service)
                                            :audit-repository    (ig/ref :wagoe/audit-repository)
                                            :identity-repository (ig/ref :wagoe/user-identity-repository)

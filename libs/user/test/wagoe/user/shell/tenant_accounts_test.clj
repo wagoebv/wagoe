@@ -250,4 +250,3 @@
         read  #(auth/account-in-tenant (:user-repository svc) nil %)]
     (is (true? (:self-registered (read "z@example.com"))) "registered at /web/register")
     (is (not (:self-registered (read "y@example.com"))) "made by an admin or the API")))
-

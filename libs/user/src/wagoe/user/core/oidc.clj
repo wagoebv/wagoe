@@ -280,7 +280,8 @@
    token's verified email, when the provider allows linking by email and that
    account has no link at this issuer yet — a second subject for the same email
    is the address changing hands, and never an administrator, of the app or of
-   a tenant (:email-user-tenant-admin?); a new account,
+   a tenant (:email-user-tenant-admin?), nor an account registered here, whose
+   email nobody proved (:self-registered); a new account,
    when it allows creating one. Nothing else — an unverified email never
    selects or creates an account.
 
