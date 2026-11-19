@@ -87,3 +87,13 @@
     (let [html (database/render {})]
       (is (str/includes? html "20260101000000-shadowed.up.sql"))
       (is (str/includes? html "resources/migrations")))))
+
+(deftest ^:unit ^:security only-one-statement-that-reads-runs
+  ;; BOU-1012: a read-only transaction alone lets COPY ... TO PROGRAM through
+  (doseq [sql ["select 1" "SELECT * FROM users;" "with x as (select 1) select * from x"
+               "explain select 1" "show tables" "values (1)" "table users"]]
+    (is (nil? (database/query-refusal sql)) sql))
+  (doseq [sql ["delete from users" "COPY users TO PROGRAM 'id'" "select 1; drop table users"
+               "update users set role = 'admin'" "create table x (id int)" "(select 1)"]]
+    (is (some? (database/query-refusal sql)) sql)))
+

@@ -246,3 +246,37 @@
       (is (nil? (get-in @(resolve 'integrant.repl.state/config) [:wagoe/dashboard :host]))
           "the config is the old one")
       (is (eventually #(serving? (:port started)))))))
+
+;; BOU-1012: it runs SQL and rewrites the config, so no other site may reach it
+
+(deftest ^:unit ^:security only-this-machine-and-the-dashboards-own-page-reach-it
+  (let [refusal #'wagoe.devtools.shell.dashboard.server/local-refusal
+        req     (fn [m & [hs]] (merge {:request-method :post :scheme :http
+                                       :headers (merge {"host" "127.0.0.1:9999"} hs)} m))]
+    (testing "a Host that is not this machine, as DNS rebinding sends"
+      (is (some? (refusal (req {:request-method :get} {"host" "evil.example:9999"}))))
+      (doseq [h ["127.0.0.1:9999" "localhost:9999" "LOCALHOST" "[::1]:9999"]]
+        (is (nil? (refusal (req {:request-method :get} {"host" h}))) h)))
+    (testing "a write from another site"
+      (is (some? (refusal (req {} {"sec-fetch-site" "cross-site"}))))
+      (is (some? (refusal (req {} {"sec-fetch-site" "same-site"}))) "another port of localhost")
+      (is (some? (refusal (req {} {"origin" "https://evil.example"})))))
+    (testing "the dashboard's own page, or a tool on this machine"
+      (is (nil? (refusal (req {} {"sec-fetch-site" "same-origin"}))))
+      (is (nil? (refusal (req {} {"origin" "http://127.0.0.1:9999"}))))
+      (is (nil? (refusal (req {})))))))
+
+(deftest ^:integration ^:security a-foreign-host-or-cross-site-post-is-refused
+  ;; Through the real handler: java.net will not send another Host or an Origin
+  (let [handler ((resolve 'wagoe.devtools.shell.dashboard.server/make-handler) {})
+        call    (fn [method uri hs & [params]]
+                  (:status (handler {:request-method method :uri uri :scheme :http
+                                     :headers (merge {"host" "127.0.0.1:9999"} hs)
+                                     :form-params (or params {}) :params (or params {})})))]
+    (is (= 403 (call :get "/dashboard" {"host" "evil.example"})) "DNS rebinding")
+    (is (= 403 (call :post "/dashboard/fragments/query-result"
+                     {"sec-fetch-site" "cross-site" "origin" "https://evil.example"} {"sql" "select 1"})))
+    (is (= 403 (call :post "/dashboard/fragments/config-apply"
+                     {"origin" "https://evil.example"} {"config-:wagoe/dashboard" "{}"})))
+    (is (= 200 (call :post "/dashboard/fragments/query-result" {"sec-fetch-site" "same-origin"} {"sql" "select 1"})))))
+

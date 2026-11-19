@@ -14,6 +14,8 @@
             [wagoe.platform.system :as platform-system]
             [wagoe.user.ports :as user-ports]
             [clojure.edn :as edn]
+            [clojure.string :as str]
+            [wagoe.core.utils.text :as text]
             [integrant.core :as ig]
             [reitit.core]
             [reitit.ring :as ring]
@@ -288,6 +290,42 @@
   (fn [req]
     (some-> (handler req) (assoc-in [:headers "X-Dashboard-Instance"] id))))
 
+(def ^:private local-hosts #{"127.0.0.1" "localhost" "[::1]"})
+
+(defn- host-name
+  "The host of a Host or Origin authority, without its port."
+  [authority]
+  (let [a (text/lower-case (str authority))]
+    (if (str/starts-with? a "[")
+      (subs a 0 (inc (or (str/index-of a "]") (dec (count a)))))
+      (first (str/split a #":" 2)))))
+
+(defn local-refusal
+  "Why `req` may not reach the dashboard, or nil (BOU-1012). It runs SQL and
+   rewrites the config, so a page the developer visits must not: every request
+   names this machine in Host, which stops DNS rebinding, and one that writes
+   comes from the dashboard's own origin."
+  [req]
+  (let [host    (get-in req [:headers "host"])
+        site    (get-in req [:headers "sec-fetch-site"])
+        origin  (get-in req [:headers "origin"])
+        writes? (not (#{:get :head :options} (:request-method req)))]
+    (cond
+      (not (local-hosts (host-name host)))
+      "Host is not this machine"
+
+      (and writes? site (not= "same-origin" site))
+      "Not from the dashboard's own page"
+
+      (and writes? (not site) origin (not= (text/lower-case origin) (str (name (or (:scheme req) :http)) "://" (text/lower-case host))))
+      "Not from the dashboard's own origin")))
+
+(defn- wrap-local-only [handler]
+  (fn [req]
+    (if-let [why (local-refusal req)]
+      {:status 403 :headers {"Content-Type" "text/plain; charset=utf-8"} :body why}
+      (handler req))))
+
 (defn- make-handler [config]
   (-> (ring/router
        [["/dashboard"
@@ -516,6 +554,7 @@
       (wrap-resource "public")
       wrap-content-type
       wrap-params
+      wrap-local-only
       (wrap-instance (::instance config))))
 
 (defn- bind-failure?
