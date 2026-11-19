@@ -29,7 +29,7 @@
         f    (if (= "." root) (io/file path) (io/file root path))
         base (.getCanonicalPath (io/file root))]
     (when-not (str/starts-with? (.getCanonicalPath f) (str base java.io.File/separator))
-      (throw (ex-info (str "Refusing to write outside " base ": " path)
+      (throw (ex-info (str "Refusing a path outside " base ": " path)
                       {:type ::outside-output-dir :path path})))
     f))
 

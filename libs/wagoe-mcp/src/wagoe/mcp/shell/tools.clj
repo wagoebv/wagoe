@@ -119,8 +119,8 @@
 ;; blocking issue is soft (see core/verify).
 
 ;; Names become file paths and SQL in the scaffolder. Agent-supplied ones are
-;; checked here first; its resolve-path refuses any write outside the project
-;; as the backstop (BOU-1018).
+;; checked here first, then by the scaffolder's schema, whose resolve-path
+;; also refuses its writes outside the project (BOU-1018).
 (def ^:private module-name-re #"[a-z][a-z0-9-]*")
 (def ^:private entity-name-re #"[A-Za-z][A-Za-z0-9]*")
 
