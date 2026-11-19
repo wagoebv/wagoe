@@ -54,7 +54,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # BOU-314: every other guard in this workflow protects the *shape* of the
       # release — the tag agrees with source (--check-versions), nothing is
@@ -279,7 +279,7 @@ jobs:
       attestations: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The hash comes from the same release, so it shows the download is
       # intact, not that it is ours; a signed attestation does (BOU-974).
@@ -297,7 +297,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The installer and its SHA-256, so a user can check what they run (BOU-938).
       - name: Hash the installer
