@@ -7,7 +7,7 @@ Read when directed by [AGENTS.md](../../AGENTS.md). Paths in commands and inline
 - Keep command examples in one place, the root `AGENTS.md`; avoid duplicate command blocks in these references.
 - Library-specific troubleshooting and deep implementation notes belong in `libs/*/AGENTS.md`.
 - Use `bb check-links` after editing AGENTS documentation.
-- Install local pre-commit hooks once per clone: `bb install-hooks`.
+- Install the git hooks once per clone: `bb install-hooks` (pre-commit gates; a push to main runs `bb check`).
 
 ---
 

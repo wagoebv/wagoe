@@ -239,6 +239,7 @@ wagoe doctor                       # One diagnostic pass, one next action (start
 bb doctor                          # Just the config checks
 bb doctor --env all --ci           # Check all envs, exit non-zero (CI)
 bb guide next                      # What to do next in this project
+bb install-hooks                   # Once per clone: a push to main runs bb check first
 bb setup                           # Interactive config setup wizard
 bb setup ai "PostgreSQL with Stripe payments"  # AI-powered config setup
 bb deploy --all                    # Deploy all libraries to Clojars

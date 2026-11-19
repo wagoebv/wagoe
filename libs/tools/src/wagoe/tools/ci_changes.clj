@@ -22,6 +22,11 @@
 (defn- docs-only-path? [p]
   (some #(re-find % p) docs-only-paths))
 
+(defn lib-of
+  "The library a repository path belongs to, or nil outside libs/<lib>/."
+  [path]
+  (second (re-find #"^libs/([^/]+)/" path)))
+
 (defn docs-only?
   "Whether every path in `paths` is one of `docs-only-paths`. An empty diff is
    not docs-only: run everything rather than guess."
@@ -135,7 +140,7 @@
    other than a docs-only file, runs them all, and so does an empty diff."
   [graph paths]
   (let [libs    (set (keys graph))
-        changed (->> paths (remove docs-only-path?) (map #(second (re-find #"^libs/([^/]+)/" %))))]
+        changed (->> paths (remove docs-only-path?) (map lib-of))]
     (if (or (empty? changed) (some #(not (libs %)) changed))
       libs
       (set (filter #(some (loaded-by graph %) changed) libs)))))
