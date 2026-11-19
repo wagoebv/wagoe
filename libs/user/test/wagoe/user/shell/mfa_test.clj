@@ -428,5 +428,7 @@
       (let [next-code (totp-clock/code mem/mfa-secret)
             tries     (doall (repeatedly 8 #(future (mfa-shell/check-code! repo (user) next-code))))]
         (is (= 1 (count (filter :valid? (map deref tries)))) "in parallel")))
+    (binding [mfa-shell/*now* (.minusSeconds totp-clock/window-edge 30)]
+      (is (not (:valid? (mfa-shell/check-code! repo (user) (totp-clock/code mem/mfa-secret)))) "nor an older window's"))
     (is (:valid? (mfa-shell/check-code! repo (user) "AAAA-BBBB-CCCC")) "a backup code is apart")
     (is (= :invalid-proof (get-in (disable fx {:code code}) [:error :type])) "nor disables MFA")))

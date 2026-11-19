@@ -201,7 +201,7 @@
   [mfa-service user-id]
   (let [{:keys [user-repository]} mfa-service]
     (try
-      (let [user (.find-user-by-id user-repository user-id)
+      (let [user (ports/find-user-by-id user-repository user-id)
             can-enable (mfa-core/can-enable-mfa? user)]
         (if (:can-enable? can-enable)
           ;; Generate MFA setup data
@@ -235,7 +235,7 @@
   [mfa-service user-id secret backup-codes verification-code]
   (let [{:keys [user-repository]} mfa-service]
     (try
-      (let [user (.find-user-by-id user-repository user-id)
+      (let [user (ports/find-user-by-id user-repository user-id)
             can-enable (mfa-core/can-enable-mfa? user)]
         (if (:can-enable? can-enable)
           ;; Verify the code before enabling
@@ -253,7 +253,7 @@
                          :mfa-enabled (:mfa-enabled updates)
                          :has-secret (boolean (:mfa-secret updates))
                          :backup-codes-count (count (:mfa-backup-codes updates))})
-              (.update-user user-repository (assoc updates :id (:id user)))
+              (ports/update-user user-repository (assoc updates :id (:id user)))
               {:success? true})
             ;; Invalid verification code
             {:success? false
@@ -292,9 +292,10 @@
    Returns:
      {:valid? boolean
       :used-backup-code? boolean
-      :code-hash string (the matched backup code's stored hash)}
+      :code-hash string (the matched backup code's stored hash)
+      :totp-step long (the 30 s window a TOTP code matched in)}
 
-   Spending the backup code is the caller's: `ports/consume-backup-code`."
+   Spending the code is the caller's: `check-code!`."
   [_mfa-service user code]
   ;; One instant, so the step recorded is the one the code was checked in
   (binding [*now* (or *now* (Instant/now))]
@@ -409,8 +410,8 @@
           :else
           ;; One attempt per field given: a request is not two guesses for one.
           (let [claim (lockout/claim-attempts! user-repository auth-config user-id
-                                               (count (remove str/blank? [(:password proof) (:code proof)]))
-                                               now)]
+                                       (count (remove str/blank? [(:password proof) (:code proof)]))
+                                       now)]
             (cond
               (not (:claimed? claim))
               {:success? false :error (lockout/locked-error (:retry-after claim))}
@@ -442,7 +443,7 @@
   [mfa-service user-id]
   (let [{:keys [user-repository]} mfa-service]
     (try
-      (let [user (.find-user-by-id user-repository user-id)]
+      (let [user (ports/find-user-by-id user-repository user-id)]
         (if user
           (mfa-core/get-mfa-status user)
           {:enabled false

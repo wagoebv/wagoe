@@ -185,3 +185,12 @@
       (is (not (log-test/logged? 'wagoe.user.shell.module-wiring :warn #"BOU-1009"))
           "registration off, no provider linking by email, or every account marked"))))
 
+(deftest ^:unit ^:security a-user-repository-that-cannot-spend-codes-refuses-to-boot-the-mfa-service
+  ;; Without them a backup code (BOU-708) or a TOTP code (BOU-1016) signs in twice
+  (doseq [[proto repo] [["IBackupCodes" #_{:clj-kondo/ignore [:missing-protocol-method]}
+                         (reify wagoe.user.ports/ITotpSteps)]
+                        ["ITotpSteps" #_{:clj-kondo/ignore [:missing-protocol-method]}
+                         (reify wagoe.user.ports/IBackupCodes)]]]
+    (is (= (str "WGE-107: the user repository does not implement " proto)
+           (try (ig/init-key :wagoe/mfa-service {:user-repository repo}) nil
+                (catch clojure.lang.ExceptionInfo e (ex-message e)))))))

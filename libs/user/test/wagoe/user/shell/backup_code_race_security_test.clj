@@ -86,4 +86,18 @@
             (is (not (:authenticated (first (parallel-logins service user [code]))))))
           (testing "the next window's code still signs in"
             (binding [mfa/*now* (.plusSeconds totp-clock/window-edge 30)]
-              (is (:authenticated (first (parallel-logins service user [(totp-clock/code secret)])))))))))))
+              (is (:authenticated (first (parallel-logins service user [(totp-clock/code secret)]))))))
+          (testing "an older window's, unused, does not"
+            (binding [mfa/*now* (.minusSeconds totp-clock/window-edge 30)]
+              (is (not (:authenticated (first (parallel-logins service user [(totp-clock/code secret)]))))))))))))
+
+(deftest ^:integration ^:security a-wrong-password-does-not-spend-the-code
+  ;; Only a sign-in whose password held spends its window (BOU-1016)
+  (with-mfa-user "totp_wrong_pw"
+    (fn [{:keys [users service user]}]
+      (binding [mfa/*now* totp-clock/window-edge]
+        (let [code  (totp-clock/code (:mfa-secret (ports/find-user-by-id users (:id user))))
+              login #(ports/authenticate-user service {:email (:email user) :password % :mfa-code code
+                                                       :ip-address "203.0.113.9" :user-agent "test"})]
+          (is (not (:authenticated (login "wrong-password"))))
+          (is (:authenticated (login password))))))))
