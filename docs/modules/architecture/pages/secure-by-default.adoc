@@ -72,6 +72,12 @@ row with no test says so.
 | 1.0.0
 | {repo}libs/user/test/wagoe/user/shell/auth_security_test.clj[`jwt-secret-validation-test`, `jwt-algorithm-pinning-test`]
 
+| Signing and encryption keys
+| A CSRF secret, webhook encryption key or OIDC `:state-secret` under 32 characters, or outside dev an example value, refuses to boot; JWT_SECRET too.
+| —
+| 1.3.0
+| {repo}libs/platform/test/wagoe/platform/shell/system/wiring_test.clj[`csrf-refuses-a-short-or-example-secret`], {repo}libs/webhooks/test/wagoe/webhooks/shell/module_wiring_test.clj[`a-short-or-example-encryption-key-is-refused`], {repo}libs/user/test/wagoe/user/shell/module_wiring_test.clj[`a-short-or-example-oidc-state-secret-is-refused`]
+
 | Every route needs a signed-in user
 | On, unless the route says `:public true`.
 | Route data `:public true`

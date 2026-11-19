@@ -13,6 +13,7 @@
             [integrant.core :as ig]
             [malli.core :as m]
             [malli.error :as me]
+            [wagoe.config :as wagoe-config]
             [wagoe.core.utils.secret-keys :as secret-keys]
             [wagoe.events.ports :as events]
             [wagoe.webhooks.ports :as ports]
@@ -71,7 +72,7 @@
     (when (and topics (not (contains? enabled :wagoe/events)))
       (refuse! ":wagoe/webhooks :topics needs :wagoe/events, which publishes them."))
     (let [settings (merge service/defaults
-                          {:require-https? (not (contains? #{:dev :test :local} profile))}
+                          {:require-https? (not (wagoe-config/dev-like? profile))}
                           settings)]
       (cond-> {:components
                {:wagoe.webhooks/db-schema    {:ctx (ig/ref :wagoe/db-context)}
@@ -80,7 +81,7 @@
                                               :job-queue   (ig/ref :wagoe/job-queue)
                                               :idempotency (ig/ref :wagoe/idempotency-store)
                                               :settings    settings
-                                              :dev-like?   (contains? #{:dev :test :local} profile)}
+                                              :dev-like?   (wagoe-config/dev-like? profile)}
                 :wagoe.webhooks/job-handlers {:service (ig/ref :wagoe/webhooks)}}
                :job-handlers [(ig/ref :wagoe.webhooks/job-handlers)]}
         topics

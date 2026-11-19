@@ -612,3 +612,15 @@
     (is (= :error (check "change-me-min-32-chars-................" "prod")))
     (is (= :pass (check "change-me-min-32-chars-................" "dev")))
     (is (= :pass (check "q8Zt0n4mR2vJ7kPa1sXc9LbW3eYh6GdUf5Ni" "prod")))))
+
+(deftest ^:unit ^:security csrf-secret-check
+  ;; BOU-1021: boot refuses what this fails
+  (let [on {:wagoe/http {:security {:csrf {:enabled? true}}}}]
+    (is (nil? (doctor/check-csrf-secret {} {"CSRF_SECRET" "short"} "prod")) "off: no check")
+    (is (= :error (:level (first (doctor/check-csrf-secret on {"CSRF_SECRET" "short"} "prod")))))
+    (is (= :error (:level (first (doctor/check-csrf-secret on {"JWT_SECRET" "change-me-to-a-32-char-random-secret!!"} "prod"))))
+        "falls back to JWT_SECRET")
+    (is (= :pass (:level (first (doctor/check-csrf-secret on {"CSRF_SECRET" "change-me-to-a-32-char-random-secret!!"} "dev")))))
+    (is (nil? (doctor/check-csrf-secret {:wagoe/http {:security {:csrf {:enabled? true :secret "#env X"}}}}
+                                        {"CSRF_SECRET" "short"} "prod"))
+        "a secret in the config is check-secret-refs' to judge")))

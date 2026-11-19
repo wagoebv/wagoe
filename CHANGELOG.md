@@ -32,6 +32,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Security
 
 - **CSRF_SECRET, the webhook encryption key and the OIDC `:state-secret` booted with an example value** (BOU-1021).
+  Each is refused at boot when short, and outside dev when an example, as JWT_SECRET is: `openssl rand -base64 32`.
   Outside dev each is refused at boot when short or an example, as JWT_SECRET is; generate one with `openssl rand -base64 32`.
 - **An admin of one tenant passed admin-only checks in another tenant where they were only a member** (BOU-1020).
   These checks read the role held where the request runs now, so a tenant's admin by membership passes them there.

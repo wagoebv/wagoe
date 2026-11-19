@@ -34,4 +34,6 @@
     (is (re-find #"at least 32" (str (boot "short" true))))
     (is (re-find #"example value" (str (boot "your-webhook-encryption-key-of-32-characters" false))))
     (is (false? (get-in (graph {} #{:wagoe/jobs} :prod) [:components :wagoe/webhooks :dev-like?])))
-    (is (true? (get-in (graph {} #{:wagoe/jobs} :dev) [:components :wagoe/webhooks :dev-like?])))))
+    (is (true? (get-in (graph {} #{:wagoe/jobs} :dev) [:components :wagoe/webhooks :dev-like?])))
+    (is (boolean? (get-in (graph {} #{:wagoe/jobs} nil) [:components :wagoe/webhooks :dev-like?]))
+        "no profile: the active one's, as elsewhere")))

@@ -34,7 +34,7 @@
 
 (def ^:private csrf-secret
   "The test system signs CSRF tokens with this, so the client can too."
-  "wagoe-test-csrf-secret-at-least-32-characters")
+  "wagoe-test-system-csrf-token-signing-key-0001")
 
 (defn- in-process
   "`config` with cache, events, realtime and jobs kept in process, and its own
