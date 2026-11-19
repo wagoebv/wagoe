@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 # Every commit names its Linear ticket, so a release lists what it holds
 # (BOU-1031): `<what changed> (BOU-123)`. Git's own merges, reverts and
-# fixup!/squash! commits are exempt.
+# fixup!/squash!/amend! commits are exempt.
 set -euo pipefail
 
-subject="$(grep -v '^#' "$1" | head -1)"
+# The first line git keeps: not blank, not a comment. awk reads the file
+# itself, so a long `git commit -v` diff cannot break a pipe.
+comment="$(git config core.commentChar 2>/dev/null || echo '#')"
+[ "$comment" = auto ] && comment='#'
+subject="$(awk -v c="$comment" 'NF && index($0, c) != 1 {print; exit}' "$1")"
+
 case "$subject" in
-  "Merge "*|"Revert "*|"fixup! "*|"squash! "*|"amend! "*) exit 0 ;;
+  "Merge branch "*|"Merge remote-tracking branch "*|"Merge tag "*|"Merge commit "*|"Merge pull request #"*) exit 0 ;;
+  "Revert \""*|"Reapply \""*|"fixup! "*|"squash! "*|"amend! "*) exit 0 ;;
 esac
 if [[ "$subject" =~ BOU-[0-9]+ ]]; then
   exit 0
