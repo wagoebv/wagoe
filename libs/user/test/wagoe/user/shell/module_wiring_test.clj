@@ -194,3 +194,15 @@
     (is (= (str "WGE-107: the user repository does not implement " proto)
            (try (ig/init-key :wagoe/mfa-service {:user-repository repo}) nil
                 (catch clojure.lang.ExceptionInfo e (ex-message e)))))))
+
+(deftest ^:unit ^:security a-short-or-example-oidc-state-secret-is-refused
+  ;; BOU-1021: it signs the state that carries a sign-in back
+  (let [check #(try (#'sut/check-state-secret! {:state-secret %1} %2) nil
+                    (catch clojure.lang.ExceptionInfo e (ex-message e)))]
+    (is (re-find #"at least 32" (str (check "short" true))))
+    (is (re-find #"example value" (str (check "your-oidc-state-secret-at-least-32-chars" false))))
+    (is (nil? (check nil false)) "without one, JWT_SECRET, checked where it is read")
+    (is (false? (get-in (sut/ig-config {:oidc {:providers {:google {:issuer "https://accounts.google.com"
+                                                                    :client-id "x" :client-secret "y"}}}}
+                                       {:config {:wagoe/profile :prod}})
+                        [:components :wagoe/user-oidc :dev-like?])))))

@@ -26,3 +26,12 @@
                           [:components :wagoe/webhooks :settings :require-https?])))))
   (testing "no topics, no subscriber"
     (is (not (contains? (:components (graph {} #{:wagoe/jobs} :dev)) :wagoe.webhooks/subscriber)))))
+
+(deftest ^:unit ^:security a-short-or-example-encryption-key-is-refused
+  ;; BOU-1021: it encrypts the signing secrets at rest
+  (let [boot #(try (ig/init-key :wagoe/webhooks {:settings {:encryption-key %1} :dev-like? %2}) nil
+                   (catch clojure.lang.ExceptionInfo e (ex-message e)))]
+    (is (re-find #"at least 32" (str (boot "short" true))))
+    (is (re-find #"example value" (str (boot "your-webhook-encryption-key-of-32-characters" false))))
+    (is (false? (get-in (graph {} #{:wagoe/jobs} :prod) [:components :wagoe/webhooks :dev-like?])))
+    (is (true? (get-in (graph {} #{:wagoe/jobs} :dev) [:components :wagoe/webhooks :dev-like?])))))
