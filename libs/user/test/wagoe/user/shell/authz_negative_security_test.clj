@@ -13,6 +13,8 @@
    deny is `(= 403 (get-in result [:response :status]))` and an allow leaves
    `:response` nil."
   (:require [wagoe.user.shell.http-interceptors :as http-int]
+            [wagoe.user.shell.middleware]
+            [wagoe.user.shell.web-handlers]
             [clojure.test :refer [deftest is testing]]))
 
 (defn- ctx
@@ -89,3 +91,40 @@
   (testing "a tenant admin passes"
     (is (allowed? (run http-int/require-tenant-admin
                        (ctx {:tenant-membership {:status :active :role :admin}}))))))
+
+;; =============================================================================
+;; The role held where the request runs (BOU-1020)
+;; =============================================================================
+
+(def ^:private tenant-a #uuid "00000000-0000-0000-0000-00000000000a")
+(def ^:private tenant-b #uuid "00000000-0000-0000-0000-00000000000b")
+
+(defn- in-b
+  "A context for a request running in tenant B."
+  [user membership-role]
+  (assoc-in (ctx {:user user :tenant-membership (when membership-role {:role membership-role :status :active})})
+            [:request :tenant] {:id tenant-b}))
+
+(deftest ^:security ^:unit an-admin-elsewhere-is-no-admin-here
+  ;; An admin of tenant A is only a member in tenant B: the guards read the
+  ;; role held in B, not the home role (BOU-1020)
+  (let [a-admin  {:id "a1" :role :admin :tenant-id tenant-a}
+        b-member {:id "b1" :role :user :tenant-id tenant-a}]
+    (testing "require-admin"
+      (is (denied? (run http-int/require-admin (in-b a-admin :member))))
+      (is (allowed? (run http-int/require-admin (in-b b-member :admin))) "an admin of B by membership"))
+    (testing "require-role"
+      (is (denied? (run (http-int/require-role :admin) (in-b a-admin :member))))
+      (is (allowed? (run (http-int/require-role :admin) (in-b b-member :admin)))))
+    (testing "require-self-or-admin"
+      (is (denied? (run http-int/require-self-or-admin
+                        (assoc (in-b a-admin :member) :path-params {:id "someone-in-b"})))))
+    (testing "require-role-middleware"
+      (let [mw    (wagoe.user.shell.middleware/require-admin-middleware (constantly {:status 200}))
+            req-b #(:request (in-b %1 %2))]
+        (is (= 403 (:status (mw (req-b a-admin :member)))))
+        (is (= 200 (:status (mw (req-b b-member :admin)))))))
+    (testing "hard-deleting a user"
+      (let [h (wagoe.user.shell.web-handlers/hard-delete-user-handler nil {})]
+        (is (= 403 (:status (h (assoc (:request (in-b a-admin :member))
+                                      :path-params {:id (str (random-uuid))}))))))))) 

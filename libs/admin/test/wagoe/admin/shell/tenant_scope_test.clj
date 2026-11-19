@@ -95,3 +95,16 @@
                                         :user admin-of-a :tenant {:id tenant-b}
                                         :tenant-membership {:tenant-id tenant-b :role :admin}
                                         :i18n/catalogue catalogue :i18n/default-locale :en}))))))
+
+(deftest ^:integration ^:security an-admin-elsewhere-is-only-what-they-are-here
+  ;; The admin role is the one held where the request runs (BOU-1020)
+  (let [in-b (fn [user role]
+               (*app* {:request-method :get :uri "/members" :headers {} :query-params {} :user user
+                       :tenant {:id tenant-b} :tenant-membership {:role role :status :active}
+                       :i18n/catalogue catalogue :i18n/default-locale :en}))]
+    (testing "an admin of A who is a member of B"
+      (is (= 403 (:status (in-b admin-of-a :member)))))
+    (testing "a member of A who is an admin of B"
+      (let [r (in-b {:id (random-uuid) :role :user :tenant-id tenant-a} :admin)]
+        (is (= 200 (:status r)))
+        (is (= #{"MEMBER-B"} (names r)))))))

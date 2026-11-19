@@ -57,12 +57,14 @@
         ;; gets the service scoped to them under :enforce (ADR-041 §6) and to
         ;; the tenant they are bound to (BOU-954); else the handlers built once.
         access          (:access config)
-        auth-middleware (if access
-                          (fn [handler]
-                            (auth-middleware
-                             (fn [request]
-                               (handler (update request :user (partial with-access config))))))
-                          auth-middleware)
+        ;; The admin role a request is decided by is the one held where it
+        ;; runs, not the caller's home tenant's (BOU-1020)
+        auth-middleware (fn [handler]
+                          (auth-middleware
+                           (fn [request]
+                             (let [here (update request :user permissions/here (core-access/tenant-admin? request))]
+                               (handler (cond-> here
+                                          access (update :user (partial with-access config))))))))
         h               (fn [ctor]
                           (let [plain (ctor admin-service schema-provider config)]
                             (fn [request]

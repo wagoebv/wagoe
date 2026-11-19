@@ -891,7 +891,7 @@
   [user-service group-service]
   (fn [handler]
     (fn [request]
-      (if-let [reach (when (access/admin? request) (core-access/admin-reach request))]
+      (if-let [reach (when (access/tenant-admin? request) (core-access/admin-reach request))]
         (let [target (rights-target user-service request)
               t      (if target (:tenant-id target) (:tenant-id reach))]
           (group-service/in-tenant group-service t #(handler request)))

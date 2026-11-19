@@ -213,7 +213,9 @@
       connection - Connection record from core/connection.clj with:
                    :id - Connection UUID (same as connection-id)
                    :user-id - User UUID
-                   :roles - Set of role keywords
+                   :roles - Set of role keywords. Not the user module's `:role` claim:
+                 that is the user's home tenant's role, and a WebSocket
+                 resolves no tenant or membership (BOU-1020)
                    :metadata - Optional metadata map
                    :created-at - Instant
       ws-connection - WebSocket adapter (IWebSocketConnection)

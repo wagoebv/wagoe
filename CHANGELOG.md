@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **An admin of one tenant passed admin-only checks in another tenant where they were only a member** (BOU-1020):
+  `require-admin`, `require-role`, the role middleware, the admin and search pages. They now read the role held there.
 - **The dev and test compose files published Postgres, MySQL and Redis with default credentials on every interface**
   (BOU-1019). They bind to 127.0.0.1: re-copy your compose override, then `docker compose up -d` and `bb test:services up`.
 - **The MCP `scaffold-module` tool wrote `.edn` files outside the project through an entity's plural** (BOU-1018).
