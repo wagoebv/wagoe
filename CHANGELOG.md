@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **The storage `:signing-secret` and the push `:callback-secret` took any length** (BOU-1049): a short one could be
+  guessed from one signed URL or token. When set, each is refused at boot if short, and outside dev if an example.
 - **CSRF_SECRET, the webhook encryption key and the OIDC `:state-secret` booted with an example value** (BOU-1021).
   Each is refused at boot when short, and outside dev when an example, as JWT_SECRET is: `openssl rand -base64 32`.
 - **An admin of one tenant passed admin-only checks in another tenant where they were only a member** (BOU-1020).

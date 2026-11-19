@@ -34,7 +34,7 @@
 
 (def callback-secret
   "Push's, so a test can sign a callback the booted handler accepts."
-  "route-table-callback-secret")
+  "route-table-push-callback-signing-key-01")
 
 (defn- every-module-config
   "The test profile with every framework module on, each from the config

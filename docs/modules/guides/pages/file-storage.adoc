@@ -67,7 +67,7 @@ The `storage` library provides file storage with local, S3 and Google Cloud Stor
 {:provider       :local
  :root           "/var/app/uploads"          ; or :base-path
  :url-base       "http://localhost:3000/api/v1/storage"
- :signing-secret #env STORAGE_SIGNING_SECRET}
+ :signing-secret #env STORAGE_SIGNING_SECRET} ; 32+ characters, refused at boot otherwise
 
 ;; AWS S3 (production)
 :wagoe/storage

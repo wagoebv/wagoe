@@ -13,7 +13,8 @@
          com.google.guava/guava {:mvn/version "33.7.2-jre"}
          wagoe/jobs             {:local/root "../jobs"}
          wagoe/platform-sql        {:local/root "../platform-sql"}
-         wagoe/core             {:local/root "../core"}}
+         wagoe/core             {:local/root "../core"}
+         wagoe/config           {:local/root "../config"}}
 
  :aliases
  {:test      {:extra-paths ["test"]

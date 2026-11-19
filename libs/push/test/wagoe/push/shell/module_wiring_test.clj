@@ -70,10 +70,10 @@
 
 (deftest ^:unit a-missing-callback-secret-warns-at-boot
   ;; Without one every callback is refused, and nothing said so (BOU-844).
-  (doseq [secret [nil "" "s3cret"]]
+  (doseq [secret [nil "" "q8Zr3vLx0pT6wN2mHc9sYbK4dF7jA1eU"]]
     (log-test/with-log
       (ig/init-key :wagoe.push/service {:callback-secret secret})
-      (is (= (not= "s3cret" secret)
+      (is (= (not= "q8Zr3vLx0pT6wN2mHc9sYbK4dF7jA1eU" secret)
              (log-test/logged? 'wagoe.push.shell.module-wiring :warn #"callback-secret"))
           (pr-str secret))))
   (testing "but not with mock providers, which reach no device (BOU-849)"
@@ -89,7 +89,7 @@
       (is (log-test/logged? 'wagoe.push.shell.module-wiring :warn #"callback-secret")))))
 
 (deftest ^:unit callback-token-settings-reach-the-components
-  (let [components (:components (wiring/ig-config {:callback-secret                "s"
+  (let [components (:components (wiring/ig-config {:callback-secret                "q8Zr3vLx0pT6wN2mHc9sYbK4dF7jA1eU"
                                                    :callback-token-ttl-seconds     86400
                                                    :refuse-legacy-callback-tokens? true}
                                                   {:enabled #{:wagoe/jobs}}))
@@ -99,7 +99,7 @@
     (is (true? (get-in components [:wagoe.push/route-contribution :refuse-legacy-callback-tokens?])))
     (is (true? (get-in components [:wagoe.push/routes :refuse-legacy-callback-tokens?]))))
   (testing "off and seven days unless set"
-    (let [components (:components (wiring/ig-config {:callback-secret "s"} {}))]
+    (let [components (:components (wiring/ig-config {:callback-secret "q8Zr3vLx0pT6wN2mHc9sYbK4dF7jA1eU"} {}))]
       (is (nil? (get-in components [:wagoe.push/route-contribution :refuse-legacy-callback-tokens?])))
       (is (nil? (:callback-token-ttl-seconds (ig/init-key :wagoe.push/service
                                                           (:wagoe.push/service components)))))))
@@ -126,3 +126,17 @@
   (log-test/with-log
     (is (= :ctx (:db (ig/init-key :wagoe.push/analytics-store {:db :ctx}))) "the deprecated :db still works")
     (is (log-test/logged? 'wagoe.push.shell.module-wiring :warn #"DEPRECATED :wagoe.push/analytics-store :db.*2\.0"))))
+
+(deftest ^:unit ^:security a-short-or-example-callback-secret-is-refused
+  ;; BOU-1049: it signs callback tokens
+  (let [check #(try (#'wagoe.push.shell.module-wiring/check-callback-secret! %1 %2) nil
+                    (catch clojure.lang.ExceptionInfo e (ex-message e)))]
+    (is (re-find #"at least 32" (str (check "s3cret" true))))
+    (is (re-find #"example value" (str (check "change-me-to-a-32-char-callback-secret" false))))
+    (is (nil? (check "change-me-to-a-32-char-callback-secret" true)) "dev keeps its example")
+    (is (nil? (check nil false)) "unset: warned about, not refused")
+    (is (nil? (check "" false)))
+    (is (re-find #"at least 32" (str (check "   " true))) "whitespace signs, so it is a key")
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"at least 32"
+                          (ig/init-key :wagoe.push/service {:callback-secret "s3cret"}))
+        "boot refuses it")))

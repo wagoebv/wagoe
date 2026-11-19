@@ -21,6 +21,9 @@
    The `:local` provider accepts the catalogue's `:root` as an alias for the
    local adapter's `:base-path`."
   (:require [integrant.core :as ig]
+            [clojure.string :as str]
+            [wagoe.config :as wagoe-config]
+            [wagoe.core.utils.secret-keys :as secret-keys]
             [wagoe.storage.shell.adapters.local :as local]
             [wagoe.storage.shell.adapters.s3 :as s3]
             [wagoe.storage.shell.adapters.gcs :as gcs]
@@ -34,6 +37,15 @@
             [wagoe.storage.ports :as ports]
             [wagoe.storage.shell.upload-index :as upload-index]
             [clojure.tools.logging :as log]))
+
+(defn- check-signing-secret!
+  "Refuse a set `:signing-secret` that is short or, unless `dev-like?`, an
+   example: it signs download URLs, so a guessable one forges them (BOU-1049)."
+  [secret dev-like?]
+  ;; As the adapter reads it: trimmed, and blank is no secret (BOU-421)
+  (when-let [problem (some-> secret str/trim not-empty
+                             (as-> s (secret-keys/weak-secret "The storage :signing-secret" s dev-like?)))]
+    (throw (ex-info problem {:type :configuration-error :module :wagoe/storage}))))
 
 (defn- build-file-storage
   "Construct the IFileStorage adapter for the configured provider."
@@ -52,6 +64,7 @@
 (defmethod ig/init-key :wagoe/storage
   [_ {:keys [provider logger upload-index] :or {provider :local} :as config}]
   (log/info "Initializing storage component" {:provider provider})
+  (check-signing-secret! (:signing-secret config) (wagoe-config/dev-like?))
   (let [file-storage (build-file-storage (assoc config :provider provider) logger)
         processor    (image-processor/create-image-processor {:logger logger})
         svc          (service/create-storage-service
