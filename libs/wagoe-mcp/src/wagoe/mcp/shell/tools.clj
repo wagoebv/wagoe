@@ -17,6 +17,7 @@
             [wagoe.mcp.core.resources :as resources]
             [wagoe.mcp.ports :as ports]
             [wagoe.mcp.shell.verify :as verify]
+            [wagoe.scaffolder.core.template :as template]
             [wagoe.scaffolder.ports :as scaffold]
             [clj-kondo.core :as kondo]
             [clojure.edn :as edn]
@@ -117,9 +118,9 @@
 ;; soft guardrails (FC/IS / convention); it is honored only when *every*
 ;; blocking issue is soft (see core/verify).
 
-;; Names become file paths in the scaffolder (`src/wagoe/<module>/…`), which
-;; does not sanitize them. Guard agent-supplied names here so a value like
-;; "../../../etc/x" cannot write outside the project tree.
+;; Names become file paths and SQL in the scaffolder. Agent-supplied ones are
+;; checked here first, then by the scaffolder's schema, whose resolve-path
+;; also refuses its writes outside the project (BOU-1018).
 (def ^:private module-name-re #"[a-z][a-z0-9-]*")
 (def ^:private entity-name-re #"[A-Za-z][A-Za-z0-9]*")
 
@@ -175,9 +176,24 @@
       (str/replace #"(^|/)src/" "$1test/")
       (str/replace #"\.clj$" "_test.clj")))
 
+(defn- valid-field!
+  "A field's names become SQL and a migration's file name (BOU-1018)."
+  [{:keys [name references references-table]}]
+  (valid-name! :field template/field-name-pattern name)
+  (some->> references (valid-name! :references template/entity-name-pattern))
+  (some->> references-table (valid-name! :references-table template/table-name-pattern)))
+
+(defn- valid-entity!
+  "An entity's names become paths and SQL: each must be an identifier (BOU-1018)."
+  [{:keys [name plural belongs-to fields]}]
+  (valid-name! :entity entity-name-re name)
+  (some->> plural (valid-name! :plural template/plural-pattern))
+  (some->> belongs-to (valid-name! :belongs-to template/entity-name-pattern))
+  (run! valid-field! fields))
+
 (defn- scaffold-module [{:keys [module entities interfaces preview force allow]} deps]
   (valid-name! :module module-name-re module)
-  (run! #(valid-name! :entity entity-name-re (:name %)) entities)
+  (run! valid-entity! entities)
   (let [svc (:scaffolder deps)
         req {:module-name module
              :entities    (mapv entity->scaffolder entities)
@@ -204,6 +220,7 @@
 (defn- add-field [{:keys [module entity field allow]} deps]
   (valid-name! :module module-name-re module)
   (valid-name! :entity entity-name-re entity)
+  (valid-field! field)
   (let [svc (:scaffolder deps)
         r   (scaffold/add-field svc {:module-name module
                                      :entity      entity
@@ -219,6 +236,7 @@
 (defn- gen-migration [{:keys [module entity fields allow]} deps]
   (valid-name! :module module-name-re module)
   (valid-name! :entity entity-name-re entity)
+  (run! valid-field! fields)
   (let [svc (:scaffolder deps)
         ;; Reuse generate-module's migration generator via dry-run, then write
         ;; only the .sql file — no source/test files for a migration-only tool.
