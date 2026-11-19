@@ -143,6 +143,7 @@ bb check --gates                                   # Gates only, as CI's Babashk
 bb check-full                                      # bb check --gates + bb test:all + bb e2e
 bb test:changed                                    # Suites of the libs changed since origin/main, plus :app and :security
 bb check:css                                       # Rebuild the CSS; fail when the committed bundles differ (needs npm ci)
+bb release NEW                                     # Bump, move [Unreleased], push, wait for green CI on main, then tag NEW
 bb check:fcis                                      # FC/IS enforcement: core/ must not import shell/IO/logging/DB, throw, or hold mutable state
 bb check:placeholder-tests                         # Detect (is true) placeholder assertions in tests
 bb check:deps                                      # Declared wagoe deps = used ones, both ways; cycles; undeclared third-party deps

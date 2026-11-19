@@ -23,7 +23,7 @@
                               (str/join "\n" (repeat 30000 "+ a line of the diff")))))))
   (testing "git's own merges, reverts and fixups pass"
     (doseq [s ["Merge branch 'x'" "Merge pull request #12 from a/b" "Revert \"Move it\""
-               "fixup! Move it" "squash! Move it" "amend! Move it"]]
+               "fixup! Move it" "squash! Move it" "amend! Move it" "Release 1.3.0"]]
       (is (zero? (exit-for (str s "\n"))) s)))
   (testing "a subject without a ticket is refused, even when the body names one"
     (is (= 1 (exit-for "Move the green tag\n\nFor BOU-1028\n")))

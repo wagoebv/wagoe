@@ -230,23 +230,17 @@ the value:
 
 === Trigger: push a version tag
 
-This is the normal release flow:
+This is the normal release flow, from an up-to-date, clean `main` (BOU-1029):
 
 [source,bash]
 ----
-# 1. Bump the version everywhere. NEW has no leading "v": the workflow
-#    triggers on unprefixed semver tags (1.0.1, 1.1.0-alpha-1).
-bb bump NEW
-
-# 2. Confirm every hard-coded copy of the version agrees before tagging
-bb check:versions
-
-# 3. Commit and tag
-git commit -am "Bump version to NEW"
-git tag -a NEW -m "Release NEW"
-git push origin main
-git push origin NEW
+bb release NEW    # NEW has no leading "v": publish.yml triggers on 1.0.1, 1.1.0-alpha-1
 ----
+
+`bb release` bumps the version everywhere (`bb bump`), turns `## [Unreleased]` in `CHANGELOG.md` into
+`## [NEW] — <date>`, checks the versions agree, and pushes the commit `Release NEW` to `main`. It then waits for CI
+on main to pass on that commit and only then pushes the annotated tag `NEW`. A red run stops it without a tag:
+fix main and release again. Run it again after an interruption; it resumes at the wait.
 
 GitHub Actions will:
 
