@@ -72,6 +72,8 @@
     [:post "/test/reset"]
     [:post "/api/v1/auth/login"] [:post "/api/v1/sessions"]
     [:get "/api/v1/sessions/:token"] [:delete "/api/v1/sessions/:token"]
+    ;; BOU-1015: the token in a header, the cookie or the body
+    [:get "/api/v1/session"] [:delete "/api/v1/session"]
     [:get "/web"] [:get "/web/login"] [:post "/web/login"]
     [:get "/web/register"] [:post "/web/register"]
     ;; A sealed ticket from login admits the caller

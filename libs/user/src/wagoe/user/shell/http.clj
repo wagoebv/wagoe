@@ -226,13 +226,13 @@
 (defn- with-presented-token
   "`handler` for a session token the caller presents in X-Session-Token, the
    session cookie or a JSON body `token`, not in the path, where logs and
-   proxies keep it (BOU-1015). No token is a 401, like no session."
+   proxies keep it (BOU-1015). No token is a 404, like an unknown session."
   [handler]
   (fn [request]
     (if-let [token (or (user-middleware/extract-session-token request)
                        (get-in request [:body-params :token]))]
       (handler (assoc-in request [:parameters :path :token] token))
-      (throw (ex-info "No session token presented" {:type :unauthorized})))))
+      (throw (ex-info "No session token presented" {:type :session-not-found})))))
 
 (defn invalidate-session-handler
   "DELETE /api/sessions/:token - Invalidate session using interceptor pipeline."

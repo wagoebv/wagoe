@@ -470,7 +470,7 @@
       (let [other (:session-token (ports/authenticate-user service {:user-id (UUID/randomUUID)}))]
         (is (= 204 (:status (del-h {:body-params {:token other}}))))
         (is (nil? (ports/validate-session service other))))
-      (is (= :unauthorized (try (get-h {}) nil (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))))))
+      (is (= :session-not-found (try (get-h {}) nil (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))))))
 
 (deftest ^:contract test-invalidate-session-handler
   (testing "DELETE /sessions/:token - Invalidate session successfully"
