@@ -985,7 +985,7 @@
                                          (ex-info "Session token is required"
                                                   {:type :validation-error
                                                    :field :token
-                                                   :message "Session token is required in path"}))
+                                                   :message "Session token is required"}))
 
                 (-> context
                     (assoc :session-token session-token

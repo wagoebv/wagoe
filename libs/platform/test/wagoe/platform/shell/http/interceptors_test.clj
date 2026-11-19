@@ -503,3 +503,30 @@
       (let [{:keys [reported spans]} (reported-and-traced ex)]
         (is (= 1 (count reported)))
         (is (= [[:attrs {:http.response.status_code 500}] [:error]] spans))))))
+
+(deftest ^:unit ^:security a-session-token-in-the-path-reaches-no-log-line
+  ;; BOU-1015: GET /api/v1/sessions/<token> logged the token; the tracer and
+  ;; the error reporter see the same path
+  (doseq [ex [(ex-info "nope" {:type :not-found}) (ex-info "untyped" {}) (RuntimeException. "boom")]]
+    (let [seen     (atom [])
+          reporter #_{:clj-kondo/ignore [:missing-protocol-method]}
+          (reify
+            error-ports/IErrorReporter
+            (capture-exception [_ _ ctx] (swap! seen conj ctx))
+            error-ports/IErrorContext
+            (add-breadcrumb! [_ b] (swap! seen conj b)))
+          tracer   #_{:clj-kondo/ignore [:missing-protocol-method]}
+          (reify tracing-ports/ITracer
+            (start-span! [_ n a] (swap! seen conj [n a]) n)
+            (end-span! [_ _] nil)
+            (set-attributes! [_ _ a] (swap! seen conj a))
+            (record-exception! [_ _ _] nil))]
+      (http-interceptors/run-http-interceptors
+       (fn [_] (throw ex))
+       http-interceptors/default-http-interceptors
+       {:request-method :get :uri "/api/v1/sessions/live-token-123" :headers {}}
+       {:logger (recording-logger seen) :error-reporter reporter :tracer tracer})
+      (is (seq @seen))
+      (is (not (re-find #"live-token-123" (pr-str @seen))) (ex-message ex))
+      (is (re-find #"/api/v1/sessions/\[REDACTED\]" (pr-str @seen))))))
+

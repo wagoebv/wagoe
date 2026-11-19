@@ -39,7 +39,8 @@
    
    Route data may also carry an :interceptors vector; when the routes are
    compiled, it becomes :middleware running through this same runner."
-  (:require [wagoe.core.utils.text :as text]
+  (:require [wagoe.core.utils.pii-redaction :as pii]
+            [wagoe.core.utils.text :as text]
             [wagoe.cache.ports :as cache-ports]
             [wagoe.core.interceptor :as interceptor]
             [wagoe.observability.logging.ports :as log-ports]
@@ -80,12 +81,14 @@
   (or (get-in request [:headers "x-session-token"])
       (get-in request [:cookies "session-token" :value])))
 
-(defn- bearer-only?
-  "A bearer token and no session cookie. A browser never attaches Authorization
-   to a cross-site request, so this one cannot be a forgery (BOU-952). The prefix
-   is matched as the user module's auth matches it, so a header it ignores skips nothing."
+(defn- header-credential-only?
+  "A bearer token, or an X-Session-Token header, and no session cookie. A
+   browser attaches neither to a cross-site request on its own, so this one
+   cannot be a forgery (BOU-952, BOU-1015). The prefix is matched as the user
+   module's auth matches it, so a header it ignores skips nothing."
   [request]
-  (and (some-> (get-in request [:headers "authorization"]) (str/starts-with? "Bearer "))
+  (and (or (some-> (get-in request [:headers "authorization"]) (str/starts-with? "Bearer "))
+           (some? (get-in request [:headers "x-session-token"])))
        (nil? (get-in request [:cookies "session-token" :value]))))
 
 (defn- path-exempt?
@@ -138,13 +141,13 @@
 
 (defn- csrf-checked?
   "Whether a request's CSRF token is validated: a state-changing request, not
-   exempt, that is session-authenticated or on /web, unless `bearer-only?`.
+   exempt, that is session-authenticated or on /web, unless `header-credential-only?`.
    The interceptor and `wrap-csrf` share it so they cannot drift."
   [request state-changing? exempt-paths uri session-binding]
   (and state-changing?
        (not (path-exempt? exempt-paths uri))
        (or session-binding (web-route? uri))
-       (not (bearer-only? request))))
+       (not (header-credential-only? request))))
 
 (defn- pre-session-cookie-value
   "The pre-session cookie's attributes: Secure follows `:secure-cookies?`, true when
@@ -326,7 +329,7 @@
     (log-ports/warn logger
                     "Exception reached HTTP boundary without :type in ex-data"
                     {:exception-class (.getName (class exception))
-                     :uri (:uri request)
+                     :uri (pii/redact-uri (:uri request))
                      :correlation-id correlation-id
                      :ex-data-keys (sort (keys ex-data))}))
   (set-response ctx
@@ -337,7 +340,7 @@
                   :details        {:hint            "Add :type to the ex-info data map (e.g., {:type :validation-error})."
                                    :exception-class (.getName (class exception))
                                    :ex-data-keys    (sort (keys ex-data))
-                                   :uri             (:uri request)}})))
+                                   :uri             (pii/redact-uri (:uri request))}})))
 
 ;; ==============================================================================
 ;; HTTP-Specific Interceptors
@@ -365,14 +368,14 @@
             (when-let [logger (:logger system)]
               (log-ports/info logger "HTTP request received"
                               {:method (:request-method request)
-                               :uri (:uri request)
+                               :uri (pii/redact-uri (:uri request))
                                :correlation-id correlation-id}))
             ctx)
    :leave (fn [{:keys [request response system correlation-id] :as ctx}]
             (when-let [logger (:logger system)]
               (log-ports/info logger "HTTP request completed"
                               {:method (:request-method request)
-                               :uri (:uri request)
+                               :uri (pii/redact-uri (:uri request))
                                :status (:status response)
                                :correlation-id correlation-id}))
             ctx)
@@ -385,7 +388,7 @@
                                       (< status 400)   "HTTP request redirected"
                                       :else            "HTTP request refused")
                                 {:method (:request-method request)
-                                 :uri (:uri request)
+                                 :uri (pii/redact-uri (:uri request))
                                  :status status
                                  :error-type (:type (ex-data exception))
                                  :error (.getMessage ^Throwable exception)
@@ -474,9 +477,9 @@
               (let [method (name (:request-method request))
                     span   (tracing-ports/start-span!
                             tracer
-                            (str "HTTP " (text/upper-case method) " " (:uri request))
+                            (str "HTTP " (text/upper-case method) " " (pii/redact-uri (:uri request)))
                             {:http.request.method method
-                             :url.path            (:uri request)
+                             :url.path            (pii/redact-uri (:uri request))
                              :correlation-id      (str correlation-id)})]
                 (assoc-in ctx [:tracing :span] span))
               ctx))
@@ -512,7 +515,7 @@
                "http"
                :info
                {:method (name (:request-method request))
-                :uri (:uri request)
+                :uri (pii/redact-uri (:uri request))
                 :correlation-id correlation-id}))
             ctx)
    :error (fn [{:keys [request exception system correlation-id] :as ctx}]
@@ -527,7 +530,7 @@
                  "HTTP request failed"
                  {:context "http-request"
                   :method (name (:request-method request))
-                  :uri (:uri request)
+                  :uri (pii/redact-uri (:uri request))
                   :correlation-id correlation-id})))
             ctx)})
 

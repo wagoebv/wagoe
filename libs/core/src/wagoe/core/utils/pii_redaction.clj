@@ -76,6 +76,16 @@
     {:keys all-keys
      :mask-email? mask-email?}))
 
+(def ^:private uri-secret
+  "A path that carries a credential: the session check's token (BOU-1015)."
+  #"^(/api(?:/v\d+)?/sessions/)[^/?#]+(/?)$")
+
+(defn redact-uri
+  "`uri` with a credential it carries replaced, for a log line or an error
+   report: the token of /api/v1/sessions/<token>."
+  [uri]
+  (some-> uri str (str/replace uri-secret "$1[REDACTED]$2")))
+
 (defn redact-pii-value
   "Redact a single value based on its key and redaction state.\n\n  Email is treated specially:\n  - when :mask-email? is true and the value looks like an email, the local part is masked\n  - when :mask-email? is false, email values are left as-is, even if :email is in the default key set"
   [k v {:keys [keys mask-email?] :as _state}]
@@ -86,6 +96,10 @@
       (cond
         (and mask-email? (email-string? v)) (mask-email v)
         :else v)
+
+      ;; A log line's request path can carry the session token (BOU-1015)
+      (and (#{"uri" "url.path"} kname) (string? v))
+      (redact-uri v)
 
       ;; All other keys use generic redaction
       (sensitive-key-name? keys kname)
@@ -136,3 +150,5 @@
    already carry them, and this is about credentials."
   [data]
   (redact-pii data log-redact-state))
+
+

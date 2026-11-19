@@ -5,6 +5,7 @@
    the error reporting protocols, making it easier for feature modules to
    report errors without dealing with protocol details directly."
   (:require
+   [wagoe.core.utils.pii-redaction :as pii]
    [wagoe.core.utils.secret-keys :as secret-keys]
    [wagoe.core.utils.text :as text]
    [wagoe.observability.errors.ports :as ports]
@@ -189,7 +190,7 @@
       (:timestamp error-context) (assoc :timestamp (:timestamp error-context))
       (:command error-context) (assoc :command (:command error-context))
       ;; HTTP-specific context
-      (:uri error-context) (assoc :uri (:uri error-context))
+      (:uri error-context) (assoc :uri (pii/redact-uri (:uri error-context)))
       (:method error-context) (assoc :method (:method error-context))
       ;; CLI-specific context
       (:operation error-context) (assoc :operation (:operation error-context))

@@ -6,7 +6,8 @@
    - Session-based authentication
    - Role-based authorization
    - Request context enrichment with user information"
-  (:require [wagoe.user.ports :as ports]
+  (:require [wagoe.core.utils.pii-redaction :as pii]
+            [wagoe.user.ports :as ports]
             [wagoe.user.core.session :as session-core]
             [wagoe.user.core.user :as user-core]
             [wagoe.user.core.view-as :as view-as]
@@ -233,7 +234,7 @@
     ;; refused here, or any caller could turn a request into a 5xx.
     {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)}
     (try
-      (log/info "Validating session token" {:uri (:uri request)})
+      (log/info "Validating session token" {:uri (pii/redact-uri (:uri request))})
       ;; validate-session refuses a gone or inactive user and hands back the
       ;; one it read, so there is no second read here (BOU-668).
       (if-let [{:keys [user] :as session} (ports/validate-session user-service token)]
@@ -247,14 +248,14 @@
                 {:user admin :session session}))
             {:refusal (create-unauthorized-response "User not found" :user-not-found request)}))
         (do
-          (log/info "Session invalid or expired" {:uri (:uri request)})
+          (log/info "Session invalid or expired" {:uri (pii/redact-uri (:uri request))})
           {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)}))
       ;; Only a refused session is a 401. A failed lookup propagates to the error
       ;; mapping as a 5xx: the caller is not unauthenticated, the store is down
       ;; (BOU-666).
       (catch clojure.lang.ExceptionInfo ex
         (if (= :session-invalid (:type (ex-data ex)))
-          (do (log/info "Session refused" {:uri (:uri request) :reason (:reason (ex-data ex))})
+          (do (log/info "Session refused" {:uri (pii/redact-uri (:uri request)) :reason (:reason (ex-data ex))})
               {:refusal (create-unauthorized-response "Invalid or expired session" :invalid-session request)})
           (throw ex))))))
 
@@ -343,7 +344,7 @@
 
       ;; No session token provided
       (do
-        (log/info "No session token provided" {:uri (:uri request) :cookies (keys (:cookies request))})
+        (log/info "No session token provided" {:uri (pii/redact-uri (:uri request)) :cookies (keys (:cookies request))})
         (create-unauthorized-response "Session token required" :missing-session request)))))
 
 ;; =============================================================================
@@ -477,7 +478,7 @@
          (let [session-token (extract-session-token request)
                bearer-token  (extract-bearer-token request)]
            (log/info "Processing authentication request"
-                     {:uri (:uri request)
+                     {:uri (pii/redact-uri (:uri request))
                       :method (:request-method request)
                       :has-session (boolean session-token)
                       :has-bearer (boolean bearer-token)

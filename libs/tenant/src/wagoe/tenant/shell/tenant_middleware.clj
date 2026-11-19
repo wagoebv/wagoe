@@ -12,7 +12,8 @@
    - Error handling for missing/invalid tenants
    
    Based on: docs/adr/ADR-004-multi-tenancy-architecture.md"
-  (:require [cheshire.core :as json]
+  (:require [wagoe.core.utils.pii-redaction :as pii]
+            [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [wagoe.core.http.errors :as errors]
@@ -265,7 +266,7 @@
              (do
                (log/warn "Tenant not found"
                          {:identifier identifier
-                          :uri (:uri request)
+                          :uri (pii/redact-uri (:uri request))
                           :method (:request-method request)})
                (if require-tenant?
                  (error-response 404 :not-found
@@ -286,7 +287,7 @@
                               {:tenant-id (:id tenant)
                                :tenant-slug (:slug tenant)
                                :schema-name (:schema-name tenant)
-                               :uri (:uri request)})
+                               :uri (pii/redact-uri (:uri request))})
 
                    ;; Add tenant to request and continue
                    (handler (assoc request :tenant tenant)))
@@ -342,7 +343,7 @@
                        {:tenant-id (:id tenant)
                         :schema-name schema-name
                         :error (.getMessage e)
-                        :uri (:uri request)})
+                        :uri (pii/redact-uri (:uri request))})
             (error-response 500 :internal-error "Failed to execute request" request))))
 
       ;; No tenant - continue without schema switching

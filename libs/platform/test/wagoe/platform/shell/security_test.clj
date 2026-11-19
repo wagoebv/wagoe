@@ -183,6 +183,16 @@
       (is (= 403 (get-in (run-csrf cfg {:request-method :post :uri "/web/admin/users"})
                          [:response :status]))))))
 
+(deftest ^:security ^:unit csrf-skips-a-header-session-write
+  ;; BOU-1015: a cross-site page cannot set X-Session-Token, as with a bearer
+  (let [cfg {:enabled? true :secret csrf-secret}]
+    (is (nil? (:response (run-csrf cfg {:request-method :delete :uri "/api/v1/session"
+                                        :headers {"x-session-token" "tok"}}))))
+    (is (= 403 (get-in (run-csrf cfg (assoc-in (session-request :delete "/api/v1/session")
+                                               [:headers "x-session-token"] "tok"))
+                       [:response :status]))
+        "with the session cookie as well, it is checked")))
+
 (deftest ^:security ^:unit csrf-default-is-opt-in-test
   (testing "a :csrf map with a secret but NO :enabled? key is a no-op (opt-in, default off)"
     (let [cfg {:secret csrf-secret :exempt-paths []} ; note: no :enabled? key

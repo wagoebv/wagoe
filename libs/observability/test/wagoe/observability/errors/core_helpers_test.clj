@@ -53,6 +53,11 @@
       (is (= :application (:error-type ctx)))
       (is (= "HTTP request failed" (:message ctx))))))
 
+(deftest ^:unit ^:security a-reported-error-carries-no-session-token
+  ;; BOU-1015: the session check's token is in its path
+  (is (= "/api/v1/sessions/[REDACTED]"
+         (:uri (ec/error-context->reporting-context {:uri "/api/v1/sessions/live-token-123"})))))
+
 (deftest ^:unit should-report-exception-test
   (testing "the default floor is :medium"
     (is (true? (ec/should-report-exception? (RuntimeException. "boom") {})))

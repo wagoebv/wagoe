@@ -65,8 +65,8 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 curl -H "Authorization: Bearer <jwtToken>" \
   http://localhost:3000/api/v1/users
 
-# 4. Logout (invalidates the session; a JWT stays valid until it expires)
-curl -X DELETE http://localhost:3000/api/v1/sessions/<sessionToken>
+# 4. Logout (ends the session, and with it its JWT)
+curl -X DELETE -H "X-Session-Token: <sessionToken>" http://localhost:3000/api/v1/session
 ```
 
 ### Token model — DB sessions are canonical
@@ -80,10 +80,10 @@ The module carries **two** token mechanisms; know which you are using:
   Prefer these for request authentication. The table holds each token's
   SHA-256, never the token; the UI names sessions by id (BOU-696).
 - **Stateless HS256 JWTs** (`auth/create-jwt-token` / `validate-jwt-token`) are
-  **not stored** and therefore **cannot be revoked before expiry** — a logout
-  does not invalidate an outstanding JWT. Use only for short-lived, stateless
-  cases where that trade-off is acceptable. The middleware does read the
-  token's user, so a deactivated user's JWT is refused (BOU-668).
+  **not stored**; a token issued at sign-in carries its session id (`:sid`), so
+  ending that session refuses it too, and the middleware refuses a JWT without
+  one (BOU-1006). It also reads the token's user, so a deactivated user's JWT
+  is refused (BOU-668).
 
 Signing keys:
 
@@ -618,7 +618,7 @@ Removed:
 - `/web/admin/groups/**`
 
 Kept:
-- `/api/v1/auth/login`, `/api/v1/sessions`, `/api/v1/sessions/:token`
+- `/api/v1/auth/login`, `/api/v1/sessions`, `/api/v1/session`, `/api/v1/sessions/:token` (deprecated)
 - `/api/v1/users/**`, `/api/v1/auth/mfa/**`
 - OIDC sign-in under `/web/auth/oidc/**`, when providers are configured. It lands
   on the admin's dashboard by default; point `:login-redirect` elsewhere.

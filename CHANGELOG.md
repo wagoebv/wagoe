@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **`/api/v1/sessions/{token}` put a live session token in URLs and the logs** (BOU-1015). Use `GET`/`DELETE
+  /api/v1/session` with `X-Session-Token`; the path form is deprecated, and Wagoe's logs mask its token.
 - **Any website could run SQL on the dev database through the dev dashboard** (BOU-1012), or rewrite its config. It
   writes only from its own page and runs one reading query; bound beyond 127.0.0.1, open it with the logged URL.
 - **A tenant's admin could change their tenant's status, features and limits, or delete it, in the admin** (BOU-1011).

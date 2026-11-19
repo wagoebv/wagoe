@@ -454,6 +454,24 @@
       ;; The token is not echoed back in an error body.
       (is (not (re-find (re-pattern invalid-token) (pr-str (:body response))))))))
 
+(deftest ^:contract ^:security the-session-in-a-header-validates-and-ends-without-the-url
+  ;; BOU-1015: the token in the path reached access logs
+  (let [service  (create-mock-service)
+        session  (ports/authenticate-user service {:user-id (UUID/randomUUID)})
+        token    (:session-token session)
+        route    (some (fn [[path data]] (when (= "/session" path) data))
+                       (user-http/api-routes service nil))
+        get-h    (get-in route [:get :handler])
+        del-h    (get-in route [:delete :handler])]
+    (is (= 200 (:status (get-h {:headers {"x-session-token" token}}))))
+    (is (= 204 (:status (del-h {:cookies {"session-token" {:value token}}}))))
+    (is (nil? (ports/validate-session service token)) "ended")
+    (testing "a body token, and no token at all"
+      (let [other (:session-token (ports/authenticate-user service {:user-id (UUID/randomUUID)}))]
+        (is (= 204 (:status (del-h {:body-params {:token other}}))))
+        (is (nil? (ports/validate-session service other))))
+      (is (= :not-found (try (get-h {}) nil (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))))))
+
 (deftest ^:contract test-invalidate-session-handler
   (testing "DELETE /sessions/:token - Invalidate session successfully"
     (let [service (create-mock-service)

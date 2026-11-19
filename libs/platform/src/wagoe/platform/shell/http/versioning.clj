@@ -13,7 +13,8 @@
    - Multiple version support concurrently"
   (:require
    [clojure.string :as str]
-   [clojure.tools.logging :as log]))
+   [clojure.tools.logging :as log]
+   [wagoe.core.utils.pii-redaction :as pii]))
 
 ;; =============================================================================
 ;; Version Configuration
@@ -152,7 +153,7 @@
                            (let [location (cond-> (str version-prefix (subs uri (count api)))
                                             (seq query-string) (str "?" query-string))]
                              (log/debug "Redirecting unversioned request"
-                                        {:from uri :to location})
+                                        {:from (pii/redact-uri uri)})
                              {:status 307  ; Temporary Redirect (preserves method)
                               :headers {"Location" location
                                         "X-API-Deprecated-Path" "true"}

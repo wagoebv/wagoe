@@ -223,6 +223,17 @@
       ;; Return the response from context
       (:response result-context))))
 
+(defn- with-presented-token
+  "`handler` for a session token the caller presents in X-Session-Token, the
+   session cookie or a JSON body `token`, not in the path, where logs and
+   proxies keep it (BOU-1015). No token is a 404, like an unknown session."
+  [handler]
+  (fn [request]
+    (if-let [token (or (user-middleware/extract-session-token request)
+                       (get-in request [:body-params :token]))]
+      (handler (assoc-in request [:parameters :path :token] token))
+      (throw (ex-info "No session token presented" {:type :not-found})))))
+
 (defn invalidate-session-handler
   "DELETE /api/sessions/:token - Invalidate session using interceptor pipeline."
   [user-service]
@@ -460,15 +471,28 @@
               :tags       ["sessions"]
               :parameters {:body credentials-body}
               :responses  login-responses}}]
-     ;; The token in the path is the credential.
+     ;; The token comes in X-Session-Token, the cookie or the body, never the URL (BOU-1015)
+     ["/session"
+      {:public true
+       :openapi {:parameters [{:name "X-Session-Token" :in "header" :required false
+                               :schema {:type "string"}}]}
+       :get    {:handler    (with-presented-token (validate-session-handler user-service))
+                :summary    "Validate the session in X-Session-Token or the session cookie"
+                :tags       ["sessions"]}
+       :delete {:handler    (with-presented-token (invalidate-session-handler user-service))
+                :summary    "Invalidate the session in X-Session-Token or the session cookie (logout)"
+                :tags       ["sessions"]}}]
+     ;; Deprecated: the token in the path reaches access logs; use /session
      ["/sessions/:token"
       {:public true
        :get    {:handler    (validate-session-handler user-service)
-                :summary    "Validate session"
+                :summary    "Validate session (deprecated: use GET /session)"
+                :openapi    {:deprecated true}
                 :tags       ["sessions"]
                 :parameters {:path [:map [:token :string]]}}
        :delete {:handler    (invalidate-session-handler user-service)
-                :summary    "Invalidate session (logout)"
+                :summary    "Invalidate session (deprecated: use DELETE /session)"
+                :openapi    {:deprecated true}
                 :tags       ["sessions"]
                 :parameters {:path [:map [:token :string]]}}}]
      ["/auth/mfa/setup"
