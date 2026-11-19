@@ -565,6 +565,8 @@
                   (release-login-attempt [_ _ _] nil)
                   wagoe.user.ports/IBackupCodes
                   (consume-backup-code [_ _ _] false)
+                  wagoe.user.ports/ITotpSteps
+                  (claim-totp-step [_ _ _] true)
                   wagoe.user.ports/IAdminLock
                   (with-admins-locked [_ f] (f)))
         svc     (mfa/create-mfa-service repo {})

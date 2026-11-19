@@ -415,3 +415,20 @@
     (testing "a disable clears the count, as a sign-in does"
       (is (:success? (disable fx {:password "Right-Pass-1!"})))
       (is (zero? (get-in @users [id :failed-login-count]))))))
+
+(deftest ^:unit ^:security a-totp-code-proves-once
+  ;; BOU-1016: the same code, in turn and in parallel, then the next window's
+  (let [{:keys [users id] :as fx} (disable-fixture nil)
+        repo (mem/->MemoryUserRepository users)
+        user #(get @users id)
+        code (totp-clock/code mem/mfa-secret)]
+    (is (:valid? (mfa-shell/check-code! repo (user) code)))
+    (is (not (:valid? (mfa-shell/check-code! repo (user) code))) "in turn")
+    (binding [mfa-shell/*now* (.plusSeconds totp-clock/window-edge 30)]
+      (let [next-code (totp-clock/code mem/mfa-secret)
+            tries     (doall (repeatedly 8 #(future (mfa-shell/check-code! repo (user) next-code))))]
+        (is (= 1 (count (filter :valid? (map deref tries)))) "in parallel")))
+    (binding [mfa-shell/*now* (.minusSeconds totp-clock/window-edge 30)]
+      (is (not (:valid? (mfa-shell/check-code! repo (user) (totp-clock/code mem/mfa-secret)))) "nor an older window's"))
+    (is (:valid? (mfa-shell/check-code! repo (user) "AAAA-BBBB-CCCC")) "a backup code is apart")
+    (is (= :invalid-proof (get-in (disable fx {:code code}) [:error :type])) "nor disables MFA")))

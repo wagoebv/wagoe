@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A TOTP code could sign in twice in its 30 s window** (BOU-1016), so a relayed code also opened a parallel login.
+  Each window's code is accepted once now. A user repository of your own implements `ITotpSteps`; see `UPGRADING.md`.
 - **`/api/v1/sessions/{token}` put a live session token in URLs and the logs** (BOU-1015). Use `GET`/`DELETE
   /api/v1/session` with `X-Session-Token`; the path form is deprecated, and Wagoe's logs mask its token.
 - **Any website could run SQL on the dev database through the dev dashboard** (BOU-1012), or rewrite its config. It

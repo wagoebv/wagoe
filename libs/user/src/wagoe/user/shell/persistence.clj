@@ -1090,6 +1090,20 @@
                                 [:or [:is :mfa_backup_codes_used nil] [:= :mfa_backup_codes_used "[]"]])]}))))
      {:db-ctx ctx}))
 
+  ports/ITotpSteps
+  (claim-totp-step [_ user-id step]
+    (persistence-interceptors/execute-persistence-operation
+     :claim-totp-step
+     {:user-id user-id}
+     (fn [_]
+       (pos? (db/execute-update!
+              ctx {:update :auth_users
+                   :set    {:mfa_last_step step}
+                   :where  [:and
+                            [:= :id (type-conversion/uuid->string user-id)]
+                            [:or [:is :mfa_last_step nil] [:< :mfa_last_step step]]]})))
+     {:db-ctx ctx}))
+
   ports/IAdminLock
   (with-admins-locked [_ f]
     ;; A no-op write rather than SELECT … FOR UPDATE: it locks the rows on

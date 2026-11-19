@@ -110,6 +110,12 @@
                                        (ok? %) (update-in [(:id user) :mfa-backup-codes-used] (fnil conj []) code-hash)))]
       (ok? old)))
 
+  ports/ITotpSteps
+  (claim-totp-step [_ user-id step]
+    (let [newer? #(< (or (get-in % [user-id :mfa-last-step]) -1) step)
+          [old _] (swap-vals! state #(cond-> % (newer? %) (assoc-in [user-id :mfa-last-step] step)))]
+      (newer? old)))
+
   ports/IAdminLock
   (with-admins-locked [_ f] (f)))
 

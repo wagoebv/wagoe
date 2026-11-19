@@ -63,15 +63,15 @@
      Boolean - true if code is valid
      
    Side effects: Time-dependent verification"
-  [code secret]
-  (try
-    (if (and code secret)
-      (let [code-int (Integer/parseInt (str/trim code))]
-        (boolean (otp/is-valid-totp-token? code-int secret
-                                           {:date (Date/from (or *now* (Instant/now)))})))
-      false) ; Explicit false instead of nil when inputs invalid
-    (catch Exception _e
-      false)))
+  ([code secret] (verify-totp-code code secret (or *now* (Instant/now))))
+  ([code secret ^Instant at]
+   (try
+     (if (and code secret)
+       (let [code-int (Integer/parseInt (str/trim code))]
+         (boolean (otp/is-valid-totp-token? code-int secret {:date (Date/from at)})))
+       false) ; Explicit false instead of nil when inputs invalid
+     (catch Exception _e
+       false))))
 
 (defn generate-totp-uri
   "Shell function: Generate TOTP URI for QR code.
@@ -196,7 +196,7 @@
   [mfa-service user-id]
   (let [{:keys [user-repository]} mfa-service]
     (try
-      (let [user (.find-user-by-id user-repository user-id)
+      (let [user (ports/find-user-by-id user-repository user-id)
             can-enable (mfa-core/can-enable-mfa? user)]
         (if (:can-enable? can-enable)
           ;; Generate MFA setup data
@@ -230,7 +230,7 @@
   [mfa-service user-id secret backup-codes verification-code]
   (let [{:keys [user-repository]} mfa-service]
     (try
-      (let [user (.find-user-by-id user-repository user-id)
+      (let [user (ports/find-user-by-id user-repository user-id)
             can-enable (mfa-core/can-enable-mfa? user)]
         (if (:can-enable? can-enable)
           ;; Verify the code before enabling
@@ -248,7 +248,7 @@
                          :mfa-enabled (:mfa-enabled updates)
                          :has-secret (boolean (:mfa-secret updates))
                          :backup-codes-count (count (:mfa-backup-codes updates))})
-              (.update-user user-repository (assoc updates :id (:id user)))
+              (ports/update-user user-repository (assoc updates :id (:id user)))
               {:success? true})
             ;; Invalid verification code
             {:success? false
@@ -287,26 +287,29 @@
    Returns:
      {:valid? boolean
       :used-backup-code? boolean
-      :code-hash string (the matched backup code's stored hash)}
+      :code-hash string (the matched backup code's stored hash)
+      :totp-step long (the 30 s window a TOTP code matched in)}
 
-   Spending the backup code is the caller's: `ports/consume-backup-code`."
+   Spending the code is the caller's: `check-code!`."
   [_mfa-service user code]
-  (cond
-      ;; Try TOTP verification first
-    (verify-totp-code code (:mfa-secret user))
-    {:valid? true
-     :used-backup-code? false}
+  (let [now (or *now* (Instant/now))]
+    (cond
+      ;; Try TOTP verification first; the step recorded is the one checked
+      (verify-totp-code code (:mfa-secret user) now)
+      {:valid? true
+       :used-backup-code? false
+       :totp-step (quot (.getEpochSecond now) 30)}
 
       ;; Try backup code — hash-verify the presented code against stored bcrypt
       ;; hashes, excluding already-used ones. The matched hash (not the plaintext)
       ;; is what gets recorded as used.
-    :else
-    (if-let [used-hash (find-unused-backup-code-hash user code)]
-      {:valid? true
-       :used-backup-code? true
-       :code-hash used-hash}
-      {:valid? false
-       :used-backup-code? false})))
+      :else
+      (if-let [used-hash (find-unused-backup-code-hash user code)]
+        {:valid? true
+         :used-backup-code? true
+         :code-hash used-hash}
+        {:valid? false
+         :used-backup-code? false}))))
 
 (defn- spend-backup-code!
   "Spend hash `h`. The write is conditional on the codes being as read; when a
@@ -322,11 +325,14 @@
                (recur fresh (dec tries)))))))
 
 (defn check-code!
-  "Verify `code`, spending it when it is a backup code."
+  "Verify `code`, spending it: a backup code once, a TOTP code's time step
+   once (BOU-1016)."
   [user-repository user code]
   (let [check (verify-mfa-code nil user code)]
-    (if (or (not (:used-backup-code? check))
-            (spend-backup-code! user-repository user (:code-hash check)))
+    (if (cond
+          (:used-backup-code? check) (spend-backup-code! user-repository user (:code-hash check))
+          (:totp-step check)         (ports/claim-totp-step user-repository (:id user) (:totp-step check))
+          :else                      true)
       check
       {:valid? false :used-backup-code? false})))
 
@@ -431,7 +437,7 @@
   [mfa-service user-id]
   (let [{:keys [user-repository]} mfa-service]
     (try
-      (let [user (.find-user-by-id user-repository user-id)]
+      (let [user (ports/find-user-by-id user-repository user-id)]
         (if user
           (mfa-core/get-mfa-status user)
           {:enabled false

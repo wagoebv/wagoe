@@ -92,6 +92,13 @@ TRUE and the rest to FALSE, and the warning stops:
 `UPDATE auth_users SET self_registered = TRUE WHERE id IN (…)`, then
 `UPDATE auth_users SET self_registered = FALSE WHERE self_registered IS NULL`.
 
+### 8. A TOTP code is accepted once (BOU-1016)
+
+`auth_users.mfa_last_step` records the 30 s window of the last code accepted,
+and a code from that window or an earlier one is refused. The migration adds
+the column. A user repository of your own must implement `ITotpSteps`: the MFA
+service refuses to boot without it (WGE-107).
+
 ## 1.1.x → 1.2.0
 
 Mostly security. Steps 1 to 4 change what an existing app does at runtime;

@@ -1,10 +1,11 @@
 (ns wagoe.user.shell.backup-code-race-security-test
   "Parallel logins could each spend one backup code, and a code marked used by
-   one could be lost to another's write (BOU-708). WAGOE_TEST_DB picks the
-   engine."
+   one could be lost to another's write (BOU-708); a TOTP code could sign in
+   twice (BOU-1016). WAGOE_TEST_DB picks the engine."
   (:require [clojure.test :refer [deftest is testing]]
             [support.test-db :as test-db]
             [wagoe.user.ports :as ports]
+            [wagoe.user.totp-clock :as totp-clock]
             [wagoe.user.shell.auth :as auth]
             [wagoe.user.shell.mfa :as mfa]
             [wagoe.user.shell.mfa-crypto :as mfa-crypto]
@@ -70,3 +71,33 @@
       (is (every? :authenticated (parallel-logins service user codes)))
       (is (= 2 (count (:mfa-backup-codes-used (ports/find-user-by-id users (:id user)))))
           "neither mark is lost"))))
+
+(deftest ^:integration ^:security a-totp-code-signs-in-once
+  ;; BOU-1016: a relayed code was good for a second login in its 30 s window
+  (with-mfa-user "totp_once"
+    (fn [{:keys [users service user]}]
+      (binding [mfa/*now* totp-clock/window-edge]
+        (let [secret  (:mfa-secret (ports/find-user-by-id users (:id user)))
+              code    (totp-clock/code secret)
+              results (parallel-logins service user (repeat 4 code))]
+          (is (= 1 (count (filter :authenticated results))) "one login spends it")
+          (is (= (repeat 3 :mfa-verification-failed) (keep :reason results)))
+          (testing "in turn too"
+            (is (not (:authenticated (first (parallel-logins service user [code]))))))
+          (testing "the next window's code still signs in"
+            (binding [mfa/*now* (.plusSeconds totp-clock/window-edge 30)]
+              (is (:authenticated (first (parallel-logins service user [(totp-clock/code secret)]))))))
+          (testing "an older window's, unused, does not"
+            (binding [mfa/*now* (.minusSeconds totp-clock/window-edge 30)]
+              (is (not (:authenticated (first (parallel-logins service user [(totp-clock/code secret)]))))))))))))
+
+(deftest ^:integration ^:security a-wrong-password-does-not-spend-the-code
+  ;; Only a sign-in whose password held spends its window (BOU-1016)
+  (with-mfa-user "totp_wrong_pw"
+    (fn [{:keys [users service user]}]
+      (binding [mfa/*now* totp-clock/window-edge]
+        (let [code  (totp-clock/code (:mfa-secret (ports/find-user-by-id users (:id user))))
+              login #(ports/authenticate-user service {:email (:email user) :password % :mfa-code code
+                                                       :ip-address "203.0.113.9" :user-agent "test"})]
+          (is (not (:authenticated (login "wrong-password"))))
+          (is (:authenticated (login password))))))))

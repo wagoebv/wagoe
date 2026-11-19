@@ -80,6 +80,12 @@
   ;; two logins spending one code cannot both succeed (BOU-708). Returns
   ;; boolean; false when either changed since `user` was read.
 
+(defprotocol ITotpSteps
+  (claim-totp-step [this user-id step]))
+  ;; Records `step`, the 30 s window a TOTP code was accepted in, as the
+  ;; user's last, only while it is newer than the last: one code cannot sign
+  ;; in twice, in turn or in parallel (BOU-1016). Returns boolean.
+
 (defprotocol IAdminLock
   (with-admins-locked [this f]))
   ;; Calls (f) in one transaction that first locks the admins' rows, so
