@@ -72,7 +72,9 @@
        [:lockout-until {:optional true} [:maybe inst?]]
        ;; Made at /web/register: nobody proved the email, so an OIDC sign-in
        ;; with it is never linked to the account (BOU-1009)
-       [:self-registered {:optional true} [:maybe :boolean]]]
+       [:self-registered {:optional true} [:maybe :boolean]]
+       ;; The last TOTP time step a code was accepted in: none twice (BOU-1016)
+       [:mfa-last-step {:optional true} [:maybe :int]]]
       (into audit-timestamps-flat-fields)))
 
 (def TenantUser

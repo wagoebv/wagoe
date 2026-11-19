@@ -52,6 +52,11 @@
    so a code they generate cannot fall into the next 30 s window."
   nil)
 
+(defn- totp-step
+  "The 30 s window a code checked now belongs to."
+  []
+  (quot (.getEpochSecond ^Instant (or *now* (Instant/now))) 30))
+
 (defn verify-totp-code
   "Shell function: Verify TOTP code against secret.
    
@@ -291,22 +296,25 @@
 
    Spending the backup code is the caller's: `ports/consume-backup-code`."
   [_mfa-service user code]
-  (cond
+  ;; One instant, so the step recorded is the one the code was checked in
+  (binding [*now* (or *now* (Instant/now))]
+    (cond
       ;; Try TOTP verification first
-    (verify-totp-code code (:mfa-secret user))
-    {:valid? true
-     :used-backup-code? false}
+      (verify-totp-code code (:mfa-secret user))
+      {:valid? true
+       :used-backup-code? false
+       :totp-step (totp-step)}
 
       ;; Try backup code — hash-verify the presented code against stored bcrypt
       ;; hashes, excluding already-used ones. The matched hash (not the plaintext)
       ;; is what gets recorded as used.
-    :else
-    (if-let [used-hash (find-unused-backup-code-hash user code)]
-      {:valid? true
-       :used-backup-code? true
-       :code-hash used-hash}
-      {:valid? false
-       :used-backup-code? false})))
+      :else
+      (if-let [used-hash (find-unused-backup-code-hash user code)]
+        {:valid? true
+         :used-backup-code? true
+         :code-hash used-hash}
+        {:valid? false
+         :used-backup-code? false}))))
 
 (defn- spend-backup-code!
   "Spend hash `h`. The write is conditional on the codes being as read; when a
@@ -322,11 +330,14 @@
                (recur fresh (dec tries)))))))
 
 (defn check-code!
-  "Verify `code`, spending it when it is a backup code."
+  "Verify `code`, spending it: a backup code once, a TOTP code's time step
+   once (BOU-1016)."
   [user-repository user code]
   (let [check (verify-mfa-code nil user code)]
-    (if (or (not (:used-backup-code? check))
-            (spend-backup-code! user-repository user (:code-hash check)))
+    (if (cond
+          (:used-backup-code? check) (spend-backup-code! user-repository user (:code-hash check))
+          (:totp-step check)         (ports/claim-totp-step user-repository (:id user) (:totp-step check))
+          :else                      true)
       check
       {:valid? false :used-backup-code? false})))
 
@@ -398,8 +409,8 @@
           :else
           ;; One attempt per field given: a request is not two guesses for one.
           (let [claim (lockout/claim-attempts! user-repository auth-config user-id
-                                       (count (remove str/blank? [(:password proof) (:code proof)]))
-                                       now)]
+                                               (count (remove str/blank? [(:password proof) (:code proof)]))
+                                               now)]
             (cond
               (not (:claimed? claim))
               {:success? false :error (lockout/locked-error (:retry-after claim))}

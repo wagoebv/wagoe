@@ -47,6 +47,8 @@
   (release-login-attempt [_ _ _] nil)
   ports/IBackupCodes
   (consume-backup-code [_ _ _] false)
+  ports/ITotpSteps
+  (claim-totp-step [_ _ _] true)
   ports/IAdminLock
   (with-admins-locked [_ f] (f)))
 
@@ -328,6 +330,8 @@
                  (release-login-attempt [_ _ _] nil)
                  ports/IBackupCodes
                  (consume-backup-code [_ _ _] false)
+                 ports/ITotpSteps
+                 (claim-totp-step [_ _ _] true)
                  ports/IAdminLock
                  (with-admins-locked [_ f] (f)))
           service (sut/->UserService repo nil nil {} nil)]
@@ -377,6 +381,8 @@
                  (release-login-attempt [_ _ _] nil)
                  ports/IBackupCodes
                  (consume-backup-code [_ _ _] false)
+                 ports/ITotpSteps
+                 (claim-totp-step [_ _ _] true)
                  ports/IAdminLock
                  (with-admins-locked [_ f] (f)))
           service (sut/->UserService repo nil nil {} nil)]
@@ -410,6 +416,8 @@
                      (release-login-attempt [_ _ _] nil)
                      ports/IBackupCodes
                      (consume-backup-code [_ _ _] false)
+                     ports/ITotpSteps
+                     (claim-totp-step [_ _ _] true)
                      ports/IAdminLock
                      (with-admins-locked [_ f] (f)))
                    (->SessionRepoStub session)
@@ -482,6 +490,8 @@
                      (release-login-attempt [_ _ _] nil)
                      ports/IBackupCodes
                      (consume-backup-code [_ _ _] false)
+                     ports/ITotpSteps
+                     (claim-totp-step [_ _ _] true)
                      ports/IAdminLock
                      (with-admins-locked [_ f] (f)))
                    ;; Deactivation ends the user's sessions (BOU-665).

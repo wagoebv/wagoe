@@ -119,7 +119,8 @@
   [_ {:keys [user-repository mfa-config] :as opts}]
   (log/info "Initializing MFA service")
   (require-protocols! "user repository" user-repository
-                      {"IBackupCodes" [ports/IBackupCodes ['consume-backup-code]]})
+                      {"IBackupCodes" [ports/IBackupCodes ['consume-backup-code]]
+                       "ITotpSteps"   [ports/ITotpSteps ['claim-totp-step]]})
   (let [service (user-mfa/create-mfa-service user-repository mfa-config opts)]
     (log/info "MFA service initialized")
     service))
