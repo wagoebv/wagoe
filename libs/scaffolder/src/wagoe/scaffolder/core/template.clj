@@ -279,6 +279,11 @@
   "What `references-table` may be: a lowercase SQL identifier."
   #"^[a-z][a-z0-9_]*$")
 
+(def field-name-pattern
+  "What a field may be named: it becomes a column in DDL and part of a
+   migration's file name, so lowercase kebab-case only (BOU-1018 review)."
+  #"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
+
 (def plural-pattern
   "What an entity's `plural` may be: it names a table, a URL and an admin file,
    so a lowercase word, never a path (BOU-1018)."

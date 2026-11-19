@@ -26,7 +26,9 @@
 (def FieldShape
   "The keys a field definition may carry."
   [:map {:title "Field Definition"}
-   [:name :keyword]                                         ; Field name (kebab-case)
+   [:name [:and :keyword                                    ; Field name (kebab-case)
+           [:fn {:error/message "a field name is lowercase kebab-case"}
+            #(boolean (re-matches template/field-name-pattern (name %)))]]]
    [:type FieldType]                                        ; Field type
    [:required {:optional true} :boolean]                    ; Is field required?
    [:unique {:optional true} :boolean]                      ; Is field unique?

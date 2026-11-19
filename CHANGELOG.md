@@ -32,7 +32,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Security
 
 - **The MCP `scaffold-module` tool wrote `.edn` files outside the project through an entity's plural** (BOU-1018).
-  A plural, parent or referenced table must be an identifier now, and the scaffolder writes only under its output dir.
+  Plurals, parents, referenced tables and field names must be identifiers, and scaffolder writes stay in the output dir.
 - **The publish job ran third-party actions by tag next to the Clojars credentials** (BOU-1017). Every workflow
   action is pinned to a commit and bb to a version; attesting and releasing the installer are their own jobs.
 - **A TOTP code could sign in twice in its 30 s window** (BOU-1016), so a relayed code also opened a parallel login.

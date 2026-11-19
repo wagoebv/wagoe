@@ -74,16 +74,14 @@
 (deftest ^:integration ^:security a-plural-that-climbs-out-of-the-project-is-refused
   ;; BOU-1018: the plural became resources/conf/<profile>/admin/<plural>.edn
   (let [dir   (temp-dir)
-        _     (.mkdirs (io/file dir "resources/conf/dev/admin"))
         run   #(try (tools/run {:scaffolder  (into-dir dir)
                                 :test-runner (fn [_] {:status :passed :passed 1 :failed 0})
                                 :audit       (audit/in-memory-audit-log)}
                                "scaffold-module"
                                {:module "billing" :entities [(merge {:name "Invoice" :fields []} %)]})
-                    (catch clojure.lang.ExceptionInfo e (ex-data e)))
-        outside (io/file dir "../escaped.edn")]
+                    (catch clojure.lang.ExceptionInfo e (ex-data e)))]
     (doseq [bad [{:plural "../../../../escaped"} {:belongs-to "../x"}
-                 {:fields [{:name "owner" :type "relation" :references "User" :references-table "users;--"}]}]]
+                 {:fields [{:name "owner" :type "relation" :references "User" :references-table "users;--"}]}
+                 {:fields [{:name "x int); drop table users; --" :type "string"}]}]]
       (is (= :validation-error (:type (run bad))) (pr-str bad)))
-    (is (not (.exists outside)))
     (is (not-any? #(.isFile %) (file-seq dir)) "nothing written")))

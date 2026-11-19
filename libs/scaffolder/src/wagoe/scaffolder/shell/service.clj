@@ -1202,7 +1202,10 @@
         {:success false
          :module-name (:module-name request)
          :files []
-         :errors [(str "Add adapter failed: " (.getMessage e))]}))))
+         :errors (if (= ::refuse-overwrite (:type (ex-data e)))
+                   (into ["The adapter already exists (--force replaces it):"]
+                         (map #(str "  " %) (:existing (ex-data e))))
+                   [(str "Add adapter failed: " (.getMessage e))])}))))
 
 (defn create-scaffolder-service
   "Create a new scaffolder service.
