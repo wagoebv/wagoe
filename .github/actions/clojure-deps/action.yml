@@ -50,7 +50,7 @@ runs:
         java-version: "21"
 
     - name: Setup Clojure
-      uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
+      uses: DeLaGuardo/setup-clojure@6d46099eae24853c33c0482f2bb54edf4f1a4c74 # 13.7.0
       with:
         cli: 1.12.6.1673
 
@@ -79,7 +79,7 @@ runs:
     # v5: those now include kaocha-cloverage (BOU-620).
     - name: Cache dependencies
       id: cache
-      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ~/.m2/repository
