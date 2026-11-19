@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A tenant's admin could change their tenant's status, features and limits, or delete it, in the admin** (BOU-1011).
+  Add `:platform-fields #{:status :settings}` and `:permissions {:delete :platform-admin}` to your own `tenants.edn`.
 - **A tenant's admin streaming in another tenant got that tenant's admin messages** (BOU-1010). An SSE stream now
   holds the roles held in its tenant: there, a membership's role, or `:admin` for a platform admin.
 - **Someone could register a victim's email and keep the account the victim later linked by OIDC** (BOU-1009). An

@@ -72,7 +72,8 @@
                                                                   "Tenant membership required" request
                                                                   (core-access/correlation-id request (str (random-uuid))))
                                   (identical? svc admin-service) (plain request)
-                                  :else                          ((ctor svc schema-provider config) request))))))]
+                                  :else                          ((ctor svc (scoped-service/schema-for-request schema-provider request) config)
+                                                                  request))))))]
 
     [["/"
       {:middleware [auth-middleware]

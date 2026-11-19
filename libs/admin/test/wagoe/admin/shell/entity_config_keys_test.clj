@@ -30,7 +30,8 @@
                             :field-groups    [{:id :main :label "Main" :fields [:number]}]
                             :has-many        has-many
                             :parent-context  {:label "Customer" :fields [:name]}
-                            :permissions     {:create false :create-hint "elsewhere"}
+                            :permissions     {:create false :create-hint "elsewhere" :delete :platform-admin}
+                            :platform-fields #{:number}
                             :workflow        {:entity-type :invoice}
                             :module          :billing
                             :ui             {:field-grouping {:other-label "More"}}}))))

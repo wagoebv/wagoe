@@ -170,7 +170,9 @@
    [:join-table      {:optional true} :boolean]
    [:permissions     {:optional true} [:map {:closed true}
                                        [:create {:optional true} :boolean]
-                                       [:create-hint {:optional true} :string]]]
+                                       [:create-hint {:optional true} :string]
+                                       [:delete {:optional true} [:enum :platform-admin]]]]
+   [:platform-fields {:optional true} [:set :keyword]]
    [:ui              {:optional true} [:map {:closed true}
                                        [:field-grouping {:optional true}
                                         [:map {:closed true}

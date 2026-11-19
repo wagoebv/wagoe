@@ -125,6 +125,15 @@
   (writable! schema-provider user entity-name (if before (delay (merge @before data)) data))
   (targets-readable! inner schema-provider user entity-name data before))
 
+(defn- without-platform-fields
+  "`data` without the entity's `:platform-fields` unless `user` is a platform
+   admin: to anyone else they are read-only (BOU-1011)."
+  [schema-provider user entity-name data]
+  (let [fields (:platform-fields (ports/get-entity-config schema-provider entity-name))]
+    (if (or (empty? fields) (access/platform-admin? user))
+      data
+      (apply dissoc data fields))))
+
 (defn- with-link-scopes
   "`data` with the scopes its `:admin/links` must keep to: a link to a record
    the user may not read is neither added nor removed."
@@ -183,11 +192,13 @@
         rows)))
 
   (create-entity [_ entity-name data]
-    (checked! inner schema-provider user entity-name data)
-    (ports/create-entity inner entity-name (with-link-scopes schema-provider user entity-name data)))
+    (let [data (without-platform-fields schema-provider user entity-name data)]
+      (checked! inner schema-provider user entity-name data)
+      (ports/create-entity inner entity-name (with-link-scopes schema-provider user entity-name data))))
 
   (create-entity-with-children [_ entity-name data children]
-    (let [nested (set (map :entity (:has-many (ports/get-entity-config schema-provider entity-name))))]
+    (let [nested (set (map :entity (:has-many (ports/get-entity-config schema-provider entity-name))))
+          data   (without-platform-fields schema-provider user entity-name data)]
       (checked! inner schema-provider user entity-name data)
       ;; Each row against its own entity's scopes: a child was created in any tenant (BOU-992).
       ;; A child the parent does not create is left to the inner service to refuse.
@@ -198,11 +209,16 @@
       (ports/create-entity-with-children inner entity-name (with-link-scopes schema-provider user entity-name data) children)))
 
   (update-entity [_ entity-name id data]
-    (let [record (stored inner schema-provider user entity-name id)]
+    (let [record (stored inner schema-provider user entity-name id)
+          data   (without-platform-fields schema-provider user entity-name data)]
       (checked! inner schema-provider user entity-name data record)
       (ports/update-entity inner entity-name id (with-link-scopes schema-provider user entity-name data))))
 
   (update-entity-field [_ entity-name id field value]
+    (when (and (contains? (:platform-fields (ports/get-entity-config schema-provider entity-name)) field)
+               (not (access/platform-admin? user)))
+      (throw (ex-info "Only a platform admin changes this field"
+                      {:type :forbidden :entity entity-name :field field :reason :platform-admin-only})))
     (let [record (stored inner schema-provider user entity-name id)]
       (checked! inner schema-provider user entity-name {field value} record))
     (ports/update-entity-field inner entity-name id field value))
@@ -214,6 +230,29 @@
   (bulk-delete-entities [_ entity-name ids]
     (inside! inner schema-provider user entity-name :write ids)
     (ports/bulk-delete-entities inner entity-name ids)))
+
+(defn- platform-readonly
+  "`entity-config` with its `:platform-fields` read-only (BOU-1011)."
+  [entity-config]
+  (if-let [fields (seq (:platform-fields entity-config))]
+    (-> entity-config
+        (update :readonly-fields (fnil into #{}) fields)
+        (update :editable-fields #(some->> % (remove (set fields)) vec)))
+    entity-config))
+
+(defn schema-for-request
+  "`schema-provider` as `request`'s caller sees it: an entity's
+   `:platform-fields` read-only, in forms and lists alike, to anyone but a
+   platform admin (BOU-1011)."
+  [schema-provider request]
+  (if (access/platform-admin? (:user request))
+    schema-provider
+    (reify ports/ISchemaProvider
+      (fetch-table-metadata [_ table] (ports/fetch-table-metadata schema-provider table))
+      (get-entity-config [_ entity] (some-> (ports/get-entity-config schema-provider entity) platform-readonly))
+      (list-available-entities [_] (ports/list-available-entities schema-provider))
+      (get-entity-label [_ entity] (ports/get-entity-label schema-provider entity))
+      (validate-entity-exists [_ entity] (ports/validate-entity-exists schema-provider entity)))))
 
 (defn for-user
   "`admin-service` as `user` may use it: scoped under `:enforce`, else as it is."

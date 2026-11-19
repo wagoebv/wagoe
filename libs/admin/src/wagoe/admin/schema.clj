@@ -242,10 +242,14 @@
                   :description "Whether entity supports soft delete (has deleted-at column)"}
     :boolean]
    [:permissions {:optional true
-                  :description "{:create false} hides and refuses create, for entities another module must create; :create-hint names where they are created instead"}
+                  :description "{:create false} hides and refuses create, for entities another module must create; :create-hint names where they are created instead; {:delete :platform-admin} lets only a platform admin delete"}
     [:map
      [:create {:optional true} :boolean]
-     [:create-hint {:optional true} :string]]]
+     [:create-hint {:optional true} :string]
+     [:delete {:optional true} [:enum :platform-admin]]]]
+   [:platform-fields {:optional true
+                      :description "Fields only a platform admin writes: read-only to anyone else (BOU-1011)"}
+    [:set :keyword]]
    [:ui {:optional true
          :description "UI-specific configuration overrides for this entity"}
     UIConfig]])
@@ -353,7 +357,9 @@
               [:field-groups [:sequential (closed-map :id :label :fields)]]
               [:has-many [:sequential HasManyEntry]]
               [:parent-context (closed-map :label :fields)]
-              [:permissions (closed-map :create :create-hint)]
+              [:permissions (closed-map :create :create-hint [:delete [:enum :platform-admin]])]
+              ;; Fields only a platform admin writes, a tenant's status and limits (BOU-1011)
+              [:platform-fields [:set :keyword]]
               ;; Scope key -> the field it lies in, or a fn (a symbol in EDN)
               ;; from the allowed values to a HoneySQL condition (ADR-041 §4)
               [:scope [:map-of :keyword [:or :keyword :symbol fn?]]]
