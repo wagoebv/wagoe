@@ -50,7 +50,7 @@ jobs:
           - archlinux:latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # No Clojure/Java setup on purpose. The test runs inside a bare container
       # and installs everything through scripts/install.sh; running it on the
@@ -68,7 +68,7 @@ jobs:
     name: Smoke — released tag (visitor)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # The same script, pointed at the published tag instead of this checkout.
       # Every other job here — and `First-Run Smoke` in ci.yml — rewrites the
@@ -101,7 +101,7 @@ jobs:
     name: Smoke — AI enabled (worktree)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: First-run smoke (AI enabled)
         env:
           SMOKE_IMAGE: ubuntu:24.04
@@ -113,7 +113,7 @@ jobs:
     name: Smoke — AI enabled (released tag)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       # Expected red between BOU-414 landing on main and the release carrying
       # it — same contract as smoke-released above: the gap is the signal.
       - name: First-run smoke (released, AI enabled)
@@ -140,7 +140,7 @@ jobs:
           - fedora:41
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: First-run adversarial cases
         env:
@@ -161,7 +161,7 @@ jobs:
           - fedora:41
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: First-run preconditions
         env:
@@ -198,7 +198,7 @@ jobs:
       actions: read
       issues: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Open or update the nightly-failure issue
         env:
           GH_TOKEN: ${{ github.token }}
@@ -216,7 +216,7 @@ jobs:
       contents: read
       issues: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - name: Close the nightly-failure issue
         env:
           GH_TOKEN: ${{ github.token }}

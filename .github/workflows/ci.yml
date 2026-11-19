@@ -59,14 +59,14 @@ jobs:
       first-run: ${{ steps.classify.outputs.first-run }}
       skip-jobs: ${{ steps.classify.outputs.skip-jobs }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
 
       - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
+        uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
         with:
-          bb: latest
+          bb: 1.13.229
 
       - name: Code or docs only
         id: classify
@@ -77,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -97,7 +97,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -129,10 +129,10 @@ jobs:
     if: needs.changes.outputs.code == 'true'
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "22"
           cache: npm
@@ -161,7 +161,7 @@ jobs:
     needs: warm-deps
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -172,7 +172,7 @@ jobs:
         run: clojure -M:docs-lint
 
       - name: Upload docs-lint report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: docs-lint-report
@@ -194,14 +194,14 @@ jobs:
       # Full history: check:changelog compares against the merge base with the
       # target branch, and a shallow clone has neither the base nor a common
       # ancestor.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
 
       - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
+        uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
         with:
-          bb: latest
+          bb: 1.13.229
 
       - name: Validate dev config
         if: ${{ !cancelled() }}
@@ -336,7 +336,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # Prefetch every alias set smoke-check invokes (:migrate and :test) so each
       # reuses a warm .cpcache and performs no concurrent resolution.
@@ -346,9 +346,9 @@ jobs:
           aliases: -M:migrate -M:test
 
       - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
+        uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
         with:
-          bb: latest
+          bb: 1.13.229
 
       - name: Run command smoke check
         run: bb smoke-check
@@ -394,7 +394,7 @@ jobs:
           - libs: [tenant, test, ui-style, user, wagoe-cli, wagoe-mcp, webhooks, workflow]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # The composite action rather than a hand-rolled setup-clojure + cache.
       # It carries the versioned cache key — the un-versioned one it replaced was
@@ -415,9 +415,9 @@ jobs:
           also-warm: libs/${{ join(matrix.libs, ' libs/') }}
 
       - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
+        uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
         with:
-          bb: latest
+          bb: 1.13.229
 
       # Requires every namespace each library ships, from the library's own
       # directory, so the classpath is its deps.edn and nothing else. One JVM
@@ -467,21 +467,21 @@ jobs:
     if: needs.changes.outputs.code == 'true'
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # This job boots the generated app, so it answers for the JDK baseline
       # too; it does not use the clojure-deps action, where the pin lives.
       - name: Setup Java
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Setup Clojure
-        uses: DeLaGuardo/setup-clojure@13.6.1
+        uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
         with:
           cli: 1.12.6.1673
-          bb: latest
+          bb: 1.13.229
 
       - name: Run the examples
         run: ./scripts/example-smoke.sh
@@ -502,7 +502,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' config ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -547,7 +547,7 @@ jobs:
     # which the per-library jobs already run, and made this the job the whole
     # run waited on (BOU-615). It is gone now: it ran every test twice locally.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -569,7 +569,7 @@ jobs:
     # The :security set again, as its own job: a red security test reads
     # differently from a red unit test (BOU-899).
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -589,7 +589,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' core ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -608,7 +608,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' observability ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -627,7 +627,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' platform ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -660,7 +660,7 @@ jobs:
           --health-retries 30
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -679,7 +679,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' user ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -710,7 +710,7 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -729,7 +729,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' ui-style ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -748,7 +748,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' shared-ui ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -767,7 +767,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' storage ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # A step and not a `services:` entry: waiting for the endpoint here means a
       # server that never came up fails this step, rather than letting the suite
@@ -836,7 +836,7 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -869,7 +869,7 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -888,7 +888,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' test ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -921,7 +921,7 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -940,7 +940,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' tenant ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -959,7 +959,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' audience ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -978,7 +978,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' devtools ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -997,7 +997,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' email ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1029,7 +1029,7 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1048,7 +1048,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' workflow ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1069,7 +1069,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' search ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1104,7 +1104,7 @@ jobs:
           --health-retries 30
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1168,7 +1168,7 @@ jobs:
           --health-retries 30
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # The shared cache: the generated app's deps are :local/root into libs/.
       - name: Setup Clojure + warm deps
@@ -1178,9 +1178,9 @@ jobs:
 
       # The generated project is set up and scaffolded with bb.
       - name: Setup bb
-        uses: DeLaGuardo/setup-clojure@13.6.1
+        uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
         with:
-          bb: latest
+          bb: 1.13.229
 
       - name: Run MySQL smoke
         run: ./scripts/mysql-smoke.sh
@@ -1221,7 +1221,7 @@ jobs:
           --health-retries 30
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1229,9 +1229,9 @@ jobs:
           aliases: "-"
 
       - name: Setup bb
-        uses: DeLaGuardo/setup-clojure@13.6.1
+        uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
         with:
-          bb: latest
+          bb: 1.13.229
 
       - name: Run web crawl smoke
         run: ./scripts/web-crawl-smoke.sh ${{ matrix.engine }}
@@ -1259,7 +1259,7 @@ jobs:
           --health-retries 30
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1281,7 +1281,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' reports ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1300,7 +1300,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' calendar ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1319,7 +1319,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' geo ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1338,7 +1338,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' ai ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1360,7 +1360,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' wagoe-mcp ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1379,7 +1379,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' wagoe-cli ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1389,9 +1389,9 @@ jobs:
 
       # agents_update_test runs a generated project's `bb agents:update`.
       - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
+        uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
         with:
-          bb: latest
+          bb: 1.13.229
 
       - name: Run tests
         working-directory: libs/wagoe-cli
@@ -1407,7 +1407,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' external ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1429,7 +1429,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' payments ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1451,7 +1451,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' push ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1470,7 +1470,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' webhooks ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1492,15 +1492,15 @@ jobs:
     if: needs.changes.outputs.code == 'true'
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
+        uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
         with:
-          bb: latest
+          bb: 1.13.229
 
       - name: Cache dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             ~/.m2/repository
@@ -1521,7 +1521,7 @@ jobs:
     if: contains(format(' {0} ', needs.changes.outputs.libs), ' i18n ')
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1543,7 +1543,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # The composite action rather than a hand-rolled setup + cache. This job
       # had its own of both: an unretried `clojure -P`, and a cache key on the
@@ -1556,12 +1556,12 @@ jobs:
           aliases: -M:test:e2e
 
       - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
+        uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
         with:
-          bb: latest
+          bb: 1.13.229
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-spel-0.7.11
@@ -1593,7 +1593,7 @@ jobs:
 
       - name: Upload failure artifacts
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-failures
           path: |
@@ -1616,12 +1616,12 @@ jobs:
     needs: warm-deps
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
+        uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
         with:
-          bb: latest
+          bb: 1.13.229
 
       # scaffold_ai_test runs the real scaffolder (`clojure -M -m ...`) to prove
       # a dry run writes nothing (BOU-490).
@@ -1653,7 +1653,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup Clojure + warm deps
         uses: ./.github/actions/clojure-deps
@@ -1739,7 +1739,7 @@ jobs:
           echo "ok: served $code on ${HTTP_PORT}"
 
       - name: Upload the uberjar
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: wagoe-uberjar
           path: target/wagoe-*-standalone.jar
@@ -1761,7 +1761,7 @@ jobs:
     if: needs.changes.outputs.first-run == 'true'
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # Deliberately no Clojure/Java setup: the test runs inside a bare
       # ubuntu:24.04 container and installs everything via scripts/install.sh.

@@ -342,15 +342,24 @@ no-API trade the rest of that gate makes.
 
 [source,yaml]
 ----
-- Setup Clojure + Babashka       # DeLaGuardo/setup-clojure with bb: latest
-- Cache ~/.m2 and ~/.gitlibs     # Speeds up subsequent runs
+publish:                         # environment `release`; contents + checks: read
 - Guard: CI passed on the commit # Waits up to 25 min for "All Tests Passed"
+- Setup Clojure + Babashka       # DeLaGuardo/setup-clojure with an exact bb
+- Cache ~/.m2 and ~/.gitlibs     # Speeds up subsequent runs
 - npm ci + npm run build:css     # Builds Tailwind CSS for ui-style jar
 - bb deploy --check-versions NEW # Every build.clj carries the release version
 - bb deploy --missing            # Deploys what is not yet on Clojars, in order
 - bb deploy --verify             # Every artifact landed
-- Create GitHub Release          # Only on tag pushes; pre-release when the version has a stage
+attest:                          # tag pushes; id-token + attestations: write
+- Attest scripts/install.sh      # From a fresh checkout; no third-party action runs
+release:                         # tag pushes; contents: write only
+- Create GitHub Release          # install.sh + its SHA-256; pre-release when the version has a stage
 ----
+
+Every action is pinned to a commit SHA with its version in a comment, since a
+tag can be moved to other code (BOU-1017); `workflow-pins-test` refuses one
+that is not. To update one, resolve the new tag's commit
+(`gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`) and replace both.
 
 ---
 
