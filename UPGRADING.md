@@ -82,6 +82,16 @@ upgrade slides 24 hours as it did, but one opened more than
 `:max-session-days` ago ends at the upgrade: those users sign in again. A page
 of your own layout gets the dialog only through `page-layout`.
 
+### 7. An account made at `/web/register` is not linked by OIDC email (BOU-1009)
+
+Such accounts are marked now. Ones made before the upgrade are not, and stay
+linkable by email when a provider has `:link-by-email? true`; boot warns, with
+their count, while registration is open. Nothing records which accounts were
+self-registered: if registration was ever open, set the ones you know were to
+TRUE and the rest to FALSE, and the warning stops:
+`UPDATE auth_users SET self_registered = TRUE WHERE id IN (…)`, then
+`UPDATE auth_users SET self_registered = FALSE WHERE self_registered IS NULL`.
+
 ## 1.1.x → 1.2.0
 
 Mostly security. Steps 1 to 4 change what an existing app does at runtime;

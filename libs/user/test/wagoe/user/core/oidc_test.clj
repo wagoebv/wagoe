@@ -116,6 +116,10 @@
       (is (= :oidc/admin-link-refused
              (get-in (sut/resolve-account {:email-user ada :email-user-tenant-admin? true :claims claims :provider provider})
                      [:error :type]))))
+    (testing "nor one registered here (BOU-1009)"
+      (is (= :oidc/self-registered-link-refused
+             (get-in (sut/resolve-account {:email-user (assoc ada :self-registered true) :claims claims :provider provider})
+                     [:error :type]))))
     (testing ":trust-email? treats an email with no email_verified as verified"
       (is (= {:action :link :user ada}
              (sut/resolve-account {:email-user ada :claims (dissoc claims :email_verified)

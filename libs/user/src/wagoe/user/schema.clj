@@ -69,7 +69,10 @@
        ;; one up at sign-in with the password alone for a while after.
        [:mfa-reset-at {:optional true} [:maybe inst?]]
        [:failed-login-count {:optional true} :int]
-       [:lockout-until {:optional true} [:maybe inst?]]]
+       [:lockout-until {:optional true} [:maybe inst?]]
+       ;; Made at /web/register: nobody proved the email, so an OIDC sign-in
+       ;; with it is never linked to the account (BOU-1009)
+       [:self-registered {:optional true} [:maybe :boolean]]]
       (into audit-timestamps-flat-fields)))
 
 (def TenantUser

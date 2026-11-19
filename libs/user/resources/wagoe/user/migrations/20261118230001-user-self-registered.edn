@@ -1,0 +1,5 @@
+;; auth_users' self_registered, set for an account made at /web/register:
+;; OIDC never links to it by email (BOU-1009). The same idempotent definition.
+{:ns      wagoe.user.shell.user-tables
+ :up-fn   "up"
+ :down-fn "down"}

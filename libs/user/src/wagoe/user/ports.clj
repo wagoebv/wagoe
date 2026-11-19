@@ -347,6 +347,8 @@
   (register-user [this user-data])
   ;; user-data: {:email :name :role :password …}. Hashes the password, writes an
   ;; audit entry. Returns the created user without :password-hash.
+  ;; :self-registered true marks an account whose email nobody proved, such as a
+  ;; sign-up page's: OIDC never links it by email (BOU-1009).
   ;; Throws :validation-error, :user-exists, :business-rule-violation.
 
   (register-or-authenticate-user [this user-data login-context])

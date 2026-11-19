@@ -334,6 +334,7 @@
           (update :active #(protocols/db->boolean adapter %))
           ;; SQLite reads 0 back, which is truthy: MFA turned off read as on
           (update :mfa-enabled db-bool)
+          (update :self-registered db-bool)
           (update :created-at type-conversion/string->instant)
           (update :updated-at type-conversion/string->instant)
           (update :deleted-at type-conversion/string->instant)
@@ -435,6 +436,15 @@
                                 :error-message :error_message
                                 :created-at :created_at})))
 
+(defn unmarked-account-count
+  "How many accounts were made before BOU-1009 marked self-registration and
+   are still unmarked."
+  [ctx]
+  (or (some-> (db/execute-one! ctx {:select [[[:count :*] :n]] :from [:auth_users]
+                                     :where [:is :self_registered nil]})
+              vals first long)
+      0))
+
 (defn read-json
   "A JSON column's value as data, however the driver returns it: a string, a
    PostgreSQL PGobject or an H2 CLOB."
@@ -516,6 +526,7 @@
    :a.mfa_reset_at
    :a.failed_login_count
    :a.lockout_until
+   :a.self_registered
    :a.created_at
    :a.updated_at
    :a.deleted_at
@@ -713,7 +724,7 @@
                                       [:id :tenant-id :email :password-hash :active
                                        :mfa-enabled :mfa-secret :mfa-backup-codes
                                        :mfa-backup-codes-used :mfa-enabled-at :mfa-reset-at
-                                       :failed-login-count :lockout-until
+                                       :failed-login-count :lockout-until :self-registered
                                        :created-at :updated-at :deleted-at])
 
              profile-fields (select-keys user-with-metadata
@@ -733,6 +744,8 @@
                              (update :id type-conversion/uuid->string)
                              (update :tenant-id type-conversion/uuid->string)
                              (update :active #(protocols/boolean->db adapter %))
+                             ;; Always TRUE or FALSE: NULL is an account from before BOU-1009
+                             (update :self-registered #(protocols/boolean->db adapter (boolean %)))
                              (update :mfa-backup-codes #(when % (cheshire.core/generate-string %)))
                              (update :mfa-backup-codes-used #(when % (cheshire.core/generate-string %)))
                              (set/rename-keys {:password-hash :password_hash
@@ -744,6 +757,7 @@
                                                :mfa-reset-at :mfa_reset_at
                                                :failed-login-count :failed_login_count
                                                :lockout-until :lockout_until
+                                               :self-registered :self_registered
                                                :tenant-id :tenant_id
                                                :created-at :created_at
                                                :updated-at :updated_at

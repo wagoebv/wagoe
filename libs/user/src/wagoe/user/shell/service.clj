@@ -356,7 +356,9 @@
                   {:user-data user-data
                    :email (:email user-data)}
                   (fn [{:keys [params]}]
-                    (let [user-data (user-core/normalize-role (:user-data params))
+                    ;; Not a request field: the registration page marks its accounts (BOU-1009)
+                    (let [self-registered? (:self-registered (:user-data params))
+                          user-data (user-core/normalize-role (dissoc (:user-data params) :self-registered))
                           _ (check-admin-change! user-repository nil user-data)
                           ;; Each rule with its own :code, which step 1 reports as one
                           ;; English sentence; a form shows them one by one. This runs
@@ -407,7 +409,8 @@
                                                       (dissoc :password))
                                                   user-data)
                             ;; 5. Persist using impure shell persistence layer
-                            prepared-user (user-core/prepare-user-for-creation user-data-with-hash (current-timestamp) (generate-user-id))
+                            prepared-user (cond-> (user-core/prepare-user-for-creation user-data-with-hash (current-timestamp) (generate-user-id))
+                                            self-registered? (assoc :self-registered true))
                             created-user (.create-user user-repository prepared-user)]
 
                         ;; 6. Create audit log entry for user creation

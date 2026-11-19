@@ -280,7 +280,8 @@
    token's verified email, when the provider allows linking by email and that
    account has no link at this issuer yet — a second subject for the same email
    is the address changing hands, and never an administrator, of the app or of
-   a tenant (:email-user-tenant-admin?); a new account,
+   a tenant (:email-user-tenant-admin?), nor an account registered here, whose
+   email nobody proved (:self-registered); a new account,
    when it allows creating one. Nothing else — an unverified email never
    selects or creates an account.
 
@@ -301,6 +302,12 @@
            (or (= :admin (:role email-user)) email-user-tenant-admin?))
       (error :oidc/admin-link-refused
              "An administrator account is not linked by email; link it by signing in another way")
+
+      ;; Nor one registered here: nobody proved its email, and whoever chose its
+      ;; password keeps it (BOU-1009)
+      (and email-user email (:link-by-email? provider) (:self-registered email-user))
+      (error :oidc/self-registered-link-refused
+             "An account registered here is not linked by email; sign in with its password")
 
       (and email-user email (:link-by-email? provider) (not email-user-linked?))
       {:action :link :user email-user}
