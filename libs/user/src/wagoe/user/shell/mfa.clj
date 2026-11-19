@@ -52,11 +52,6 @@
    so a code they generate cannot fall into the next 30 s window."
   nil)
 
-(defn- totp-step
-  "The 30 s window a code checked now belongs to."
-  []
-  (quot (.getEpochSecond ^Instant (or *now* (Instant/now))) 30))
-
 (defn verify-totp-code
   "Shell function: Verify TOTP code against secret.
    
@@ -68,15 +63,15 @@
      Boolean - true if code is valid
      
    Side effects: Time-dependent verification"
-  [code secret]
-  (try
-    (if (and code secret)
-      (let [code-int (Integer/parseInt (str/trim code))]
-        (boolean (otp/is-valid-totp-token? code-int secret
-                                           {:date (Date/from (or *now* (Instant/now)))})))
-      false) ; Explicit false instead of nil when inputs invalid
-    (catch Exception _e
-      false)))
+  ([code secret] (verify-totp-code code secret (or *now* (Instant/now))))
+  ([code secret ^Instant at]
+   (try
+     (if (and code secret)
+       (let [code-int (Integer/parseInt (str/trim code))]
+         (boolean (otp/is-valid-totp-token? code-int secret {:date (Date/from at)})))
+       false) ; Explicit false instead of nil when inputs invalid
+     (catch Exception _e
+       false))))
 
 (defn generate-totp-uri
   "Shell function: Generate TOTP URI for QR code.
@@ -297,14 +292,13 @@
 
    Spending the code is the caller's: `check-code!`."
   [_mfa-service user code]
-  ;; One instant, so the step recorded is the one the code was checked in
-  (binding [*now* (or *now* (Instant/now))]
+  (let [now (or *now* (Instant/now))]
     (cond
-      ;; Try TOTP verification first
-      (verify-totp-code code (:mfa-secret user))
+      ;; Try TOTP verification first; the step recorded is the one checked
+      (verify-totp-code code (:mfa-secret user) now)
       {:valid? true
        :used-backup-code? false
-       :totp-step (totp-step)}
+       :totp-step (quot (.getEpochSecond now) 30)}
 
       ;; Try backup code — hash-verify the presented code against stored bcrypt
       ;; hashes, excluding already-used ones. The matched hash (not the plaintext)
