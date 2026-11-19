@@ -147,3 +147,9 @@
     (is (= uri (pii/redact-uri uri)) uri))
   (is (nil? (pii/redact-uri nil))))
 
+
+(deftest ^:unit ^:security a-logged-uri-loses-its-session-token
+  ;; BOU-1015: the log adapters redact every context through redact-pii
+  (is (= {:uri "/api/v1/sessions/[REDACTED]" :url.path "/api/sessions/[REDACTED]"}
+         (pii/redact-pii {:uri "/api/v1/sessions/tok" :url.path "/api/sessions/tok"}
+                         (pii/build-redact-state {})))))

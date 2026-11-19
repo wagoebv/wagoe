@@ -150,11 +150,10 @@
         target-path (str version-prefix path)
         redirect-handler (fn [{:keys [uri query-string]}]
                            ;; Matched at /api<path>, so uri starts with "/api".
-                           (let [versioned (str version-prefix (subs uri (count api)))
-                                 location  (cond-> versioned
-                                             (seq query-string) (str "?" query-string))]
+                           (let [location (cond-> (str version-prefix (subs uri (count api)))
+                                            (seq query-string) (str "?" query-string))]
                              (log/debug "Redirecting unversioned request"
-                                        {:from (pii/redact-uri uri) :to (pii/redact-uri versioned)})
+                                        {:from (pii/redact-uri uri)})
                              {:status 307  ; Temporary Redirect (preserves method)
                               :headers {"Location" location
                                         "X-API-Deprecated-Path" "true"}

@@ -81,7 +81,7 @@
   (or (get-in request [:headers "x-session-token"])
       (get-in request [:cookies "session-token" :value])))
 
-(defn- bearer-only?
+(defn- header-credential-only?
   "A bearer token, or an X-Session-Token header, and no session cookie. A
    browser attaches neither to a cross-site request on its own, so this one
    cannot be a forgery (BOU-952, BOU-1015). The prefix is matched as the user
@@ -141,13 +141,13 @@
 
 (defn- csrf-checked?
   "Whether a request's CSRF token is validated: a state-changing request, not
-   exempt, that is session-authenticated or on /web, unless `bearer-only?`.
+   exempt, that is session-authenticated or on /web, unless `header-credential-only?`.
    The interceptor and `wrap-csrf` share it so they cannot drift."
   [request state-changing? exempt-paths uri session-binding]
   (and state-changing?
        (not (path-exempt? exempt-paths uri))
        (or session-binding (web-route? uri))
-       (not (bearer-only? request))))
+       (not (header-credential-only? request))))
 
 (defn- pre-session-cookie-value
   "The pre-session cookie's attributes: Secure follows `:secure-cookies?`, true when

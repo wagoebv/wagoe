@@ -459,12 +459,10 @@
   (let [service  (create-mock-service)
         session  (ports/authenticate-user service {:user-id (UUID/randomUUID)})
         token    (:session-token session)
-        handlers (into {} (for [route (user-http/api-routes service nil)
-                                :let  [[path data] route]
-                                :when (= "/session" path)]
-                            [:session data]))
-        get-h    (get-in handlers [:session :get :handler])
-        del-h    (get-in handlers [:session :delete :handler])]
+        route    (some (fn [[path data]] (when (= "/session" path) data))
+                       (user-http/api-routes service nil))
+        get-h    (get-in route [:get :handler])
+        del-h    (get-in route [:delete :handler])]
     (is (= 200 (:status (get-h {:headers {"x-session-token" token}}))))
     (is (= 204 (:status (del-h {:cookies {"session-token" {:value token}}}))))
     (is (nil? (ports/validate-session service token)) "ended")
