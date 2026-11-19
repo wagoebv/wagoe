@@ -132,7 +132,7 @@
                                                           {:provider :local
                                                            :root root
                                                            :url-base public
-                                                           :signing-secret "s3cr3t"
+                                                           :signing-secret "q8Zr3vLx0pT6wN2mHc9sYbK4dF7jA1eU"
                                                            :http-base-path base
                                                            :upload-index lookup})}))
         paths   (set (map first routes))]
@@ -144,7 +144,7 @@
       (testing "and a URL the adapter emits lands on exactly that path"
         (let [storage (local/create-local-storage {:base-path root
                                                    :url-base public
-                                                   :signing-secret "s3cr3t"})
+                                                   :signing-secret "q8Zr3vLx0pT6wN2mHc9sYbK4dF7jA1eU"})
               {:keys [key url]} (ports/store-file
                                  storage
                                  {:bytes (.getBytes "x") :content-type "text/plain"}
@@ -160,3 +160,15 @@
            (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo
                                         (ig/init-key :wagoe.storage/export-jobs {:requests-per-hour bad}))))))
         (pr-str bad))))
+
+(deftest ^:unit ^:security a-short-or-example-signing-secret-is-refused
+  ;; BOU-1049: it signs download URLs
+  (let [check #(try (#'wagoe.storage.shell.module-wiring/check-signing-secret! %1 %2) nil
+                    (catch clojure.lang.ExceptionInfo e (ex-message e)))]
+    (is (re-find #"at least 32" (str (check "s3cr3t" true))))
+    (is (re-find #"example value" (str (check "change-me-to-a-32-char-signing-secret" false))))
+    (is (nil? (check "change-me-to-a-32-char-signing-secret" true)) "dev keeps its example")
+    (is (nil? (check nil false)) "unset: no signed URLs")
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"at least 32"
+                          (ig/init-key :wagoe/storage {:provider :local :root "target/x" :signing-secret "s3cr3t"}))
+        "boot refuses it")))

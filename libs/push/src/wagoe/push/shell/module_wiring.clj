@@ -1,5 +1,7 @@
 (ns wagoe.push.shell.module-wiring
   (:require [clojure.string :as str]
+            [wagoe.config :as wagoe-config]
+            [wagoe.core.utils.secret-keys :as secret-keys]
             [wagoe.push.shell.service :as service]
             [wagoe.push.shell.persistence :as persistence]
             [wagoe.push.shell.adapters.mock :as mock]
@@ -57,12 +59,20 @@
     (throw (ex-info (str "Invalid :wagoe/push settings: " (pr-str errors))
                     {:type :configuration-error :errors errors}))))
 
+(defn- check-callback-secret!
+  "Refuse a set `:callback-secret` that is short or, unless `dev-like?`, an
+   example: it signs callback tokens, so a guessable one forges them (BOU-1049)."
+  [secret dev-like?]
+  (when-let [problem (and (not (str/blank? secret)) (secret-keys/weak-secret "The push :callback-secret" secret dev-like?))]
+    (throw (ex-info problem {:type :configuration-error :module :wagoe/push}))))
+
 (defmethod ig/init-key :wagoe.push/service
   [_ {:keys [device-store analytics-store fcm-provider apns-provider
              job-queue queue-name callback-secret callback-token-ttl-seconds providers]
       :as config}]
   ;; Again here: a hand-wired service never passes through `ig-config`.
   (check-settings! config)
+  (check-callback-secret! callback-secret (wagoe-config/dev-like?))
   (log/info "Push: initializing push service" {:queue (or queue-name :default)})
   ;; With mock providers nothing reaches a device, so nothing calls back.
   (when (and (empty? callback-secret)

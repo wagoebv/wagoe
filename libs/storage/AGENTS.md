@@ -110,7 +110,7 @@ they refuse to boot without it (WGE-107).
      ;; With :signing-secret, this must be the public URL of the mounted
      ;; download route — nothing else verifies the signature.
      :url-base  "https://app.example.com/api/v1/storage/download"
-     :signing-secret "hmac-key"    ; optional — enables real signed, expiring URLs
+     :signing-secret (System/getenv "STORAGE_SIGNING_SECRET") ; optional: signed URLs; 32+ chars
      :create-directories? true     ; default true
      :logger    logger}))          ; optional
 ```
