@@ -64,6 +64,12 @@
     (string? role) (keyword role)
     :else nil))
 
+(defn- as-user
+  "`request` with `user`, who may come from its session, as its :user: what
+   the access checks read to decide where the request runs (BOU-1020)."
+  [request user]
+  (assoc request :user user))
+
 (defn- create-error-response
   "The one error body (BOU-586). No Content-Type: muuntaja skips encoding a
    response that already has one, and Jetty then writes an empty body on the
@@ -174,7 +180,7 @@
    :enter (fn [{:keys [request correlation-id system] :as ctx}]
             (let [user (get-user request)]
               ;; Admin where the request runs, not at home (BOU-1020)
-              (if (and user (core-access/tenant-admin? (assoc request :user user)))
+              (if (and user (core-access/tenant-admin? (as-user request user)))
                 (do
                   ;; Log successful authorization
                   (when-let [logger (:logger system)]
@@ -255,7 +261,7 @@
               ;; The role held where the request runs: an admin of another
               ;; tenant is not one here (BOU-1020)
               (if (and user (some #{normalized-required-role}
-                                  (map normalize-role (core-access/roles-here (assoc request :user user)))))
+                                  (map normalize-role (core-access/roles-here (as-user request user)))))
                 (do
                   ;; Log successful authorization
                   (when-let [logger (:logger system)]
@@ -300,7 +306,7 @@
             (let [user (get-user request)
                   target-id (:id path-params)
                   user-id (str (:id user))
-                  is-admin? (and user (core-access/tenant-admin? (assoc request :user user)))
+                  is-admin? (and user (core-access/tenant-admin? (as-user request user)))
                   is-self? (= target-id user-id)]
               (if (or is-admin? is-self?)
                 (do
