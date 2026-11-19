@@ -120,7 +120,7 @@ jobs:
       - name: Setup Babashka
         uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
         with:
-          bb: latest
+          bb: 1.13.229
 
       # The compiled CSS is committed; it must be what the sources build.
       - name: Build CSS and verify the committed bundles
@@ -142,7 +142,7 @@ jobs:
       # Full history: check:changelog compares against the merge base with the
       # target branch, and a shallow clone has neither the base nor a common
       # ancestor.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
 
@@ -153,9 +153,9 @@ jobs:
           aliases: -M:clj-kondo
 
       - name: Setup Babashka
-        uses: DeLaGuardo/setup-clojure@13.6.1
+        uses: DeLaGuardo/setup-clojure@4c7a6f613e5089821bb3bb2a33a3ee115578580d # 13.6.1
         with:
-          bb: latest
+          bb: 1.13.229
 
       - name: Clear clj-kondo cache
         run: rm -rf .clj-kondo/.cache/* 2>/dev/null || true
