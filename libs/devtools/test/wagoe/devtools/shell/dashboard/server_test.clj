@@ -250,21 +250,37 @@
 ;; BOU-1012: it runs SQL and rewrites the config, so no other site may reach it
 
 (deftest ^:unit ^:security only-this-machine-and-the-dashboards-own-page-reach-it
-  (let [refusal #'wagoe.devtools.shell.dashboard.server/local-refusal
+  (let [refusal #(#'wagoe.devtools.shell.dashboard.server/local-refusal % nil)
         req     (fn [m & [hs]] (merge {:request-method :post :scheme :http
                                        :headers (merge {"host" "127.0.0.1:9999"} hs)} m))]
     (testing "a Host that is not this machine, as DNS rebinding sends"
-      (is (some? (refusal (req {:request-method :get} {"host" "evil.example:9999"}))))
+      (doseq [h ["evil.example:9999" "127.0.0.1.evil.com:9999" "localhost@evil" "0.0.0.0:9999" nil]]
+        (is (some? (refusal (req {:request-method :get} {"host" h}))) (pr-str h)))
       (doseq [h ["127.0.0.1:9999" "localhost:9999" "LOCALHOST" "[::1]:9999"]]
         (is (nil? (refusal (req {:request-method :get} {"host" h}))) h)))
     (testing "a write from another site"
       (is (some? (refusal (req {} {"sec-fetch-site" "cross-site"}))))
       (is (some? (refusal (req {} {"sec-fetch-site" "same-site"}))) "another port of localhost")
-      (is (some? (refusal (req {} {"origin" "https://evil.example"})))))
+      (is (some? (refusal (req {} {"sec-fetch-site" "none"}))))
+      (is (some? (refusal (req {} {"origin" "https://evil.example"}))))
+      (is (some? (refusal (req {} {"origin" "null"}))) "a sandboxed frame"))
     (testing "the dashboard's own page, or a tool on this machine"
       (is (nil? (refusal (req {} {"sec-fetch-site" "same-origin"}))))
       (is (nil? (refusal (req {} {"origin" "http://127.0.0.1:9999"}))))
       (is (nil? (refusal (req {})))))))
+
+(deftest ^:unit ^:security bound-beyond-this-machine-every-request-carries-the-token
+  ;; A client on the network sets its own Host (BOU-1012)
+  (let [refusal #'wagoe.devtools.shell.dashboard.server/local-refusal
+        req     (fn [& {:keys [qs cookie]}]
+                  {:request-method :post :scheme :http :query-string qs
+                   :headers (cond-> {"host" "localhost:9999"} cookie (assoc "cookie" cookie))})]
+    (is (some? (refusal (req) "t-1")) "a forged Host is not enough")
+    (is (some? (refusal (req :cookie "wagoe-dashboard-token=wrong") "t-1")))
+    (is (nil? (refusal (req :qs "token=t-1") "t-1")) "the URL in the log")
+    (is (nil? (refusal (req :cookie "a=b; wagoe-dashboard-token=t-1") "t-1")) "the cookie it set")
+    (is (nil? (refusal (assoc-in (req :cookie "wagoe-dashboard-token=t-1") [:headers "host"] "192.168.1.5:9999") "t-1"))
+        "any Host, once the token is right")))
 
 (deftest ^:integration ^:security a-foreign-host-or-cross-site-post-is-refused
   ;; Through the real handler: java.net will not send another Host or an Origin
@@ -279,4 +295,3 @@
     (is (= 403 (call :post "/dashboard/fragments/config-apply"
                      {"origin" "https://evil.example"} {"config-:wagoe/dashboard" "{}"})))
     (is (= 200 (call :post "/dashboard/fragments/query-result" {"sec-fetch-site" "same-origin"} {"sql" "select 1"})))))
-

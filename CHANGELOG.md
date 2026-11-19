@@ -32,7 +32,7 @@ for what is public API, what is internal, and how deprecations are announced.
 ### Security
 
 - **Any website could run SQL on the dev database through the dev dashboard** (BOU-1012), or rewrite its config. It
-  answers only Host 127.0.0.1, localhost or ::1, writes only from its own page, and runs one read-only query.
+  writes only from its own page and runs one reading query; bound beyond 127.0.0.1, open it with the logged URL.
 - **A tenant's admin could change their tenant's status, features and limits, or delete it, in the admin** (BOU-1011).
   Add `:platform-fields #{:status :settings}` and `:permissions {:delete :platform-admin}` to your own `tenants.edn`.
 - **A tenant's admin streaming in another tenant got that tenant's admin messages** (BOU-1010). An SSE stream now
