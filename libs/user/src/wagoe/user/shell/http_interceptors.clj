@@ -23,7 +23,8 @@
             :interceptors ['user.http-interceptors/require-authenticated
                            'user.http-interceptors/require-admin
                            'user.http-interceptors/log-action]}}]"
-  (:require [wagoe.observability.logging.ports :as logging]
+  (:require [wagoe.core.utils.pii-redaction :as pii]
+            [wagoe.observability.logging.ports :as logging]
             [wagoe.observability.metrics.ports :as metrics]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
@@ -106,7 +107,7 @@
                 ;; Log authentication failure
                 (when-let [logger (:logger system)]
                   (logging/warn logger "Authentication required but not provided"
-                                {:uri (:uri request)
+                                {:uri (pii/redact-uri (:uri request))
                                  :method (:request-method request)
                                  :correlation-id correlation-id}))
 
@@ -154,7 +155,7 @@
                 (when-let [logger (:logger system)]
                   (logging/debug logger "Already authenticated, access denied"
                                  {:user-id (:id (get-user request))
-                                  :uri (:uri request)
+                                  :uri (pii/redact-uri (:uri request))
                                   :correlation-id correlation-id}))
 
                 ;; Short-circuit with 403
@@ -194,7 +195,7 @@
                     (logging/warn logger "Admin role required but not present"
                                   {:user-id (:id user)
                                    :user-role (:role user)
-                                   :uri (:uri request)
+                                   :uri (pii/redact-uri (:uri request))
                                    :correlation-id correlation-id}))
 
                   ;; Increment auth failure metric
@@ -226,7 +227,7 @@
                                   {:user-id (:id user)
                                    :user-role (:role user)
                                    :tenant-id (:tenant-id user)
-                                   :uri (:uri request)
+                                   :uri (pii/redact-uri (:uri request))
                                    :correlation-id correlation-id}))
                   (when-let [metrics (:metrics-emitter system)]
                     (metrics/increment metrics "http.auth.failures"
@@ -273,7 +274,7 @@
                                   {:user-id (:id user)
                                    :user-role (:role user)
                                    :required-role normalized-required-role
-                                   :uri (:uri request)
+                                   :uri (pii/redact-uri (:uri request))
                                    :correlation-id correlation-id}))
 
                   ;; Increment auth failure metric
@@ -323,7 +324,7 @@
                                   {:user-id user-id
                                    :target-id target-id
                                    :user-role (:role user)
-                                   :uri (:uri request)
+                                   :uri (pii/redact-uri (:uri request))
                                    :correlation-id correlation-id}))
 
                   ;; Increment auth failure metric

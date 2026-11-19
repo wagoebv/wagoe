@@ -72,10 +72,10 @@ curl -X POST http://localhost:3000/api/v1/sessions \
   -d '{"email": "user@example.com", "password": "..."}'
 
 # Validate a session token
-curl http://localhost:3000/api/v1/sessions/{token}
+curl -H "X-Session-Token: {token}" http://localhost:3000/api/v1/session
 
 # Invalidate it (sign out)
-curl -X DELETE http://localhost:3000/api/v1/sessions/{token}
+curl -X DELETE -H "X-Session-Token: {token}" http://localhost:3000/api/v1/session
 ----
 
 Admins list and revoke a user's sessions in the web UI at `/web/users/:id/sessions`.

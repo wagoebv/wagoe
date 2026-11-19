@@ -65,8 +65,8 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 curl -H "Authorization: Bearer <jwtToken>" \
   http://localhost:3000/api/v1/users
 
-# 4. Logout (invalidates the session; a JWT stays valid until it expires)
-curl -X DELETE http://localhost:3000/api/v1/sessions/<sessionToken>
+# 4. Logout (ends the session, and with it its JWT)
+curl -X DELETE -H "X-Session-Token: <sessionToken>" http://localhost:3000/api/v1/session
 ```
 
 ### Token model — DB sessions are canonical
@@ -618,7 +618,7 @@ Removed:
 - `/web/admin/groups/**`
 
 Kept:
-- `/api/v1/auth/login`, `/api/v1/sessions`, `/api/v1/sessions/:token`
+- `/api/v1/auth/login`, `/api/v1/sessions`, `/api/v1/session`, `/api/v1/sessions/:token` (deprecated)
 - `/api/v1/users/**`, `/api/v1/auth/mfa/**`
 - OIDC sign-in under `/web/auth/oidc/**`, when providers are configured. It lands
   on the admin's dashboard by default; point `:login-redirect` elsewhere.

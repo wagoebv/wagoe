@@ -454,6 +454,21 @@
       ;; The token is not echoed back in an error body.
       (is (not (re-find (re-pattern invalid-token) (pr-str (:body response))))))))
 
+(deftest ^:contract ^:security the-session-in-a-header-validates-and-ends-without-the-url
+  ;; BOU-1015: the token in the path reached access logs
+  (let [service  (create-mock-service)
+        session  (ports/authenticate-user service {:user-id (UUID/randomUUID)})
+        token    (:session-token session)
+        handlers (into {} (for [route (user-http/api-routes service nil)
+                                :let  [[path data] route]
+                                :when (= "/session" path)]
+                            [:session data]))
+        get-h    (get-in handlers [:session :get :handler])
+        del-h    (get-in handlers [:session :delete :handler])]
+    (is (= 200 (:status (get-h {:headers {"x-session-token" token}}))))
+    (is (= 204 (:status (del-h {:cookies {"session-token" {:value token}}}))))
+    (is (nil? (ports/validate-session service token)) "ended")))
+
 (deftest ^:contract test-invalidate-session-handler
   (testing "DELETE /sessions/:token - Invalidate session successfully"
     (let [service (create-mock-service)

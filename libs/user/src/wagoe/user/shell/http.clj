@@ -223,6 +223,13 @@
       ;; Return the response from context
       (:response result-context))))
 
+(defn- with-presented-token
+  "`handler` for a session token the caller presents in X-Session-Token or
+   the session cookie, not in the path, where logs and proxies keep it (BOU-1015)."
+  [handler]
+  (fn [request]
+    (handler (assoc-in request [:parameters :path :token] (user-middleware/extract-session-token request)))))
+
 (defn invalidate-session-handler
   "DELETE /api/sessions/:token - Invalidate session using interceptor pipeline."
   [user-service]
@@ -460,15 +467,27 @@
               :tags       ["sessions"]
               :parameters {:body credentials-body}
               :responses  login-responses}}]
-     ;; The token in the path is the credential.
+     ;; The session X-Session-Token or the cookie names: the credential stays
+     ;; out of the URL (BOU-1015)
+     ["/session"
+      {:public true
+       :get    {:handler    (with-presented-token (validate-session-handler user-service))
+                :summary    "Validate the session in X-Session-Token or the session cookie"
+                :tags       ["sessions"]}
+       :delete {:handler    (with-presented-token (invalidate-session-handler user-service))
+                :summary    "Invalidate the session in X-Session-Token or the session cookie (logout)"
+                :tags       ["sessions"]}}]
+     ;; Deprecated: the token in the path reaches access logs; use /session
      ["/sessions/:token"
       {:public true
        :get    {:handler    (validate-session-handler user-service)
-                :summary    "Validate session"
+                :summary    "Validate session (deprecated: use GET /session)"
+                :deprecated true
                 :tags       ["sessions"]
                 :parameters {:path [:map [:token :string]]}}
        :delete {:handler    (invalidate-session-handler user-service)
-                :summary    "Invalidate session (logout)"
+                :summary    "Invalidate session (deprecated: use DELETE /session)"
+                :deprecated true
                 :tags       ["sessions"]
                 :parameters {:path [:map [:token :string]]}}}]
      ["/auth/mfa/setup"

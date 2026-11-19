@@ -503,3 +503,16 @@
       (let [{:keys [reported spans]} (reported-and-traced ex)]
         (is (= 1 (count reported)))
         (is (= [[:attrs {:http.response.status_code 500}] [:error]] spans))))))
+
+(deftest ^:unit ^:security a-session-token-in-the-path-reaches-no-log-line
+  ;; BOU-1015: GET /api/v1/sessions/<token> logged the token
+  (let [entries (atom [])]
+    (http-interceptors/run-http-interceptors
+     (fn [_] (throw (ex-info "nope" {:type :not-found})))
+     http-interceptors/default-http-interceptors
+     {:request-method :get :uri "/api/v1/sessions/live-token-123" :headers {}}
+     {:logger (recording-logger entries)})
+    (is (seq @entries))
+    (is (not (re-find #"live-token-123" (pr-str @entries))))
+    (is (re-find #"/api/v1/sessions/\[REDACTED\]" (pr-str @entries)))))
+

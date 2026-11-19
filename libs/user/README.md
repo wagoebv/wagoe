@@ -139,8 +139,9 @@ The module registers these routes automatically:
 |------|--------|-------------|
 | `/api/v1/auth/login` | POST | Authenticate user |
 | `/api/v1/sessions` | POST | Create session (same as login) |
-| `/api/v1/sessions/:token` | GET | Validate session |
-| `/api/v1/sessions/:token` | DELETE | Invalidate session (logout) |
+| `/api/v1/session` | GET | Validate the session in `X-Session-Token` or the cookie |
+| `/api/v1/session` | DELETE | Invalidate it (logout) |
+| `/api/v1/sessions/:token` | GET, DELETE | Deprecated: the token in the path reaches access logs |
 | `/api/v1/auth/mfa/setup` | POST | Generate MFA secret |
 | `/api/v1/auth/mfa/enable` | POST | Enable MFA |
 | `/api/v1/auth/mfa/disable` | POST | Disable MFA; needs `password` or a TOTP/backup `code` |

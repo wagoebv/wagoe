@@ -485,7 +485,7 @@ does the same. It defaults to on.
 | Removed | Kept
 
 | `/web` landing page, `/web/login`, `/web/register`, `/web/logout`
-| `/api/v1/auth/login`, `/api/v1/sessions`, `/api/v1/sessions/:token`
+| `/api/v1/auth/login`, `/api/v1/sessions`, `/api/v1/session`, `/api/v1/sessions/:token` (deprecated)
 
 | `/web/dashboard`, `/web/profile/**` (incl. MFA setup and disable pages)
 | `/api/v1/auth/mfa/**`
@@ -509,13 +509,15 @@ at a page that exists.
 [source,bash]
 ----
 # Validate a session token
-curl http://localhost:3000/api/v1/sessions/{session-token}
+curl -H "X-Session-Token: {session-token}" http://localhost:3000/api/v1/session
 
 # End it (logout)
-curl -X DELETE http://localhost:3000/api/v1/sessions/{session-token}
+curl -X DELETE -H "X-Session-Token: {session-token}" http://localhost:3000/api/v1/session
 ----
 
-The token in the path is the credential. A user's other sessions are listed and
+The header, or the session cookie, carries the credential. The older
+`/api/v1/sessions/{session-token}` still works but is deprecated: the token in
+the path reaches access logs, so it is masked in Wagoe's own. A user's other sessions are listed and
 revoked on their *Sessions* tab in the web UI.
 
 A session lasts the hours its sign-in got: 24 by default (`:default-session-hours`),

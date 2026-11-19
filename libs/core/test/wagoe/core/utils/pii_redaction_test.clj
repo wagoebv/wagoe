@@ -137,3 +137,12 @@
     (let [out (pii/apply-redaction {:extra {:content-hash "h" :csrf-token "c"}} {})]
       (is (= "h" (get-in out [:extra :content-hash])))
       (is (= "[REDACTED]" (get-in out [:extra :csrf-token]))))))
+
+(deftest ^:unit ^:security redact-uri-test
+  ;; BOU-1015: the session check's token is a credential in the path
+  (is (= "/api/v1/sessions/[REDACTED]" (pii/redact-uri "/api/v1/sessions/abc.def-123")))
+  (is (= "/api/sessions/[REDACTED]" (pii/redact-uri "/api/sessions/abc")))
+  (doseq [uri ["/api/v1/sessions" "/web/users/42/sessions/7/revoke" "/api/v1/users/9"]]
+    (is (= uri (pii/redact-uri uri)) uri))
+  (is (nil? (pii/redact-uri nil))))
+
