@@ -9,7 +9,8 @@
 
    The shell puts the request's rights on the user map under `::access`
    (`with-access`); a user without it is decided by the role."
-  (:require [wagoe.platform.core.scope :as scope]))
+  (:require [wagoe.core.http.access :as access]
+            [wagoe.platform.core.scope :as scope]))
 
 ;; =============================================================================
 ;; Role-Based Permission Checks
@@ -351,7 +352,11 @@
   ([user entity-name entity-config]
    (can-delete-entity? user entity-name entity-config nil))
   ([user entity-name entity-config _record]
-   (allows? user entity-name :delete entity-config)))
+   ;; `:permissions {:delete :platform-admin}`: a tenant's own admin may not
+   ;; delete their tenant (BOU-1011)
+   (and (allows? user entity-name :delete entity-config)
+        (or (not= :platform-admin (get-in entity-config [:permissions :delete]))
+            (access/platform-admin? user)))))
 
 (defn can-bulk-delete-entity?
   "Determine if user can perform bulk delete operations.

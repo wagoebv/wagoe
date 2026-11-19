@@ -23,18 +23,21 @@
 (def ^:private i18n-catalogue
   (catalogue/create-map-catalogue (catalogue/load-catalogue "wagoe/i18n/translations")))
 
-(defn- request!
-  "Call `app`; a thrown ex-info comes back as `{:thrown <ex-data :type>}`, the
-   platform's error mapping being outside this test."
-  [app method uri & [form]]
+(defn- request-as!
+  "Call `app` as `user`; a thrown ex-info comes back as `{:thrown <ex-data :type>}`,
+   the platform's error mapping being outside this test."
+  [user app method uri & [form]]
   (try
-    (let [resp (app {:request-method method :uri uri :user admin-user
+    (let [resp (app {:request-method method :uri uri :user user
                      :headers {} :query-params {} :form-params (or form {})
                      :i18n/catalogue i18n-catalogue :i18n/default-locale :en})]
       (cond-> resp
         (vector? (:body resp)) (update :body ui-components/render-html)))
     (catch clojure.lang.ExceptionInfo e
       {:thrown (:type (ex-data e))})))
+
+(defn- request! [app method uri & [form]]
+  (request-as! admin-user app method uri form))
 
 (defn- with-admin [profile f & [allowlist]]
   (let [allowlist (or allowlist #{:tenants})
@@ -129,3 +132,31 @@
             (is (nil? (:deleted-at (db/execute-one! ctx {:select [:deleted-at] :from [:auth_users] :where [:= :id user]}))))
             (is (= tenant (str (:tenant-id (db/execute-one! ctx {:select [:tenant-id] :from [:users] :where [:= :id user]})))))))
         #{:tenants :users}))))
+
+(deftest ^:integration ^:security a-tenants-admin-cannot-change-its-status-limits-or-existence
+  ;; Only a platform admin, as the tenant API has it (BOU-1011)
+  (doseq [profile [:dev :test]]
+    (testing (str profile)
+      (with-admin profile
+        (fn [ctx app]
+          (let [id     (str (random-uuid))
+                theirs (assoc admin-user :id (random-uuid) :tenant-id (parse-uuid id))
+                row    #(db/execute-one! ctx {:select [:name :status :settings :deleted-at] :from [:tenants]
+                                              :where [:= :id id]})]
+            (db/execute-update! ctx {:insert-into :tenants
+                                     :values [{:id id :slug "acme" :name "Acme" :schema-name "tenant_acme"
+                                               :status "active" :created-at (str (java.time.Instant/now))}]})
+            (testing "an edit keeps the status and limits, and the name changes"
+              (request-as! theirs app :put (str "/web/admin/tenants/" id)
+                           {"name" "Acme 2" "status" "suspended" "settings" "{\"max-users\": 9999}"})
+              (is (= "Acme 2" (:name (row))))
+              (is (= "active" (:status (row))))
+              (is (not (str/includes? (str (:settings (row))) "9999"))))
+            (testing "a delete is refused"
+              (is (#{403 :forbidden} (let [r (request-as! theirs app :delete (str "/web/admin/tenants/" id))]
+                                       (or (:thrown r) (:status r)))))
+              (is (nil? (:deleted-at (row)))))
+            (testing "a platform admin still sets the status"
+              (request! app :put (str "/web/admin/tenants/" id) {"name" "Acme 2" "status" "suspended"})
+              (is (= "suspended" (:status (row)))))))))))
+

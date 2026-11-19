@@ -125,6 +125,23 @@
   (writable! schema-provider user entity-name (if before (delay (merge @before data)) data))
   (targets-readable! inner schema-provider user entity-name data before))
 
+(defn- without-platform-fields
+  "`data` without the entity's `:platform-fields` unless `user` is a platform
+   admin: to anyone else they are read-only (BOU-1011)."
+  [schema-provider user entity-name data]
+  (let [fields (:platform-fields (ports/get-entity-config schema-provider entity-name))]
+    (if (or (empty? fields) (access/platform-admin? user))
+      data
+      (apply dissoc data fields))))
+
+(defn- platform-delete!
+  "Throw :forbidden when only a platform admin may delete `entity-name`'s
+   records and `user` is not one (BOU-1011)."
+  [schema-provider user entity-name]
+  (when (and (= :platform-admin (get-in (ports/get-entity-config schema-provider entity-name) [:permissions :delete]))
+             (not (access/platform-admin? user)))
+    (throw (ex-info "Only a platform admin deletes these" {:type :forbidden :entity entity-name :reason :platform-admin-only}))))
+
 (defn- with-link-scopes
   "`data` with the scopes its `:admin/links` must keep to: a link to a record
    the user may not read is neither added nor removed."
@@ -183,8 +200,9 @@
         rows)))
 
   (create-entity [_ entity-name data]
-    (checked! inner schema-provider user entity-name data)
-    (ports/create-entity inner entity-name (with-link-scopes schema-provider user entity-name data)))
+    (let [data (without-platform-fields schema-provider user entity-name data)]
+      (checked! inner schema-provider user entity-name data)
+      (ports/create-entity inner entity-name (with-link-scopes schema-provider user entity-name data))))
 
   (create-entity-with-children [_ entity-name data children]
     (let [nested (set (map :entity (:has-many (ports/get-entity-config schema-provider entity-name))))]
@@ -198,20 +216,26 @@
       (ports/create-entity-with-children inner entity-name (with-link-scopes schema-provider user entity-name data) children)))
 
   (update-entity [_ entity-name id data]
-    (let [record (stored inner schema-provider user entity-name id)]
+    (let [record (stored inner schema-provider user entity-name id)
+          data   (without-platform-fields schema-provider user entity-name data)]
       (checked! inner schema-provider user entity-name data record)
       (ports/update-entity inner entity-name id (with-link-scopes schema-provider user entity-name data))))
 
   (update-entity-field [_ entity-name id field value]
+    (when (empty? (without-platform-fields schema-provider user entity-name {field value}))
+      (throw (ex-info "Only a platform admin changes this field"
+                      {:type :forbidden :entity entity-name :field field :reason :platform-admin-only})))
     (let [record (stored inner schema-provider user entity-name id)]
       (checked! inner schema-provider user entity-name {field value} record))
     (ports/update-entity-field inner entity-name id field value))
 
   (delete-entity [_ entity-name id]
+    (platform-delete! schema-provider user entity-name)
     (inside! inner schema-provider user entity-name :write [id])
     (ports/delete-entity inner entity-name id))
 
   (bulk-delete-entities [_ entity-name ids]
+    (platform-delete! schema-provider user entity-name)
     (inside! inner schema-provider user entity-name :write ids)
     (ports/bulk-delete-entities inner entity-name ids)))
 

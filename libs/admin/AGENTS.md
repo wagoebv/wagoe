@@ -686,6 +686,11 @@ module's create page, or, if it has none, set `:permissions {:create false}`.
 That hides "New" and answers create with a 403 admin page; `:create-hint
 "POST /api/v1/tenants"` tells the user where to go instead (BOU-534).
 
+`:platform-fields #{:status :settings}` makes fields read-only to anyone but a
+platform admin: a tenant's admin edits their tenant's name, not its status or
+limits. `:permissions {:delete :platform-admin}` lets only a platform admin
+delete (BOU-1011).
+
 ### 6. Direct Navigation to HTMX Fragment Endpoints
 
 **Problem**: Refreshing page on HTMX fragment URL shows unstyled HTML.
