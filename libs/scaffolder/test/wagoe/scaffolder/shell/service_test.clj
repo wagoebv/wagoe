@@ -1051,3 +1051,29 @@
         (is (str/includes? (slurp (io/file dir "src/wagoe/invoice/schema.clj"))
                            "[:enum :draft :sent :paid]")))
       (finally (delete-tree! dir)))))
+
+(deftest ^:unit ^:security no-write-lands-outside-the-output-dir
+  ;; BOU-1018: an entity's plural is part of a path, a field's name of DDL
+  (let [dir      (temp-dir)
+        generate #(ports/generate-module (service/create-scaffolder-service)
+                                         {:module-name "billing"
+                                          :entities    [(merge {:name "Invoice" :fields [{:name :name :type :string}]} %)]
+                                          :interfaces  {:http true}
+                                          :output-dir  (.getPath dir)
+                                          :dry-run     false})]
+    (try
+      (is (re-find #":plural" (str (:errors (generate {:plural "../../../escaped"})))))
+      (is (re-find #"kebab-case" (str (:errors (generate {:fields [{:name (keyword "x int); drop table users; --")
+                                                                    :type :string}]})))))
+      (is (not-any? #(.isFile %) (file-seq dir)))
+      (finally (delete-tree! dir))))
+  (let [resolve #'service/resolve-path
+        dir     (temp-dir)
+        path    (.getPath dir)]
+    (try
+      (is (= (io/file path "a/b.edn") (resolve path "a/b.edn")))
+      (is (= (io/file "a/b.edn") (resolve "." "a/b.edn")))
+      (doseq [p ["../x.edn" "resources/conf/dev/admin/../../../../../x.edn"]]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"outside" (resolve path p)) p)
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"outside" (resolve "." p)) p))
+      (finally (delete-tree! dir)))))
