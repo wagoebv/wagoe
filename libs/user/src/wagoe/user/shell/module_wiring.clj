@@ -4,7 +4,9 @@
   This namespace owns all Integrant init/halt methods for user-specific
   components so that shared system wiring does not depend directly on
   user shell namespaces."
-  (:require [wagoe.tenant.ports :as tenant-ports]
+  (:require [wagoe.config :as wagoe-config]
+            [wagoe.core.utils.secret-keys :as secret-keys]
+            [wagoe.tenant.ports :as tenant-ports]
             [wagoe.user.ports :as ports]
             [wagoe.user.shell.persistence :as user-persistence]
             [wagoe.user.shell.auth-persistence :as auth-persistence]
@@ -320,9 +322,19 @@
                        "are unmarked: they stay linkable. Set auth_users.self_registered; see UPGRADING.")
                   {:providers (vec ps) :unmarked n})))))
 
+(defn- check-state-secret!
+  "Refuse a short or, outside dev, example `:state-secret`: it signs the state
+   that carries a sign-in back (BOU-1021). Without one, JWT_SECRET, checked
+   where it is read."
+  [{:keys [state-secret]} dev-like?]
+  (when state-secret
+    (when-let [problem (secret-keys/weak-secret "The OIDC :state-secret" state-secret dev-like?)]
+      (throw (ex-info problem {:type :configuration-error :module :wagoe/user-oidc})))))
+
 (defmethod ig/init-key :wagoe/user-oidc
-  [_ {:keys [settings registration? ctx] :as opts}]
+  [_ {:keys [settings registration? ctx dev-like?] :as opts}]
   (log/info "Initializing OIDC sign-in" {:providers (keys (:providers settings))})
+  (check-state-secret! settings dev-like?)
   (warn-unmarked-registrations! settings registration? #(user-persistence/unmarked-account-count ctx))
   (oidc/create-oidc-client
    (assoc opts :secret (or (:state-secret settings) (user-auth/get-jwt-secret)))))
@@ -537,6 +549,7 @@
       (seq (get-in settings [:oidc :providers]))
       (-> (update :components assoc
                   :wagoe/user-oidc        {:settings            (:oidc settings)
+                                           :dev-like?           (wagoe-config/dev-like? (:wagoe/profile config))
                                            :registration?       (landing/registration? config)
                                            :ctx                 (ig/ref :wagoe/db-context)
                                            :auth-service        (ig/ref :wagoe/auth-service)

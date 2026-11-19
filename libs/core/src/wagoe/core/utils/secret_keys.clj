@@ -42,3 +42,19 @@
   [secret]
   (let [s (text/lower-case (str secret))]
     (boolean (or (re-find placeholder-marker s) (< (count (set s)) 6)))))
+
+(def min-secret-length
+  "A key shorter than this materially weakens what it signs or encrypts."
+  32)
+
+(defn weak-secret
+  "Why `secret`, named `what` in the message, cannot key anything, or nil:
+   under 32 characters, or, unless `dev-like?`, a published example value
+   (BOU-1021)."
+  [what secret dev-like?]
+  (cond
+    (< (count (str secret)) min-secret-length)
+    (str what " must be at least " min-secret-length " characters.")
+
+    (and (not dev-like?) (placeholder-secret? secret))
+    (str what " is an example value from the docs or a template. Generate one: openssl rand -base64 32")))

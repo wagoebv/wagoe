@@ -341,6 +341,19 @@
                         "export RPC_SERVICE_KEY=\"$(openssl rand -base64 32)\"" "a service")
            {:id :rpc-service-key :level :pass :msg "RPC_SERVICE_KEY is set"})])))
 
+(defn check-csrf-secret
+  "When CSRF is on, fail what boot refuses for its secret, CSRF_SECRET or else
+   JWT_SECRET: under 32 characters, or outside a dev-like `profile` an example
+   value (BOU-1021). A secret in the config itself is check-secret-refs' to judge."
+  [active-config env-map profile]
+  (let [csrf (get-in active-config [:wagoe/http :security :csrf])
+        [var-name secret] (some (fn [v] (when-not (str/blank? (get env-map v)) [v (get env-map v)]))
+                                ["CSRF_SECRET" "JWT_SECRET"])]
+    (when (and (true? (:enabled? csrf)) (not (contains? csrf :secret)) secret)
+      [(or (weak-secret :csrf-secret var-name secret profile
+                        "export CSRF_SECRET=\"$(openssl rand -base64 32)\"" "CSRF protection")
+           {:id :csrf-secret :level :pass :msg (str "CSRF secret (" var-name ") is set")})])))
+
 (defn check-admin-parity
   "Check that admin entity config files exist in both dev and test."
   [dev-files test-files]
@@ -687,6 +700,7 @@
          (check-providers active)
          (check-jwt-secret active env-map (code-enabled-modules (root-dir)) env)
          (check-rpc-service-key env-map env)
+         (check-csrf-secret active env-map env)
          ;; It compares dev with test, so it says nothing about another
          ;; profile and named the wrong two under --env prod (BOU-597).
          (when (#{"dev" "test"} env)

@@ -12,3 +12,10 @@
   (is (not-any? secret-keys/placeholder-secret?
                 ["q8Zt0n4mR2vJ7kPa1sXc9LbW3eYh6GdUf5Ni" "3f9a0c71e2b4d8a65f0e1c9b7d2a4e6f"
                  "abcdefabcdefabcdefabcdefabcdefabcdef"])))
+
+(deftest ^:unit ^:security a-weak-secret-says-why
+  ;; BOU-1021
+  (is (re-find #"at least 32" (secret-keys/weak-secret "K" "short" false)))
+  (is (re-find #"example value" (secret-keys/weak-secret "K" "change-me-change-me-change-me-change-me" false)))
+  (is (nil? (secret-keys/weak-secret "K" "change-me-change-me-change-me-change-me" true)) "dev keeps its example")
+  (is (nil? (secret-keys/weak-secret "K" "q8Zr3vLx0pT6wN2mHc9sYbK4dF7jA1eU5gR" false))))

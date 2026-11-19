@@ -13,6 +13,8 @@
             [integrant.core :as ig]
             [malli.core :as m]
             [malli.error :as me]
+            [wagoe.config :as wagoe-config]
+            [wagoe.core.utils.secret-keys :as secret-keys]
             [wagoe.events.ports :as events]
             [wagoe.webhooks.ports :as ports]
             [wagoe.webhooks.schema :as schema]
@@ -25,8 +27,12 @@
   {:status :initialized})
 
 (defmethod ig/init-key :wagoe/webhooks
-  [_ {:keys [db-ctx job-queue idempotency settings]}]
+  [_ {:keys [db-ctx job-queue idempotency settings dev-like?]}]
   (let [settings (update settings :encryption-key #(or % (System/getenv "JWT_SECRET")))]
+    ;; It encrypts the signing secrets at rest (BOU-1021)
+    (when-let [problem (secret-keys/weak-secret "The webhook encryption key (:encryption-key, else JWT_SECRET)"
+                                                (:encryption-key settings) dev-like?)]
+      (throw (ex-info problem {:type :configuration-error :module :wagoe/webhooks})))
     (log/info "Webhooks: initializing" {:queue (:queue settings) :require-https? (:require-https? settings)})
     (service/create-service {:store       (persistence/create-store db-ctx)
                              :transport   (http-transport/create-transport settings)
@@ -66,7 +72,7 @@
     (when (and topics (not (contains? enabled :wagoe/events)))
       (refuse! ":wagoe/webhooks :topics needs :wagoe/events, which publishes them."))
     (let [settings (merge service/defaults
-                          {:require-https? (not (contains? #{:dev :test :local} profile))}
+                          {:require-https? (not (wagoe-config/dev-like? profile))}
                           settings)]
       (cond-> {:components
                {:wagoe.webhooks/db-schema    {:ctx (ig/ref :wagoe/db-context)}
@@ -74,7 +80,8 @@
                                               :schema      (ig/ref :wagoe.webhooks/db-schema)
                                               :job-queue   (ig/ref :wagoe/job-queue)
                                               :idempotency (ig/ref :wagoe/idempotency-store)
-                                              :settings    settings}
+                                              :settings    settings
+                                              :dev-like?   (wagoe-config/dev-like? profile)}
                 :wagoe.webhooks/job-handlers {:service (ig/ref :wagoe/webhooks)}}
                :job-handlers [(ig/ref :wagoe.webhooks/job-handlers)]}
         topics

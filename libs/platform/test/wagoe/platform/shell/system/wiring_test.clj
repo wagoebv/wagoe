@@ -185,6 +185,21 @@
                        :config {:active {:wagoe/http {:security {:csrf {:enabled? true
                                                                         :secret ""}}}}}})))))
 
+(deftest ^:security ^:unit csrf-refuses-a-short-or-example-secret
+  ;; BOU-1021: either lets anyone forge the token
+  (let [boot (fn [profile secret]
+               (try (ig/init-key :wagoe/http-handler
+                                 {:router ::router :logger ::logger :metrics-emitter ::metrics
+                                  :error-reporter ::error-reporter
+                                  :config {:wagoe/profile profile
+                                           :active {:wagoe/http {:security {:csrf {:enabled? true :secret secret}}}}}})
+                    nil
+                    (catch clojure.lang.ExceptionInfo e (ex-message e))))]
+    (is (re-find #"at least 32" (str (boot :prod "too-short"))))
+    (is (re-find #"example value" (str (boot :prod "change-me-to-a-32-char-random-csrf-secret"))))
+    (is (not (re-find #"CSRF" (str (boot :dev "change-me-to-a-32-char-random-csrf-secret"))))
+        "dev keeps its example")))
+
 (deftest ^:security ^:unit rate-limit-fails-loud-in-prod-without-cache
   (testing "rate limiting enabled in :prod with no cache throws at startup (no false protection)"
     (is (thrown-with-msg?

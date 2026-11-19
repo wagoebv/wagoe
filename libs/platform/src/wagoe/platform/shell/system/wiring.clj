@@ -23,7 +23,9 @@
      (def cfg (sys-config/ig-config (config/load-config)))
      (def system (ig/init cfg))
      (ig/halt! system)"
-  (:require [wagoe.core.utils.text :as text]
+  (:require [wagoe.config :as wagoe-config]
+            [wagoe.core.utils.secret-keys :as secret-keys]
+            [wagoe.core.utils.text :as text]
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.platform.shell.database.migrations :as migrations]
             [wagoe.observability.logging.shell.adapters.no-op :as logging-no-op]
@@ -470,6 +472,12 @@
                                  "state-changing requests would NOT be CSRF-validated. "
                                  "Set CSRF_SECRET or JWT_SECRET, or :wagoe/http :security :csrf :secret.")
                             {:type :configuration-error :csrf/enabled? true :csrf/secret-present? false})))
+        ;; A short or example secret lets anyone forge the token (BOU-1021)
+        _ (when (:enabled? csrf-config)
+            (when-let [problem (secret-keys/weak-secret "The CSRF secret (:wagoe/http :security :csrf :secret, else CSRF_SECRET, else JWT_SECRET)"
+                                                        (:secret csrf-config)
+                                                        (wagoe-config/dev-like? (:wagoe/profile config)))]
+              (throw (ex-info problem {:type :configuration-error :csrf/enabled? true}))))
         ;; Off stays the default so an upgrade cannot 403 an app; said out loud so
         ;; it is a choice (BOU-940).
         _ (when-not (or (:enabled? csrf-config) (= :test (:wagoe/profile config)))
