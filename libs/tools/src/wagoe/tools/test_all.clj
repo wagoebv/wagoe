@@ -21,8 +21,10 @@
 (ns wagoe.tools.test-all
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
+            [clojure.edn :as edn]
             [clojure.string :as str]
             [wagoe.tools.ansi :refer [bold green red yellow dim]]
+            [wagoe.tools.ci-changes :as ci-changes]
             [wagoe.tools.test-services :as test-services]))
 
 ;; =============================================================================
@@ -99,7 +101,7 @@
 ;; value AGENTS.md used to document was 27 characters — so the documented
 ;; command aborted before running a single test. Supply a valid default rather
 ;; than making every caller remember.
-(def ^:private dev-jwt-secret "dev-secret-at-least-32-characters-long")
+(def dev-jwt-secret "dev-secret-at-least-32-characters-long")
 
 (defn- test-env []
   (cond-> {"WAG_ENV" "test"}
@@ -172,6 +174,79 @@
     (println (format "  %-52s %s   %s" (str host ":" port " (" (name id) ")")
                      "bb test:services up"
                      (dim (str/join ", " needed-by))))))
+
+(defn- lib-suites
+  "{lib suite-id} for each tests.edn suite that tests libs/<lib>/test."
+  []
+  (into {} (for [{:keys [id test-paths]} (:tests (edn/read-string {:default (fn [_ v] v)} (slurp "tests.edn")))
+                 path test-paths
+                 :let [lib (second (re-find #"^libs/([^/]+)/test$" path))]
+                 :when lib]
+             [lib (name id)])))
+
+(def ^:private standalone
+  "Library → the surfaces its change runs, for libraries outside tests.edn."
+  {"tools" #{:tools :agents} "config" #{:config} "wagoe-cli" #{:wagoe-cli} "wagoe-mcp" #{:wagoe-mcp}})
+
+(defn changed-surfaces
+  "What `bb check` runs for `libs`, the libraries a diff touches: their suites
+   plus :app, the :security tests of every other suite, and any standalone
+   surface they own. The app and security suites caught 5 of 12 real CI
+   failures (BOU-1023)."
+  [libs lib-suites]
+  (let [ids    (into #{} (mapcat standalone) libs)
+        run    (conj (set (keep lib-suites libs)) "app")
+        suites (map #(str ":" %) (sort run))]
+    (-> [{:id    :main
+          :label "changed suites + :app"
+          :dir   "."
+          :cmd   (into ["clojure" main-suite-aliases] suites)}]
+        ;; The main run already holds its suites' security tests.
+        (cond-> (not= run (conj (set (vals lib-suites)) "app"))
+          (conj {:id    :security
+                 :label ":security tests of the other suites"
+                 :dir   "."
+                 :cmd   (into ["clojure" main-suite-aliases "--focus-meta" ":security"]
+                              (mapcat #(vector "--skip" %))
+                              suites)}))
+        (into (filter (comp ids :id)) surfaces))))
+
+(defn- git-lines [& args]
+  (let [{:keys [exit out err]} (apply process/shell {:out :string :err :string :continue true} "git" args)]
+    (when-not (zero? exit)
+      (throw (ex-info (str "git " (str/join " " args) " failed: " err) {:type :internal-error})))
+    (remove str/blank? (str/split-lines out))))
+
+(defn- local-changes
+  "Paths changed since the merge base with origin/<base>: commits, the working
+   tree and untracked files, so a check before a commit sees the edit too."
+  [base]
+  (let [merge-base (first (git-lines "merge-base" (str "origin/" base) "HEAD"))]
+    (distinct (concat (git-lines "diff" "--name-only" merge-base)
+                      (git-lines "ls-files" "--others" "--exclude-standard")))))
+
+(defn local-libs
+  "Libraries whose suites `bb check` runs for `paths`; nil when no code changed.
+   Unlike CI, a change outside libs/ selects no library: CI on main runs
+   everything, and here that cost 30 minutes per push (BOU-1024)."
+  [graph paths]
+  (when-not (or (empty? paths) (ci-changes/docs-only? paths))
+    (let [lib-paths (filter #(str/starts-with? % "libs/") paths)]
+      (if (seq lib-paths) (ci-changes/libs-to-test graph lib-paths) #{}))))
+
+(defn changed-main
+  "`bb test:changed [base-ref]`: the tests of what changed since
+   origin/<base-ref>, default main."
+  [& [base-ref]]
+  (let [base (or base-ref "main")
+        libs (local-libs (ci-changes/dependency-graph ".") (local-changes base))]
+    (if (nil? libs)
+      (println (dim (str "No code changed since origin/" base "; no tests to run.")))
+      (do
+        (println (bold (str "Testing what changed since origin/" base ": "))
+                 (if (seq libs) (str/join " " (sort libs)) "no library, so :app and :security"))
+        (test-services/print-preflight)
+        (System/exit (if (pos? (report (mapv run-surface (changed-surfaces libs (lib-suites))))) 1 0))))))
 
 (defn -main [& args]
   (if (some #{"--list"} args)

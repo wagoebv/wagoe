@@ -57,12 +57,10 @@
 ;; all-checks <-> CI lockstep
 ;; =============================================================================
 ;;
-;; CI invokes each gate as its own job (`run: bb check:<gate>`) rather than
-;; calling `bb check`, so the workflow and `all-checks` are two hand-maintained
-;; copies of the same registry — and they had silently drifted three ways:
-;; check:no-boundary was in neither, check:poms ran only in CI, check:agents
-;; only in `bb check`. A gate missing from `all-checks` means `bb check --ci`
-;; passes locally without it; missing from CI means nothing enforces it on a PR.
+;; CI once ran each gate as its own step, a second hand-kept copy of the
+;; registry that drifted three ways. It now runs `bb check --gates`, the
+;; registry itself (BOU-1024). These tests keep that so, and keep any gate CI
+;; still runs on its own inside the registry.
 
 (defn- repo-root
   "The repository root: the cwd under `bb test:tools`, ../.. inside libs/tools.
@@ -109,19 +107,20 @@
        set))
 
 (deftest ^:unit ci-workflow-is-discoverable-and-runs-gates
-  (testing "the workflow is found and actually invokes gates — guards the two tests below"
-    (is (seq (ci-invoked-gates (ci-workflow)))
-        "found no `run: bb check:<gate>` lines; the lockstep tests below would pass vacuously")))
+  (testing "CI runs the registry, so every gate in it runs on a PR"
+    (is (re-find #"run:\s+bb\s+check\s+--gates" (ci-workflow))
+        "ci.yml no longer runs `bb check --gates`; gates could pass locally and never run in CI")))
 
 (deftest ^:unit every-aggregate-check-also-runs-in-ci
-  (testing "each bb check:<gate> in all-checks has a CI job invoking it"
+  (testing "each bb check:<gate> row that --gates leaves out has a CI job of its own"
     (let [ci (ci-invoked-gates (all-workflow-sources))]
-      (doseq [{:keys [id cmd]} check/all-checks
-              :when (and (= "bb" (first cmd))
+      (doseq [{:keys [id cmd kind]} check/all-checks
+              :when (and (= :test kind)
+                         (= "bb" (first cmd))
                          (str/starts-with? (second cmd) "check:"))
               :let [gate (subs (second cmd) (count "check:"))]]
         (is (contains? ci gate)
-            (str "check:" gate " (" id ") is in all-checks but no CI job runs it"))))))
+            (str "check:" gate " (" id ") is left out of --gates but no CI job runs it"))))))
 
 (defn- summary-needs
   "Job ids in the `All Tests Passed` summary's `needs:` list."
@@ -133,7 +132,7 @@
            set))
 
 (defn- gate-job-ids
-  "Job ids whose step runs a `bb check:<gate>` command.
+  "Job ids whose step runs `bb check` or a `bb check:<gate>` command.
 
    The job id is the last `^  <id>:` line before the run step."
   [yaml]
@@ -142,7 +141,7 @@
       (if (nil? l)
         found
         (let [id (second (re-find #"^  ([a-z][a-z0-9-]*):\s*$" l))
-              hit (re-find #"run:\s+bb\s+check:[a-z-]+" l)]
+              hit (re-find #"run:\s+bb\s+check[: ]" l)]
           (recur more (or id current) (if (and hit current) (conj found current) found)))))))
 
 (deftest ^:unit no-secret-is-exposed-to-branch-controlled-workflows
@@ -240,6 +239,23 @@
 ;; Argument parsing
 ;; =============================================================================
 
+(deftest ^:unit select-checks-test
+  (let [ids (fn [opts] (set (map :id (check/select-checks opts check/all-checks))))]
+    (testing "--gates leaves out exactly the test rows"
+      (is (= (disj (set (map :id check/all-checks)) :css :tests) (ids {:gates true}))))
+    (testing "--quick wins over --gates"
+      (is (= check/quick-check-ids (ids {:quick true :gates true}))))
+    (testing "a plain run selects every row"
+      (is (= (set (map :id check/all-checks)) (ids {}))))))
+
+(deftest ^:unit check-env-test
+  (testing "the framework repo gets a dev JWT_SECRET only when none is set"
+    (is (= {"JWT_SECRET" test-all/dev-jwt-secret} (check/check-env true nil)))
+    (is (= {"JWT_SECRET" test-all/dev-jwt-secret} (check/check-env true "")))
+    (is (nil? (check/check-env true "mine"))))
+  (testing "a generated project keeps its own"
+    (is (nil? (check/check-env false nil)))))
+
 (deftest ^:unit parse-args-test
   (testing "defaults when no args"
     (let [opts (#'check/parse-args [])]
@@ -261,6 +277,9 @@
       (is (true? (:quick opts)))
       (is (true? (:ci opts)))
       (is (false? (:fix opts)))))
+
+  (testing "parses --gates flag"
+    (is (true? (:gates (#'check/parse-args ["--gates"])))))
 
   (testing "parses --help flag"
     (is (true? (:help (#'check/parse-args ["--help"]))))))
@@ -290,7 +309,7 @@
     ;; test below enforces.
     (is (= #{:doc-counts :versions :agents :poms :no-boundary :docs-lint
              :branch-protection :changelog :isolation :error-shape :deps :jdk
-             :roadmap :ports-diff}
+             :roadmap :ports-diff :css :tests}
            (set (map :id (remove #(= :any (:scope %)) check/all-checks)))))))
 
 (deftest ^:unit the-template-defines-no-task-a-user-has-no-business-running

@@ -9,6 +9,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [wagoe.tools.ci-changes :as ci-changes]
             [wagoe.tools.test-all :as test-all]))
 
 (defn- repo-root
@@ -84,3 +85,22 @@
       (is (string? label))
       (is (and (string? reason) (seq reason))
           (str "excluded surface " id " needs a :reason")))))
+
+(deftest ^:unit every-library-has-a-surface-for-bb-check
+  ;; `bb test:changed` maps a changed library to its tests.edn suite or its
+  ;; standalone surface; a library with neither would get only :app (BOU-1024).
+  (let [suites (#'test-all/lib-suites)]
+    (is (= "user" (get suites "user")) "lib-suites no longer reads tests.edn")
+    (doseq [lib (keys (ci-changes/dependency-graph "."))]
+      (is (or (contains? suites lib) (contains? @#'test-all/standalone lib) (= "e2e" lib))
+          (str lib " has no suite and no standalone surface for bb check")))))
+
+(deftest ^:unit local-libs-test
+  (let [graph (ci-changes/dependency-graph ".")]
+    (testing "nothing changed, or only docs: no tests"
+      (is (nil? (test-all/local-libs graph [])))
+      (is (nil? (test-all/local-libs graph ["CHANGELOG.md"]))))
+    (testing "a change outside libs/ selects no library"
+      (is (= #{} (test-all/local-libs graph ["bb.edn"]))))
+    (testing "a library change selects it"
+      (is (contains? (test-all/local-libs graph ["libs/user/src/wagoe/user/x.clj"]) "user")))))
