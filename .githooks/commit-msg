@@ -14,6 +14,10 @@ case "$subject" in
   "Merge branch "*|"Merge remote-tracking branch "*|"Merge tag "*|"Merge commit "*|"Merge pull request #"*) exit 0 ;;
   "Revert \""*|"Reapply \""*|"fixup! "*|"squash! "*|"amend! "*) exit 0 ;;
 esac
+# `bb release` (BOU-1029); the release itself names no single ticket.
+if [[ "$subject" =~ ^Release\ [0-9]+\.[0-9]+\.[0-9]+(-[a-z]+-[0-9]+)?$ ]]; then
+  exit 0
+fi
 if [[ "$subject" =~ BOU-[0-9]+ ]]; then
   exit 0
 fi

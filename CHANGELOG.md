@@ -83,6 +83,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`bb release <version>` tags only a commit CI passed on main** (BOU-1029): it bumps, moves `[Unreleased]` to
+  the version, pushes, waits for green CI, then tags. Release with it instead of tagging by hand.
 - **`bb check` is the pre-push gate** (BOU-1024): gates, the CSS build and the tests of what changed (`bb test:changed`);
   `--gates` skips the tests, `bb check-full` adds `bb test:all` and `bb e2e`. Run `npm ci` once for the CSS row.
 - **A user's Rights tab shows what they can and can't do** (BOU-1000): per module at a glance, every permission held or
