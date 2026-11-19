@@ -204,3 +204,20 @@
     (ports/send-message conn {:type :fragment :fragment "b"})
     (is (not (ports/open? conn)))
     (is (sse-adapter/closed? (sse-adapter/next-event conn 10)))))
+
+(deftest ^:integration ^:security an-admin-elsewhere-gets-only-the-roles-held-here
+  ;; A's admin, a viewer in B, streaming in B got B's admin messages (BOU-1010)
+  (let [a #uuid "00000000-0000-0000-0000-00000000000a"
+        b #uuid "00000000-0000-0000-0000-00000000000b"
+        {:keys [service registry]} (system)
+        {:keys [broken? done]}
+        (open-stream service (assoc (request {"topic" "order:1"})
+                                    :user (assoc user :role :admin :tenant-id a)
+                                    :tenant {:id b} :tenant-membership {:role :viewer})
+                     :authorize-topic allow-orders :heartbeat-ms 20)]
+    (is (await-until #(= 1 (ports/connection-count registry))))
+    (is (empty? (ports/find-by-role registry :admin)) "no admin in B")
+    (is (= 1 (count (ports/find-by-role registry :viewer))) "a viewer, as their membership there")
+    (reset! broken? true)
+    (deref done 2000 nil)))
+

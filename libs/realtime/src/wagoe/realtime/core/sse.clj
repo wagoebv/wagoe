@@ -55,6 +55,18 @@
       resolved
       own)))
 
+(defn roles-in
+  "The roles `user` holds in `tenant`, the connection's (BOU-1010): in their
+   own tenant, or none, their own; in another, the role of their membership
+   there, or `:admin` for a platform admin. A home tenant's admin is no admin
+   elsewhere. The rule of `wagoe.core.http.access/roles-here`."
+  [{:keys [user tenant-membership]} tenant]
+  (let [own (into #{} (comp (remove nil?) (map keyword)) (or (seq (:roles user)) [(:role user)]))]
+    (cond
+      (or (nil? tenant) (= (str tenant) (str (:tenant-id user)))) own
+      (and (nil? (:tenant-id user)) (contains? own :admin))         #{:admin}
+      :else (into #{} (keep #(some-> % keyword)) [(:role tenant-membership)]))))
+
 (defn request-topics
   "The `topic` query parameter as a vector of topic names; repeated params
    arrive as a vector."
