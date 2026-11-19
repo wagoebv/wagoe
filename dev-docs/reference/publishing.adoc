@@ -255,7 +255,7 @@ GitHub Actions will:
   Needs the `LINEAR_API_KEY` secret (read-only) on the `release` environment
 . Run `bb deploy --missing` with the Clojars credentials, so a re-run skips what already landed
 . Check every artifact is on Clojars (`bb deploy --verify`)
-. Create a GitHub Release. A version with a stage (`1.1.0-rc-1`) is marked pre-release, so `/releases/latest`, which
+. Create a GitHub Release whose notes are the version's CHANGELOG section. A version with a stage (`1.1.0-rc-1`) is marked pre-release, so `/releases/latest`, which
   `scripts/install.sh` installs, stays on the last final release. Try a pre-release through its Maven version
   (`{:mvn/version "1.1.0-rc-1"}`), not through `install.sh`.
 

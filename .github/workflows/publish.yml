@@ -303,6 +303,20 @@ jobs:
       - name: Hash the installer
         run: cd scripts && sha256sum install.sh > install.sh.sha256
 
+      # The release notes are this version's CHANGELOG section (BOU-1030).
+      # release:check already refused a version without one.
+      - name: Release notes from CHANGELOG.md
+        shell: bash
+        env:
+          VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          {
+            printf '## Wagoe Framework %s\n\nAll libraries published to Clojars.\n\n' "$VERSION"
+            printf '```clojure\ncom.wagoe/wagoe-platform {:mvn/version "%s"}\n```\n\n' "$VERSION"
+            awk -v h="## [$VERSION]" 'index($0, h) == 1 {on = 1; next} on && /^## \[/ {exit} on' CHANGELOG.md
+          } > release-notes.md
+          grep -q '^### ' release-notes.md || { echo "::error::CHANGELOG.md has no section for $VERSION"; exit 1; }
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
@@ -311,16 +325,7 @@ jobs:
           files: |
             scripts/install.sh
             scripts/install.sh.sha256
-          body: |
-            ## Wagoe Framework ${{ needs.publish.outputs.version }}
-
-            All libraries published to Clojars.
-
-            ```clojure
-            com.wagoe/wagoe-platform {:mvn/version "${{ needs.publish.outputs.version }}"}
-            ```
-
-            See [CHANGELOG.md](https://github.com/wagoebv/wagoe/blob/main/CHANGELOG.md) for details.
+          body_path: release-notes.md
           draft: false
           # scripts/install.sh installs /releases/latest, which skips
           # prereleases. A version with a stage (1.1.0-rc-1) is a prerelease,
