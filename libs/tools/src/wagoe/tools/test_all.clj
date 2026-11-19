@@ -21,6 +21,7 @@
 (ns wagoe.tools.test-all
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
+            [clojure.edn :as edn]
             [clojure.string :as str]
             [wagoe.tools.ansi :refer [bold green red yellow dim]]
             [wagoe.tools.ci-changes :as ci-changes]
@@ -100,7 +101,7 @@
 ;; value AGENTS.md used to document was 27 characters — so the documented
 ;; command aborted before running a single test. Supply a valid default rather
 ;; than making every caller remember.
-(def ^:private dev-jwt-secret "dev-secret-at-least-32-characters-long")
+(def dev-jwt-secret "dev-secret-at-least-32-characters-long")
 
 (defn- test-env []
   (cond-> {"WAG_ENV" "test"}
@@ -174,10 +175,14 @@
                      "bb test:services up"
                      (dim (str/join ", " needed-by))))))
 
-(defn- suite-ids
-  "Suite ids tests.edn declares, as strings."
+(defn- lib-suites
+  "{lib suite-id} for each tests.edn suite that tests libs/<lib>/test."
   []
-  (set (map second (re-seq #":id\s+:([a-z0-9-]+)" (slurp "tests.edn")))))
+  (into {} (for [{:keys [id test-paths]} (:tests (edn/read-string {:default (fn [_ v] v)} (slurp "tests.edn")))
+                 path test-paths
+                 :let [lib (second (re-find #"^libs/([^/]+)/test$" path))]
+                 :when lib]
+             [lib (name id)])))
 
 (def ^:private standalone
   "Library → the surfaces its change runs, for libraries outside tests.edn."
@@ -187,14 +192,14 @@
   "What `bb check` runs for `libs`, the libraries a diff touches: their suites
    plus :app, every :security test, and any standalone surface they own. The
    app and security suites caught 5 of 12 real CI failures (BOU-1023)."
-  [libs suites]
+  [libs lib-suites]
   (let [ids (into #{} (mapcat standalone) libs)]
     (into [{:id    :main
             :label "changed suites + :app"
             :dir   "."
             :cmd   (into ["clojure" main-suite-aliases]
                          (map #(str ":" %))
-                         (sort (conj (set (filter suites libs)) "app")))}
+                         (sort (conj (set (keep lib-suites libs)) "app")))}
            {:id    :security
             :label ":security tests"
             :dir   "."
@@ -215,7 +220,7 @@
         (println (bold (str "Testing what changed since origin/" base ": "))
                  (str/join " " (sort libs)))
         (test-services/print-preflight)
-        (System/exit (if (pos? (report (mapv run-surface (changed-surfaces libs (suite-ids))))) 1 0))))))
+        (System/exit (if (pos? (report (mapv run-surface (changed-surfaces libs (lib-suites))))) 1 0))))))
 
 (defn -main [& args]
   (if (some #{"--list"} args)

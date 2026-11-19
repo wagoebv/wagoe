@@ -15,7 +15,8 @@
   (:require [wagoe.tools.ansi :refer [bold green red dim]]
             [babashka.process :as process]
             [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [wagoe.tools.test-all :as test-all]))
 
 ;; =============================================================================
 ;; Check definitions
@@ -67,25 +68,15 @@
   []
   (System/exit (:exit (process/shell {:continue true} (str/join " " (linting-cmd))))))
 
-(def ^:private ui-assets
-  "Committed UI assets the build must leave in place."
-  ["libs/ui-style/resources/public/css/daisy-admin.css"
-   "libs/ui-style/resources/public/css/wagoe-admin.css"
-   "libs/ui-style/resources/public/js/theme.js"
-   "libs/ui-style/resources/public/js/htmx.min.js"])
-
 (defn css
   "Rebuild the CSS and fail when the committed bundles differ from it.
    Tailwind scans the Clojure sources for class names, so any code change can
    change the bundle; this failed 2 of 30 red CI runs (BOU-1023)."
   []
-  (let [sh   #(:exit (apply process/shell {:continue true} %&))
-        exit (if (pos? (sh "npm" "run" "build:css"))
-               1
-               (sh "git" "diff" "--exit-code" "--" "libs/ui-style/resources/public/css"))
-        gone (remove #(.exists (io/file %)) ui-assets)]
-    (doseq [f gone] (println (red (str "missing: " f))))
-    (System/exit (if (and (zero? exit) (empty? gone)) 0 1))))
+  (let [sh #(:exit (apply process/shell {:continue true} %&))]
+    (System/exit (if (pos? (sh "npm" "run" "build:css"))
+                   1
+                   (sh "git" "diff" "--exit-code" "--" "libs/ui-style/resources/public")))))
 
 (def all-checks
   [{:id    :fcis
@@ -238,11 +229,6 @@
     :label "Tests: changed libraries, :app, :security"
     :cmd   ["bb" "test:changed"]}])
 
-(def ^:private dev-jwt-secret
-  "What CI and `bb test:all` use. Without it the doctor row failed every local
-   run in this repo, since no developer config sets JWT_SECRET."
-  "dev-secret-at-least-32-characters-long")
-
 (def quick-check-ids
   "Check IDs included in --quick mode."
   #{:fcis :deps :ports})
@@ -285,8 +271,9 @@
               (conj (vec cmd) "--fix")
               cmd)
         start   (System/currentTimeMillis)
+        ;; The doctor row failed every local run here: no dev config sets it.
         env     (when (and (framework-repo?) (str/blank? (System/getenv "JWT_SECRET")))
-                  {"JWT_SECRET" dev-jwt-secret})
+                  {"JWT_SECRET" test-all/dev-jwt-secret})
         ;; Test rows run for minutes; stream them rather than sit silent.
         result  (process/shell (cond-> {:continue true :extra-env env}
                                  (not= :test kind) (assoc :out :string :err :string))

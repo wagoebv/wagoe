@@ -1435,7 +1435,7 @@
       (finally (delete-tree! d)))))
 
 (deftest ^:unit tests-gate-fires-test
-  (let [cmds (fn [libs] (map :cmd (test-all/changed-surfaces libs #{"app" "user" "core"})))]
+  (let [cmds (fn [libs] (map :cmd (test-all/changed-surfaces libs {"user" "user" "core" "core"})))]
     (testing "a changed library runs its suite, with :app and every :security test"
       (is (= [["clojure" "-M:test:test/all" ":app" ":user"]
               ["clojure" "-M:test:test/all" "--focus-meta" ":security"]]
@@ -1451,7 +1451,7 @@
    Kept as the honest place for a gate that arrives without a seam: the
    alternative is quietly leaving it out of both lists, which the test below
    forbids. An entry here is a to-do, not an exemption."
-  {:css "Shells out to npm and git diff; no seam. CI's Build UI Assets job ran the same commands and failed 2 of 30 red runs (BOU-1023)."})
+  {:css "Shells out to npm and git; no seam."})
 
 (deftest ^:unit every-gate-is-accounted-for-test
   (let [declared (set (map :id check/all-checks))
