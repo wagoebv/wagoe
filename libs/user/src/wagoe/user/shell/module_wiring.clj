@@ -308,17 +308,21 @@
   (identity-persistence/create-identity-repository ctx))
 
 (defn- warn-unmarked-registrations!
-  "Linking by email with registration open: accounts registered before
-   BOU-1009 carry no mark, so OIDC still links them by email."
-  [settings registration?]
+  "Linking by email with registration open, while accounts from before
+   BOU-1009 are unmarked: OIDC still links those by email. Quiet once they are
+   all marked TRUE or FALSE, or registration is off."
+  [settings registration? unmarked-count]
   (when-let [ps (and registration? (seq (keep (fn [[id p]] (when (:link-by-email? p) id)) (:providers settings))))]
-    (log/warn "OIDC links by email while /web/register is open; accounts registered before BOU-1009 are not marked and stay linkable. See UPGRADING (BOU-1009)."
-              {:providers (vec ps)})))
+    (let [n (unmarked-count)]
+      (when (pos? n)
+        (log/warn (str "OIDC links by email while /web/register is open, and " n " accounts from before BOU-1009 "
+                       "are unmarked: they stay linkable. Set auth_users.self_registered; see UPGRADING.")
+                  {:providers (vec ps) :unmarked n})))))
 
 (defmethod ig/init-key :wagoe/user-oidc
-  [_ {:keys [settings registration?] :as opts}]
+  [_ {:keys [settings registration? ctx] :as opts}]
   (log/info "Initializing OIDC sign-in" {:providers (keys (:providers settings))})
-  (warn-unmarked-registrations! settings registration?)
+  (warn-unmarked-registrations! settings registration? #(user-persistence/unmarked-account-count ctx))
   (oidc/create-oidc-client
    (assoc opts :secret (or (:state-secret settings) (user-auth/get-jwt-secret)))))
 
@@ -533,6 +537,7 @@
       (-> (update :components assoc
                   :wagoe/user-oidc        {:settings            (:oidc settings)
                                            :registration?       (landing/registration? config)
+                                           :ctx                 (ig/ref :wagoe/db-context)
                                            :auth-service        (ig/ref :wagoe/auth-service)
                                            :audit-repository    (ig/ref :wagoe/audit-repository)
                                            :identity-repository (ig/ref :wagoe/user-identity-repository)

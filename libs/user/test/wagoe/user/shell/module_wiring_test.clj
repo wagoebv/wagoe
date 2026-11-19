@@ -176,11 +176,12 @@
   (let [warn! #'sut/warn-unmarked-registrations!
         on    {:providers {:google {:link-by-email? true} :azure {}}}]
     (log-test/with-log
-      (warn! on true)
-      (is (log-test/logged? 'wagoe.user.shell.module-wiring :warn #"BOU-1009")))
+      (warn! on true (constantly 3))
+      (is (log-test/logged? 'wagoe.user.shell.module-wiring :warn #"3 accounts from before BOU-1009")))
     (log-test/with-log
-      (warn! on false)
-      (warn! {:providers {:google {}}} true)
+      (warn! on false (constantly 3))
+      (warn! {:providers {:google {}}} true (constantly 3))
+      (warn! on true (constantly 0))
       (is (not (log-test/logged? 'wagoe.user.shell.module-wiring :warn #"BOU-1009"))
-          "registration off, or no provider linking by email"))))
+          "registration off, no provider linking by email, or every account marked"))))
 

@@ -436,6 +436,15 @@
                                 :error-message :error_message
                                 :created-at :created_at})))
 
+(defn unmarked-account-count
+  "How many accounts were made before BOU-1009 marked self-registration and
+   are still unmarked."
+  [ctx]
+  (or (some-> (db/execute-one! ctx {:select [[[:count :*] :n]] :from [:auth_users]
+                                     :where [:is :self_registered nil]})
+              vals first long)
+      0))
+
 (defn read-json
   "A JSON column's value as data, however the driver returns it: a string, a
    PostgreSQL PGobject or an H2 CLOB."
@@ -735,8 +744,8 @@
                              (update :id type-conversion/uuid->string)
                              (update :tenant-id type-conversion/uuid->string)
                              (update :active #(protocols/boolean->db adapter %))
-                             (cond-> (some? (:self-registered auth-fields))
-                               (update :self-registered #(protocols/boolean->db adapter %)))
+                             ;; Always TRUE or FALSE: NULL is an account from before BOU-1009
+                             (update :self-registered #(protocols/boolean->db adapter (boolean %)))
                              (update :mfa-backup-codes #(when % (cheshire.core/generate-string %)))
                              (update :mfa-backup-codes-used #(when % (cheshire.core/generate-string %)))
                              (set/rename-keys {:password-hash :password_hash

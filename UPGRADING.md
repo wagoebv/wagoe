@@ -85,11 +85,12 @@ of your own layout gets the dialog only through `page-layout`.
 ### 7. An account made at `/web/register` is not linked by OIDC email (BOU-1009)
 
 Such accounts are marked now. Ones made before the upgrade are not, and stay
-linkable by email when a provider has `:link-by-email? true`; boot warns while
-registration is open. Nothing records which accounts were self-registered: if
-registration was ever open, mark the ones you know were, or every account with
-no OIDC link that no administrator made for someone:
-`UPDATE auth_users SET self_registered = TRUE WHERE id IN (…)`.
+linkable by email when a provider has `:link-by-email? true`; boot warns, with
+their count, while registration is open. Nothing records which accounts were
+self-registered: if registration was ever open, set the ones you know were to
+TRUE and the rest to FALSE, and the warning stops:
+`UPDATE auth_users SET self_registered = TRUE WHERE id IN (…)`, then
+`UPDATE auth_users SET self_registered = FALSE WHERE self_registered IS NULL`.
 
 ## 1.1.x → 1.2.0
 
