@@ -1,5 +1,5 @@
 (ns wagoe.tools.nightly-failure-issue-test
-  "scripts/nightly-failure-issue.sh against a fake gh. The fake does not run
+  "scripts/failure-issue.sh against a fake gh. The fake does not run
    --jq; it prints what the query would, so this tests the script's decisions,
    not GitHub's filtering (BOU-290)."
   (:require [babashka.fs :as fs]
@@ -43,7 +43,7 @@ esac
                                                   "RUN_ID" "42"
                                                   "RUN_URL" "https://github.com/wagoebv/wagoe/actions/runs/42"}
                                                  env)}
-                              "bash" "scripts/nightly-failure-issue.sh" mode)]
+                              "bash" "scripts/failure-issue.sh" mode)]
          (assoc r :calls (if (fs/exists? log) (str/split-lines (slurp log)) [])))
        (finally (fs/delete-tree dir))))))
 
@@ -109,6 +109,19 @@ esac
                               :extra-env {"PATH" (str dir ":" (System/getenv "PATH"))
                                           "GITHUB_REPOSITORY" "wagoebv/wagoe"
                                           "RUN_ID" "42" "RUN_URL" "u"}}
-                             "bash" "scripts/nightly-failure-issue.sh" "fail")]
+                             "bash" "scripts/failure-issue.sh" "fail")]
         (is (not (zero? (:exit r)))))
       (finally (fs/delete-tree dir)))))
+
+(deftest ^:unit a-red-main-opens-its-own-issue-and-mentions-the-pusher
+  ;; ci.yml's announce-main passes these (BOU-1026).
+  (let [r (run-script "fail" "" {"FAILURE_LABEL" "main-red"
+                                  "FAILURE_TITLE" "main is red"
+                                  "FAILURE_WHAT" "CI failed on main: revert first, then debug."
+                                  "FAILURE_NOTIFY" "someone"})
+        [create] (calls-to r "issue create")]
+    (is (zero? (:exit r)) (str (:out r) (:err r)))
+    (is (str/includes? create "--label main-red"))
+    (is (str/includes? create "--title main is red"))
+    (is (str/includes? create "revert first"))
+    (is (str/includes? create "(cc @someone)"))))

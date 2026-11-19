@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# Keeps one open issue for a failing nightly first-run matrix: opened, or
-# commented on, when a scheduled run fails; closed by the next one that passes.
-# A red nightly used to show only in the Actions tab, and nobody looked (BOU-290).
+# Keeps one open issue for a failing run: opened, or commented on, when it
+# fails; closed by the next one that passes. A red nightly used to show only in
+# the Actions tab, and nobody looked (BOU-290). A red main uses it too (BOU-1026).
 #
-# Usage: nightly-failure-issue.sh fail|pass
+# Usage: failure-issue.sh fail|pass
 # Env:   GH_TOKEN, GITHUB_REPOSITORY, RUN_ID, RUN_URL
+#        FAILURE_LABEL, FAILURE_TITLE, FAILURE_WHAT (default: the nightly matrix)
+#        FAILURE_NOTIFY: a login to mention on each failure report
 set -euo pipefail
 
-LABEL="nightly-failure"
-TITLE="Nightly first-run matrix is failing"
+LABEL="${FAILURE_LABEL:-nightly-failure}"
+TITLE="${FAILURE_TITLE:-Nightly first-run matrix is failing}"
+WHAT="${FAILURE_WHAT:-The scheduled first-run matrix failed.}"
 REPO="${GITHUB_REPOSITORY:?}"
 : "${RUN_ID:?}" "${RUN_URL:?}"
 
@@ -34,7 +37,7 @@ case "${1:-}" in
     number="$(open_issue)"
     jobs="$(failed_jobs || echo "- (could not list jobs; see the run)")"
     set_key="$(printf '%s\n' "$jobs" | sort | paste -sd ';' -)"
-    report="Run: $RUN_URL
+    report="Run: $RUN_URL${FAILURE_NOTIFY:+ (cc @$FAILURE_NOTIFY)}
 
 Failed jobs:
 $jobs
@@ -49,9 +52,9 @@ $jobs
       echo "Commented on #$number"
     else
       gh label create "$LABEL" --repo "$REPO" --color d73a4a --force \
-        --description "The nightly first-run matrix is red"
+        --description "$TITLE"
       gh issue create --repo "$REPO" --title "$TITLE" --label "$LABEL" \
-        --body "The scheduled first-run matrix failed. This issue is reused on later failures and closed by the next passing run.
+        --body "$WHAT This issue is reused on later failures and closed by the next passing run.
 
 $report"
     fi

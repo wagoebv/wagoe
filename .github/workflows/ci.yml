@@ -28,9 +28,6 @@ concurrency:
 
 jobs:
   # =============================================================================
-  # Lint all code
-  # =============================================================================
-  # =============================================================================
   # Warm the shared dependency cache ONCE, before anything fans out.
   #
   # Without this, lint/docs-lint/command-smoke all start on a cold cache and race
@@ -60,7 +57,8 @@ jobs:
     outputs:
       code: ${{ steps.classify.outputs.code }}
       libs: ${{ steps.classify.outputs.libs }}
-      first-run: ${{ steps.classify.outputs.first-run }}
+      # A push to main; jobs gated on it are skipped on a pull request (BOU-1026).
+      full: ${{ steps.classify.outputs.full }}
       skip-jobs: ${{ steps.classify.outputs.skip-jobs }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -253,7 +251,7 @@ jobs:
     name: Isolated Build (${{ join(matrix.libs, ', ') }})
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.full == 'true'
 
     strategy:
       fail-fast: false
@@ -336,7 +334,7 @@ jobs:
     name: Example Smoke (examples/)
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.full == 'true'
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -960,7 +958,7 @@ jobs:
     name: Test admin, user, workflow, search, push, webhooks, events outbox, jobs DB queue on MySQL (+ outbox, jobs, webhooks on PG)
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.full == 'true'
     services:
       mysql:
         image: mysql:8
@@ -1025,7 +1023,7 @@ jobs:
     name: MySQL Smoke
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.full == 'true'
     services:
       mysql:
         image: mysql:8
@@ -1063,7 +1061,7 @@ jobs:
     name: Web crawl (${{ matrix.engine }})
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.full == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -1371,15 +1369,6 @@ jobs:
         with:
           bb: 1.13.229
 
-      - name: Cache dependencies
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.gitlibs
-          key: ${{ runner.os }}-clojure-${{ hashFiles('**/deps.edn') }}
-          restore-keys: ${{ runner.os }}-clojure-
-
       - name: Scan for unexternalised strings
         run: bb i18n:scan
 
@@ -1412,7 +1401,7 @@ jobs:
     name: E2E (spel)
     runs-on: ubuntu-latest
     needs: [warm-deps, build-ui-assets, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.full == 'true'
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1522,7 +1511,7 @@ jobs:
     name: Build Uberjar
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.full == 'true'
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1619,18 +1608,13 @@ jobs:
           if-no-files-found: error
 
   # =============================================================================
-  # Summary job
-  # =============================================================================
-  # =============================================================================
   # First-run smoke — the documented newcomer path, in a bare container
   # =============================================================================
   first-run-smoke:
     name: First-Run Smoke
     runs-on: ubuntu-latest
     needs: changes
-    # Only when the installer, CLI, tools or quickstart page changed; every
-    # push to main runs it (wagoe.tools.ci-changes/first-run-paths).
-    if: needs.changes.outputs.first-run == 'true'
+    if: needs.changes.outputs.full == 'true'
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1658,13 +1642,14 @@ jobs:
   test-summary:
     name: All Tests Passed
     runs-on: ubuntu-latest
-    # always(): with the default, a failed job skips this one, and GitHub
-    # counts a skipped required check as passing (BOU-615).
-    if: always()
+    # Not the default: a failed job would skip this one, and GitHub counts a
+    # skipped required check as passing (BOU-615). !cancelled() keeps a run a
+    # newer push superseded from ending red (BOU-1026).
+    if: ${{ !cancelled() }}
     needs: [changes, warm-deps, checks, first-run-smoke, build-ui-assets, command-smoke, i18n-scan, check-isolation-matrix, build-uberjar, test-tools, example-smoke, test-i18n, test-config, test-app, security-tests, test-core, test-observability, test-platform, test-platform-sql, test-user, test-admin, test-ui-style, test-storage, test-cache, test-events, test-test-kit, test-jobs, test-tenant, test-audience, test-devtools, test-email, test-realtime, test-workflow, test-search, test-mysql-suites, mysql-smoke, web-crawl-smoke, test-scaffolder, test-external, test-payments, test-push, test-webhooks, test-calendar, test-reports, test-geo, test-ai, test-mcp, test-wagoe-cli, test-shared-ui, e2e]
 
     steps:
-      - name: Every job passed, or was skipped on a docs-only change or untouched library
+      - name: Every job passed, or was skipped on a docs-only change, an untouched library or a pull request
         env:
           RESULTS: ${{ toJSON(needs) }}
           CODE: ${{ needs.changes.outputs.code }}
@@ -1732,3 +1717,30 @@ jobs:
           echo "  - build-uberjar (deployable artifact builds and is versioned)"
           echo "  - test-tools (libs/tools + AGENTS.md generator tests)"
           echo "  - example-smoke (examples/todo, shop and stores run)"
+
+  # =============================================================================
+  # A red main is announced in one issue, closed again when main is green
+  # (BOU-1026). Cancelled runs, superseded by a newer push, say nothing.
+  # =============================================================================
+  announce-main:
+    name: Announce main status
+    runs-on: ubuntu-latest
+    needs: test-summary
+    if: ${{ !cancelled() && github.event_name == 'push' }}
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Open, update or close the "main is red" issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RESULT: ${{ needs.test-summary.result }}
+          FAILURE_LABEL: main-red
+          FAILURE_TITLE: main is red
+          FAILURE_WHAT: "CI failed on main: revert first, then debug."
+          FAILURE_NOTIFY: ${{ github.actor }}
+        run: ./scripts/failure-issue.sh "$([ "$RESULT" = success ] && echo pass || echo fail)"

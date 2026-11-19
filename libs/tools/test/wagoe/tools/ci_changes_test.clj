@@ -2,6 +2,7 @@
   "A docs-only pull request skips the code jobs, so `docs-only?` must never
    call a file docs-only that a code test reads (BOU-615)."
   (:require [babashka.fs :as fs]
+            [clj-yaml.core :as yaml]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [wagoe.tools.ci-changes :as sut]))
@@ -74,12 +75,14 @@
     (doseq [paths [["libs/geo/src/x.clj" "deps.edn"] [".github/workflows/ci.yml"] []]]
       (is (= (set (keys graph)) (sut/libs-to-test graph paths)) (pr-str paths)))))
 
+(defn- jobs [workflow] (:jobs (yaml/parse-string workflow)))
+
 (deftest ^:unit gated-jobs-name-a-library
   (is (= {"test-geo" "geo"}
-         (sut/gated-jobs "jobs:\n  test-geo:\n    if: contains(format(' {0} ', needs.changes.outputs.libs), ' geo ')\n  lint:\n    if: always()\n"
+         (sut/gated-jobs (jobs "jobs:\n  test-geo:\n    if: contains(format(' {0} ', needs.changes.outputs.libs), ' geo ')\n  lint:\n    if: always()\n")
                          #{"geo"})))
   (is (thrown? clojure.lang.ExceptionInfo
-               (sut/gated-jobs "jobs:\n  test-goe:\n    if: contains(format(' {0} ', needs.changes.outputs.libs), ' goe ')\n"
+               (sut/gated-jobs (jobs "jobs:\n  test-goe:\n    if: contains(format(' {0} ', needs.changes.outputs.libs), ' goe ')\n")
                                #{"geo"}))))
 
 (def ^:private root (if (fs/exists? "libs/tools") "." "../.."))
@@ -88,7 +91,7 @@
 
 (deftest ^:unit every-library-test-job-is-gated-on-its-own-library
   (let [graph @repo-graph
-        gated (sut/gated-jobs (slurp (str root "/.github/workflows/ci.yml")) (set (keys graph)))]
+        gated (sut/gated-jobs (jobs (slurp (str root "/.github/workflows/ci.yml"))) (set (keys graph)))]
     (is (<= 30 (count gated)) "the per-library jobs lost their gate")
     (doseq [[job lib] gated]
       (is (#{(str "test-" lib) ({"test" "test-test-kit" "wagoe-mcp" "test-mcp"} lib)} job)
@@ -110,18 +113,23 @@
                m)]
     (is (= 1 (count uses)))))
 
-(deftest ^:unit first-run-smoke-runs-for-what-only-it-tests
-  (testing "the installer, CLI, tools and quickstart page run it"
-    (doseq [p ["scripts/install.sh" "libs/wagoe-cli/src/wagoe/cli/new.clj" "libs/tools/bb.edn"
-               "docs/modules/getting-started/pages/quickstart.adoc" ".github/workflows/ci.yml"]]
-      (is (sut/first-run? ["libs/geo/src/x.clj" p]) p)))
-  (testing "a library change does not"
-    (is (not (sut/first-run? ["libs/admin/src/x.clj" "libs/geo/test/x_test.clj"]))))
-  (testing "an empty diff does"
-    (is (sut/first-run? []))))
+(deftest ^:unit pull-requests-skip-the-main-only-jobs
+  ;; A pull request runs the fast layer; these run on a push to main (BOU-1026).
+  (is (= #{"check-isolation-matrix" "example-smoke" "test-mysql-suites" "mysql-smoke"
+           "web-crawl-smoke" "e2e" "build-uberjar" "first-run-smoke"}
+         (set (sut/main-only-jobs (jobs (slurp (str root "/.github/workflows/ci.yml"))))))))
 
-(deftest ^:unit first-run-paths-exist
-  (doseq [p ["scripts/install.sh" "scripts/first-run-smoke.sh" "libs/wagoe-cli" "libs/tools"
-             "libs/ai" "libs/scaffolder"
-             "docs/modules/getting-started/pages/quickstart.adoc" ".github/workflows/ci.yml"]]
-    (is (fs/exists? (fs/path root p)) (str p " moved; update first-run-paths"))))
+(deftest ^:unit plan-runs-everything-on-main-and-the-fast-layer-on-a-pull-request
+  (let [ci (jobs (str "jobs:\n"
+                        "  test-geo:\n    if: contains(format(' {0} ', needs.changes.outputs.libs), ' geo ')\n"
+                      "  test-search:\n    if: contains(format(' {0} ', needs.changes.outputs.libs), ' search ')\n"
+                      "  e2e:\n    if: needs.changes.outputs.full == 'true'\n"))]
+    (testing "a push to main runs every library and skips nothing"
+      (is (= {:code true :libs (set (keys graph)) :full true :skip-jobs #{}}
+             (sut/plan graph ci nil))))
+    (testing "a pull request skips the main-only jobs and the untouched libraries"
+      (is (= {:code true :libs #{"geo" "admin"} :full false :skip-jobs #{"e2e" "test-search"}}
+             (sut/plan graph ci ["libs/geo/src/x.clj"]))))
+    (testing "a docs-only pull request runs no library"
+      (is (= {:code false :libs #{} :full false :skip-jobs #{"e2e" "test-geo" "test-search"}}
+             (sut/plan graph ci ["CHANGELOG.md"]))))))

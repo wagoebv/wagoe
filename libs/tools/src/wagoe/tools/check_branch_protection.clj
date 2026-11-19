@@ -134,6 +134,12 @@
                       (recur (into seen nxt)
                              (mapcat #(get graph % #{}) nxt)))))
         parked  (set (for [[k v] jobs :when (disabled? v)] (name k)))
+        ;; A push-only job that needs the summary reports on its result; it
+        ;; runs after the merge gate, not in it (BOU-1026: announcing a red main).
+        after   (set (for [[k v] jobs
+                           :when (and (contains? (needs-of v) (name summary-job-key))
+                                      (str/includes? (str (:if v)) "github.event_name == 'push'"))]
+                       (name k)))
         all     (set (keys graph))
         ;; Only jobs the summary actually reaches: one outside the gate is
         ;; already reported as unguarded, and `continue-on-error` on something
@@ -148,7 +154,7 @@
     {:summary-name (when summary (job-context summary-job-key summary))
      :disabled     (sort parked)
      :toothless    blunt
-     :missing      (sort (set/difference all reached parked #{(name summary-job-key)}))}))
+     :missing      (sort (set/difference all reached parked after #{(name summary-job-key)}))}))
 
 ;; =============================================================================
 ;; Triggers — coverage is worthless if the workflow never starts

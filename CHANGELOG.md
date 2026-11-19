@@ -92,6 +92,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **A pull request runs CI's fast layer** (BOU-1026): no e2e, MySQL job, first-run/example/web-crawl smokes, isolation
+  matrix or uberjar; main runs all and opens a "main is red" issue. Releases need a green run on main.
 - **A push to main runs `bb check` first** (BOU-1025), which now tests only the changed libraries, not the ones that
   load them; CI on main still does. Run `bb install-hooks` once per clone.
 - **The admin service refuses a key that is not a field of the entity** (BOU-998), as a `:validation-error` on that

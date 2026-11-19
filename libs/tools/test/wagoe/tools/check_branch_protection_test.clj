@@ -50,7 +50,27 @@
                     "  test-summary:\n    name: All Tests Passed\n    needs: [a, b]\n"
                     "  a:\n    name: A\n"
                     "  b:\n    name: B\n")))]
-      (is (empty? missing)))))
+      (is (empty? missing))))
+
+  (testing "a push-only job that needs the summary runs after the gate and is not reported"
+    (let [{:keys [missing]}
+          (sut/summary-covers
+           (wf (str "jobs:\n"
+                    "  test-summary:\n    name: All Tests Passed\n    needs: [a]\n"
+                    "  a:\n    name: A\n"
+                    "  announce:\n    name: Announce\n    needs: [test-summary]\n"
+                    "    if: github.event_name == 'push'\n"
+                    "  orphan:\n    name: Orphan\n    needs: [a]\n")))]
+      (is (= ["orphan"] missing))))
+
+  (testing "a job after the summary that also runs on pull requests is reported"
+    (let [{:keys [missing]}
+          (sut/summary-covers
+           (wf (str "jobs:\n"
+                    "  test-summary:\n    name: All Tests Passed\n    needs: [a]\n"
+                    "  a:\n    name: A\n"
+                    "  late-test:\n    name: Late\n    needs: test-summary\n")))]
+      (is (= ["late-test"] missing)))))
 
 (deftest ^:unit coverage-is-transitive
   ;; `warm-deps` is not in the summary's needs, but `lint` needs it — so a
