@@ -96,11 +96,10 @@
           (str lib " has no suite and no standalone surface for bb check")))))
 
 (deftest ^:unit local-libs-test
-  (let [graph (ci-changes/dependency-graph ".")]
-    (testing "nothing changed, or only docs: no tests"
-      (is (nil? (test-all/local-libs graph [])))
-      (is (nil? (test-all/local-libs graph ["CHANGELOG.md"]))))
-    (testing "a change outside libs/ selects no library"
-      (is (= #{} (test-all/local-libs graph ["bb.edn"]))))
-    (testing "a library change selects that library only, not the ones that load it"
-      (is (= #{"user"} (test-all/local-libs graph ["libs/user/src/wagoe/user/x.clj"]))))))
+  (testing "nothing changed, or only docs: no tests"
+    (is (nil? (test-all/local-libs [])))
+    (is (nil? (test-all/local-libs ["CHANGELOG.md"]))))
+  (testing "a change outside libs/ selects no library"
+    (is (= #{} (test-all/local-libs ["bb.edn"]))))
+  (testing "a library change selects that library only, not the ones that load it"
+    (is (= #{"user"} (test-all/local-libs ["libs/user/src/wagoe/user/x.clj"])))))

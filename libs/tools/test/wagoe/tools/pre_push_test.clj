@@ -2,41 +2,39 @@
   "The pre-push hook runs `bb check` on a push to main, and only then (BOU-1025)."
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
 
 (def ^:private hook (str (fs/absolutize ".githooks/pre-push")))
 
-(defn- run-hook
-  "Run the hook in a fresh repo whose `bb` exits 3, feeding `stdin`."
-  [stdin dirty?]
+(defn- push-line [remote-ref sha] (str "refs/heads/x " sha " " remote-ref " " sha "\n"))
+
+(deftest ^:unit pre-push-hook-test
+  ;; One repo whose `bb` exits 3, so "ran bb check" shows as exit 3.
   (let [repo (str (fs/create-temp-dir))
         bin  (str (fs/create-dirs (fs/path repo ".bin")))
-        sh   #(apply process/shell {:dir repo :out :string :err :string} %&)]
+        sh   (fn [opts & args] (apply process/shell (merge {:dir repo :out :string :err :string} opts) args))
+        hook! (fn [stdin]
+                (:exit (sh {:in stdin :continue true
+                            :extra-env {"PATH" (str bin ":" (System/getenv "PATH"))}}
+                           "bash" hook)))]
     (try
       (spit (str bin "/bb") "#!/bin/sh\nexit 3\n")
       (fs/set-posix-file-permissions (str bin "/bb") "rwxr-xr-x")
-      (sh "git" "init" "-q")
       (spit (str repo "/.gitignore") ".bin\n")
-      (sh "git" "add" ".gitignore")
-      (sh "git" "-c" "user.email=t@t" "-c" "user.name=t" "commit" "-qm" "init")
-      (when dirty? (spit (str repo "/x.txt") "x"))
-      (:exit (process/shell {:dir       repo
-                             :in        stdin
-                             :out       :string
-                             :err       :string
-                             :continue  true
-                             :extra-env {"PATH" (str bin ":" (System/getenv "PATH"))}}
-                            "bash" hook))
+      (sh {} "git" "init" "-q")
+      (sh {} "git" "add" ".gitignore")
+      (sh {} "git" "-c" "user.email=t@t" "-c" "user.name=t" "commit" "-qm" "init")
+      (let [head (str/trim (:out (sh {} "git" "rev-parse" "HEAD")))]
+        (testing "a push of HEAD to main runs bb check and fails with it"
+          (is (= 3 (hook! (push-line "refs/heads/main" head)))))
+        (testing "a push to another branch does not run it"
+          (is (= 0 (hook! (push-line "refs/heads/x" head)))))
+        (testing "deleting a remote main does not run it"
+          (is (= 0 (hook! (push-line "refs/heads/main" (apply str (repeat 40 "0")))))))
+        (testing "pushing a commit other than HEAD to main is refused"
+          (is (= 1 (hook! (push-line "refs/heads/main" (apply str (repeat 40 "1")))))))
+        (testing "a dirty tree is refused before bb check runs"
+          (spit (str repo "/x.txt") "x")
+          (is (= 1 (hook! (push-line "refs/heads/main" head))))))
       (finally (fs/delete-tree repo)))))
-
-(def ^:private sha "1111111111111111111111111111111111111111")
-
-(deftest ^:unit pre-push-hook-test
-  (testing "a push to main runs bb check and fails with it"
-    (is (= 3 (run-hook (str "refs/heads/main " sha " refs/heads/main " sha "\n") false))))
-  (testing "a push to another branch does not run it"
-    (is (= 0 (run-hook (str "refs/heads/x " sha " refs/heads/x " sha "\n") false))))
-  (testing "deleting a remote branch does not run it"
-    (is (= 0 (run-hook (str "(delete) 0000000000000000000000000000000000000000 refs/heads/main " sha "\n") false))))
-  (testing "a dirty tree is refused before bb check runs"
-    (is (= 1 (run-hook (str "refs/heads/main " sha " refs/heads/main " sha "\n") true)))))

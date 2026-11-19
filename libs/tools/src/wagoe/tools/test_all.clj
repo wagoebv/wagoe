@@ -229,18 +229,16 @@
   "Libraries whose suites `bb check` runs for `paths`, the ones changed; nil
    when no code changed. CI also runs the libraries that load them, and all of
    them for a change outside libs/: here that took 20 to 30 minutes (BOU-1025)."
-  [graph paths]
+  [paths]
   (when-not (or (empty? paths) (ci-changes/docs-only? paths))
-    (into #{} (keep #(when-let [lib (second (re-find #"^libs/([^/]+)/" %))]
-                       (when (contains? graph lib) lib)))
-          paths)))
+    (into #{} (keep ci-changes/lib-of) paths)))
 
 (defn changed-main
   "`bb test:changed [base-ref]`: the tests of what changed since
    origin/<base-ref>, default main."
   [& [base-ref]]
   (let [base (or base-ref "main")
-        libs (local-libs (ci-changes/dependency-graph ".") (local-changes base))]
+        libs (local-libs (local-changes base))]
     (if (nil? libs)
       (println (dim (str "No code changed since origin/" base "; no tests to run.")))
       (do

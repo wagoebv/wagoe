@@ -4,15 +4,19 @@
 set -euo pipefail
 
 zero=0000000000000000000000000000000000000000
-to_main=false
+pushed=""
 while read -r _local_ref local_sha remote_ref _remote_sha; do
   if [ "$remote_ref" = "refs/heads/main" ] && [ "$local_sha" != "$zero" ]; then
-    to_main=true
+    pushed=$local_sha
   fi
 done
-$to_main || exit 0
+[ -n "$pushed" ] || exit 0
 
-# bb check tests the working tree; it must be what is pushed.
+# bb check tests the working tree, so that must be exactly what is pushed.
+if [ "$pushed" != "$(git rev-parse HEAD)" ]; then
+  echo "pre-push: push main from a checkout of the commit you push, so bb check tests it." >&2
+  exit 1
+fi
 if [ -n "$(git status --porcelain)" ]; then
   echo "pre-push: commit or stash your changes first, so bb check tests what you push." >&2
   exit 1

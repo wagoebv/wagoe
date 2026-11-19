@@ -29,7 +29,8 @@
             [clojure.edn :as edn]
             [babashka.process :as process]
             [edamame.core :as e]
-            [wagoe.tools.ansi :as ansi]))
+            [wagoe.tools.ansi :as ansi]
+            [wagoe.tools.ci-changes :as ci-changes]))
 
 (def changelog-path "CHANGELOG.md")
 (def catalogue-path "libs/wagoe-cli/resources/wagoe/cli/modules-catalogue.edn")
@@ -61,8 +62,6 @@
   (boolean (and (re-matches #"libs/[^/]+/src/.*\.clj[cs]?" path)
                 (some #{"ports" "protocols"}
                       (map #(str/replace % #"\.clj[cs]?$" "") (str/split path #"/"))))))
-
-(defn lib-of [path] (second (re-find #"^libs/([^/]+)/" path)))
 
 (defn- parse-forms
   [raw]
@@ -100,7 +99,7 @@
     (into {}
           (for [form forms :when (defprotocol? form)]
             [(str nsn "/" (second form))
-             {:lib (lib-of path) :path path :name (str (second form))
+             {:lib (ci-changes/lib-of path) :path path :name (str (second form))
               :methods (method-arities form)}]))))
 
 ;; =============================================================================
