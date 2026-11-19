@@ -15,7 +15,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
-# Read-only by default; no job writes to the repository.
+# Read-only by default; a job that writes declares it (tag-green, announce-main).
 permissions:
   contents: read
 
@@ -1756,12 +1756,15 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Every commit, no trees: merge-base needs only the history.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
+          filter: tree:0
 
       # A re-run of an older commit must not move green backwards.
       - name: Move green to this commit unless it already points later
+        shell: bash
         env:
           SHA: ${{ github.sha }}
         run: |
@@ -1770,5 +1773,4 @@ jobs:
             echo "green is at $current, not an ancestor of $SHA; leaving it."
             exit 0
           fi
-          git tag -f green "$SHA"
-          git push -f origin refs/tags/green
+          git push -f origin "$SHA:refs/tags/green"
