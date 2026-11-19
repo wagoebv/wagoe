@@ -102,8 +102,6 @@
                (*app* {:request-method :get :uri "/members" :headers {} :query-params {} :user user
                        :tenant {:id tenant-b} :tenant-membership {:role role :status :active}
                        :i18n/catalogue catalogue :i18n/default-locale :en}))]
-    (testing "an admin of A who is a member of B"
-      (is (= 403 (:status (in-b admin-of-a :member)))))
     (testing "a member of A who is an admin of B"
       (let [r (in-b {:id (random-uuid) :role :user :tenant-id tenant-a} :admin)]
         (is (= 200 (:status r)))

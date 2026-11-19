@@ -891,12 +891,23 @@
   [user-service group-service]
   (fn [handler]
     (fn [request]
-      (if-let [reach (when (access/tenant-admin? request) (core-access/admin-reach request))]
-        (let [target (rights-target user-service request)
-              t      (if target (:tenant-id target) (:tenant-id reach))]
-          (group-service/in-tenant group-service t #(handler request)))
-        (access/forbidden-response "Admin role required" request
-                                   (access/correlation-id request (str (random-uuid))))))))
+      (let [reach  (when (access/tenant-admin? request) (core-access/admin-reach request))
+            target (when reach (rights-target user-service request))]
+        (cond
+          (nil? reach)
+          (access/forbidden-response "Admin role required" request
+                                     (access/correlation-id request (str (random-uuid))))
+
+          ;; An admin here by membership reaches their own account elsewhere
+          ;; too, but not its tenant's rights (BOU-1020)
+          (and target (contains? reach :tenant-id)
+               (not (core-access/same-id? (:tenant-id target) (:tenant-id reach))))
+          (access/refusal-response 404 "not-found" "User not found"
+                                   (access/correlation-id request (str (random-uuid))))
+
+          :else
+          (group-service/in-tenant group-service (if target (:tenant-id target) (:tenant-id reach))
+                                   #(handler request)))))))
 
 (defn group-routes
   "Groups, roles and permissions, mounted under /web/admin beside the admin UI,

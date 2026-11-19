@@ -118,7 +118,9 @@
       (is (allowed? (run (http-int/require-role :admin) (in-b b-member :admin)))))
     (testing "require-self-or-admin"
       (is (denied? (run http-int/require-self-or-admin
-                        (assoc (in-b a-admin :member) :path-params {:id "someone-in-b"})))))
+                        (assoc (in-b a-admin :member) :path-params {:id "someone-in-b"}))))
+      (is (allowed? (run http-int/require-self-or-admin
+                         (assoc (in-b b-member :admin) :path-params {:id "someone-in-b"})))))
     (testing "require-role-middleware"
       (let [mw    (wagoe.user.shell.middleware/require-admin-middleware (constantly {:status 200}))
             req-b #(:request (in-b %1 %2))]

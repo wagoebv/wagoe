@@ -441,7 +441,8 @@
   [handler]
   (fn [request]
     (let [user (:user request)]
-      (if (and (admin-permissions/can-access-admin? user)
+      ;; Admin as held here, so a tenant's admin by membership is one (BOU-1020)
+      (if (and (admin-permissions/can-access-admin? (admin-permissions/here user (access/tenant-admin? request)))
                (access/in-tenant-scope? request)
                (access/tenant-admin? request))
         (handler request)
