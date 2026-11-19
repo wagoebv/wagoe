@@ -13,9 +13,11 @@ subject="$(awk -v c="$comment" 'NF && index($0, c) != 1 {print; exit}' "$1")"
 case "$subject" in
   "Merge branch "*|"Merge remote-tracking branch "*|"Merge tag "*|"Merge commit "*|"Merge pull request #"*) exit 0 ;;
   "Revert \""*|"Reapply \""*|"fixup! "*|"squash! "*|"amend! "*) exit 0 ;;
-  # `bb release` (BOU-1029); the release itself names no single ticket.
-  "Release "[0-9]*) exit 0 ;;
 esac
+# `bb release` (BOU-1029); the release itself names no single ticket.
+if [[ "$subject" =~ ^Release\ [0-9]+\.[0-9]+\.[0-9]+(-[a-z]+-[0-9]+)?$ ]]; then
+  exit 0
+fi
 if [[ "$subject" =~ BOU-[0-9]+ ]]; then
   exit 0
 fi

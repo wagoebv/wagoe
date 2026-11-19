@@ -29,4 +29,5 @@
     (is (= 1 (exit-for "Move the green tag\n\nFor BOU-1028\n")))
     (is (= 1 (exit-for "Merge the two config loaders\n")))
     (is (= 1 (exit-for "Revert the cache tweak\n")))
+    (is (= 1 (exit-for "Release 1 thing\n")))
     (is (= 1 (exit-for "\n")))))

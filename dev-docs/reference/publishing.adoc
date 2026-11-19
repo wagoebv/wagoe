@@ -239,8 +239,10 @@ bb release NEW    # NEW has no leading "v": publish.yml triggers on 1.0.1, 1.1.0
 
 `bb release` bumps the version everywhere (`bb bump`), turns `## [Unreleased]` in `CHANGELOG.md` into
 `## [NEW] — <date>`, checks the versions agree, and pushes the commit `Release NEW` to `main`. It then waits for CI
-on main to pass on that commit and only then pushes the annotated tag `NEW`. A red run stops it without a tag:
-fix main and release again. Run it again after an interruption; it resumes at the wait.
+on main to pass and only then pushes the annotated tag `NEW` on the tip of main, which must still hold `NEW`. A red
+or superseded run stops it without a tag: fix main, `git pull`, and run it again. Once the release commit is on
+main, a rerun only waits and tags. It runs `bb release:check NEW` first, so it needs `LINEAR_API_KEY` and
+`GITHUB_TOKEN`.
 
 GitHub Actions will:
 
