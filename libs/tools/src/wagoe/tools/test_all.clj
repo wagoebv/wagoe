@@ -231,7 +231,7 @@
    them for a change outside libs/: here that took 20 to 30 minutes (BOU-1025)."
   [paths]
   (when-not (or (empty? paths) (ci-changes/docs-only? paths))
-    (into #{} (keep ci-changes/lib-of) paths)))
+    (into #{} (keep #(if (str/starts-with? % ".githooks/") "tools" (ci-changes/lib-of %))) paths)))
 
 (defn changed-main
   "`bb test:changed [base-ref]`: the tests of what changed since

@@ -23,6 +23,9 @@ bb check                    # pre-push gate: quality gates + tests of what chang
 clojure -M:repl-clj         # development REPL (nREPL on 7888)
 ```
 
+To land on main: `git pull --rebase`, then push at once. The hook runs `bb check`, about
+5 minutes per changed library; if main moved meanwhile, pull and push again.
+
 `apm install` needs [APM](https://github.com/microsoft/apm) 0.33 or later. It writes
 `.claude/`, `.cursor/`, `.codex/` and `.agents/`, which are generated and ignored:
 edit the sources in `ai/.apm/` and run it again.

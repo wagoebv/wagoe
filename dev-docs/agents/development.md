@@ -137,6 +137,8 @@ bb scripts/docs_lint.clj                           # Run documentation drift lin
 
 # Quality Gates (all run in CI + check:fcis/check:ports run in pre-commit)
 bb check                                           # Pre-push gate: every gate, the CSS build and bb test:changed
+                                                   # A push to main runs it (~5 min per changed library): give the push a 600000 ms timeout
+                                                   # or run it in the background; never add --no-verify unless the user says so
 bb check --gates                                   # Gates only, as CI's Babashka Gates job runs them
 bb check-full                                      # bb check --gates + bb test:all + bb e2e
 bb test:changed                                    # Suites of the libs changed since origin/main, plus :app and :security

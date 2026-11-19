@@ -383,11 +383,17 @@
                       (println (dim "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"))
                       (println))
           start   (System/currentTimeMillis)
-          results (mapv (fn [check]
-                          (let [result (run-check check opts)]
-                            (print-check-result result)
-                            result))
-                        checks)
+          ;; The test rows come last and take minutes; after a red gate the run
+          ;; has already failed, so skip them.
+          results (reduce (fn [acc check]
+                            (if (and (= :test (:kind check)) (some #(pos? (:exit %)) acc))
+                              (do (println (dim (str "- " (:label check) " (skipped: a gate failed)")))
+                                  acc)
+                              (let [result (run-check check opts)]
+                                (print-check-result result)
+                                (conj acc result))))
+                          []
+                          checks)
           end     (System/currentTimeMillis)
           passed  (count (filter #(zero? (:exit %)) results))
           failed  (count (filter #(not (zero? (:exit %))) results))

@@ -172,4 +172,4 @@ bb check-links
 
 Regenerate before publishing wagoe-cli. The maintenance guide describes source
 ownership, adding libraries and the separate per-module AI documentation tool.
-Install local pre-commit hooks once per clone with `bb install-hooks`.
+Install the git hooks once per clone with `bb install-hooks`; a push to main then runs `bb check`.

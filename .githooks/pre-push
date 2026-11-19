@@ -3,23 +3,30 @@
 # Other branches push freely. Bypass in an emergency: git push --no-verify.
 set -euo pipefail
 
-zero=0000000000000000000000000000000000000000
+# GUI git clients run hooks with a bare PATH.
+export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+
 pushed=""
-while read -r _local_ref local_sha remote_ref _remote_sha; do
-  if [ "$remote_ref" = "refs/heads/main" ] && [ "$local_sha" != "$zero" ]; then
+while read -r _local_ref local_sha remote_ref _remote_sha || [ -n "${local_sha:-}" ]; do
+  if [ "$remote_ref" = "refs/heads/main" ] && [[ ! "$local_sha" =~ ^0+$ ]]; then
     pushed=$local_sha
   fi
+  local_sha=""
 done
 [ -n "$pushed" ] || exit 0
 
-# bb check tests the working tree, so that must be exactly what is pushed.
-if [ "$pushed" != "$(git rev-parse HEAD)" ]; then
-  echo "pre-push: push main from a checkout of the commit you push, so bb check tests it." >&2
-  exit 1
-fi
-if [ -n "$(git status --porcelain)" ]; then
-  echo "pre-push: commit or stash your changes first, so bb check tests what you push." >&2
-  exit 1
-fi
+refuse() { echo "pre-push: $1 Push not sent (emergency: git push --no-verify)." >&2; exit 1; }
 
-exec bb check
+command -v bb >/dev/null || refuse "bb is not on PATH; push from a terminal."
+# bb check tests the working tree, so that must be exactly what is pushed.
+[ "$pushed" = "$(git rev-parse HEAD)" ] || refuse "check out the commit you push to main."
+[ -z "$(git status --porcelain)" ] || refuse "commit, stash -u or remove your changes first."
+git merge-base --is-ancestor origin/main HEAD 2>/dev/null || refuse "git pull --rebase first."
+
+# From a linked worktree git exports GIT_DIR; tests that run git in a temp dir
+# would then write to this repository.
+unset $(git rev-parse --local-env-vars) GIT_CONFIG_PARAMETERS
+
+bb check || refuse "bb check failed; fix it and push again."
+[ "$pushed" = "$(git rev-parse HEAD)" ] && [ -z "$(git status --porcelain)" ] ||
+  refuse "the tree changed while bb check ran; push again."

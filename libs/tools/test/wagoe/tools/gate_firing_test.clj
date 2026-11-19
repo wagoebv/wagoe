@@ -602,8 +602,12 @@
 ;; check:no-boundary — against a throwaway repo
 ;; =============================================================================
 
-(defn- git! [dir & args]
-  (apply process/shell {:dir (str dir) :out :string :err :string} "git" args))
+(defn- git!
+  "git in `dir`, without an inherited GIT_DIR that would point it at this repo."
+  [dir & args]
+  (apply process/shell {:dir (str dir) :out :string :err :string
+                        :env (into {} (remove #(str/starts-with? (key %) "GIT_")) (System/getenv))}
+         "git" args))
 
 ;; Split so this source file contains no literal the rename gate would flag.
 ;; See the probe map below for why that matters.
