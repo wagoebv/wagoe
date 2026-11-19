@@ -61,6 +61,7 @@ jobs:
       code: ${{ steps.classify.outputs.code }}
       libs: ${{ steps.classify.outputs.libs }}
       first-run: ${{ steps.classify.outputs.first-run }}
+      # A push to main; jobs gated on it are skipped on a pull request (BOU-1026).
       full: ${{ steps.classify.outputs.full }}
       skip-jobs: ${{ steps.classify.outputs.skip-jobs }}
     steps:
@@ -254,8 +255,7 @@ jobs:
     name: Isolated Build (${{ join(matrix.libs, ', ') }})
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    # Main only: a pull request runs the fast layer (BOU-1026).
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
+    if: needs.changes.outputs.full == 'true'
 
     strategy:
       fail-fast: false
@@ -338,8 +338,7 @@ jobs:
     name: Example Smoke (examples/)
     runs-on: ubuntu-latest
     needs: changes
-    # Main only: a pull request runs the fast layer (BOU-1026).
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
+    if: needs.changes.outputs.full == 'true'
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -963,8 +962,7 @@ jobs:
     name: Test admin, user, workflow, search, push, webhooks, events outbox, jobs DB queue on MySQL (+ outbox, jobs, webhooks on PG)
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    # Main only: a pull request runs the fast layer (BOU-1026).
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
+    if: needs.changes.outputs.full == 'true'
     services:
       mysql:
         image: mysql:8
@@ -1029,8 +1027,7 @@ jobs:
     name: MySQL Smoke
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    # Main only: a pull request runs the fast layer (BOU-1026).
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
+    if: needs.changes.outputs.full == 'true'
     services:
       mysql:
         image: mysql:8
@@ -1068,8 +1065,7 @@ jobs:
     name: Web crawl (${{ matrix.engine }})
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    # Main only: a pull request runs the fast layer (BOU-1026).
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
+    if: needs.changes.outputs.full == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -1418,8 +1414,7 @@ jobs:
     name: E2E (spel)
     runs-on: ubuntu-latest
     needs: [warm-deps, build-ui-assets, changes]
-    # Main only: a pull request runs the fast layer (BOU-1026).
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
+    if: needs.changes.outputs.full == 'true'
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1529,8 +1524,7 @@ jobs:
     name: Build Uberjar
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    # Main only: a pull request runs the fast layer (BOU-1026).
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
+    if: needs.changes.outputs.full == 'true'
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0

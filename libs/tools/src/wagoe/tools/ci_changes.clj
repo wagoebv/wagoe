@@ -146,25 +146,29 @@
       libs
       (set (filter #(some (loaded-by graph %) changed) libs)))))
 
+(defn- jobs-gated-on
+  "[job gate] for each job in `jobs` (ci.yml's :jobs) whose `if:` reads `output`."
+  [jobs output]
+  (for [[job {gate :if}] jobs
+        :when (and (string? gate) (str/includes? gate (str "needs.changes.outputs." output)))]
+    [(name job) gate]))
+
 (defn gated-jobs
-  "{job lib} for each job in `workflow` (ci.yml text) whose `if:` gates it on
-   `libs`. A gate naming no library throws, rather than skip the job forever."
-  [workflow libs]
+  "{job lib} for each job in `jobs` whose `if:` gates it on `libs`. A gate
+   naming no library throws, rather than skip the job forever."
+  [jobs libs]
   (into {}
-        (for [[job {gate :if}] (:jobs (yaml/parse-string workflow))
-              :when (and (string? gate) (str/includes? gate "needs.changes.outputs.libs"))
+        (for [[job gate] (jobs-gated-on jobs "libs")
               :let [lib (second (re-find #"' ([a-z0-9-]+) '" gate))]]
           (if (contains? libs lib)
-            [(name job) lib]
-            (throw (ex-info (str "ci.yml: " (name job) " is gated on no library: " gate)
+            [job lib]
+            (throw (ex-info (str "ci.yml: " job " is gated on no library: " gate)
                             {:type :validation-error}))))))
 
 (defn main-only-jobs
-  "Jobs in `workflow` (ci.yml text) whose `if:` runs them only on a push to main."
-  [workflow]
-  (for [[job {gate :if}] (:jobs (yaml/parse-string workflow))
-        :when (and (string? gate) (str/includes? gate "needs.changes.outputs.full"))]
-    (name job)))
+  "Jobs in `jobs` that run only on a push to main."
+  [jobs]
+  (map first (jobs-gated-on jobs "full")))
 
 (defn- changed-files [base-ref]
   (let [{:keys [exit out err]} (process/shell {:out :string :err :string :continue true}
@@ -179,13 +183,13 @@
   (let [graph (dependency-graph ".")
         libs  (set (keys graph))
         paths (when-not (str/blank? base-ref) (changed-files base-ref))
-        code? (or (nil? paths) (not (docs-only? paths)))
-        run   (cond (nil? paths) libs
-                    code?        (libs-to-test graph paths)
-                    :else        #{})
-        smoke? (or (nil? paths) (first-run? paths))
         full? (nil? paths)
-        ci    (slurp ".github/workflows/ci.yml")
+        code? (or full? (not (docs-only? paths)))
+        run   (cond full? libs
+                    code? (libs-to-test graph paths)
+                    :else #{})
+        smoke? (or full? (first-run? paths))
+        ci    (:jobs (yaml/parse-string (slurp ".github/workflows/ci.yml")))
         gated (gated-jobs ci libs)
         skip  (cond-> (keep (fn [[job lib]] (when-not (run lib) job)) gated)
                 (not smoke?) (conj "first-run-smoke")
