@@ -132,7 +132,7 @@ bb migrate status                                  # Show current migration stat
 bb coverage                                        # Run Cloverage coverage with the monorepo test/classpath setup
 bb check-links                                     # Validate local markdown links in AGENTS.md files
 bb smoke-check                                     # Verify deps.edn aliases and key tool entrypoints
-bb install-hooks                                   # Configure git hooks path to .githooks
+bb install-hooks                                   # Configure git hooks path to .githooks (pre-push to main runs bb check)
 bb scripts/docs_lint.clj                           # Run documentation drift linter directly
 
 # Quality Gates (all run in CI + check:fcis/check:ports run in pre-commit)

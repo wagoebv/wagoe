@@ -226,13 +226,14 @@
                       (git-lines "ls-files" "--others" "--exclude-standard")))))
 
 (defn local-libs
-  "Libraries whose suites `bb check` runs for `paths`; nil when no code changed.
-   Unlike CI, a change outside libs/ selects no library: CI on main runs
-   everything, and here that cost 30 minutes per push (BOU-1024)."
+  "Libraries whose suites `bb check` runs for `paths`, the ones changed; nil
+   when no code changed. CI also runs the libraries that load them, and all of
+   them for a change outside libs/: here that took 20 to 30 minutes (BOU-1025)."
   [graph paths]
   (when-not (or (empty? paths) (ci-changes/docs-only? paths))
-    (let [lib-paths (filter #(str/starts-with? % "libs/") paths)]
-      (if (seq lib-paths) (ci-changes/libs-to-test graph lib-paths) #{}))))
+    (into #{} (keep #(when-let [lib (second (re-find #"^libs/([^/]+)/" %))]
+                       (when (contains? graph lib) lib)))
+          paths)))
 
 (defn changed-main
   "`bb test:changed [base-ref]`: the tests of what changed since

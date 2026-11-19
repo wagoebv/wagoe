@@ -102,5 +102,5 @@
       (is (nil? (test-all/local-libs graph ["CHANGELOG.md"]))))
     (testing "a change outside libs/ selects no library"
       (is (= #{} (test-all/local-libs graph ["bb.edn"]))))
-    (testing "a library change selects it"
-      (is (contains? (test-all/local-libs graph ["libs/user/src/wagoe/user/x.clj"]) "user")))))
+    (testing "a library change selects that library only, not the ones that load it"
+      (is (= #{"user"} (test-all/local-libs graph ["libs/user/src/wagoe/user/x.clj"]))))))
