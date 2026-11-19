@@ -55,7 +55,8 @@ all of it.
   Usually why, not what. One or two sentences. If a comment needs paragraphs,
   the code probably needs a rethink, or the reasoning belongs in an ADR.
 - **Commit messages** — a subject line that says what changed, and a body only
-  when the reason is not evident from the diff. Reference the ticket.
+  when the reason is not evident from the diff. End the subject with the
+  ticket, `<what changed> (BOU-123)`; the commit-msg hook refuses one without.
 - **PR descriptions** — what changed and why, in a few lines. Reviewers read
   the diff; do not narrate it back to them. Include verification output only
   when a reviewer would otherwise have to re-run it.
