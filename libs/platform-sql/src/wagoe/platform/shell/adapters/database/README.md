@@ -309,8 +309,8 @@ Enable debug logging to troubleshoot issues:
 
 ```bash
 # Install test databases (Docker)
-docker run -d --name test-postgres -e POSTGRES_PASSWORD=test -p 5432:5432 postgres:13
-docker run -d --name test-mysql -e MYSQL_ROOT_PASSWORD=test -p 3306:3306 mysql:8
+docker run -d --name test-postgres -e POSTGRES_PASSWORD=test -p 127.0.0.1:5432:5432 postgres:13
+docker run -d --name test-mysql -e MYSQL_ROOT_PASSWORD=test -p 127.0.0.1:3306:3306 mysql:8
 
 # Run all tests
 clojure -M:test:test/all

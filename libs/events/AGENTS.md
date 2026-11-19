@@ -293,7 +293,7 @@ The unit tests need nothing. The Redis Streams tests skip themselves when no
 Redis is reachable on `localhost:6379`:
 
 ```bash
-docker run -d -p 6379:6379 redis:7-alpine
+docker run -d -p 127.0.0.1:6379:6379 redis:7-alpine
 clojure -M:test :events
 ```
 

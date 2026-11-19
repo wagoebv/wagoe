@@ -100,7 +100,7 @@ Before anything writes config:
 If unreachable: say so, and offer either SQLite instead or
 
 ```
-docker run --name wagoe-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:16
+docker run --name wagoe-pg -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:5432:5432 -d postgres:16
 ```
 
 Stop until they choose. Do not write config and let the migration fail later —

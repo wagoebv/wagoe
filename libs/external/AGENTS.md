@@ -225,7 +225,7 @@ For dev/test, use [Mailhog](https://github.com/mailhog/MailHog) as a local SMTP 
 
 ```bash
 # Start Mailhog (SMTP on 1025, Web UI on 8025)
-docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
+docker run -d -p 127.0.0.1:1025:1025 -p 127.0.0.1:8025:8025 mailhog/mailhog
 ```
 
 **Web UI**: http://localhost:8025 — view all captured emails, search by sender/recipient/subject.

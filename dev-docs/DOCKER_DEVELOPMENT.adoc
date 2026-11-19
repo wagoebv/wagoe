@@ -203,7 +203,7 @@ services:
       - DEBUG=true
       - LOG_LEVEL=debug
     ports:
-      - "5005:5005"  # JVM Debug port
+      - "127.0.0.1:5005:5005"  # JVM Debug port
     volumes:
       - ./custom-config:/app/config:ro
 ----
@@ -277,7 +277,7 @@ LOG_LEVEL=debug
 services:
   app:
     ports:
-      - "5005:5005"
+      - "127.0.0.1:5005:5005"
     command: ["java", "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005", "-jar", "app.jar"]
 ----
 . *Connect debugger* to `localhost:5005`
