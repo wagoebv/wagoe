@@ -203,7 +203,7 @@ to `*err*` and records emails in-memory instead of delivering them. Inspect with
 ## Local development (MailHog)
 
 ```bash
-docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
+docker run -d -p 127.0.0.1:1025:1025 -p 127.0.0.1:8025:8025 mailhog/mailhog
 # Sender config: {:host "localhost" :port 1025 :tls? false}
 # Inbox UI:      http://localhost:8025
 ```

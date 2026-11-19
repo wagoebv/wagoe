@@ -14,8 +14,8 @@ services:
       - HOT_RELOAD=true
     # Expose additional ports for debugging
     ports:
-      - "${HTTP_PORT:-3000}:${HTTP_PORT:-3000}" 
-      - "5005:5005"  # JVM Debug port
+      - "127.0.0.1:${HTTP_PORT:-3000}:${HTTP_PORT:-3000}" 
+      - "127.0.0.1:5005:5005"  # JVM Debug port
     # Override command for development
     # command: ["java", "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005", "-jar", "app.jar"]
     
@@ -25,7 +25,7 @@ services:
   #   image: redis:7-alpine
   #   container_name: wagoe-redis
   #   ports:
-  #     - "6379:6379"
+  #     - "127.0.0.1:6379:6379"
   #   networks:
   #     - wagoe-network
 

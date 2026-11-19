@@ -341,7 +341,7 @@ For local testing, use Mailhog or MailCatcher to capture emails without sending 
 
 ```bash
 # Start Mailhog (catches emails on port 1025, web UI on port 8025)
-docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
+docker run -d -p 127.0.0.1:1025:1025 -p 127.0.0.1:8025:8025 mailhog/mailhog
 ```
 
 ```clojure
@@ -1158,7 +1158,7 @@ Use Mailhog or MailCatcher for development:
 
 ```bash
 # Start Mailhog
-docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
+docker run -d -p 127.0.0.1:1025:1025 -p 127.0.0.1:8025:8025 mailhog/mailhog
 
 # Configure email sender
 (def dev-sender (smtp/create-smtp-sender

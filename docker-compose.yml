@@ -15,7 +15,7 @@ services:
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     ports:
       # PostgreSQL port - can be overridden via POSTGRES_PORT env var
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       # For PostgreSQL 18+, store data in pg_ctlcluster-compatible directory
       - wagoe_pgdata:/var/lib/postgresql/data/pgdata
@@ -63,9 +63,9 @@ services:
       
     ports:
       # Main application port - can be overridden via HTTP_PORT env var
-      - "${HTTP_PORT:-3000}:${HTTP_PORT:-3000}"
+      - "127.0.0.1:${HTTP_PORT:-3000}:${HTTP_PORT:-3000}"
       # Development mode: expose port range for auto-allocation
-      - "${HTTP_PORT_RANGE_START:-3001}-${HTTP_PORT_RANGE_END:-3010}:${HTTP_PORT_RANGE_START:-3001}-${HTTP_PORT_RANGE_END:-3010}"
+      - "127.0.0.1:${HTTP_PORT_RANGE_START:-3001}-${HTTP_PORT_RANGE_END:-3010}:${HTTP_PORT_RANGE_START:-3001}-${HTTP_PORT_RANGE_END:-3010}"
     volumes:
       # Configuration override
       - ./resources/conf/dev:/app/resources/conf/dev:ro
@@ -95,7 +95,7 @@ services:
       - DOCKER_CONTAINER=true
       - DOCS_PORT=${DOCS_PORT:-8080}
     ports:
-      - "${DOCS_PORT:-8080}:${DOCS_PORT:-8080}"
+      - "127.0.0.1:${DOCS_PORT:-8080}:${DOCS_PORT:-8080}"
     volumes:
       - .:/app:ro
       - /app/node_modules
