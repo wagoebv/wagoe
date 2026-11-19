@@ -2,7 +2,8 @@
   "Which CI jobs a pull request needs. `bb ci:changes <base-ref>` writes to
    $GITHUB_OUTPUT: `code`, false when only docs no code test reads changed
    (BOU-615); `libs`, the libraries whose tests run; `first-run`, whether
-   First-Run Smoke does; `skip-jobs`, the jobs that therefore do not."
+   First-Run Smoke does; `full`, whether the main-only jobs do (a push to
+   main, BOU-1026); `skip-jobs`, the jobs that therefore do not."
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
             [clj-yaml.core :as yaml]
@@ -158,6 +159,13 @@
             (throw (ex-info (str "ci.yml: " (name job) " is gated on no library: " gate)
                             {:type :validation-error}))))))
 
+(defn main-only-jobs
+  "Jobs in `workflow` (ci.yml text) whose `if:` runs them only on a push to main."
+  [workflow]
+  (for [[job {gate :if}] (:jobs (yaml/parse-string workflow))
+        :when (and (string? gate) (str/includes? gate "needs.changes.outputs.full"))]
+    (name job)))
+
 (defn- changed-files [base-ref]
   (let [{:keys [exit out err]} (process/shell {:out :string :err :string :continue true}
                                               "git" "diff" "--name-only" (str "origin/" base-ref "...HEAD"))]
@@ -176,12 +184,16 @@
                     code?        (libs-to-test graph paths)
                     :else        #{})
         smoke? (or (nil? paths) (first-run? paths))
-        gated (gated-jobs (slurp ".github/workflows/ci.yml") libs)
+        full? (nil? paths)
+        ci    (slurp ".github/workflows/ci.yml")
+        gated (gated-jobs ci libs)
         skip  (cond-> (keep (fn [[job lib]] (when-not (run lib) job)) gated)
-                (not smoke?) (conj "first-run-smoke"))
+                (not smoke?) (conj "first-run-smoke")
+                (not full?)  (into (main-only-jobs ci)))
         lines [(str "code=" code?)
                (str "libs=" (str/join " " (sort run)))
                (str "first-run=" smoke?)
+               (str "full=" full?)
                (str "skip-jobs=" (str/join " " (sort skip)))]]
     (run! println lines)
     (when-let [out (System/getenv "GITHUB_OUTPUT")]

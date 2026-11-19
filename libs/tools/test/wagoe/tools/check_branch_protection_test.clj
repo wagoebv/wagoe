@@ -50,6 +50,15 @@
                     "  test-summary:\n    name: All Tests Passed\n    needs: [a, b]\n"
                     "  a:\n    name: A\n"
                     "  b:\n    name: B\n")))]
+      (is (empty? missing))))
+
+  (testing "a job that needs the summary runs after the gate and is not reported"
+    (let [{:keys [missing]}
+          (sut/summary-covers
+           (wf (str "jobs:\n"
+                    "  test-summary:\n    name: All Tests Passed\n    needs: [a]\n"
+                    "  a:\n    name: A\n"
+                    "  announce:\n    name: Announce\n    needs: test-summary\n")))]
       (is (empty? missing)))))
 
 (deftest ^:unit coverage-is-transitive

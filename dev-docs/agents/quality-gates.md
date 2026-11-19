@@ -8,6 +8,8 @@ Automated safeguards run in CI (and `check:fcis` + `check:ports` in pre-commit, 
 
 `bb test:changed` tests what differs from `origin/main`, committed or not: the suites of the changed libraries (not the ones that load them), `:app`, and the `:security` tests of every other suite. A change outside `libs/` selects no library. CI on main runs the dependents and everything else. Before the first run: `npm ci` and `bb test:services up`. Measured on 19-11-2026: gates 46 s, a one-library change about 5 minutes in all (BOU-1024).
 
+CI has two layers (BOU-1026). A pull request runs the gates, the CSS build and the tests of the libraries it touches. A push to main runs everything, including e2e, the MySQL job and the smokes; `bb ci:changes` lists the main-only jobs from their `full` gate in `ci.yml`. A red main opens a "main is red" issue: revert first, then debug.
+
 The table below covers the gates with non-obvious rules.
 
 | Gate | Command | What it catches | Hard fail? |

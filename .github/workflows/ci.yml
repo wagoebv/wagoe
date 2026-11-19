@@ -61,6 +61,7 @@ jobs:
       code: ${{ steps.classify.outputs.code }}
       libs: ${{ steps.classify.outputs.libs }}
       first-run: ${{ steps.classify.outputs.first-run }}
+      full: ${{ steps.classify.outputs.full }}
       skip-jobs: ${{ steps.classify.outputs.skip-jobs }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -253,7 +254,8 @@ jobs:
     name: Isolated Build (${{ join(matrix.libs, ', ') }})
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    # Main only: a pull request runs the fast layer (BOU-1026).
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
 
     strategy:
       fail-fast: false
@@ -336,7 +338,8 @@ jobs:
     name: Example Smoke (examples/)
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    # Main only: a pull request runs the fast layer (BOU-1026).
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -960,7 +963,8 @@ jobs:
     name: Test admin, user, workflow, search, push, webhooks, events outbox, jobs DB queue on MySQL (+ outbox, jobs, webhooks on PG)
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    # Main only: a pull request runs the fast layer (BOU-1026).
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
     services:
       mysql:
         image: mysql:8
@@ -1025,7 +1029,8 @@ jobs:
     name: MySQL Smoke
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    # Main only: a pull request runs the fast layer (BOU-1026).
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
     services:
       mysql:
         image: mysql:8
@@ -1063,7 +1068,8 @@ jobs:
     name: Web crawl (${{ matrix.engine }})
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    # Main only: a pull request runs the fast layer (BOU-1026).
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -1412,7 +1418,8 @@ jobs:
     name: E2E (spel)
     runs-on: ubuntu-latest
     needs: [warm-deps, build-ui-assets, changes]
-    if: needs.changes.outputs.code == 'true'
+    # Main only: a pull request runs the fast layer (BOU-1026).
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1522,7 +1529,8 @@ jobs:
     name: Build Uberjar
     runs-on: ubuntu-latest
     needs: [warm-deps, changes]
-    if: needs.changes.outputs.code == 'true'
+    # Main only: a pull request runs the fast layer (BOU-1026).
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.full == 'true'
 
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1732,3 +1740,34 @@ jobs:
           echo "  - build-uberjar (deployable artifact builds and is versioned)"
           echo "  - test-tools (libs/tools + AGENTS.md generator tests)"
           echo "  - example-smoke (examples/todo, shop and stores run)"
+
+  # =============================================================================
+  # A red main is announced in one issue, closed again when main is green
+  # (BOU-1026). Cancelled runs, superseded by a newer push, say nothing.
+  # =============================================================================
+  announce-main:
+    name: Announce main status
+    runs-on: ubuntu-latest
+    needs: test-summary
+    if: always() && github.event_name == 'push' && contains(fromJSON('["success", "failure"]'), needs.test-summary.result)
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RESULT: ${{ needs.test-summary.result }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      SHA: ${{ github.sha }}
+    steps:
+      - name: Open, update or close the "main is red" issue
+        run: |
+          title="main is red"
+          open=$(gh issue list --state open --search "in:title \"$title\"" --json number,title \
+                   --jq ".[] | select(.title == \"$title\") | .number" | head -1)
+          if [ "$RESULT" = failure ]; then
+            body="CI failed on $SHA: $RUN_URL. Revert first, then debug."
+            if [ -n "$open" ]; then gh issue comment "$open" --body "$body"
+            else gh issue create --title "$title" --body "$body"; fi
+          elif [ -n "$open" ]; then
+            gh issue close "$open" --comment "Green again on $SHA: $RUN_URL"
+          fi

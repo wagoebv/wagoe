@@ -125,3 +125,9 @@
              "libs/ai" "libs/scaffolder"
              "docs/modules/getting-started/pages/quickstart.adoc" ".github/workflows/ci.yml"]]
     (is (fs/exists? (fs/path root p)) (str p " moved; update first-run-paths"))))
+
+(deftest ^:unit pull-requests-skip-the-main-only-jobs
+  ;; A pull request runs the fast layer; these run on a push to main (BOU-1026).
+  (is (= #{"check-isolation-matrix" "example-smoke" "test-mysql-suites" "mysql-smoke"
+           "web-crawl-smoke" "e2e" "build-uberjar"}
+         (set (sut/main-only-jobs (slurp (str root "/.github/workflows/ci.yml")))))))
