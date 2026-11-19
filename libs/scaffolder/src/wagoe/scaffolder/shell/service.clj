@@ -22,11 +22,16 @@
    affordance decoupled from what the code does).
 
    \".\" and nil resolve to the plain relative path, so default behaviour and
-   every existing report are unchanged."
+   every existing report are unchanged. A path that resolves outside the output
+   directory, through `..` in a name, is refused (BOU-1018)."
   [output-dir path]
-  (if (or (str/blank? output-dir) (= "." output-dir))
-    (io/file path)
-    (io/file output-dir path)))
+  (let [root (if (or (str/blank? output-dir) (= "." output-dir)) "." output-dir)
+        f    (if (= "." root) (io/file path) (io/file root path))
+        base (.getCanonicalPath (io/file root))]
+    (when-not (str/starts-with? (.getCanonicalPath f) (str base java.io.File/separator))
+      (throw (ex-info (str "Refusing to write outside " base ": " path)
+                      {:type ::outside-output-dir :path path})))
+    f))
 
 (defn- require-existing-file!
   "Refuse to continue when `file` is not there.

@@ -94,7 +94,7 @@
   [:and
    [:map {:title "Entity Definition"}
     [:name :string]                                          ; Entity name (PascalCase)
-    [:plural {:optional true} :string]                       ; Plural form (e.g., "customers")
+    [:plural {:optional true} [:re template/plural-pattern]] ; Plural form (e.g., "customers")
     [:fields [:vector FieldDefinition]]                      ; Entity fields
     ;; The parent entity, in this module: a required `<parent>_id` relation
     ;; column with a foreign key and an index (BOU-497).

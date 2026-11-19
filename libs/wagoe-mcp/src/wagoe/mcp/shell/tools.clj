@@ -17,6 +17,7 @@
             [wagoe.mcp.core.resources :as resources]
             [wagoe.mcp.ports :as ports]
             [wagoe.mcp.shell.verify :as verify]
+            [wagoe.scaffolder.core.template :as template]
             [wagoe.scaffolder.ports :as scaffold]
             [clj-kondo.core :as kondo]
             [clojure.edn :as edn]
@@ -175,9 +176,19 @@
       (str/replace #"(^|/)src/" "$1test/")
       (str/replace #"\.clj$" "_test.clj")))
 
+(defn- valid-entity!
+  "An entity's names become paths and SQL: each must be an identifier (BOU-1018)."
+  [{:keys [name plural belongs-to fields]}]
+  (valid-name! :entity entity-name-re name)
+  (some->> plural (valid-name! :plural template/plural-pattern))
+  (some->> belongs-to (valid-name! :belongs-to template/entity-name-pattern))
+  (doseq [{:keys [references references-table]} fields]
+    (some->> references (valid-name! :references template/entity-name-pattern))
+    (some->> references-table (valid-name! :references-table template/table-name-pattern))))
+
 (defn- scaffold-module [{:keys [module entities interfaces preview force allow]} deps]
   (valid-name! :module module-name-re module)
-  (run! #(valid-name! :entity entity-name-re (:name %)) entities)
+  (run! valid-entity! entities)
   (let [svc (:scaffolder deps)
         req {:module-name module
              :entities    (mapv entity->scaffolder entities)

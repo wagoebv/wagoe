@@ -1051,3 +1051,22 @@
         (is (str/includes? (slurp (io/file dir "src/wagoe/invoice/schema.clj"))
                            "[:enum :draft :sent :paid]")))
       (finally (delete-tree! dir)))))
+
+(deftest ^:unit ^:security no-write-lands-outside-the-output-dir
+  ;; BOU-1018: an entity's plural is part of a path
+  (let [dir (temp-dir)
+        r   (ports/generate-module (service/create-scaffolder-service)
+                                   {:module-name "billing"
+                                    :entities    [{:name "Invoice" :plural "../../../escaped"
+                                                   :fields [{:name :name :type :string}]}]
+                                    :interfaces  {:http true}
+                                    :output-dir  (.getPath dir)
+                                    :dry-run     false})]
+    (is (false? (:success r)) "the schema refuses the plural"))
+  (let [resolve #'service/resolve-path
+        dir     (.getPath (temp-dir))]
+    (is (= (io/file dir "a/b.edn") (resolve dir "a/b.edn")))
+    (is (= (io/file "a/b.edn") (resolve "." "a/b.edn")))
+    (doseq [path ["../x.edn" "resources/conf/dev/admin/../../../../../x.edn"]]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"outside" (resolve dir path)) path)
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"outside" (resolve "." path)) path))))

@@ -279,6 +279,11 @@
   "What `references-table` may be: a lowercase SQL identifier."
   #"^[a-z][a-z0-9_]*$")
 
+(def plural-pattern
+  "What an entity's `plural` may be: it names a table, a URL and an admin file,
+   so a lowercase word, never a path (BOU-1018)."
+  #"^[a-z][a-z0-9]*([-_][a-z0-9]+)*$")
+
 (defn valid-entity-name?
   "Whether `s` is something a relation may reference.
 
