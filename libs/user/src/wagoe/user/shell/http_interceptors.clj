@@ -25,6 +25,7 @@
                            'user.http-interceptors/log-action]}}]"
   (:require [wagoe.observability.logging.ports :as logging]
             [wagoe.observability.metrics.ports :as metrics]
+            [wagoe.core.http.access :as core-access]
             [wagoe.platform.core.http.access :as access]
             [wagoe.platform.core.http.errors :as errors]
             [wagoe.tenant.core.membership :as membership-core]
@@ -63,13 +64,11 @@
     (string? role) (keyword role)
     :else nil))
 
-(defn- admin-user?
-  "Return true when a user has an admin role.
-
-   Accept both keyword and string role representations to keep the interceptors
-   compatible with older session payloads and newer normalized user maps."
-  [user]
-  (= :admin (normalize-role (:role user))))
+(defn- as-user
+  "`request` with `user`, who may come from its session, as its :user: what
+   the access checks read to decide where the request runs (BOU-1020)."
+  [request user]
+  (assoc request :user user))
 
 (defn- create-error-response
   "The one error body (BOU-586). No Content-Type: muuntaja skips encoding a
@@ -180,7 +179,8 @@
   {:name :require-admin
    :enter (fn [{:keys [request correlation-id system] :as ctx}]
             (let [user (get-user request)]
-              (if (and user (admin-user? user))
+              ;; Admin where the request runs, not at home (BOU-1020)
+              (if (and user (core-access/tenant-admin? (as-user request user)))
                 (do
                   ;; Log successful authorization
                   (when-let [logger (:logger system)]
@@ -258,7 +258,10 @@
                   normalized-required-role (if (keyword? required-role)
                                              required-role
                                              (keyword required-role))]
-              (if (and user (= normalized-required-role (normalize-role (:role user))))
+              ;; The role held where the request runs: an admin of another
+              ;; tenant is not one here (BOU-1020)
+              (if (and user (some #{normalized-required-role}
+                                  (map normalize-role (core-access/roles-here (as-user request user)))))
                 (do
                   ;; Log successful authorization
                   (when-let [logger (:logger system)]
@@ -303,7 +306,7 @@
             (let [user (get-user request)
                   target-id (:id path-params)
                   user-id (str (:id user))
-                  is-admin? (admin-user? user)
+                  is-admin? (and user (core-access/tenant-admin? (as-user request user)))
                   is-self? (= target-id user-id)]
               (if (or is-admin? is-self?)
                 (do

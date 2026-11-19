@@ -440,10 +440,12 @@
    tenant's, or without a tenant the public one."
   [handler]
   (fn [request]
-    (let [user (:user request)]
-      (if (and (admin-permissions/can-access-admin? user)
-               (access/in-tenant-scope? request)
-               (access/tenant-admin? request))
+    (let [user   (:user request)
+          admin? (access/tenant-admin? request)]
+      ;; Admin as held here, so a tenant's admin by membership is one (BOU-1020)
+      (if (and admin?
+               (admin-permissions/can-access-admin? (admin-permissions/here user admin?))
+               (access/in-tenant-scope? request))
         (handler request)
         (html-response request (admin-layout/admin-forbidden-page nil user) 403)))))
 

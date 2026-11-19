@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **An admin of one tenant passed admin-only checks in another tenant where they were only a member** (BOU-1020).
+  These checks read the role held where the request runs now, so a tenant's admin by membership passes them there.
 - **The dev and test compose files published Postgres, MySQL and Redis with default credentials on every interface**
   (BOU-1019). They bind to 127.0.0.1: re-copy your compose override, then `docker compose up -d` and `bb test:services up`.
 - **The MCP `scaffold-module` tool wrote `.edn` files outside the project through an entity's plural** (BOU-1018).
@@ -94,6 +96,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- `require-role` and `require-role-middleware` match the role held in the request's tenant (BOU-1020). An app
+  guarding with its own role should check it is granted there.
 - **A pull request runs CI's fast layer** (BOU-1026): no e2e, MySQL job, first-run/example/web-crawl smokes, isolation
   matrix or uberjar; main runs all and opens a "main is red" issue. Releases need a green run on main.
 - **A push to main runs `bb check` first** (BOU-1025), which now tests only the changed libraries, not the ones that

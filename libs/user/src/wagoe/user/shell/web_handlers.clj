@@ -1194,10 +1194,9 @@
   (fn [request]
     (try
       (let [user-id (get-in request [:path-params :id])
-            uuid (UUID/fromString user-id)
-            current-user (:user request)]
+            uuid (UUID/fromString user-id)]
         ;; Check if current user is admin
-        (if-not (= :admin (:role current-user))
+        (if-not (core-access/tenant-admin? request)
           (-> (html-response request
                              (layout/error-layout 403 [:t :user/page-access-denied-title]
                                                   [:t :user/error-delete-admin-only])

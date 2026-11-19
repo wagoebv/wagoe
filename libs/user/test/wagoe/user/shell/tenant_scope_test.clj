@@ -160,3 +160,19 @@
         (is (= 403 (bound path no-tenant)))
         (is (= {:id nil} (bound path {:id (UUID/randomUUID) :role :admin})) "a platform admin: no tenant's")
         (is (= {:id tenant-b} (bound path {:id (UUID/randomUUID) :role :admin} tenant-b)) "or the one named")))))
+
+(deftest ^:unit ^:security an-admin-here-by-membership-grants-only-in-this-tenant
+  ;; A user of A who is admin of B by membership reaches their own account from
+  ;; B, but must not grant it rights in A (BOU-1020)
+  (let [guard ((#'http/in-admins-tenant (service (atom [])) nil)
+               (fn [_] {:status 200 :body group-persistence/*tenant*}))
+        grant (fn [target]
+                (let [resp (guard {:user              user-of-a
+                                   :tenant            {:id tenant-b}
+                                   :tenant-membership {:role :admin :status :active}
+                                   :uri               (str "/web/users/" (:id target) "/grant/group")
+                                   :path-params       {:id (str (:id target))}
+                                   :headers           {}})]
+                  (if (= 200 (:status resp)) (:body resp) (:status resp))))]
+    (is (= 404 (grant user-of-a)) "their own account, of tenant A")
+    (is (= {:id tenant-b} (grant user-of-b)) "a user of B, in B's groups")))

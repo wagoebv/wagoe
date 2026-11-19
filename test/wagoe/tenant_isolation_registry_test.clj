@@ -49,10 +49,12 @@
                                  "an-index-without-a-tenant-filter-is-refused-to-a-caller-in-a-tenant"
                                  "only-a-platform-admin-writes-documents"]
                                 "libs/search/test/wagoe/search/shell/http_test.clj"
-                                ["a-tenants-admin-sees-no-count-across-tenants"]}}
+                                ["a-tenants-admin-sees-no-count-across-tenants"
+                                 "an-admin-elsewhere-gets-no-admin-pages-here"]}}
    "user"          {:scoped-by "users.tenant_id, one account per tenant with its email unique there; listings and routes by user id forced to the caller's tenant; roles, groups and Everyone per tenant, managed by that tenant's admins"
                     :tests     {"libs/user/test/wagoe/user/shell/authz_negative_security_test.clj"
-                                ["require-tenant-member-denies-non-member"]
+                                ["require-tenant-member-denies-non-member"
+                                 "an-admin-elsewhere-is-no-admin-here"]
                                 "libs/user/test/wagoe/user/shell/tenant_scope_test.clj"
                                 ["a-listing-holds-only-the-callers-tenant"
                                  "a-route-naming-another-tenants-user-answers-404"
@@ -93,7 +95,8 @@
    "admin"         {:scoped-by "an entity mapping :tenant-id under :scope shows a tenant's caller only their tenant's records; its events carry the tenant"
                     :tests     {"libs/admin/test/wagoe/admin/shell/tenant_scope_test.clj"
                                 ["a-tenants-admin-reaches-only-their-tenants-records"
-                                 "a-platform-admin-reaches-every-tenant-or-the-resolved-one"]
+                                 "a-platform-admin-reaches-every-tenant-or-the-resolved-one"
+                                 "an-admin-elsewhere-is-only-what-they-are-here"]
                                 "libs/admin/test/wagoe/admin/shell/create_with_children_test.clj"
                                 ["a-tenants-admin-creates-children-only-in-their-tenant"
                                  "a-tenants-admin-points-a-foreign-key-only-at-their-tenants-records"

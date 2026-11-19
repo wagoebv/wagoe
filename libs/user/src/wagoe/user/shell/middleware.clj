@@ -519,8 +519,9 @@
      Wrapped handler function"
   [required-roles handler]
   (fn [request]
-    (if-let [user (:user request)]
-      (let [user-role (:role user)]
+    (if (:user request)
+      ;; The role held where the request runs, not at home (BOU-1020)
+      (let [user-role (first (core-access/roles-here request))]
         (if (contains? required-roles user-role)
           ;; User has required role
           (handler request)

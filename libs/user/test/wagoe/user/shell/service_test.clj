@@ -677,3 +677,15 @@
       (is (= "Bea" (:name (ports/update-user-profile service {:id user-id :name "Bea"}))) "the change stands")
       (is (some #(and (= :warn (:level %)) (= "audit table gone" (ex-message (:throwable %))))
                 (log-test/the-log))))))
+
+(deftest ^:unit ^:security no-one-but-a-platform-admin-makes-themselves-admin
+  ;; An admin of tenant B by membership reaches their own account of tenant A
+  ;; from B; the service still refuses them :admin on it (BOU-1020)
+  (let [x        {:id (UUID/randomUUID) :name "X" :email "x@example.nl" :role :user :active true
+                  :tenant-id (UUID/randomUUID)}
+        state    (atom {(:id x) x})
+        service  (sut/->UserService (->UserRepoStub state) nil (->AuditRepoCapture (atom [])) {} nil)
+        attempt  #(sut/with-audit-context {:actor-id (:id x) :actor-email (:email x)}
+                    (fn [] (ports/update-user-profile service (assoc x :role :admin))))]
+    (is (= :forbidden (try (attempt) nil (catch clojure.lang.ExceptionInfo e (:type (ex-data e))))))
+    (is (= :user (:role (get @state (:id x)))))))

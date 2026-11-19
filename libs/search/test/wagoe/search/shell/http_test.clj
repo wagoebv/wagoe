@@ -45,6 +45,17 @@
         (is (= 403 (:status resp)))
         (is (nil? (get-in resp [:headers "Location"])))))))
 
+(deftest ^:unit ^:security an-admin-elsewhere-gets-no-admin-pages-here
+  ;; An admin of tenant A who is only a member of tenant B (BOU-1020)
+  (let [data    (some (fn [[p d]] (when (= p "/search") d)) (sut/search-web-routes nil))
+        handler (reduce (fn [h mw] (mw h)) (constantly {:status 200}) (reverse (:middleware data)))
+        a       (random-uuid)
+        b       (random-uuid)
+        in-b    (fn [user role] (:status (handler {:request-method :get :uri "/web/admin/search" :user user
+                                                   :tenant {:id b} :tenant-membership {:role role :status :active}})))]
+    (is (= 403 (in-b {:id (random-uuid) :role :admin :tenant-id a} :member)))
+    (is (= 200 (in-b {:id (random-uuid) :role :user :tenant-id a} :admin)) "an admin of B by membership")))
+
 ;; =============================================================================
 ;; As served: the platform's router, coercion and error handling (BOU-586)
 ;; =============================================================================

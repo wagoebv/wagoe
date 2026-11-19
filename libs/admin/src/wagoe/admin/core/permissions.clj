@@ -34,21 +34,24 @@
   (boolean (and user
                 (= (:role user) required-role))))
 
+(defn here
+  "`user` marked with whether they are an admin where the request runs: their
+   own `:role` is their home tenant's (BOU-1020)."
+  [user admin-here?]
+  (when user (assoc user ::admin-here? (boolean admin-here?))))
+
 (defn is-admin?
-  "Check if user has admin role.
-
-   Args:
-     user: User entity map
-
-   Returns:
-     Boolean true if user is an admin
+  "Whether `user` is an admin: where the request runs when the shell marked
+   them (`here`), else by their role.
 
    Examples:
-     (is-admin? {:role :admin})  ;=> true
-     (is-admin? {:role :user})   ;=> false
-     (is-admin? nil)             ;=> false"
+     (is-admin? {:role :admin})                     ;=> true
+     (is-admin? (here {:role :admin} false))        ;=> false
+     (is-admin? nil)                                ;=> false"
   [user]
-  (has-role? user :admin))
+  (if (contains? user ::admin-here?)
+    (::admin-here? user)
+    (has-role? user :admin)))
 
 (defn is-authenticated?
   "Check if user is authenticated (has any role).
