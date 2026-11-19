@@ -220,4 +220,3 @@
     (is (= 1 (count (ports/find-by-role registry :viewer))) "a viewer, as their membership there")
     (reset! broken? true)
     (deref done 2000 nil)))
-

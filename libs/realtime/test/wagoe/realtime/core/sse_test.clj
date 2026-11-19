@@ -55,5 +55,12 @@
     (is (= #{:admin} (sse/roles-in {:user {:id (random-uuid) :role :admin}} b)) "a platform admin")
     (is (= #{:admin} (sse/roles-in {:user {:id (random-uuid) :role :user :tenant-id a}
                                     :tenant-membership {:role :admin}} b))
-        "an admin by membership")))
-
+        "an admin by membership")
+    (is (= #{:user :admin} (sse/roles-in {:user {:id (random-uuid) :role :user :tenant-id a}
+                                          :tenant-membership {:role "admin"}} a))
+        "at home, an admin membership there too, as roles-here has it")
+    (is (= #{:admin} (sse/roles-in {:user (assoc admin-of-a :tenant-id (str a))} a)) "a string tenant id")
+    (is (= #{:admin} (sse/roles-in {:user {:id (random-uuid) :role "admin"}} b)) "a platform admin, role a string")
+    (is (= #{:viewer} (sse/roles-in {:user {:id (random-uuid) :role :user :roles [:admin]}
+                                     :tenant-membership {:role :viewer}} b))
+        "platform admin is read from :role, as connection-tenant reads it")))
