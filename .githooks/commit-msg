@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Every commit names its Linear ticket, so a release lists what it holds
+# (BOU-1031): `<what changed> (BOU-123)`. Git's own merges, reverts and
+# fixup!/squash! commits are exempt.
+set -euo pipefail
+
+subject="$(grep -v '^#' "$1" | head -1)"
+case "$subject" in
+  "Merge "*|"Revert "*|"fixup! "*|"squash! "*|"amend! "*) exit 0 ;;
+esac
+if [[ "$subject" =~ BOU-[0-9]+ ]]; then
+  exit 0
+fi
+echo "commit-msg: name the ticket in the subject, as \`<what changed> (BOU-123)\`." >&2
+exit 1

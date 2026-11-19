@@ -14,7 +14,7 @@ brew install openjdk clojure/tools/clojure borkdude/brew/babashka  # macOS
 
 git clone https://github.com/wagoebv/wagoe.git
 cd wagoe
-bb install-hooks            # pre-commit: FC/IS and ports gates; pre-push to main: bb check
+bb install-hooks            # pre-commit: FC/IS and ports; commit-msg: ticket id; pre-push to main: bb check
 apm install                 # agent skills, reviewers and hooks from ai/.apm/
 
 bb test:services up         # Redis + MySQL for the adapter sweeps (docker compose)
@@ -133,6 +133,16 @@ clojure -M:test:test/all
 # Lint code
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
 ```
+
+### ✍️ **Commits and the changelog**
+
+- Every commit names its Linear ticket at the end of the subject:
+  `Move the green tag to the newest green commit (BOU-1028)`. The commit-msg
+  hook refuses a subject without one; merges, reverts and fixups are exempt.
+- A change to shipped code adds a line under `## [Unreleased]` in
+  `CHANGELOG.md`, with the ticket id: what changed and what a user must do.
+  `bb check` fails a branch that changes `src/` without one. A release turns
+  `[Unreleased]` into its version.
 
 ### 🎯 **Pull Request Process**
 
