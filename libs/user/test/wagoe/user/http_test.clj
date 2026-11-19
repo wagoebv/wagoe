@@ -467,7 +467,12 @@
         del-h    (get-in handlers [:session :delete :handler])]
     (is (= 200 (:status (get-h {:headers {"x-session-token" token}}))))
     (is (= 204 (:status (del-h {:cookies {"session-token" {:value token}}}))))
-    (is (nil? (ports/validate-session service token)) "ended")))
+    (is (nil? (ports/validate-session service token)) "ended")
+    (testing "a body token, and no token at all"
+      (let [other (:session-token (ports/authenticate-user service {:user-id (UUID/randomUUID)}))]
+        (is (= 204 (:status (del-h {:body-params {:token other}}))))
+        (is (nil? (ports/validate-session service other))))
+      (is (= :unauthorized (try (get-h {}) nil (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))))))
 
 (deftest ^:contract test-invalidate-session-handler
   (testing "DELETE /sessions/:token - Invalidate session successfully"

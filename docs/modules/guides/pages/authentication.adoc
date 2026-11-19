@@ -515,7 +515,7 @@ curl -H "X-Session-Token: {session-token}" http://localhost:3000/api/v1/session
 curl -X DELETE -H "X-Session-Token: {session-token}" http://localhost:3000/api/v1/session
 ----
 
-The header, or the session cookie, carries the credential. The older
+The header, the session cookie or a JSON body `token` carries the credential. The older
 `/api/v1/sessions/{session-token}` still works but is deprecated: the token in
 the path reaches access logs, so it is masked in Wagoe's own. A user's other sessions are listed and
 revoked on their *Sessions* tab in the web UI.

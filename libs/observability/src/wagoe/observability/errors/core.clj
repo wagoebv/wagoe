@@ -6,7 +6,7 @@
    report errors without dealing with protocol details directly."
   (:require
    [wagoe.core.utils.pii-redaction :as pii]
-            [wagoe.core.utils.secret-keys :as secret-keys]
+   [wagoe.core.utils.secret-keys :as secret-keys]
    [wagoe.core.utils.text :as text]
    [wagoe.observability.errors.ports :as ports]
    [wagoe.observability.core.sql-redaction :as redaction]

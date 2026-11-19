@@ -9,6 +9,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [wagoe.core.utils.pii-redaction :as pii]
             [malli.error :as me]
             [muuntaja.core :as m]
             [reitit.coercion.malli :as malli-coercion]
@@ -247,7 +248,7 @@
                  ;; the match tree — and logging it writes the Authorization
                  ;; header of the caller into the log on every occurrence.
                  (log/error msg
-                            {:uri            (:uri request)
+                            {:uri            (pii/redact-uri (:uri request))
                              :method         (some-> (:request-method request) name)
                              :correlation-id cid
                              :exception      (some-> ^Throwable e class .getName)

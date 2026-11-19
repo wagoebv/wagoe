@@ -7,6 +7,7 @@
             [wagoe.core.http.error-status :as error-status]
             [wagoe.platform.core.http.client-ip :as client-ip]
             [wagoe.platform.core.http.errors :as errors]
+            [wagoe.core.utils.pii-redaction :as pii]
             [wagoe.core.utils.text :as text]))
 
 ;; =============================================================================
@@ -107,7 +108,7 @@
         (or (:correlation-id request) (get headers "x-trace-id") (get headers "x-correlation-id")) (assoc :trace-id (or (:correlation-id request) (get headers "x-trace-id") (get headers "x-correlation-id")))
         (get headers "x-request-id") (assoc :request-id (get headers "x-request-id"))
         (get headers "user-agent") (assoc :user-agent (get headers "user-agent"))
-        (:uri request) (assoc :uri (:uri request))
+        (:uri request) (assoc :uri (pii/redact-uri (:uri request)))
         (:request-method request) (assoc :method (-> request :request-method name text/upper-case))
         ;; Never X-Forwarded-For itself: the client writes it (see client-ip).
         (client-ip/request-ip request) (assoc :ip-address (client-ip/request-ip request)))))))

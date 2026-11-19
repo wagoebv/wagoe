@@ -139,11 +139,11 @@
 
 (def ^:private uri-secret
   "A path that carries a credential: the session check's token (BOU-1015)."
-  #"^(/api(?:/v\d+)?/sessions/)[^/?#]+$")
+  #"^(/api(?:/v\d+)?/sessions/)[^/?#]+(/?)$")
 
 (defn redact-uri
   "`uri` with a credential it carries replaced, for a log line or an error
    report: the token of /api/v1/sessions/<token>."
   [uri]
-  (some-> uri str (str/replace uri-secret "$1[REDACTED]")))
+  (some-> uri str (str/replace uri-secret "$1[REDACTED]$2")))
 

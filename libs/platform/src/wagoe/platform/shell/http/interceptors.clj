@@ -340,7 +340,7 @@
                   :details        {:hint            "Add :type to the ex-info data map (e.g., {:type :validation-error})."
                                    :exception-class (.getName (class exception))
                                    :ex-data-keys    (sort (keys ex-data))
-                                   :uri             (:uri request)}})))
+                                   :uri             (pii/redact-uri (:uri request))}})))
 
 ;; ==============================================================================
 ;; HTTP-Specific Interceptors
@@ -810,7 +810,7 @@
   [handler groups-fn]
   (with-meta
     (fn [request]
-      (binding [nav/*nav* {:groups (delay (groups-fn)) :uri (pii/redact-uri (:uri request))}]
+      (binding [nav/*nav* {:groups (delay (groups-fn)) :uri (:uri request)}]
         (handler request)))
     (meta handler)))
 
