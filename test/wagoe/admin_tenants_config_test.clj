@@ -156,6 +156,19 @@
               (is (#{403 :forbidden} (let [r (request-as! theirs app :delete (str "/web/admin/tenants/" id))]
                                        (or (:thrown r) (:status r)))))
               (is (nil? (:deleted-at (row)))))
+            (testing "nor through an inline edit, nor a bulk delete"
+              (let [r (request-as! theirs app :patch (str "/web/admin/tenants/" id "/status") {"status" "suspended"})]
+                (is (#{403 :forbidden} (or (:thrown r) (:status r)))))
+              (let [r (request-as! theirs app :post "/web/admin/tenants/bulk-delete" {"ids[]" [id]})]
+                (is (#{403 :forbidden} (or (:thrown r) (:status r)))))
+              (is (= "active" (:status (row))))
+              (is (nil? (:deleted-at (row)))))
+            (testing "the edit form shows them read-only, and offers no delete"
+              (let [body (str (:body (request-as! theirs app :get (str "/web/admin/tenants/" id))))]
+                (is (not (re-find #"<(input|select|textarea)[^>]*name=\"status\"(?![^>]*(disabled|readonly))" body)))
+                (is (not (str/includes? body "hx-delete"))))
+              (is (re-find #"name=\"status\"" (str (:body (request! app :get (str "/web/admin/tenants/" id)))))
+                  "a platform admin's form has the field, so the check above means something"))
             (testing "a platform admin still sets the status"
               (request! app :put (str "/web/admin/tenants/" id) {"name" "Acme 2" "status" "suspended"})
               (is (= "suspended" (:status (row)))))))))))
