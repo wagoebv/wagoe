@@ -133,3 +133,12 @@
     (testing "a docs-only pull request runs no library"
       (is (= {:code false :libs #{} :full false :skip-jobs #{"e2e" "test-geo" "test-search"}}
              (sut/plan graph ci ["CHANGELOG.md"]))))))
+
+(deftest ^:unit green-moves-only-after-a-green-push-to-main
+  ;; `green` is the newest commit on main whose CI passed (BOU-1028).
+  (let [{gate :if :keys [needs permissions]}
+        (:tag-green (jobs (slurp (str root "/.github/workflows/ci.yml"))))]
+    (is (= "test-summary" needs))
+    (is (str/includes? gate "github.event_name == 'push'"))
+    (is (str/includes? gate "needs.test-summary.result == 'success'"))
+    (is (= {:contents "write"} permissions))))

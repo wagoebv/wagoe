@@ -15,7 +15,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
-# Read-only by default; no job writes to the repository.
+# Read-only by default; a job that writes declares it (tag-green, announce-main).
 permissions:
   contents: read
 
@@ -1744,3 +1744,33 @@ jobs:
           FAILURE_WHAT: "CI failed on main: revert first, then debug."
           FAILURE_NOTIFY: ${{ github.actor }}
         run: ./scripts/failure-issue.sh "$([ "$RESULT" = success ] && echo pass || echo fail)"
+
+  # =============================================================================
+  # `green` marks the newest commit on main whose CI passed (BOU-1028).
+  # =============================================================================
+  tag-green:
+    name: Move the green tag
+    runs-on: ubuntu-latest
+    needs: test-summary
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.test-summary.result == 'success' }}
+    permissions:
+      contents: write
+    steps:
+      # Every commit, no trees: merge-base needs only the history.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          filter: tree:0
+
+      # A re-run of an older commit must not move green backwards.
+      - name: Move green to this commit unless it already points later
+        shell: bash
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          current="$(git ls-remote origin refs/tags/green | cut -f1)"
+          if [ -n "$current" ] && ! git merge-base --is-ancestor "$current" "$SHA"; then
+            echo "green is at $current, not an ancestor of $SHA; leaving it."
+            exit 0
+          fi
+          git push -f origin "$SHA:refs/tags/green"

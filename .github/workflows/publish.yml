@@ -18,7 +18,7 @@ on:
       - '[0-9]+.[0-9]+.[0-9]+'
       - '[0-9]+.[0-9]+.[0-9]+-*'
 
-# Each job gets only what it needs (BOU-1017): publish reads checks for its CI
+# Each job gets only what it needs (BOU-1017): publish reads the CI runs for its
 # guard; attest signs the installer's provenance (BOU-974) from a fresh checkout,
 # running no third-party code; release alone writes the GitHub release.
 permissions:
