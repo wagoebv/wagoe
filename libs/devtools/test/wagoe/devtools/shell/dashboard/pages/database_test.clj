@@ -87,3 +87,26 @@
     (let [html (database/render {})]
       (is (str/includes? html "20260101000000-shadowed.up.sql"))
       (is (str/includes? html "resources/migrations")))))
+
+(deftest ^:unit ^:security only-one-statement-that-reads-runs
+  ;; BOU-1012: a read-only transaction alone lets COPY ... TO PROGRAM through
+  (doseq [sql ["select 1" "SELECT * FROM users;" "with x as (select 1) select * from x"
+               "explain select 1" "show tables" "values (1)" "table users"]]
+    (is (nil? (database/query-refusal sql)) sql))
+  (doseq [sql ["delete from users" "COPY users TO PROGRAM 'id'" "select 1; drop table users"
+               "update users set role = 'admin'" "create table x (id int)" "(select 1)"
+               "select csvwrite('/tmp/x.csv', 'select 1')" "SELECT FILE_WRITE('x', '/tmp/x')"
+               "select * from users into outfile '/tmp/x'"]]
+    (is (some? (database/query-refusal sql)) sql)))
+
+(deftest ^:integration a-query-that-reads-runs-and-its-writes-are-undone
+  (let [ds  (doto (org.h2.jdbcx.JdbcDataSource.) (.setURL "jdbc:h2:mem:dash_query;DB_CLOSE_DELAY=-1"))
+        run #(database/render-query-result {:params {"sql" %} :db-context {:datasource ds}})]
+    (is (str/includes? (run "select 42 as answer") "42"))
+    (is (str/includes? (run "delete from nothing") "Query refused"))))
+
+(deftest ^:integration a-query-runs-on-sqlite-whose-driver-refuses-read-only-once-open
+  (let [ds (doto (org.sqlite.SQLiteDataSource.) (.setUrl "jdbc:sqlite::memory:"))]
+    (is (str/includes? (database/render-query-result {:params {"sql" "select 42 as answer"}
+                                                       :db-context {:datasource ds}})
+                       "42"))))

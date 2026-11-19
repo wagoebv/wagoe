@@ -14,6 +14,8 @@
             [wagoe.platform.system :as platform-system]
             [wagoe.user.ports :as user-ports]
             [clojure.edn :as edn]
+            [clojure.string :as str]
+            [wagoe.core.utils.text :as text]
             [integrant.core :as ig]
             [reitit.core]
             [reitit.ring :as ring]
@@ -288,6 +290,62 @@
   (fn [req]
     (some-> (handler req) (assoc-in [:headers "X-Dashboard-Instance"] id))))
 
+(def ^:private local-hosts #{"127.0.0.1" "localhost" "[::1]"})
+
+(defn- host-name
+  "The host of a Host or Origin authority, without its port."
+  [authority]
+  (let [a (text/lower-case (str authority))]
+    (if (str/starts-with? a "[")
+      (subs a 0 (inc (or (str/index-of a "]") (dec (count a)))))
+      (first (str/split a #":" 2)))))
+
+(def ^:private token-cookie "wagoe-dashboard-token")
+
+(defn- presented-token
+  "The token `req` carries: in its query, the URL the log printed, or its cookie."
+  [req]
+  (or (second (re-find #"(?:^|&)token=([^&]+)" (str (:query-string req))))
+      (second (re-find (re-pattern (str "(?:^|;\\s*)" token-cookie "=([^;]+)")) (str (get-in req [:headers "cookie"]))))))
+
+(defn local-refusal
+  "Why `req` may not reach the dashboard, or nil (BOU-1012). It runs SQL and
+   rewrites the config, so a page the developer visits must not: a request that
+   writes comes from the dashboard's own origin. Bound to this machine only,
+   every request names it in Host, which stops DNS rebinding. Bound beyond it,
+   where any client sets its own Host, every request carries `token`, the one
+   in the URL the log printed."
+  [req token]
+  (let [host    (get-in req [:headers "host"])
+        site    (get-in req [:headers "sec-fetch-site"])
+        origin  (get-in req [:headers "origin"])
+        own     (str (name (or (:scheme req) :http)) "://" (text/lower-case (str host)))
+        writes? (not (#{:get :head :options} (:request-method req)))]
+    (cond
+      (and token (not= token (presented-token req)))
+      "Open the dashboard with the URL in the log"
+
+      (and (nil? token) (not (local-hosts (host-name host))))
+      "Host is not this machine"
+
+      (and writes? site (not= "same-origin" site))
+      "Not from the dashboard's own page"
+
+      (and writes? (not site) origin (not= (text/lower-case origin) own))
+      "Not from the dashboard's own origin")))
+
+(defn- wrap-local-only
+  "Refuse what `local-refusal` refuses; a token presented in the URL stays as a
+   same-site cookie for the requests that follow."
+  [handler token]
+  (fn [req]
+    (if-let [why (local-refusal req token)]
+      {:status 403 :headers {"Content-Type" "text/plain; charset=utf-8"} :body why}
+      (cond-> (handler req)
+        (and token (str/includes? (str (:query-string req)) "token="))
+        (assoc-in [:headers "Set-Cookie"]
+                  (str token-cookie "=" token "; Path=/; HttpOnly; SameSite=Strict"))))))
+
 (defn- make-handler [config]
   (-> (ring/router
        [["/dashboard"
@@ -516,6 +574,7 @@
       (wrap-resource "public")
       wrap-content-type
       wrap-params
+      (wrap-local-only (::token config))
       (wrap-instance (::instance config))))
 
 (defn- bind-failure?
@@ -562,14 +621,20 @@
           (seq more) (recur more)
           :else      nil)))))
 
+(defn- loopback? [host]
+  (contains? #{"127.0.0.1" "localhost" "::1" "[::1]"} (text/lower-case (str host))))
+
 (defmethod ig/init-key :wagoe/dashboard [_ {:keys [port host] :as config}]
   (let [port   (or port default-port)
         host   (or host "127.0.0.1")
-        result (try-start-jetty (make-handler (assoc config ::instance (str (random-uuid))))
+        ;; Beyond this machine a client sets its own Host: a token per start (BOU-1012)
+        token  (when-not (loopback? host) (str (random-uuid)))
+        result (try-start-jetty (make-handler (assoc config ::instance (str (random-uuid)) ::token token))
                                 host port)]
     (if result
       (do
-        (log/infof "Dev dashboard started on http://%s:%d/dashboard" host (:port result))
+        (log/infof "Dev dashboard started on http://%s:%d/dashboard%s" host (:port result)
+                   (if token (str "?token=" token) ""))
         (when (not= port (:port result))
           (log/warnf "Dashboard port %d was busy, using %d instead" port (:port result)))
         (assoc result :host host))

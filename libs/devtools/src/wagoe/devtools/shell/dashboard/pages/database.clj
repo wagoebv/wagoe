@@ -4,6 +4,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [integrant.repl.state :as state]
+            [wagoe.core.utils.text :as text]
             [wagoe.platform.database :as db]
             [hiccup2.core :as h])
   (:import (java.io File)))
@@ -201,6 +202,41 @@
   [context]
   (str (h/html (render-pool-stats (pool-stats context)))))
 
+(def ^:private read-keywords
+  "What a query may start with: it reads. It runs in a read-only transaction
+   too, which alone does not stop PostgreSQL's COPY ... TO PROGRAM (BOU-1012)."
+  #{"select" "with" "explain" "show" "values" "table"})
+
+(def ^:private file-writers
+  "What writes a file from a SELECT, which neither the keyword nor a read-only
+   transaction stops: H2's CSVWRITE and FILE_WRITE, MySQL's INTO OUTFILE."
+  #"(?i)\b(csvwrite|file_write|link_schema|into\s+(outfile|dumpfile))\b")
+
+(defn- statement
+  "`sql` without its whitespace and a trailing semicolon."
+  [sql]
+  (str/replace (str/trim (str sql)) #";\s*$" ""))
+
+(defn query-refusal
+  "Why `sql` may not run here, or nil: one statement that reads (BOU-1012)."
+  [sql]
+  (let [s (statement sql)]
+    (cond
+      (str/includes? s ";")
+      "One statement at a time."
+
+      (not (read-keywords (text/lower-case (first (str/split s #"[\s(]+" 2)))))
+      "Only a query that reads runs here: SELECT, WITH, EXPLAIN, SHOW, VALUES or TABLE."
+
+      (re-find file-writers s)
+      "A query that writes a file does not run here.")))
+
+(defn- read-only!
+  "Ask `conn` for read-only where its driver can: SQLite's refuses once open."
+  [^java.sql.Connection conn]
+  (try (.setReadOnly conn true) (catch java.sql.SQLException _ nil))
+  conn)
+
 (defn render-query-result
   "Execute SQL from request params and return an HTML table fragment.
    Reads from :params key; falls back to raw SQL string.
@@ -221,18 +257,28 @@
              [:p.error-title "Database unavailable"]
              [:p "No database connection found in the Integrant system."]]))
 
+      (query-refusal sql)
+      (str (h/html
+            [:div.detail-panel.detail-panel-error
+             [:p.error-title "Query refused"]
+             [:p.error-message (query-refusal sql)]]))
+
       :else
       (try
-        (with-open [conn (.getConnection ds)]
+        ;; Read-only where the driver honours it, and rolled back: a table write
+        ;; slipping past the check is undone
+        (with-open [conn (read-only! (doto (.getConnection ds) (.setAutoCommit false)))]
           (let [stmt (.createStatement conn)
                 _    (.setMaxRows stmt 50)
-                rs   (.executeQuery stmt sql)
+                rs   (try (.executeQuery stmt (statement sql))
+                          (catch Exception e (.rollback conn) (throw e)))
                 md   (.getMetaData rs)
                 cols (mapv #(.getColumnName md %) (range 1 (inc (.getColumnCount md))))
                 rows (loop [acc []]
                        (if (.next rs)
                          (recur (conj acc (mapv #(.getString rs %) cols)))
                          acc))
+                _    (.rollback conn)
                 col-width (if (> (count cols) 6) "140px" "1fr")
                 tpl       (str/join " " (repeat (count cols) col-width))]
             (str (h/html
