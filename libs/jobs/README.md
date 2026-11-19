@@ -708,7 +708,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"  # the workers reach it over the compose network
     volumes:
       - redis-data:/data
 
