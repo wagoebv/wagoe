@@ -21,6 +21,7 @@
    The `:local` provider accepts the catalogue's `:root` as an alias for the
    local adapter's `:base-path`."
   (:require [integrant.core :as ig]
+            [clojure.string :as str]
             [wagoe.config :as wagoe-config]
             [wagoe.core.utils.secret-keys :as secret-keys]
             [wagoe.storage.shell.adapters.local :as local]
@@ -41,7 +42,9 @@
   "Refuse a set `:signing-secret` that is short or, unless `dev-like?`, an
    example: it signs download URLs, so a guessable one forges them (BOU-1049)."
   [secret dev-like?]
-  (when-let [problem (and (some? secret) (secret-keys/weak-secret "The storage :signing-secret" secret dev-like?))]
+  ;; As the adapter reads it: trimmed, and blank is no secret (BOU-421)
+  (when-let [problem (some-> secret str/trim not-empty
+                             (as-> s (secret-keys/weak-secret "The storage :signing-secret" s dev-like?)))]
     (throw (ex-info problem {:type :configuration-error :module :wagoe/storage}))))
 
 (defn- build-file-storage

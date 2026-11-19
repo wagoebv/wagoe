@@ -169,6 +169,10 @@
     (is (re-find #"example value" (str (check "change-me-to-a-32-char-signing-secret" false))))
     (is (nil? (check "change-me-to-a-32-char-signing-secret" true)) "dev keeps its example")
     (is (nil? (check nil false)) "unset: no signed URLs")
+    (is (nil? (check "" false)) "blank is unset, as the adapter reads it")
+    (is (nil? (check "   " false)))
+    (is (re-find #"at least 32" (str (check (str "   " (apply str (repeat 29 "k")) "   ") true)))
+        "measured trimmed, as it signs")
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"at least 32"
                           (ig/init-key :wagoe/storage {:provider :local :root "target/x" :signing-secret "s3cr3t"}))
         "boot refuses it")))

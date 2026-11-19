@@ -135,6 +135,8 @@
     (is (re-find #"example value" (str (check "change-me-to-a-32-char-callback-secret" false))))
     (is (nil? (check "change-me-to-a-32-char-callback-secret" true)) "dev keeps its example")
     (is (nil? (check nil false)) "unset: warned about, not refused")
+    (is (nil? (check "" false)))
+    (is (re-find #"at least 32" (str (check "   " true))) "whitespace signs, so it is a key")
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"at least 32"
                           (ig/init-key :wagoe.push/service {:callback-secret "s3cret"}))
         "boot refuses it")))

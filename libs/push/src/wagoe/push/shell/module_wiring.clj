@@ -63,7 +63,8 @@
   "Refuse a set `:callback-secret` that is short or, unless `dev-like?`, an
    example: it signs callback tokens, so a guessable one forges them (BOU-1049)."
   [secret dev-like?]
-  (when-let [problem (and (not (str/blank? secret)) (secret-keys/weak-secret "The push :callback-secret" secret dev-like?))]
+  ;; As the service reads it: only an empty one is unset, so whitespace is a key
+  (when-let [problem (and (seq secret) (secret-keys/weak-secret "The push :callback-secret" secret dev-like?))]
     (throw (ex-info problem {:type :configuration-error :module :wagoe/push}))))
 
 (defmethod ig/init-key :wagoe.push/service

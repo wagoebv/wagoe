@@ -99,7 +99,8 @@
 (def PushSettings
   [:map
    [:callback-token-ttl-seconds {:optional true} [:maybe [:int {:min 1 :max (* 100 365 24 60 60)}]]]
-   [:refuse-legacy-callback-tokens? {:optional true} [:maybe :boolean]]])
+   [:refuse-legacy-callback-tokens? {:optional true} [:maybe :boolean]]
+   [:callback-secret {:optional true} [:maybe :string]]])
 
 ;; --- Validators ---
 (def ^:private push-definition-validator (m/validator PushDefinition))
