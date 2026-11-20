@@ -116,6 +116,8 @@ See [claude-plugin/README.md](./claude-plugin/README.md) for details.
 |----------|-------------|
 | [Documentation](./docs/) | Architecture guides, tutorials, library reference (Antora) |
 | [AGENTS.md](./AGENTS.md) | Commands, conventions, common pitfalls, debugging |
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | How to contribute: the flow to main, reviews, pull requests |
+| [RELEASING.md](./RELEASING.md) | When and how a version is released |
 | [dev-docs/adr/](./dev-docs/adr/) | Architecture Decision Records |
 | [Deployment Patterns](./docs/modules/guides/pages/deployment-patterns.adoc) | systemd, nginx, Fly.io, Render reference configs |
 | [Migrations Guide](./docs/modules/guides/pages/migrations.adoc) | Zero-downtime schema change patterns |
