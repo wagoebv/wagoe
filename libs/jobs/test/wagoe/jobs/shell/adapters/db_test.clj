@@ -97,21 +97,24 @@
   (test-db/with-db "jobs_lease"
     (fn [{:keys [datasource]}]
       (db/create-jobs-table! datasource)
-      (let [q        (db/create-db-job-queue datasource :lease-ms 150)
+      ;; 1 s lease, renewed every 333 ms: three misses before it lapses, so CI
+      ;; noise does not reclaim it (BOU-1048).
+      (let [q        (db/create-db-job-queue datasource :lease-ms 1000)
             store    (db/create-db-job-store datasource)
             registry (worker/create-job-registry)
             started  (promise)
             runs     (atom 0)]
         (ports/register-handler! registry :send-email
                                  (fn [_] (swap! runs inc) (deliver started true)
-                                   (Thread/sleep 600) {:success? true}))
+                                   (Thread/sleep 3000) {:success? true}))
         (ports/enqueue-job! q :default (mk-job))
         (let [ran (future (worker/run-pending! {} q store registry))]
           (is (deref started 5000 false))
-          (Thread/sleep 400) ; well past the 150ms lease
+          (Thread/sleep 2000) ; well past the 1 s lease
+          (is (not (realized? ran)) "the handler still runs, so the lease must have been renewed")
           (is (zero? (:reclaimed (ports/reclaim-abandoned-jobs! q :default))))
           (is (nil? (ports/dequeue-job! q :default "worker-b")) "a second worker gets nothing")
-          (is (= 1 (deref ran 5000 :timeout)))
+          (is (= 1 (deref ran 10000 :timeout)))
           (is (= 1 @runs)))))))
 
 (deftest ^:integration scheduled-jobs-become-ready-when-due
