@@ -650,3 +650,22 @@
   (testing "nothing at all"
     (is (not (sut/prerelease-of-a-patch? nil)))
     (is (not (sut/prerelease-of-a-patch? "v1.0.1-alpha-1")))))
+
+(deftest ^:unit docs-keep-the-last-release-while-main-is-a-snapshot
+  ;; BOU-1057: users install what the docs name, so they stay on the release.
+  (let [src  (fn [v] {:file "libs/core/build.clj" :version v})
+        doc  (fn [f v] {:file f :version v})
+        offs #(set (map :file (:offenders (apply sut/version-offenders %&))))]
+    (is (empty? (offs [(src "1.3.0-SNAPSHOT")] [(doc "README.md" "1.2.0") (doc "a.adoc" "1.2.0")])))
+    (is (= #{"a.adoc"} (offs [(src "1.3.0-SNAPSHOT")] [(doc "README.md" "1.2.0") (doc "x.md" "1.2.0")
+                                                       (doc "a.adoc" "1.1.0")]))
+        "the docs still agree with each other")
+    (is (= #{"README.md"} (offs [(src "1.3.0-SNAPSHOT")] [(doc "README.md" "1.3.0-SNAPSHOT")]))
+        "a doc never names the snapshot")
+    (is (= #{"README.md"} (offs [(src "1.3.0")] [(doc "README.md" "1.2.0")]))
+        "with a release in source, the docs follow it as before")))
+
+(deftest ^:unit a-snapshot-version-is-read-whole
+  (is (= ["1.3.0-SNAPSHOT"] (map :version (sut/matches-in "(def version \"1.3.0-SNAPSHOT\")"
+                                                          #"\(def version \"[^\"]+\"\)")))
+      "not 1.3.0 out of it"))

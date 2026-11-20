@@ -12,6 +12,7 @@
             [clojure.string :as str]
             [wagoe.tools.ansi :as ansi]
             [wagoe.tools.bump :as bump]
+            [wagoe.tools.check-versions :as check-versions]
             [wagoe.tools.release-check :as release-check]))
 
 (defn release-changelog
@@ -28,6 +29,8 @@
   [{:keys [version branch dirty? behind ahead released? pending-commit? tagged? in-changelog?]}]
   (cond-> []
     (not (bump/valid-version? version)) (conj (str "not a suite version: " (pr-str version) " (no leading v)"))
+    (check-versions/snapshot? version)  (conj (str version " is not tagged: bb bump it on main and publish with "
+                                                   "gh workflow run publish.yml --ref main"))
     (not= "main" branch)                (conj (str "on " branch ", not main"))
     dirty?                              (conj "the working tree has changes; commit or stash them")
     (pos? behind)                       (conj "behind origin/main; git pull --rebase first")
@@ -130,7 +133,10 @@
       (when-not (= sha (out "git" "rev-parse" (str version "^{commit}")))
         (fail! (str "a local tag " version " points elsewhere; delete it with git tag -d " version)))
       (process/shell "git" "push" "origin" (str "refs/tags/" version))
-      (println (ansi/green (str "Tagged " version " on " sha "; publish.yml takes it from here."))))))
+      (println (ansi/green (str "Tagged " version " on " sha "; publish.yml takes it from here.")))
+      (let [[major minor] (map parse-long (str/split version #"\."))]
+        (when-not (str/includes? version "-")
+          (println (str "Next: bb bump " major "." (inc minor) ".0-SNAPSHOT on main.")))))))
 
 (defn -main [& [version]]
   (try

@@ -87,6 +87,9 @@ So that it cannot happen again:
 * A pre-release is always `<major>.<minor+1>.0-<stage>-N` — `1.1.0-alpha-1`,
   `1.1.0-rc-2`. Never from a patch version.
 * Patch versions are only ever final. There is no `1.0.1-alpha-1`.
+* A `-SNAPSHOT` is the same: `1.3.0-SNAPSHOT`, never `1.2.1-SNAPSHOT`. It is
+  `main` between releases, republished from each green commit we choose to
+  publish, and carries no promise at all.
 
 The reason is Maven's ordering, which puts `1.0.1-alpha-1` *above* `1.0.0`: a
 pre-release of a patch outranks the release it precedes, for anyone resolving

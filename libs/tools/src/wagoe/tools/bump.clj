@@ -89,10 +89,18 @@
   []
   (concat (check-versions/version-sources) (check-versions/doc-sources)))
 
+(defn- sources-for
+  "What a bump to `new-version` rewrites: a -SNAPSHOT leaves the docs on the
+   last release, which is what users can install (BOU-1057)."
+  [new-version]
+  (if (check-versions/snapshot? new-version)
+    (check-versions/version-sources)
+    (current-sources)))
+
 (defn plan
   "{path -> new-content} for a bump to `new-version`. Reads only; writes nothing."
   [new-version]
-  (->> (current-sources)
+  (->> (sources-for new-version)
        (group-by :file)
        (reduce (fn [acc [path findings]]
                  (let [f (fs/file root-dir path)]
@@ -147,7 +155,7 @@
                                  (str "Not a suite version: " (pr-str new-version))
                                  "No version given")))
             (println)
-            (println "  Expected 1.0.0-beta-6, 1.1.0-alpha-1 or 2.0.0 — no leading \"v\",")
+            (println "  Expected 1.0.0-beta-6, 1.1.0-alpha-1, 1.3.0-SNAPSHOT or 2.0.0 — no leading \"v\",")
             (println "  and a numbered pre-release if there is one. A tag prefix written")
             (println "  into every location would leave them all agreeing, so the check")
             (println "  would pass on it.")))
@@ -155,7 +163,7 @@
       (usage)
       (System/exit 2))
 
-    (let [sources (current-sources)
+    (let [sources (sources-for new-version)
           current (:version (first sources))
           p       (plan new-version)
           changed (changed-files p)]
@@ -204,8 +212,10 @@
           ;; rewrote fewer than half the locations would name the *bumped*
           ;; files as the offenders.
           (println "Verifying:")
-          (let [all (current-sources)]
-            (if-let [{:keys [offenders]} (check-versions/disagreements all new-version)]
+          (let [{:keys [offenders]} (check-versions/version-offenders
+                                     (check-versions/version-sources) (check-versions/doc-sources)
+                                     new-version)]
+            (if (seq offenders)
               (do (binding [*out* *err*]
                     (println (ansi/red (str "  ✗ " (count offenders)
                                             " location(s) still do not name " new-version)))
@@ -213,10 +223,12 @@
                       (println (str "      " file (when line (str ":" line))
                                     "  (" what ") names " version))))
                   (System/exit 1))
-              (do (println (ansi/green (str "  ✓ all " (count all)
+              (do (println (ansi/green (str "  ✓ all " (count sources)
                                             " location(s) name " new-version)))
                   (println)
-                  (println "Next: bb check --quick, then commit and tag.")))))))))
+                  (println (if (check-versions/snapshot? new-version)
+                             "Next: bb check --quick, then commit; a snapshot is never tagged."
+                             "Next: bb check --quick, then commit and tag."))))))))))
 
 (when (= *file* (System/getProperty "babashka.file"))
   (apply -main *command-line-args*))

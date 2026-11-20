@@ -7,6 +7,7 @@
             [babashka.process :as process]
             [cheshire.core :as json]
             [clojure.string :as str]
+            [wagoe.tools.check-versions :as check-versions]
             [wagoe.tools.deploy :as deploy]))
 
 (def ^:private project "Security & stability — every release")
@@ -27,8 +28,12 @@
                                     "\\][^\\n]*\\n(.*?)(?=\\n## \\[|\\z)"))
                    changelog)))
 
-(defn security-section? [changelog version]
-  (boolean (some->> (changelog-section changelog version) (re-find #"(?m)^### Security\s*$"))))
+(defn security-section?
+  "Whether `version`'s CHANGELOG entry has a ### Security section. A -SNAPSHOT
+   has no entry of its own: it ships what is under [Unreleased]."
+  [changelog version]
+  (let [section (if (check-versions/snapshot? version) "Unreleased" version)]
+    (boolean (some->> (changelog-section changelog section) (re-find #"(?m)^### Security\s*$")))))
 
 (defn open-issues
   "Open Urgent/High issues labelled security or Bug in the project. A reply that
