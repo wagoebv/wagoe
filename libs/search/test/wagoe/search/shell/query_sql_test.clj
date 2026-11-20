@@ -116,3 +116,40 @@
     (let [[sql _ _ pattern] (build (match "A_b 50%"))]
       (is (re-find #"WHERE index_id = \? AND entity_type = \? AND LOWER\(content_all\) LIKE LOWER\(\?\) ESCAPE '!'" sql))
       (is (= "%A!_b 50!%%" pattern)))))
+
+(deftest ^:unit a-set-filter-matches-any-of-its-values
+  (testing "PostgreSQL: IN with the key and each value bound"
+    (let [[sql & params] (query-sql/build-postgres-count-sql
+                          "i" "t" "english" "w" {:tenant-id "t1" :conversation-id #{"c2" "c1"}})]
+      (is (str/includes? sql "AND d.filters::jsonb->>?::text IN (?, ?) AND d.filters::jsonb->>?::text = ?"))
+      (is (= ["conversation_id" "c1" "c2" "tenant_id" "t1"] (drop 4 params)))))
+  (testing "fallback: an OR group of containment checks"
+    (let [[sql & params] (query-sql/build-fallback-count-sql
+                          "i" "t" (match "w") {:conversation-id ["c1" "c2"]})]
+      (is (str/includes? sql "AND (INSTR(filters, ?) > 0 OR INSTR(filters, ?) > 0)"))
+      (is (= ["\"conversation_id\":\"c1\"" "\"conversation_id\":\"c2\""] (take-last 2 params)))))
+  (testing "an empty set matches nothing, on both paths, and binds no key"
+    (let [[pg & pg-params] (query-sql/build-postgres-count-sql "i" "t" "english" "w" {:conversation-id #{}})
+          [fb]             (query-sql/build-fallback-count-sql "i" "t" (match "w") {:conversation-id []})]
+      (is (str/includes? pg "AND 1 = 0"))
+      (is (not-any? #{"conversation_id"} pg-params))
+      (is (str/includes? fb "AND 1 = 0")))))
+
+(deftest ^:unit every-builder-binds-a-set-filter-in-place
+  (let [f {:conversation-id #{"c2" "c1"}}
+        pair (fn [c] (str "\"conversation_id\":\"" c "\""))]
+    (testing "PostgreSQL search: filters before limit and offset"
+      (is (= ["conversation_id" "c1" "c2" 20 0]
+             (drop 4 (rest (query-sql/build-postgres-search-sql "i" "t" "english" "w" 20 0 false f))))))
+    (testing "PostgreSQL suggest: filters before the limit"
+      (is (= ["conversation_id" "c1" "c2" 5]
+             (drop 4 (rest (query-sql/build-postgres-suggest-sql "i" "t" "w" 5 f))))))
+    (testing "PostgreSQL LIKE suggest"
+      (let [[sql & params] (query-sql/build-postgres-like-suggest-sql "i" "t" (match "w") 5 f)]
+        (is (str/includes? sql "IN (?, ?)"))
+        (is (= ["conversation_id" "c1" "c2" 5] (take-last 4 params)))))
+    (testing "fallback search and suggest"
+      (is (= [(pair "c1") (pair "c2") 20 0]
+             (take-last 4 (rest (query-sql/build-fallback-search-sql "i" "t" (match "w") 20 0 f)))))
+      (is (= [(pair "c1") (pair "c2") 5]
+             (take-last 3 (rest (query-sql/build-fallback-suggest-sql "i" "t" (match "w") 5 f))))))))

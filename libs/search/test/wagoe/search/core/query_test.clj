@@ -54,8 +54,12 @@
 
 (deftest ^:unit filter-terms-test
   (testing "sorted by key, json keys, string values"
-    (is (= [["status" "active"] ["tenant_id" "42"]]
+    (is (= [["status" ["active"]] ["tenant_id" ["42"]]]
            (query/filter-terms {:tenant-id 42 :status "active"}))))
   (testing "nil and empty are no terms"
     (is (= [] (query/filter-terms nil)))
-    (is (= [] (query/filter-terms {})))))
+    (is (= [] (query/filter-terms {}))))
+  (testing "a set or vector gives its sorted distinct strings; empty stays empty"
+    (is (= [["conversation_id" ["1" "2"]]] (query/filter-terms {:conversation-id #{2 1}})))
+    (is (= [["conversation_id" ["a" "b"]]] (query/filter-terms {:conversation-id ["b" "a" "b"]})))
+    (is (= [["conversation_id" []]] (query/filter-terms {:conversation-id #{}})))))

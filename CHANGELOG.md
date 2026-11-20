@@ -83,6 +83,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **A search filter value can be a set** (BOU-1055): `{:filters {:conversation-id #{c1 c2}}}` matches any of them;
+  an empty set matches nothing. The search API takes up to 500 members.
 - **`bb release <version>` tags only a commit CI passed on main** (BOU-1029): it bumps, moves `[Unreleased]` to
   the version, pushes, waits for green CI, then tags. Release with it instead of tagging by hand.
 - **`bb check` is the pre-push gate** (BOU-1024): gates, the CSS build and the tests of what changed (`bb test:changed`);

@@ -68,8 +68,8 @@
       (swap! calls conj [:index index-id entity-id fields]))
     (remove-document! [_ index-id entity-id]
       (swap! calls conj [:remove index-id entity-id]))
-    (search [_ index-id query _opts]
-      (swap! calls conj [:search index-id query])
+    (search [_ index-id query opts]
+      (swap! calls conj (cond-> [:search index-id query] (:filters opts) (conj (:filters opts))))
       {:results [] :total 0 :query query :took-ms 0})
     (suggest [_ index-id _ _]
       (swap! calls conj [:suggest index-id])
@@ -119,6 +119,20 @@
       (is (= [:search :products "widget"] (last @calls))))
     (testing "a removal names a UUID or is a 400"
       (is (= 400 (:status (call :delete "/search/documents/product/nope" "")))))))
+
+(deftest ^:unit ^:security a-filter-set-is-capped
+  ;; BOU-1055: a set matches any member; an unbounded one would bind a parameter each.
+  (let [calls  (atom [])
+        call   (served calls)
+        search (fn [n] (:status (call :post "/search/products"
+                                      (json/generate-string {:query "w" :filters {:group (range n)}}))))]
+    (is (= 200 (search 500)))
+    (is (= 500 (count (:group (nth (last @calls) 3)))) "the set reaches the engine whole")
+    (is (= 400 (search 501)) "refused, not run with the filter stripped")
+    (is (= 1 (count @calls)))
+    (is (= 200 (:status (call :post "/search/products"
+                              (json/generate-string {:query "w" :filters {:group "g1"}})))))
+    (is (= {:group "g1"} (nth (last @calls) 3)))))
 
 ;; =============================================================================
 ;; Which indexes the API serves

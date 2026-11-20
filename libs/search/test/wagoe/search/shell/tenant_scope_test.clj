@@ -75,6 +75,25 @@
   (testing "suggestions are scoped too"
     (is (= #{(str doc-a)} (ids (call :suggest :scoped-items member-of-a {}))))))
 
+(deftest ^:unit ^:security a-set-filter-cannot-widen-the-tenant
+  ;; A filter value may be a set (BOU-1055); the tenant stays the resolved one.
+  (testing "a set of tenant ids, in either spelling, reads only the caller's"
+    (is (= #{(str doc-a)} (ids (call :search :scoped-items member-of-a
+                                     {:filters {:tenant_id [(str tenant-a) (str tenant-b)]}}))))
+    (is (= #{(str doc-a)} (ids (call :search :scoped-items member-of-a
+                                     {:filters {:tenant-id #{(str tenant-a) (str tenant-b)}}})))))
+  (testing "a set over another key matches within the caller's tenant only"
+    (let [conv-a (UUID/randomUUID) conv-b (UUID/randomUUID)
+          in-a   (UUID/randomUUID) in-b   (UUID/randomUUID)]
+      (ports/index-document! *engine* :scoped-items in-a {:title "widget in a"}
+                             {:filter-values {:tenant-id tenant-a :conversation-id conv-a}})
+      (ports/index-document! *engine* :scoped-items in-b {:title "widget in b"}
+                             {:filter-values {:tenant-id tenant-b :conversation-id conv-b}})
+      (let [response (call :search :scoped-items member-of-a
+                           {:filters {:conversation_id [(str conv-a) (str conv-b)]}})]
+        (is (= #{(str in-a)} (ids response)))
+        (is (= 1 (get-in response [:body :total])))))))
+
 (deftest ^:unit ^:security without-a-tenant-only-an-admin-reads-a-scoped-index
   (testing "a signed-in user with no tenant context is refused"
     (is (= 403 (:status (call :search :scoped-items {:user {:id (UUID/randomUUID) :role :user}}

@@ -105,6 +105,22 @@ ships no indexes.
 ;    :took-ms 3}
 ----
 
+A filter value can be a set or vector: it matches a document whose value is
+any of its members, and an empty one matches nothing. Search messages across
+the conversations a caller is in:
+
+[source,clojure]
+----
+(ports/search search-engine :messages "invoice"
+  {:filters {:tenant-id tenant-id :conversation-id #{c1 c2}}})
+----
+
+Each member is a bound parameter. The cost is dominated by the number of
+documents in the index; each member adds a little per matching row. The search
+API refuses a set of more than 500 members with a 400.
+On a tenant-scoped index the tenant stays the one resolved for the request: a
+set of tenant ids in a request body is dropped like any other.
+
 == Testing
 
 [source,bash]

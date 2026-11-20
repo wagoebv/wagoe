@@ -322,6 +322,10 @@ varies by database type:
 - **PostgreSQL**: `d.filters::jsonb->>'tenant_id' = ?` (native JSONB operator)
 - **H2 / SQLite**: `INSTR(filters, '"tenant_id":"abc"') > 0` (substring match)
 
+A query filter value may be a set or vector (BOU-1055): `->>? IN (?, ...)` on
+PostgreSQL, an OR group of `INSTR` checks on the fallback, and `1 = 0` for an
+empty one. A stored filter value is always one string.
+
 H2 2.4.x does not support `JSON_VALUE`, `JSON_EXTRACT`, or `->>` via JDBC prepared
 statements — the INSTR fallback is intentional and tested.
 

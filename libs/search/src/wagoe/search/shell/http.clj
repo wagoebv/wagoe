@@ -48,13 +48,22 @@
    [:metadata {:optional true} :any]
    [:filterValues {:optional true} [:map-of :keyword :any]]])
 
+(def ^:private Filters
+  ;; A set matches any member (BOU-1055); one of more than 500 is a 400 rather
+  ;; than thousands of bound parameters. Checked on the whole map: coercion
+  ;; strips a :map-of entry whose value fails, and the search would then run
+  ;; without that filter.
+  [:and [:map-of :keyword :any]
+   [:fn {:error/message "a filter holds at most 500 values"}
+    (fn [filters] (not-any? #(and (instance? java.util.Collection %) (< 500 (count %))) (vals filters)))]])
+
 (def ^:private SearchBody
   [:map
    [:query {:optional true} :string]
    [:limit {:optional true} :int]
    [:offset {:optional true} :int]
    [:highlight? {:optional true} :boolean]
-   [:filters {:optional true} [:map-of :keyword :any]]])
+   [:filters {:optional true} Filters]])
 
 (def ^:private SuggestBody
   [:map

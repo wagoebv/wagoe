@@ -33,10 +33,15 @@
 ;; Filters
 ;; =============================================================================
 
+(defn- sequential-or-set? [v] (or (set? v) (sequential? v)))
+
 (defn filter-terms
-  "A :filters map as [json-key value] pairs, each value a string, sorted by key
-   so that query parameters come out in a stable order. Every term must match."
+  "A :filters map as [json-key values] pairs, sorted by key so that query
+   parameters come out in a stable order. Every term must match; `values` is a
+   sorted vector of distinct strings, one for a scalar, and a document matches
+   any of them. An empty set or vector matches nothing."
   [filters]
   (->> (seq filters)
        (sort-by (comp name first))
-       (mapv (fn [[k v]] [(index/filter-key->json-key k) (str v)]))))
+       (mapv (fn [[k v]] [(index/filter-key->json-key k)
+                          (vec (sort (set (map str (if (sequential-or-set? v) v [v])))))]))))

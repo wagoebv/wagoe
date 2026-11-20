@@ -229,6 +229,42 @@
                      "unfiltered" {:limit 10 :offset 0})]
         (is (= 2 (count results)))))))
 
+;; A chat app searches the conversations its caller is in (BOU-1055).
+(deftest ^:integration set-filter-test
+  (let [index! (fn [tenant conv]
+                 (let [id (UUID/randomUUID)]
+                   (ports/upsert-document! @test-store
+                                           (make-doc {:entity-id id :content-all (str "Invoice " conv)
+                                                      :filters {:tenant-id tenant :conversation-id conv}}))
+                   id))
+        in     (into {} (for [c ["c1" "c2" "c3"]] [c (set (repeatedly 2 #(index! "t1" c)))]))
+        _      (index! "t2" "c1")
+        opts   (fn [conv] {:index-id :product-search :limit 10 :offset 0
+                           :filters {:tenant-id "t1" :conversation-id conv}})
+        found  (fn [conv] (set (map :entity-id (ports/search-documents @test-store :product-search :product
+                                                                       "invoice" (opts conv)))))
+        total  (fn [conv] (ports/count-results @test-store :product "invoice" (opts conv)))
+        hints  (fn [conv] (set (map :entity-id (ports/suggest-documents @test-store :product-search :product
+                                                                        "invo" (assoc (opts conv) :limit 10)))))]
+    (testing "a set matches the documents of its members, in the tenant only"
+      (is (= (into (in "c1") (in "c2")) (found #{"c1" "c2"})))
+      (is (= 4 (total #{"c1" "c2"}))))
+    (testing "a vector does too, and a scalar is unchanged"
+      (is (= (into (in "c2") (in "c3")) (found ["c2" "c3"])))
+      (is (= (in "c3") (found "c3"))))
+    (testing "an empty set matches nothing; it does not drop the condition"
+      (is (empty? (found #{})))
+      (is (zero? (total #{})))
+      (is (empty? (hints #{}))))
+    (testing "pagination: the pages split the matches"
+      (let [page (fn [offset] (set (map :entity-id (ports/search-documents
+                                                    @test-store :product-search :product "invoice"
+                                                    (assoc (opts #{"c1" "c2"}) :limit 3 :offset offset)))))]
+        (is (= 3 (count (page 0))))
+        (is (= (into (in "c1") (in "c2")) (into (page 0) (page 3))))))
+    (testing "suggest takes a set too"
+      (is (= (into (in "c1") (in "c3")) (hints #{"c1" "c3"}))))))
+
 (defn- tenant-1-suggestions
   "Entity ids `store` suggests for \"wid\" under tenant-1, after indexing one
    matching document per tenant. Returns [expected actual]."

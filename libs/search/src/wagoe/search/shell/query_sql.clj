@@ -18,48 +18,56 @@
 ;; Filter SQL
 ;; =============================================================================
 
-(defn- build-filter-sql-postgres
-  "Build PostgreSQL WHERE conditions for a filter map.
+(defn- filter-sql
+  "[sql & params] for the filter terms, each rendered by `term`, which gives
+   [sql-fragment & params] for one [key values] pair."
+  [term filters]
+  (let [parts (map term (qry/filter-terms filters))]
+    (into [(str/join " " (map first parts))] (mapcat rest) parts)))
 
-   Each filter is rendered as:
+(defn- placeholders [n] (str/join ", " (repeat n "?")))
+
+(defn- postgres-term
+  "One filter as a PostgreSQL condition on the JSON filters column:
      AND d.filters::jsonb->>?::text = ?
+   or `IN (?, ...)` for a set value; an empty set matches nothing.
 
    The key is bound, not spliced: it comes from the request body, and a quote
-   in it would otherwise end the literal and OR past the tenant filter.
+   in it would otherwise end the literal and OR past the tenant filter. A NULL
+   filters column or absent key makes the condition NULL, so the document is
+   excluded."
+  [[k vs]]
+  (case (count vs)
+    0 ["AND 1 = 0"]
+    1 ["AND d.filters::jsonb->>?::text = ?" k (first vs)]
+    (into [(str "AND d.filters::jsonb->>?::text IN (" (placeholders (count vs)) ")") k] vs)))
 
-   A NULL filters column or absent key causes the condition to evaluate to
-   NULL (which is falsy), so documents without that filter value are excluded.
+(defn- json-pair
+  "\"key\":\"value\" as filters->json stores it, so a quote or backslash in a
+   value is escaped on both sides."
+  [k v]
+  (let [pair (json/generate-string {k v})]
+    (subs pair 1 (dec (count pair)))))
 
-   Returns [sql-fragment & param-values] or [\"\" ] when filters is empty."
-  [filters]
-  (let [terms (qry/filter-terms filters)]
-    (into [(str/join " " (repeat (count terms) "AND d.filters::jsonb->>?::text = ?"))]
-          cat
-          terms)))
-
-(defn- build-filter-sql-fallback
-  "Build H2/SQLite WHERE conditions for a filter map.
-
-   Each filter is rendered as:
+(defn- fallback-term
+  "One filter as an H2/SQLite/MySQL condition:
      AND INSTR(filters, '\"<key>\":\"<val>\"') > 0
+   or an OR group of them for a set value; an empty set matches nothing.
 
-   Uses string containment rather than JSON functions because H2 2.4 does not
-   expose JSON_VALUE, JSON_EXTRACT, or the PostgreSQL ->> operator via JDBC
-   prepared statements. The approach is reliable because `filters->json` always
-   emits compact JSON with no spaces:
-     {\"tenant_id\":\"abc\",\"status\":\"active\"}
-   so searching for \"key\":\"value\" will not produce false positives within a
-   realistic set of filter keys and string values.
+   String containment rather than JSON functions: H2 2.4 does not expose
+   JSON_VALUE, JSON_EXTRACT, or ->> via JDBC prepared statements. Reliable
+   because `filters->json` emits compact JSON with no spaces, so
+   \"key\":\"value\" cannot match inside another key or value."
+  [[k vs]]
+  (case (count vs)
+    0 ["AND 1 = 0"]
+    1 ["AND INSTR(filters, ?) > 0" (json-pair k (first vs))]
+    (into [(str "AND (" (str/join " OR " (repeat (count vs) "INSTR(filters, ?) > 0")) ")")]
+          (map #(json-pair k %))
+          vs)))
 
-   Returns [sql-fragment & param-values] or [\"\" ] when filters is empty."
-  [filters]
-  (let [terms (qry/filter-terms filters)]
-    (into [(str/join " " (repeat (count terms) "AND INSTR(filters, ?) > 0"))]
-          ;; Encoded as filters->json stores it, so a quote or backslash in a
-          ;; value is escaped on both sides.
-          (map (fn [[k v]] (let [pair (json/generate-string {k v})]
-                             (subs pair 1 (dec (count pair))))))
-          terms)))
+(defn- build-filter-sql-postgres [filters] (filter-sql postgres-term filters))
+(defn- build-filter-sql-fallback [filters] (filter-sql fallback-term filters))
 
 ;; =============================================================================
 ;; PostgreSQL FTS SQL builders

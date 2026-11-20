@@ -10,6 +10,7 @@
    - :on-conflict — INSERT … ON CONFLICT DO UPDATE; without it, delete and
      insert in one transaction"
   (:require [wagoe.search.ports :as ports]
+            [wagoe.search.core.index :as index]
             [wagoe.search.core.query :as qry]
             [wagoe.search.shell.query-sql :as query-sql]
             [wagoe.platform.ports.database :as db-ports]
@@ -36,11 +37,12 @@
 
    {:tenant-id \"abc\" :status \"active\"} => \"{\\\"tenant_id\\\":\\\"abc\\\",\\\"status\\\":\\\"active\\\"}\"
 
-   Returns nil when filters is nil or empty."
+   Returns nil when filters is nil or empty. A stored value is one string;
+   only a query's filter value may be a set."
   [filters]
   (when (seq filters)
     (json/generate-string
-     (into {} (qry/filter-terms filters)))))
+     (into {} (map (fn [[k v]] [(index/filter-key->json-key k) (str v)])) filters))))
 
 ;; =============================================================================
 ;; Row <-> Entity mapping
