@@ -205,3 +205,24 @@
       (deploy/deploy-sequence! ["core" "observability" "platform"])
       (is (< (- (System/currentTimeMillis) start) 1000)
           "deploy-sequence! is sleeping between libraries"))))
+
+(deftest ^:unit a-snapshot-is-republished-and-found-by-its-metadata
+  ;; BOU-1057: a snapshot's pom has a timestamp in its name, and the one on
+  ;; Clojars is an older commit's.
+  (with-redefs [deploy/read-version (constantly "1.3.0-SNAPSHOT")]
+    (is (= "https://clojars.org/repo/com/wagoe/wagoe-core/1.3.0-SNAPSHOT/maven-metadata.xml"
+           (deploy/metadata-url "core")))
+    (let [deployed (atom nil)]
+      (with-redefs [deploy/check-env!       (constantly nil)
+                    deploy/published?       (fn [_] (throw (ex-info "asked Clojars" {})))
+                    deploy/deploy-sequence! #(reset! deployed %)]
+        (deploy/cmd-publish))
+      (is (= deploy/publish-order @deployed) "every library, without asking what is there"))
+    (testing "no cljdoc request: cljdoc builds from a release tag"
+      (let [asked (atom false)]
+        (with-redefs [babashka.process/shell          (constantly nil)
+                      deploy/verify-jar!              (constantly nil)
+                      deploy/patch-catalogue-version! (constantly nil)
+                      deploy/request-cljdoc-build!    (fn [& _] (reset! asked true))]
+          (deploy/deploy-lib! "core"))
+        (is (false? @asked))))))

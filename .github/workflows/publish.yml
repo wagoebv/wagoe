@@ -5,6 +5,7 @@ name: Publish to Clojars
 # such a tag builds every library from the *tagged commit* and deploys to Clojars,
 # guarded so the tag can never disagree with the source version, and verified so a
 # partial deploy fails loudly instead of silently shipping a half/stale release.
+# A -SNAPSHOT is the exception: dispatched from main, never tagged (BOU-1057).
 on:
   workflow_dispatch:
     inputs:
@@ -23,6 +24,12 @@ on:
 # running no third-party code; release alone writes the GitHub release.
 permissions:
   contents: read
+
+# Snapshot runs one at a time, so two cannot overwrite each other's jars. Each
+# tag has its own group: a queued release is never cancelled by another.
+concurrency:
+  group: ${{ startsWith(github.ref, 'refs/tags/') && github.ref || 'publish-snapshot' }}
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -55,6 +62,20 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # A -SNAPSHOT is published by dispatch from main and never tagged: tags
+      # are immutable, and a snapshot is overwritten (BOU-1057). Refused here,
+      # in seconds, not after the CI guard's wait.
+      - name: Guard — a snapshot comes from main, untagged
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          version="${INPUT_VERSION:-${GITHUB_REF#refs/tags/}}"
+          [[ "$GITHUB_REF" == refs/tags/* ]] || version="${INPUT_VERSION:-$(grep -m1 'def version' libs/core/build.clj | sed -E 's/.*"([^"]+)".*/\1/')}"
+          if [[ "$version" == *-SNAPSHOT && "$GITHUB_REF" != refs/heads/main ]]; then
+            echo "::error::$version is published from main by dispatch: gh workflow run publish.yml --ref main"; exit 1
+          fi
 
       # BOU-314: every other guard in this workflow protects the *shape* of the
       # release — the tag agrees with source (--check-versions), nothing is
@@ -245,7 +266,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: bb release:check "$VERSION"
 
-      # Deploy only artifacts not yet on Clojars at this version. Clojars
+      # Deploy only artifacts not yet on Clojars at this version (a -SNAPSHOT:
+      # every artifact, overwriting the last one). Clojars release
       # coordinates are immutable, so a re-run after a partial/transient failure
       # must skip already-published libs (re-deploying them 409s and aborts the
       # whole run). --missing makes the publish idempotent and recoverable: on a

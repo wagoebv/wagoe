@@ -83,6 +83,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`-SNAPSHOT` versions** (BOU-1057): `main` carries the next minor as `-SNAPSHOT`, published to Clojars from a green
+  commit with `gh workflow run publish.yml --ref main`. See "Snapshots" in RELEASING.md.
 - **`:max-virtual-threads` on `:wagoe/http` and `:wagoe/rpc`** (BOU-1056) raises Jetty's cap of 200 concurrent requests,
   SSE streams included, on virtual threads. Absent keeps 200; see the scaling page.
 - **A search filter value can be a set** (BOU-1055): `{:filters {:conversation-id #{c1 c2}}}` matches any of them;

@@ -259,6 +259,9 @@ GitHub Actions will:
   `scripts/install.sh` installs, stays on the last final release. Try a pre-release through its Maven version
   (`{:mvn/version "1.1.0-rc-1"}`), not through `install.sh`.
 
+A `-SNAPSHOT` is published by `gh workflow run publish.yml --ref main`, never by a tag; see "Snapshots" in
+`RELEASING.md`.
+
 === Trigger: manual dispatch
 
 For deploying without a tag (e.g. re-running after a partial failure):
@@ -281,6 +284,11 @@ To release, after pushing the tag:
 
 A run left unapproved shows as waiting, not failed. If a tag push seems to have
 done nothing, check for a pending approval before debugging anything else.
+
+Limit the environment's *Deployment branches and tags* to branch `main` and tags
+`[0-9]*.[0-9]*.[0-9]*`. A dispatch runs the workflow file of the ref it names, so
+a branch that drops the guards would otherwise reach the Clojars secrets on one
+approval (BOU-1057).
 
 .Why an environment rather than an actor check
 [NOTE]

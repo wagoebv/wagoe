@@ -130,6 +130,9 @@
     (when (.exists build-file)
       (second (re-find #"\(def version \"([^\"]+)\"" (slurp build-file))))))
 
+(defn- version-dir-url [lib]
+  (format "https://clojars.org/repo/com/wagoe/%s/%s/" (artifact-name lib) (read-version lib)))
+
 (defn pom-url
   "Clojars repo URL of a lib's published pom. Note the group appears here in
    PATH form (com/wagoe), not coord form (com.wagoe) — a rename that only
@@ -137,13 +140,18 @@
    artifact then reports as unpublished (BOU-213). Extracted so the group is
    assertable without a network call."
   [lib]
-  (let [version  (read-version lib)
-        artifact (artifact-name lib)]
-    (format "https://clojars.org/repo/com/wagoe/%s/%s/%s-%s.pom"
-            artifact version artifact version)))
+  (str (version-dir-url lib) (artifact-name lib) "-" (read-version lib) ".pom"))
+
+(defn metadata-url
+  "Clojars URL of a -SNAPSHOT's maven-metadata.xml. A snapshot's pom carries a
+   timestamp in its name, so `pom-url` never finds one (BOU-1057). It shows a
+   snapshot exists, not that this run's landed: a failed upload fails the deploy."
+  [lib]
+  (str (version-dir-url lib) "maven-metadata.xml"))
 
 (defn published? [lib]
-  (= 200 (:status (http/get (pom-url lib) {:throw false}))))
+  (let [url (if (check-versions/snapshot? (read-version lib)) (metadata-url lib) (pom-url lib))]
+    (= 200 (:status (http/get url {:throw false})))))
 
 (defn version-mismatches
   "Seq of {:lib :actual :expected} for libraries whose build.clj version differs
@@ -308,7 +316,9 @@
     (p/shell {:dir dir} "clojure" "-T:build" "deploy")
     (println (green (str "✓ " (artifact-name lib) " " version " deployed")))
     (patch-catalogue-version! lib version)
-    (request-cljdoc-build! lib version)))
+    ;; cljdoc builds from a release tag; a snapshot has none.
+    (when-not (check-versions/snapshot? version)
+      (request-cljdoc-build! lib version))))
 
 (defn deploy-sequence! [libs]
   ;; No pause between libs: `deploy-lib!` installs into ~/.m2 first, so the next
@@ -344,6 +354,14 @@
         (println (bold (str "\nDeploying " (count missing) " missing artifacts...")))
         (deploy-sequence! missing)
         (println (green "\n✓ Done."))))))
+
+(defn cmd-publish
+  "`--missing`: what a release has not shipped yet, or every library for a
+   snapshot, since the one on Clojars is an older commit's (BOU-1057)."
+  []
+  (if (check-versions/snapshot? (read-version "core"))
+    (cmd-all)
+    (cmd-missing)))
 
 (defn cmd-install-local
   "Build and install every artifact into ~/.m2, in publish order, without
@@ -432,7 +450,7 @@
     (cond
       (or (empty? args) (contains? (set args) "--help")) (print-help)
       (= args ["--all"])                                 (cmd-all)
-      (= args ["--missing"])                             (cmd-missing)
+      (= args ["--missing"])                             (cmd-publish)
       (= args ["--verify"])                              (cmd-verify)
       (= args ["--install-local"])                       (cmd-install-local)
       (= (first args) "--check-versions")                (cmd-check-versions (second args))

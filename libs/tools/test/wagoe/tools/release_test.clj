@@ -43,3 +43,7 @@
     (is (= :pending (release/verdict (runs "in_progress" nil))))
     (is (= :pending (release/verdict (runs "completed" "cancelled" "queued" nil))))
     (is (= :pending (release/verdict [])))))
+
+(deftest ^:unit a-snapshot-is-never-released-by-tag
+  ;; BOU-1057: a snapshot is published by dispatch, and tags are immutable.
+  (is (= 1 (count (release/preflight (assoc fresh :version "1.3.0-SNAPSHOT"))))))

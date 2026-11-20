@@ -88,8 +88,25 @@ loads straight from the repository.
 `git ls-remote https://github.com/wagoebv/wagoe.git refs/tags/green` prints the
 sha. Every library you use directly needs its own entry with its `:deps/root`,
 in place of its `com.wagoe` Maven coordinate: both at once put two versions on
-the classpath. Sibling libraries resolve from the same sha. We publish no
-`-SNAPSHOT` versions.
+the classpath. Sibling libraries resolve from the same sha.
+
+## Snapshots
+
+Between releases `main` carries the next minor with `-SNAPSHOT`: after
+`1.2.0`, `bb bump 1.3.0-SNAPSHOT`, committed with `Review-skipped: version
+bump`. A release manager publishes a green `main` as that snapshot:
+
+```bash
+gh workflow run publish.yml --ref main
+```
+
+The workflow reads the version from source, requires green CI on the commit and
+the same security checks as a release (the `### Security` section under
+`[Unreleased]`), republishes every library, and creates no tag and no GitHub
+Release. A snapshot is overwritten by the next one: use it to try a coming
+release (`{:mvn/version "1.3.0-SNAPSHOT"}`), never in production. `bb release
+1.3.0` then moves the snapshot to `1.3.0`; bump `main` to the next
+`-SNAPSHOT` after it is tagged.
 
 ## When it goes wrong
 

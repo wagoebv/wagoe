@@ -139,3 +139,9 @@
   (testing "a final patch release is fine — the rule is about pre-releases"
     (is (sut/valid-version? "1.0.1"))
     (is (sut/valid-version? "1.0.0"))))
+
+(deftest ^:unit main-may-carry-a-snapshot-of-the-next-minor
+  ;; BOU-1057: main carries the next version between releases.
+  (is (sut/valid-version? "1.3.0-SNAPSHOT"))
+  (is (not (sut/valid-version? "1.2.1-SNAPSHOT")) "a snapshot is a pre-release: of the next minor")
+  (is (not (sut/valid-version? "1.3.0-snapshot")) "Maven's spelling only"))

@@ -11,13 +11,23 @@
 
 (def ^:private root-dir (fs/file (System/getProperty "user.dir")))
 
+(def ^:private suffix
+  "A pre-release stage (beta-5) or SNAPSHOT."
+  "(?:[a-z]+-\\d+|SNAPSHOT)")
+
 (def version-pattern
-  "A suite version: 1.0.0-beta-5, 1.0.1-alpha-32, 2.0.0.
+  "A suite version: 1.0.0-beta-5, 1.0.1-alpha-32, 2.0.0, 1.3.0-SNAPSHOT.
 
    Public because `bb bump` validates its argument against it. What counts as a
    suite version has to be one definition: a bump that accepts a shape the check
    does not recognise writes 96 locations the gate then cannot read."
-  #"\d+\.\d+\.\d+(?:-[a-z]+-\d+)?")
+  (re-pattern (str "\\d+\\.\\d+\\.\\d+(?:-" suffix ")?")))
+
+(defn snapshot?
+  "Whether `v` is a -SNAPSHOT: what main carries between releases, published
+   from a green commit and overwritten by the next one (BOU-1057)."
+  [v]
+  (str/ends-with? (str v) "-SNAPSHOT"))
 
 (defn prerelease-of-a-patch?
   "Whether `v` is a pre-release cut from a patch version — `1.0.1-alpha-1`.
@@ -26,10 +36,11 @@
    release it precedes for anything resolving \"newest\". That is not
    hypothetical: the `1.0.1-alpha-N` line outranked every `1.0.0-beta-N` and
    users had to pin exact versions (BOU-176). Pre-releases belong to the next
-   minor — `1.1.0-alpha-1` — and patch versions are only ever final (BOU-435)."
+   minor — `1.1.0-alpha-1` — and patch versions are only ever final (BOU-435).
+   A -SNAPSHOT counts as a pre-release here: main carries the next minor's."
   [v]
   (boolean
-   (when-let [[_ patch] (re-matches #"\d+\.\d+\.(\d+)-[a-z]+-\d+" (str v))]
+   (when-let [[_ patch] (re-matches (re-pattern (str "\\d+\\.\\d+\\.(\\d+)-" suffix)) (str v))]
      (pos? (parse-long patch)))))
 
 (defn matches-in
@@ -621,6 +632,20 @@
      (when (seq offenders)
        {:consensus consensus :offenders offenders}))))
 
+(defn version-offenders
+  "{:expected :offenders} for `code` and `docs` sources. Docs follow the code,
+   except while the code is a -SNAPSHOT: then they keep naming the last release
+   and only have to agree with each other on a final version (BOU-1057).
+   `expected` defaults to the source's majority."
+  [code docs & [expected]]
+  (let [expected (or expected (:consensus (disagreements code)) (:version (first code)))
+        doc-side (if (snapshot? expected)
+                   (concat (:offenders (disagreements docs))
+                           (filter #(snapshot? (:version %)) docs))
+                   (:offenders (disagreements docs expected)))]
+    {:expected  expected
+     :offenders (distinct (concat (:offenders (disagreements code expected)) doc-side))}))
+
 (defn check
   "Fail when the repository names more than one suite version."
   []
@@ -651,22 +676,20 @@
           (System/exit 1))
 
       :else
-      ;; The source consensus first, then every location against it. Deciding
-      ;; the version from source rather than from the whole population is what
-      ;; keeps a wholly-stale documentation set from outvoting the code.
-      (let [code-verdict (disagreements code)
-            expected     (or (:consensus code-verdict) (:version (first code)))
-            all          (concat code docs)]
-        (if-let [{:keys [consensus offenders]} (disagreements all expected)]
+      (let [{:keys [expected offenders]} (version-offenders code docs)
+            all (concat code docs)]
+        (if (seq offenders)
           (do (binding [*out* *err*]
                 (println (str "  ✗ " (count offenders) " location(s) disagree with the other "
                               (- (count all) (count offenders))))
                 (doseq [{:keys [file line version what]} offenders]
                   (println (str "      " file (when line (str ":" line))
                                 "  (" what ") names " version
-                                ", the rest name " consensus))))
+                                (if (snapshot? expected)
+                                  ", the docs must agree on the last release while the source names a snapshot"
+                                  (str ", the source names " expected))))))
               (System/exit 1))
-          (println (str "  ✓ " (count all) " location(s) all name " expected
-                        "  (" (count code) " in source, " (count docs) " in docs)")))))))
+          (println (str "  ✓ " (count code) " location(s) in source name " expected ", "
+                        (count docs) " in docs name " (:version (first docs)))))))))
 
 (defn -main [& _] (check))

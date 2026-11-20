@@ -49,3 +49,8 @@ None.
 (deftest ^:unit a-section-ends-at-the-next-release
   (is (= "\n### Fixed\n\n- Last.\n" (sut/changelog-section changelog "1.1.8")))
   (is (not (re-find #"1\.1\.8" (sut/changelog-section changelog "1.1.9")))))
+
+(deftest ^:unit a-snapshot-ships-what-is-unreleased
+  ;; BOU-1057: a -SNAPSHOT has no entry of its own.
+  (is (sut/security-section? changelog "1.3.0-SNAPSHOT"))
+  (is (not (sut/security-section? "# C\n\n## [Unreleased]\n\n- x\n" "1.3.0-SNAPSHOT"))))
