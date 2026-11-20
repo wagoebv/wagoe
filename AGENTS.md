@@ -8,6 +8,27 @@
 - Never commit or push without explicit user approval. Show the intended changes and wait for "commit" or "push".
 - Before changing a library, read its `libs/<library>/AGENTS.md` if present.
 
+## Trunk-based flow (from the cut-over, BOU-1042)
+
+While this paragraph is here, the cut-over has not happened: use the
+pull-request flow and the rules above. BOU-1042 removes it; from then on this
+section replaces the ban on committing in the first bullet above. Agents still
+never push.
+
+- Work on one Linear ticket, in small steps, on a branch rebased on
+  `origin/main`. Unfinished work follows "Unfinished work on main" in
+  [CONTRIBUTING.md](CONTRIBUTING.md); shipped code gets its CHANGELOG line
+  ("Commits and the changelog").
+- Before committing, run the `simplify` skill, then the `review-pr` skill in
+  `local` mode. Fix the blocking findings; fix, ticket or reject the others.
+  Then make the Verification commands below green. A trivial commit carries
+  `Review-skipped: <reason>` instead of the review.
+- Commit locally without asking: the ticket ends the subject, and the review
+  trailers from "Review before main" follow (they are not attribution). Report
+  the commit and stop.
+- Never push, tag, run `bb release` or pass `--no-verify`. The developer reads
+  the diff and pushes with their own rights.
+
 ## Read before the relevant task
 
 These files are task-specific instructions. Read the relevant guide before acting;
