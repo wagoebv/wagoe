@@ -398,7 +398,7 @@
                         (when (= :reject (:decision uniqueness-result))
                           (throw (ex-info "User already exists"
                                           {:type :user-exists
-                                           :message (:message uniqueness-result)}))))
+                                           :reason (:reason uniqueness-result)}))))
 
                       ;; 4. Hash password using auth service (shell layer I/O)
                       (let [password-hash (when (:password user-data)

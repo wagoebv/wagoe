@@ -1,11 +1,11 @@
 {:paths ["src" "resources"]
- :deps  {org.clojure/clojure {:mvn/version "1.12.6"}
-         cheshire/cheshire {:mvn/version "6.2.0"}
+ :deps  {org.clojure/clojure {:mvn/version "1.12.7"}
+         cheshire/cheshire {:mvn/version "6.2.1"}
                          ;; Built into Babashka, but a JVM consumer of the
                          ;; published artifact resolves through the POM (BOU-378).
          org.clojure/tools.cli {:mvn/version "1.4.256"}
          ;; Also bundled in Babashka; declared for the published POM (BOU-365).
-         borkdude/edamame {:mvn/version "1.6.43"}
+         borkdude/edamame {:mvn/version "1.6.44"}
          ;; setup renders AGENTS.md's module blocks with the CLI's own code, at
          ;; this release, not with whichever `wagoe` is on PATH (BOU-577).
          wagoe/cli {:local/root "../wagoe-cli"}}

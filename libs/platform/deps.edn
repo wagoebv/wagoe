@@ -1,6 +1,6 @@
 {:paths ["src" "resources"]
 
- :deps  {org.clojure/clojure               {:mvn/version "1.12.6"}
+ :deps  {org.clojure/clojure {:mvn/version "1.12.7"}
          ;; JDBC, migrations, lease and transit, under their old names (BOU-871).
          wagoe/platform-sql             {:local/root "../platform-sql"}
          wagoe/observability            {:local/root "../observability"}
@@ -18,43 +18,43 @@
          ;; wagoe.platform.shell.rpc.client — the remote-port adapter (BOU-90),
          ;; same client libs/external's outbound adapters use.
          clj-http/clj-http              {:mvn/version "3.13.1"}
-         metosin/malli {:mvn/version "0.20.1"}
-         org.clojure/tools.logging {:mvn/version "1.3.1"}
+         metosin/malli {:mvn/version "0.20.3"}
+         org.clojure/tools.logging {:mvn/version "1.3.2"}
 
          ;; HTTP
-         ring/ring-core                    {:mvn/version "1.15.5"}
+         ring/ring-core {:mvn/version "1.15.6"}
          ;; ring-jetty-adapter 1.15.5 (latest) brings Jetty 12.1.8: CVE-2026-10050. Every Jetty artifact moves together (BOU-618).
-         org.eclipse.jetty/jetty-http                                     {:mvn/version "12.1.14"}
-         org.eclipse.jetty/jetty-io                                       {:mvn/version "12.1.14"}
-         org.eclipse.jetty/jetty-security                                 {:mvn/version "12.1.14"}
-         org.eclipse.jetty/jetty-server                                   {:mvn/version "12.1.14"}
-         org.eclipse.jetty/jetty-session                                  {:mvn/version "12.1.14"}
-         org.eclipse.jetty/jetty-unixdomain-server                        {:mvn/version "12.1.14"}
-         org.eclipse.jetty/jetty-util                                     {:mvn/version "12.1.14"}
-         org.eclipse.jetty/jetty-xml                                      {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee/jetty-ee-webapp                             {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9/jetty-ee9-nested                           {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9/jetty-ee9-security                         {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9/jetty-ee9-servlet                          {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9/jetty-ee9-webapp                           {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-jetty-api    {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-jetty-common {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-jetty-server {:mvn/version "12.1.14"}
-         org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-servlet      {:mvn/version "12.1.14"}
-         org.eclipse.jetty.websocket/jetty-websocket-core-common          {:mvn/version "12.1.14"}
-         org.eclipse.jetty.websocket/jetty-websocket-core-server          {:mvn/version "12.1.14"}
-         ring/ring-jetty-adapter           {:mvn/version "1.15.5"}
+         org.eclipse.jetty/jetty-http {:mvn/version "12.1.15"}
+         org.eclipse.jetty/jetty-io {:mvn/version "12.1.15"}
+         org.eclipse.jetty/jetty-security {:mvn/version "12.1.15"}
+         org.eclipse.jetty/jetty-server {:mvn/version "12.1.15"}
+         org.eclipse.jetty/jetty-session {:mvn/version "12.1.15"}
+         org.eclipse.jetty/jetty-unixdomain-server {:mvn/version "12.1.15"}
+         org.eclipse.jetty/jetty-util {:mvn/version "12.1.15"}
+         org.eclipse.jetty/jetty-xml {:mvn/version "12.1.15"}
+         org.eclipse.jetty.ee/jetty-ee-webapp {:mvn/version "12.1.15"}
+         org.eclipse.jetty.ee9/jetty-ee9-nested {:mvn/version "12.1.15"}
+         org.eclipse.jetty.ee9/jetty-ee9-security {:mvn/version "12.1.15"}
+         org.eclipse.jetty.ee9/jetty-ee9-servlet {:mvn/version "12.1.15"}
+         org.eclipse.jetty.ee9/jetty-ee9-webapp {:mvn/version "12.1.15"}
+         org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-jetty-api {:mvn/version "12.1.15"}
+         org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-jetty-common {:mvn/version "12.1.15"}
+         org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-jetty-server {:mvn/version "12.1.15"}
+         org.eclipse.jetty.ee9.websocket/jetty-ee9-websocket-servlet {:mvn/version "12.1.15"}
+         org.eclipse.jetty.websocket/jetty-websocket-core-common {:mvn/version "12.1.15"}
+         org.eclipse.jetty.websocket/jetty-websocket-core-server {:mvn/version "12.1.15"}
+         ring/ring-jetty-adapter {:mvn/version "1.15.6"}
          ;; buddy-core 1.12.0-430 (latest) brings BouncyCastle 1.78.1: critical CVE-2025-14813, CVE-2026-8763 (BOU-618).
-         org.bouncycastle/bcprov-jdk18on {:mvn/version "1.86"}
-         org.bouncycastle/bcpkix-jdk18on {:mvn/version "1.86"}
-         org.bouncycastle/bcutil-jdk18on {:mvn/version "1.86"}
+         org.bouncycastle/bcprov-jdk18on {:mvn/version "1.87"}
+         org.bouncycastle/bcpkix-jdk18on {:mvn/version "1.87"}
+         org.bouncycastle/bcutil-jdk18on {:mvn/version "1.87"}
          buddy/buddy-core                  {:mvn/version "1.12.0-430"}
-         metosin/reitit-core               {:mvn/version "0.10.1"}
-         metosin/reitit-ring               {:mvn/version "0.10.1"}
-         metosin/reitit-malli              {:mvn/version "0.10.1"}
-         metosin/reitit-middleware         {:mvn/version "0.10.1"}
-         fi.metosin/reitit-openapi         {:mvn/version "0.10.1"}
-         metosin/reitit-swagger-ui         {:mvn/version "0.10.1"}
+         metosin/reitit-core {:mvn/version "0.11.0"}
+         metosin/reitit-ring {:mvn/version "0.11.0"}
+         metosin/reitit-malli {:mvn/version "0.11.0"}
+         metosin/reitit-middleware {:mvn/version "0.11.0"}
+         fi.metosin/reitit-openapi {:mvn/version "0.11.0"}
+         metosin/reitit-swagger-ui {:mvn/version "0.11.0"}
          metosin/muuntaja                  {:mvn/version "0.6.12"}
 
          ;; Configuration
@@ -65,8 +65,8 @@
          ;; JSON
          ;; cheshire brings jackson-core and -databind below 2.22.3: CVE-2026-89407, CVE-2026-89425, CVE-2026-91776, CVE-2026-91777 (BOU-618).
          com.fasterxml.jackson.core/jackson-core     {:mvn/version "2.22.3"}
-         com.fasterxml.jackson.core/jackson-databind {:mvn/version "2.22.3"}
-         cheshire/cheshire                 {:mvn/version "6.2.0"}}
+         com.fasterxml.jackson.core/jackson-databind {:mvn/version "2.23.0"}
+         cheshire/cheshire {:mvn/version "6.2.1"}}
 
  :aliases
  {:test      {:extra-paths ["test"]
@@ -78,11 +78,11 @@
               ;; and its PSP clients to every consumer of platform, which is
               ;; what BOU-131 just finished removing.
               :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
-                            com.h2database/h2 {:mvn/version "2.5.250"}
+                            com.h2database/h2 {:mvn/version "2.5.252"}
                             wagoe/payments      {:local/root "../payments"}}
               :main-opts   ["-m" "kaocha.runner"]}
 
-  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.10.26"}}
               :main-opts    ["-m" "clj-kondo.main"]}
 
   :build     {:replace-deps {io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177d"}

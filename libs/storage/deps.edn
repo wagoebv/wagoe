@@ -1,34 +1,34 @@
 {:paths ["src" "resources"]
 
- :deps  {org.clojure/clojure                        {:mvn/version "1.12.6"}
+ :deps  {org.clojure/clojure {:mvn/version "1.12.7"}
          wagoe/core {:local/root "../core"}
          wagoe/config {:local/root "../config"}
          wagoe/platform-sql                      {:local/root "../platform-sql"}
          wagoe/observability                     {:local/root "../observability"}
          integrant/integrant {:mvn/version "1.0.1"}
-         metosin/malli {:mvn/version "0.20.1"}
-         org.clojure/tools.logging {:mvn/version "1.3.1"}
+         metosin/malli {:mvn/version "0.20.3"}
+         org.clojure/tools.logging {:mvn/version "1.3.2"}
          ;; google-cloud-storage brings jackson-core and -databind 2.18.3: CVE-2026-89407, CVE-2026-89425, CVE-2026-91776, CVE-2026-91777 (BOU-618). Pinned in platform until BOU-871.
          com.fasterxml.jackson.core/jackson-core     {:mvn/version "2.22.3"}
-         com.fasterxml.jackson.core/jackson-databind {:mvn/version "2.22.3"}
+         com.fasterxml.jackson.core/jackson-databind {:mvn/version "2.23.0"}
 
          ;; AWS SDK for S3
-         software.amazon.awssdk/s3                  {:mvn/version "2.54.17"}
-         software.amazon.awssdk/s3-transfer-manager {:mvn/version "2.54.17"}
+         software.amazon.awssdk/s3 {:mvn/version "2.59.5"}
+         software.amazon.awssdk/s3-transfer-manager {:mvn/version "2.59.5"}
          ;; The GCS client brings guava 33.6.0-jre: GHSA-xxph-c9ww-hj94, CVE-2026-102554 (BOU-861).
-         com.google.guava/guava {:mvn/version "33.7.2-jre"}
+         com.google.guava/guava {:mvn/version "33.8.0-jre"}
 
          ;; Google Cloud Storage (GCS adapter)
-         com.google.cloud/google-cloud-storage      {:mvn/version "2.73.0"}}
+         com.google.cloud/google-cloud-storage {:mvn/version "2.79.0"}}
 
  :aliases
  {:test      {:extra-paths ["test"]
               :extra-deps  {lambdaisland/kaocha        {:mvn/version "1.91.1392"}
                             ;; In-memory Storage fake for GCS adapter tests
-                            com.google.cloud/google-cloud-nio {:mvn/version "0.137.0"}}
+                            com.google.cloud/google-cloud-nio {:mvn/version "0.143.0"}}
               :main-opts   ["-m" "kaocha.runner"]}
 
-  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.10.26"}}
               :main-opts    ["-m" "clj-kondo.main"]}
 
   :build     {:replace-deps {io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177d"}

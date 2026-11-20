@@ -1,14 +1,14 @@
 {:paths ["src" "resources"]
  :deps  {;; cheshire brings jackson-core below 2.22.3: CVE-2026-89407, CVE-2026-89425 (BOU-618).
          com.fasterxml.jackson.core/jackson-core {:mvn/version "2.22.3"}
-         cheshire/cheshire {:mvn/version "6.2.0"}
+         cheshire/cheshire {:mvn/version "6.2.1"}
          ;; Built into Babashka; declared for the JVM and the published POM.
-         rewrite-clj/rewrite-clj {:mvn/version "1.2.57"}}
+         rewrite-clj/rewrite-clj {:mvn/version "1.3.59"}}
  :aliases
  {:test  {:extra-paths ["test"]
           :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
                         ;; To load a generated project's logback.xml in new-test.
-                        ch.qos.logback/logback-classic {:mvn/version "1.6.3"}
+                        ch.qos.logback/logback-classic {:mvn/version "1.6.8"}
                         ;; To load a config.edn `wagoe add` rewrote the way the app does.
                         wagoe/config {:local/root "../config"}}
           :main-opts   ["-m" "kaocha.runner"]}

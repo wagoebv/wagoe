@@ -1,16 +1,16 @@
 {:paths ["src" "resources"]
 
- :deps  {org.clojure/clojure       {:mvn/version "1.12.6"}
-         metosin/malli             {:mvn/version "0.20.1"}
-         org.clojure/tools.logging {:mvn/version "1.3.1"}
-         com.github.seancorfield/next.jdbc {:mvn/version "1.3.1118"}
-         com.github.seancorfield/honeysql  {:mvn/version "2.7.1437"}
+ :deps  {org.clojure/clojure {:mvn/version "1.12.7"}
+         metosin/malli {:mvn/version "0.20.3"}
+         org.clojure/tools.logging {:mvn/version "1.3.2"}
+         com.github.seancorfield/next.jdbc {:mvn/version "1.4.72"}
+         com.github.seancorfield/honeysql {:mvn/version "2.8.85"}
          integrant/integrant      {:mvn/version "1.0.1"}
-         cheshire/cheshire        {:mvn/version "6.2.0"}
-         ring/ring-core           {:mvn/version "1.15.5"}
-         com.google.auth/google-auth-library-oauth2-http {:mvn/version "1.52.0"}
+         cheshire/cheshire {:mvn/version "6.2.1"}
+         ring/ring-core {:mvn/version "1.15.6"}
+         com.google.auth/google-auth-library-oauth2-http {:mvn/version "1.58.0"}
          ;; google-auth-library brings guava 33.6.0-jre: GHSA-xxph-c9ww-hj94, CVE-2026-102554 (BOU-861).
-         com.google.guava/guava {:mvn/version "33.7.2-jre"}
+         com.google.guava/guava {:mvn/version "33.8.0-jre"}
          wagoe/jobs             {:local/root "../jobs"}
          wagoe/platform-sql        {:local/root "../platform-sql"}
          wagoe/core             {:local/root "../core"}
@@ -19,9 +19,9 @@
  :aliases
  {:test      {:extra-paths ["test"]
               :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}
-                            com.h2database/h2 {:mvn/version "2.5.250"}}}
+                            com.h2database/h2 {:mvn/version "2.5.252"}}}
 
-  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.10.26"}}
               :main-opts    ["-m" "clj-kondo.main"]}
 
   :build     {:replace-deps {io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177d"}

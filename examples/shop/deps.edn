@@ -60,10 +60,10 @@
          ;; wagoe library. Declared here rather than left to arrive
          ;; transitively through wagoe-user — `wagoe new --no-user` drops that.
          hiccup/hiccup                           {:mvn/version "2.0.0"}
-         org.xerial/sqlite-jdbc                  {:mvn/version "3.53.4.0"}
-         com.h2database/h2                       {:mvn/version "2.5.250"}
-         org.postgresql/postgresql               {:mvn/version "42.7.13"}
-         com.mysql/mysql-connector-j             {:mvn/version "26.7.0"}}
+         org.xerial/sqlite-jdbc                  {:mvn/version "3.54.1.0"}
+         com.h2database/h2                       {:mvn/version "2.5.252"}
+         org.postgresql/postgresql               {:mvn/version "42.7.14"}
+         com.mysql/mysql-connector-j             {:mvn/version "26.10.0"}}
  :aliases
  {:repl     {:extra-paths ["dev"]
              ;; wagoe-devtools is dev-only on purpose: it carries a dashboard
@@ -71,8 +71,8 @@
              ;; In the alias, so `clojure -M:repl` has it and `-M:run`, the
              ;; uberjar and the Dockerfile do not.
              :extra-deps {com.wagoe/wagoe-devtools {:local/root "../../libs/devtools"}
-                          nrepl/nrepl {:mvn/version "1.7.0"}
-                          cider/cider-nrepl {:mvn/version "0.62.2"}}
+                          nrepl/nrepl {:mvn/version "1.8.0"}
+                          cider/cider-nrepl {:mvn/version "0.64.1"}}
              :main-opts  ["-m" "nrepl.cmdline" "--middleware" "[cider.nrepl/cider-middleware]"
                           "--port" "7888"]
              :jvm-opts   ["--enable-native-access=ALL-UNNAMED" "-Duser.timezone=UTC"]}
@@ -102,12 +102,12 @@
              :jvm-opts  ["--enable-native-access=ALL-UNNAMED" "-Duser.timezone=UTC"]}
   ;; clj-kondo static analysis. Isolated via :replace-deps so it pulls only the
   ;; linter, not the project's deps. Used by the .githooks/pre-commit gate.
-  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.10.26"}}
               :main-opts    ["-m" "clj-kondo.main"]}
-  :user-cli {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.53.4.0"}
-                          org.postgresql/postgresql   {:mvn/version "42.7.13"}
-                          com.h2database/h2           {:mvn/version "2.5.250"}
-                          com.mysql/mysql-connector-j {:mvn/version "26.7.0"}}
+  :user-cli {:extra-deps {org.xerial/sqlite-jdbc      {:mvn/version "3.54.1.0"}
+                          org.postgresql/postgresql   {:mvn/version "42.7.14"}
+                          com.h2database/h2           {:mvn/version "2.5.252"}
+                          com.mysql/mysql-connector-j {:mvn/version "26.10.0"}}
              ;; -m, not -e: with -e the first non-option argument is taken as a
              ;; script path and *command-line-args* holds only what follows, so
              ;; `create` in `bb create-admin` was dropped and the CLI rejected
