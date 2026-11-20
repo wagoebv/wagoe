@@ -16,12 +16,18 @@
 
 (use-fixtures :each fx/with-fresh-seed)
 
-(def ^:private axe-path "META-INF/resources/webjars/axe-core/4.13.0/axe.min.js")
+(def ^:private axe-pom "META-INF/maven/org.webjars.npm/axe-core/pom.properties")
+
+(defn- resource!
+  [path]
+  (or (io/resource path)
+      (throw (ex-info "axe-core is not on the classpath" {:type :wagoe.e2e/missing-axe :path path}))))
 
 (def ^:private axe-source
-  (delay (slurp (or (io/resource axe-path)
-                    (throw (ex-info "axe-core is not on the classpath; its webjar version moved?"
-                                    {:type :wagoe.e2e/missing-axe :path axe-path}))))))
+  ;; The webjar path carries its version; read it so a deps upgrade cannot strand it.
+  (delay (let [version (with-open [r (io/reader (resource! axe-pom))]
+                         (.getProperty (doto (java.util.Properties.) (.load r)) "version"))]
+           (slurp (resource! (str "META-INF/resources/webjars/axe-core/" version "/axe.min.js"))))))
 
 (defn- serious-violations
   "axe's serious and critical violations on the page, with the first few

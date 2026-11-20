@@ -33,7 +33,7 @@
                                              :user {:display-name "Ada Lovelace"}})]
     (is (seq (tagged page :aside.admin-sidebar)))
     (is (= [[:h1 {:class "admin-topbar-title"} "Users"]] (tagged page :h1)))
-    (is (= "AL" (last (first (tagged page :summary)))))
+    (is (= [:span {:aria-hidden "true"} "AL"] (last (first (tagged page :summary)))))
     (is (some #{[:p "Body"]} (nodes page)))))
 
 (def ^:private groups

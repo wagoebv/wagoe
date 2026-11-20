@@ -117,6 +117,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The user menu button had an `aria-label` its visible initials were not part of** (BOU-1054, WCAG 2.5.3); hidden
+  text names it now.
 - **Creating a user whose email exists carried an empty `:message` in its error data** (BOU-1051); it carries `:reason` now.
 - **A job enqueued in a transaction could run before the commit** (BOU-993) and miss its rows; a data export then stayed
   pending for a day. Jobs wait for the commit now, and an export no worker started in 15 minutes is failed.

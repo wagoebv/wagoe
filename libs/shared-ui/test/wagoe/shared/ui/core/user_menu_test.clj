@@ -27,7 +27,12 @@
                                    {:items [{:href "/web/admin/" :label "Beheer" :icon :settings}]})
         hrefs (map (comp :href second) (tagged menu :a))]
     (testing "who it is, the extra items before the profile, and signing out"
-      (is (= "Ann de Jong" (:title (second (first (tagged menu :summary))))))
+      (is (= {:class "user-menu-button" :title "Ann de Jong"} (second (first (tagged menu :summary))))
+          "no aria-label: the hidden text names it")
+      (is (= [[:span {:class "user-menu-label"} [:t :admin/user-menu]]
+              [:span {:aria-hidden "true"} "AJ"]]
+             (drop 2 (first (tagged menu :summary))))
+          "named by the hidden label, the initials kept out of the name")
       (is (some #{"ann@example.nl"} (tree-seq coll? seq menu)))
       (is (= ["/web/admin/" "/web/profile"] hrefs))
       (is (seq (tagged menu :form))))

@@ -39,8 +39,11 @@
   [user & [{:keys [items]}]]
   (let [who (:display-name user (:email user))]
     [:details {:class "user-menu"}
-     [:summary {:class "user-menu-button" :aria-label [:t :admin/user-menu] :title (str who)}
-      (avatar user)]
+     ;; Named by hidden text, not aria-label: a label the visible initials are
+     ;; not part of fails WCAG 2.5.3 (axe label-content-name-mismatch)
+     [:summary {:class "user-menu-button" :title (str who)}
+      [:span {:class "user-menu-label"} [:t :admin/user-menu]]
+      [:span {:aria-hidden "true"} (avatar user)]]
      [:div {:class "user-menu-panel"}
       [:div {:class "user-menu-who"}
        [:span [:t :admin/header-welcome {:name who}]]
