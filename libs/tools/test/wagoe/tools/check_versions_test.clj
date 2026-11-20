@@ -621,13 +621,14 @@
             "expected the documented com.wagoe pins, so a passing run means something")))))
 
 (deftest ^:unit the-repository-currently-agrees
-  (let [code (sut/version-sources)
-        all  (concat code (sut/doc-sources))]
+  ;; By the gate's own rule: docs stay on the last release while main is a
+  ;; -SNAPSHOT (BOU-1057).
+  (let [code      (sut/version-sources)
+        offenders (:offenders (sut/version-offenders code (sut/doc-sources)))]
     (is (seq code))
-    (is (nil? (sut/disagreements all (:version (first code))))
+    (is (empty? offenders)
         (str "locations naming a different version: "
-             (pr-str (map (juxt :file :version)
-                          (:offenders (sut/disagreements all (:version (first code))))))))))
+             (pr-str (map (juxt :file :version) offenders))))))
 
 (deftest ^:unit prerelease-of-a-patch-is-recognised
   ;; Verified against Maven's own ordering (org.apache.maven.artifact.versioning
