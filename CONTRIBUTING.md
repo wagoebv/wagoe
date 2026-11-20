@@ -190,6 +190,10 @@ Without a pull request there is no review before `main`, so it happens locally, 
 5. Push. The pre-push hook refuses a commit to main without either, then runs `bb check`.
 
 The trailer proves the review ran, not that it was good; review on `main` afterwards still counts.
+### 🚀 **Releases**
+
+[RELEASING.md](RELEASING.md) covers when we release, who does it, and how to use
+`main` from another project before a release.
 
 ### 🎯 **Pull Request Process**
 

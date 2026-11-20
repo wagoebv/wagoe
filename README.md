@@ -284,82 +284,15 @@ See [ADR-021](./dev-docs/adr/ADR-021-fcis-boundary-rules.adoc) (FC/IS rules) and
 
 ## Releasing a New Version
 
-The version appears in 136 locations — 73 in source, 63 in documentation.
-`bb check:versions` is the list, and `bb bump` is the way to change it.
-
-**1. Bump:**
+See [RELEASING.md](RELEASING.md). In short, from a clean, up-to-date `main`:
 
 ```bash
-bb bump 1.0.1 --dry-run   # list what would change
-bb bump 1.0.1
+bb release 1.3.0
 ```
 
-It rewrites exactly the locations `check:versions` discovers and nothing else,
-prints a `git diff --stat`, and finishes by verifying the result against the
-version it just wrote. Re-running it is a no-op.
-
-Give the plain version, not the tag: `1.0.1`, not `v1.0.1`. It
-refuses a leading `v` rather than writing it into 136 places, where every
-location would then agree and the check would pass on it.
-
-**2. Verify and commit:**
-
-```bash
-bb check
-git add -A && git commit -m "bump library suite version to 1.0.1"
-```
-
-The full `bb check` — not `--quick`, which skips `check:versions`. That gate is
-the one that knows every location and fails when they disagree.
-
-**3. Run the pre-release gate:**
-
-The nightly first-run matrix doubles as the pre-release check — that is what its
-`workflow_dispatch` is for. Run it against the commit you are about to tag
-rather than trusting last night's run to describe today's tree.
-
-```bash
-gh workflow run first-run-matrix.yml -f reason="pre-release gate for 1.0.1"
-```
-
-**4. Tag. The tag is the release:**
-
-```bash
-git push
-git tag -a "1.0.1" -m "Release 1.0.1"
-git push --tags
-```
-
-Pushing an unprefixed semver tag fires `.github/workflows/publish.yml`, which
-waits for a maintainer to approve the `release` environment and then does the
-rest: builds every library from the tagged commit in publish order, refuses if
-the tag disagrees with the source version or if CI did not pass on that exact
-commit, deploys the artifacts not already on Clojars, and creates the GitHub
-release.
-
-So there is nothing to run by hand afterwards. In particular:
-
-- **Do not** `gh release create` — the workflow creates the release, and doing
-  both collides.
-- **Do not** `bb deploy --all` — the workflow has already deployed. Re-deploying
-  a published artifact 409s and aborts the run, which is why the workflow itself
-  uses `--missing`.
-
-`bb deploy` by hand is the fallback for when the workflow cannot run, not a step
-of the normal release. `patch-catalogue-version!` keeps `modules-catalogue.edn`
-in sync after each successful deploy either way.
-
-**What `bb bump` deliberately leaves alone:** `CHANGELOG.md` and the ADRs
-(historical — they record what was true when written), and
-`docs/modules/ROOT/pages/stability.adoc`, whose
-subject *is* the old version numbers. Also draft/pre-releases on GitHub —
-`install.sh` uses `/releases/latest`, which only returns published releases.
-
-> Until BOU-316 this step was a global `find | xargs sed`. It set `OLD` and
-> `NEW` to the same string, so a copy-paste run rewrote nothing and reported
-> success — and the verification was `grep -r "$OLD"`, which then found nothing
-> and agreed. It was also macOS-only (`sed -i ''`) and rewrote every occurrence
-> of the version string, including third-party pins that happened to match.
+It moves `[Unreleased]` in the changelog to the version, bumps it everywhere,
+pushes the release commit, waits for CI on main to pass and pushes the tag;
+`publish.yml` publishes to Clojars after a release manager approves.
 
 ---
 
