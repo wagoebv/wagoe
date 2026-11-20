@@ -458,3 +458,11 @@ ADR-043-observational-effects.adoc
 An effect is observational when the application has no read path to its sink:
 logs, metrics, traces. Writes to the app's own store never are, so they stay
 shell. Core still does not log in 1.2, for want of an observation channel.
+
+==== ADR-044: Trunk-Based Development [Proposed]
+ADR-044-trunk-based-development.adoc
+
+The core team commits to `main` behind a local gate (review trailers and
+`bb check`); CI on `main` detects and a red `main` is reverted first. A release
+tag lands only on a commit CI passed on `main`. External contributors keep
+pull requests.
