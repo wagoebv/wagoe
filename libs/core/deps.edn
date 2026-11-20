@@ -1,7 +1,7 @@
 {:paths ["src" "resources"]
 
- :deps  {org.clojure/clojure {:mvn/version "1.12.6"}
-         metosin/malli       {:mvn/version "0.20.1"}}
+ :deps  {org.clojure/clojure {:mvn/version "1.12.7"}
+         metosin/malli {:mvn/version "0.20.3"}}
 
  :aliases
  {:test      {:extra-paths ["test"]
@@ -10,7 +10,7 @@
                             com.gfredericks/test.chuck {:mvn/version "0.2.15"}}
               :main-opts   ["-m" "kaocha.runner"]}
 
-  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.10.26"}}
               :main-opts    ["-m" "clj-kondo.main"]}
 
   :build     {:replace-deps {io.github.clojure/tools.build {:git/tag "v0.10.13" :git/sha "3a3c177d"}

@@ -1,11 +1,11 @@
 {:paths ["src"]
 
- :deps  {org.clojure/clojure {:mvn/version "1.12.6"}
+ :deps  {org.clojure/clojure {:mvn/version "1.12.7"}
          wagoe/core {:local/root "../core"}
          wagoe/platform   {:local/root "../platform"}
          wagoe/ui-style   {:local/root "../ui-style"}
-         metosin/malli {:mvn/version "0.20.1"}
-         cheshire/cheshire {:mvn/version "6.2.0"}
+         metosin/malli {:mvn/version "0.20.3"}
+         cheshire/cheshire {:mvn/version "6.2.1"}
          hiccup/hiccup       {:mvn/version "2.0.0"}}
 
  :aliases

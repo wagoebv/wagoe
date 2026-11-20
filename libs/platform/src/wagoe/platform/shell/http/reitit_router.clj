@@ -660,7 +660,8 @@
   (let [document {:get {:no-doc true
                         :public true
                         :skip-interceptors? true
-                        :openapi docs-data
+                        ;; reitit 0.11 emits 3.2.0 unless told; clients were promised 3.1 (BOU-462)
+                        :openapi (merge {:openapi "3.1.0"} docs-data)
                         :handler (openapi/create-openapi-handler)}}]
     [["/openapi.json" document]
      ["/swagger.json" document]

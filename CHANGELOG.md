@@ -102,6 +102,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **Dependencies upgraded** (BOU-1051): Clojure 1.12.7, reitit 0.11, malli 0.20.3, next.jdbc 1.4, honeysql 2.8, Jetty 12.1.15
+  and more; `/openapi.json` stays OpenAPI 3.1.0. New projects get them; an app pinning these bumps its own `deps.edn`.
 - **A push to main needs review and simplify trailers** (BOU-1041): `Reviewed-by: review-pr` and `Simplified-by:
   simplify` on every commit, or `Review-skipped: <reason>`. See "Review before main" in CONTRIBUTING.md.
 - `require-role` and `require-role-middleware` match the role held in the request's tenant (BOU-1020). An app
@@ -115,6 +117,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Creating a user whose email exists carried an empty `:message` in its error data** (BOU-1051); it carries `:reason` now.
 - **A job enqueued in a transaction could run before the commit** (BOU-993) and miss its rows; a data export then stayed
   pending for a day. Jobs wait for the commit now, and an export no worker started in 15 minutes is failed.
 
