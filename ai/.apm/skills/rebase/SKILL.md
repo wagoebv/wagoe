@@ -68,14 +68,14 @@ Only if step 3 produced changes:
 
 ```bash
 git add AGENTS.md libs/wagoe-cli/resources/wagoe/cli/templates/AGENTS.md.tmpl examples/shop test/snapshots
-git commit -m "Regenerate derived files after rebase"
+git commit -m "Regenerate derived files after rebase (BOU-123)" -m "Review-skipped: generated files"
 ```
 
 ### 6. Hand off to user
 
 Tell the user to review the rebase result and push when satisfied:
 
-> Rebase complete. Please review the changes with `git log --oneline origin/main..HEAD` to verify no work was lost, then run `git push --force-with-lease` when everything looks good.
+> Rebase complete. Please review the changes with `git log --oneline origin/main..HEAD` to verify no work was lost, then push as CONTRIBUTING.md describes: `git push origin HEAD:main` for the core team, `git push --force-with-lease` for a pull request branch.
 
 Do **not** push — the user must confirm.
 

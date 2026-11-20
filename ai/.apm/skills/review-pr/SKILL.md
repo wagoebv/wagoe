@@ -1,7 +1,7 @@
 ---
 name: review-pr
 description: Evidence-backed PR review with convention checks and call-chain tracing. Not a walkthrough or hands-on verification; use understand-pr or verify-pr.
-argument-hint: "[PR number, URL, or branch name — defaults to current branch PR, then current branch vs main]"
+argument-hint: "[PR number, URL, branch name, or `local` for the diff about to go to main — defaults to current branch PR, then current branch vs main]"
 allowed-tools: Bash, Read, Grep, Glob, Agent
 ---
 
