@@ -23,12 +23,16 @@ Parse the input argument (`$ARGUMENTS`) to determine the PR:
 - **PR URL** (e.g., `https://github.com/org/repo/pull/123`): extract number, use `gh pr view`
 - **Branch name**: use `git diff origin/main...origin/<branch>`
 - **Empty**: detect current branch, use `gh pr view` for current branch or fall back to `git diff origin/main...HEAD`
+- **`local`**, the review before a push to main (BOU-1041): `git diff origin/main...HEAD` plus uncommitted work
+  (`git diff HEAD`). There is no PR; take the ticket ids for the story contract from the commit subjects.
 
 ## Step 2: Gather context
 
 Execute these steps sequentially (each depends on the previous):
 
 ### 2a. PR metadata
+
+In `local` mode skip this: there is no PR. The title and context come from the commit subjects.
 
 ```bash
 gh pr view <number> --json title,body,headRefName,baseRefName,files
@@ -44,6 +48,8 @@ The labeled block that procedure produces goes verbatim into the `## Story contr
 
 ### 2c. Diff
 
+In `local` mode: `git diff origin/main...HEAD` and `git diff HEAD`.
+
 ```bash
 git diff origin/<base>...origin/<head>
 ```
@@ -55,6 +61,8 @@ git fetch origin <head>
 ```
 
 ### 2d. Changed file contents
+
+In `local` mode read the files from the working tree, which holds the uncommitted work too.
 
 For each changed file, read the full content from the PR branch:
 
@@ -69,6 +77,8 @@ Budget: read every changed file in full. If a single file exceeds 1000 lines, re
 Read the root `AGENTS.md` and the `libs/<lib>/AGENTS.md` of every library the diff touches. These are the conventions agents may cite.
 
 ### 2f. Quality gates
+
+In `local` mode run them in the working tree.
 
 On the PR head, run the gates that enforce the architecture rules, and keep their output for the report:
 
@@ -109,6 +119,11 @@ Launch applicable agents in parallel using the Agent tool. With a contract prese
 
 ## Step 4: Aggregate and format report
 
+Mark every verified issue **blocking** or **non-blocking**. CRITICAL and IMPORTANT findings and a failing gate are
+blocking: fix them before the push. SUGGESTION and NIT are non-blocking: fix them, file a Linear ticket, or reject
+them with a reason. A fix that changes logic or structure gets `review-pr` again on the changes since this review;
+the `Reviewed-by: review-pr` trailer goes on a commit only once its final code was reviewed.
+
 Collect results from all agents. Produce the final report:
 
 ```markdown
@@ -134,6 +149,7 @@ story contract was extracted.]
 
 ### [CRITICAL/IMPORTANT/SUGGESTION/NIT] — [title]
 
+**Blocking:** yes (CRITICAL, IMPORTANT) / no
 **File:** `path/to/file:line`
 **Evidence:** [from agent]
 **Impact:** [from agent]

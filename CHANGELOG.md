@@ -102,6 +102,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Changed
 
+- **A push to main needs review and simplify trailers** (BOU-1041): `Reviewed-by: review-pr` and `Simplified-by:
+  simplify` on every commit, or `Review-skipped: <reason>`. See "Review before main" in CONTRIBUTING.md.
 - `require-role` and `require-role-middleware` match the role held in the request's tenant (BOU-1020). An app
   guarding with its own role should check it is granted there.
 - **A pull request runs CI's fast layer** (BOU-1026): no e2e, MySQL job, first-run/example/web-crawl smokes, isolation

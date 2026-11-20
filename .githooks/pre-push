@@ -23,6 +23,17 @@ command -v bb >/dev/null || refuse "bb is not on PATH; push from a terminal."
 [ -z "$(git status --porcelain)" ] || refuse "commit, stash -u or remove your changes first."
 git merge-base --is-ancestor origin/main HEAD 2>/dev/null || refuse "git pull --rebase first."
 
+# Every commit was simplified and reviewed, or says why not (BOU-1041). A
+# revert is exempt: it is the way out of a red main. The subject goes last, so
+# a tab in it cannot shift the trailer fields.
+t='valueonly,unfold,separator=%x2C'
+unreviewed="$(git log --no-merges --no-show-signature origin/main..HEAD \
+  --format="%h%x09%(trailers:key=Reviewed-by,$t)%x09%(trailers:key=Simplified-by,$t)%x09%(trailers:key=Review-skipped,$t)%x09%s" |
+  awk -F '\t' '!(($2 != "" && $3 != "") || $4 != "" || index($5, "Revert \"") == 1) {print "  " $1 " " $5}')"
+[ -z "$unreviewed" ] || refuse "these commits lack Reviewed-by and Simplified-by trailers, or Review-skipped: <reason>:
+$unreviewed
+"
+
 # From a linked worktree git exports GIT_DIR; tests that run git in a temp dir
 # would then write to this repository.
 unset $(git rev-parse --local-env-vars) GIT_CONFIG_PARAMETERS
