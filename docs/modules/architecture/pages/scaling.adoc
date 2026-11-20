@@ -69,17 +69,50 @@ Off by default. Turn them on per listener and for job workers:
 
 A request that blocks on the database or an HTTP call then holds no platform
 thread. Jetty caps concurrent tasks at 200, its `VirtualThreadPool` default;
-the connector's acceptor and selectors hold a few of those.
+the connector's acceptor and selectors hold a few of those. Raise the cap per
+listener with `:max-virtual-threads`; a value that is not a positive integer
+fails the boot with `WGE-108`:
+
+[source,clojure]
+----
+:wagoe/http {:virtual-threads? true :max-virtual-threads 1200}
+----
 
 * *Context still applies.* Tenant schema, MDC and the tracing and error
   contexts are set and read on the thread that serves the request or runs the
   job, and each request gets a fresh one.
-* *Size the connection pool for 200.* Virtual threads add no connections; a
-  request beyond `maximum-pool-size` waits `connection-timeout-ms`, then fails.
+* *Virtual threads add no connections.* A request beyond `maximum-pool-size`
+  waits `connection-timeout-ms`, then fails.
 * *Pinning is why it is opt-in.* On JDK 21 a virtual thread blocked inside
   `synchronized` holds its carrier. The PostgreSQL and MySQL drivers, HikariCP,
   Logback and Clojure 1.12 avoid it; SQLite and H2 do not. Check with JFR's
   `jdk.VirtualThreadPinned` event before turning it on in production.
+
+==== Three limits for an SSE-heavy app
+
+An open SSE stream is one long request: it holds a virtual thread for as long
+as the page is open, but no database connection between events. Three
+settings bound a node:
+
+* `:max-virtual-threads` on `:wagoe/http`: every request in flight, streams
+  included.
+* `:max-streams` on `:wagoe/realtime`: the streams alone. Keep it below the
+  thread cap, with room for ordinary requests.
+* `maximum-pool-size` of the database pool: the requests querying at the same
+  moment. Streams do not count.
+
+A chat app keeping one stream per browser, 1,000 browsers per node, and about
+100 other requests in flight at peak:
+
+[source,clojure]
+----
+:wagoe/http     {:virtual-threads? true :max-virtual-threads 1200} ; 1,000 streams + 100 requests + headroom
+:wagoe/realtime {:max-streams 1000}
+;; database pool: maximum-pool-size 30, for the requests that query at once
+----
+
+More browsers than `:max-streams` on one node wait and retry; add a node
+rather than raising the caps past what its memory holds.
 
 == How the architecture enables horizontal scaling
 

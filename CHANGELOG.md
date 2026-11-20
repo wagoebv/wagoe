@@ -83,6 +83,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`:max-virtual-threads` on `:wagoe/http` and `:wagoe/rpc`** (BOU-1056) raises Jetty's cap of 200 concurrent requests,
+  SSE streams included, on virtual threads. Absent keeps 200; see the scaling page.
 - **A search filter value can be a set** (BOU-1055): `{:filters {:conversation-id #{c1 c2}}}` matches any of them;
   an empty set matches nothing. The search API takes up to 500 members.
 - **`bb release <version>` tags only a commit CI passed on main** (BOU-1029): it bumps, moves `[Unreleased]` to

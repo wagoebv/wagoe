@@ -163,7 +163,9 @@
                    ;; fixed in BOU-90's own tests; same mistake, same fix.)
                    (assoc-in [:active :wagoe/rpc] {:port             0
                                                    :service-key      service-key
-                                                   :max-request-body (* 1024 1024)}))
+                                                   :max-request-body (* 1024 1024)
+                                                   :virtual-threads? true
+                                                   :max-virtual-threads 300}))
         [ig-config summary] (main/service-ig-config config #{:payments})]
 
     (testing "the RPC endpoint is part of the service"
@@ -172,7 +174,9 @@
       (is (= (ig/ref :wagoe/payment-provider)
              (get-in ig-config [:wagoe/rpc-server :implementation])))
       (is (= (* 1024 1024) (get-in ig-config [:wagoe/rpc-server :max-request-body]))
-          "its body limit is configurable (BOU-644)"))
+          "its body limit is configurable (BOU-644)")
+      (is (= 300 (get-in ig-config [:wagoe/rpc-server :max-virtual-threads]))
+          "and its virtual-thread maximum (BOU-1056)"))
 
     (testing "and a caller with only the protocol gets an answer from it"
       ;; Without :wagoe/http-server. This test is about the RPC listener, and

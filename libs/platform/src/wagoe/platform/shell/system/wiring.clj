@@ -949,10 +949,24 @@
       (.setHandler s limiter))))
 
 (defn- virtual-thread-pool
-  "nil unless `on?`, which run-jetty reads as: build the platform pool."
-  [on? pool-name]
+  "nil unless `on?`, which run-jetty reads as: build the platform pool.
+   `max-threads` caps concurrent requests, SSE streams included; absent keeps
+   Jetty's 200. A value that is not a positive integer fails the boot, even with
+   virtual threads off."
+  [on? pool-name max-threads]
+  (when (and (some? max-threads) (not (and (pos-int? max-threads) (<= max-threads Integer/MAX_VALUE))))
+    (throw (ex-info (str "WGE-108: :max-virtual-threads must be a positive integer, not "
+                         (pr-str max-threads))
+                    {:type :configuration-error :wagoe/error-code "WGE-108"
+                     :max-virtual-threads max-threads})))
+  (when (and max-threads (not on?))
+    (log/warn "Ignoring :max-virtual-threads: the listener runs on Jetty's platform pool without :virtual-threads? true"
+              {:pool pool-name :max-virtual-threads max-threads}))
   (when on?
-    (doto (org.eclipse.jetty.util.thread.VirtualThreadPool.) (.setName pool-name))))
+    (doto (if max-threads
+            (org.eclipse.jetty.util.thread.VirtualThreadPool. (int max-threads))
+            (org.eclipse.jetty.util.thread.VirtualThreadPool.))
+      (.setName pool-name))))
 
 ;; A listener serving one module's protocol to the rest of the deployment.
 ;;
@@ -965,7 +979,8 @@
 ;; resolved here, where a name that no longer exists fails the boot rather than
 ;; the first call.
 (defmethod ig/init-key :wagoe/rpc-server
-  [_ {:keys [protocol implementation port host service-key auth max-request-body virtual-threads?]
+  [_ {:keys [protocol implementation port host service-key auth max-request-body virtual-threads?
+             max-virtual-threads]
       :or   {max-request-body default-max-request-body}}]
   (let [protocol-var (or (requiring-resolve protocol)
                          (throw (ex-info (str "RPC protocol not found: " protocol)
@@ -978,7 +993,7 @@
         server       (jetty/run-jetty app {:port         port
                                            :host         (or host "0.0.0.0")
                                            :join?        false
-                                           :thread-pool  (virtual-thread-pool virtual-threads? "wagoe-rpc")
+                                           :thread-pool  (virtual-thread-pool virtual-threads? "wagoe-rpc" max-virtual-threads)
                                            :configurator #(limit-request-body! % max-request-body)})]
     (log/info "RPC endpoint started"
               {:protocol (str protocol) :port port :path rpc-server/default-path})
@@ -991,7 +1006,8 @@
     (.stop server)))
 
 (defmethod ig/init-key :wagoe/http-server
-  [_ {:keys [handler port host join? config drain-timeout-ms max-request-body virtual-threads?]
+  [_ {:keys [handler port host join? config drain-timeout-ms max-request-body virtual-threads?
+             max-virtual-threads]
       :or   {max-request-body default-max-request-body}}]
   (let [http-config (or config {})
         port-allocation (port-manager/allocate-port port http-config)
@@ -1005,7 +1021,7 @@
                                   {:port allocated-port
                                    :host host
                                    :join? (or join? false)
-                                   :thread-pool (virtual-thread-pool virtual-threads? "wagoe-http")
+                                   :thread-pool (virtual-thread-pool virtual-threads? "wagoe-http" max-virtual-threads)
                                    ;; Store the handler atom on the server so
                                    ;; halt-key! can clear the right one, and
                                    ;; enable graceful connection draining.

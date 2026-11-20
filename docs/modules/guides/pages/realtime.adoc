@@ -102,7 +102,8 @@ Each open stream holds one server thread for as long as the page is open, and
 writes a heartbeat every 15 seconds; a closed tab is cleaned up at the next one.
 The `:wagoe/realtime` key caps streams per node with `:max-streams` (default
 32, under Jetty's 50 threads); a stream over the cap is told to retry in 10
-seconds. A handler accepts at most `:max-topics` (16) topics per stream.
+seconds. For hundreds of streams, run the listener on virtual threads and
+raise `:max-virtual-threads` above `:max-streams` (see the scaling page). A handler accepts at most `:max-topics` (16) topics per stream.
 
 An open stream does not see a logout by itself. Pass `:revalidate`, asked every
 heartbeat, and the stream closes once it answers false; the browser reconnects

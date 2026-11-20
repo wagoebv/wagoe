@@ -135,7 +135,10 @@
 (deftest ^:unit the-virtual-threads-flag-reaches-the-server
   (let [server #(:wagoe/http-server (sut/system-config (config :wagoe/http %)))]
     (is (true? (:virtual-threads? (server {:virtual-threads? true}))))
-    (is (false? (:virtual-threads? (server {}))))))
+    (is (false? (:virtual-threads? (server {}))))
+    (testing "the pool's maximum, only when set (BOU-1056)"
+      (is (= 2000 (:max-virtual-threads (server {:virtual-threads? true :max-virtual-threads 2000}))))
+      (is (not (contains? (server {:virtual-threads? true}) :max-virtual-threads))))))
 
 (deftest ^:unit the-server-knows-the-boot-profile
   ;; The port strategy decides by profile; without it a :prod boot searched

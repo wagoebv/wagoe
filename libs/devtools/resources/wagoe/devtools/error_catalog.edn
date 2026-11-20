@@ -41,6 +41,12 @@
             :description "A component the config hands Wagoe, such as your own repository or service, implements a stable protocol but not one added beside it after 1.0, which this Wagoe calls. The boot stops rather than fail on that first call."
             :fix         "Implement the protocol the message names on your record (its methods are in :missing), or wire Wagoe's own component."}
 
+ "WGE-108" {:code        "WGE-108"
+            :category    :config
+            :title       "Invalid Virtual-Thread Maximum"
+            :description ":max-virtual-threads on :wagoe/http or :wagoe/rpc is not a positive integer."
+            :fix         "Set it to the most concurrent requests one node should serve, SSE streams included, e.g. 1200; or remove it to keep Jetty's 200."}
+
  ;; WGE-2xx — Validation
  "WGE-201" {:code        "WGE-201"
             :category    :validation

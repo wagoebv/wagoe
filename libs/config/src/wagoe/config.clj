@@ -321,7 +321,8 @@
    
    Returns:
      Map with :port, :host, :join?, :port-range, :drain-timeout-ms and
-     :virtual-threads? keys, plus :max-request-body when the config sets it
+     :virtual-threads? keys, plus :max-request-body and :max-virtual-threads
+     when the config sets them
 
    :drain-timeout-ms controls graceful shutdown: on stop the server stops
    accepting new connections, lets in-flight requests finish (bounded by this
@@ -337,7 +338,9 @@
              :virtual-threads? (boolean (:virtual-threads? http-cfg))}
       ;; Absent leaves the server's default; nil lifts the limit (BOU-644).
       (contains? http-cfg :max-request-body)
-      (assoc :max-request-body (:max-request-body http-cfg)))))
+      (assoc :max-request-body (:max-request-body http-cfg))
+      (contains? http-cfg :max-virtual-threads)
+      (assoc :max-virtual-threads (:max-virtual-threads http-cfg)))))
 
 (defn app-config
   "Extract application-level configuration.
