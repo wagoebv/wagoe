@@ -144,6 +144,28 @@ clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
   `bb check` fails a branch that changes `src/` without one. A release turns
   `[Unreleased]` into its version.
 
+### 🚧 **Unfinished work on main**
+
+`main` must be releasable at every commit, so unfinished work lands without
+becoming public API (BOU-1033):
+
+- **A new library** starts `:incubating` in `modules-catalogue.edn`, outside the
+  [breaking-change promise](https://wagoe.org/docs/stability.html#_not_every_library_though_tiers);
+  `webhooks` is one.
+- **In a stable library** unfinished code, a new protocol for it included, goes
+  in a namespace marked `^:no-doc`:
+
+  ```clojure
+  (ns ^:no-doc wagoe.user.shell.passkeys
+    "Unfinished (BOU-123): not public API until that ticket is done.")
+  ```
+
+  Never add a method to an existing protocol of a stable library: add a new
+  protocol. `bb check:ports-diff` fails CI on a gained method.
+- **The commit that finishes the ticket** removes `^:no-doc` (or promotes the
+  library) and adds its CHANGELOG line.
+
+Only `check:ports-diff` is automated; `^:no-doc` and the tiers rely on review.
 ### 🔍 **Review before main**
 
 Without a pull request there is no review before `main`, so it happens locally, per ticket, before the push

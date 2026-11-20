@@ -316,6 +316,8 @@ depend on it rather than from this page afterwards.
 * `wagoe-tools`, `wagoe-devtools`, `wagoe-cli` and `wagoe-mcp` are development
   tooling. They are versioned in lockstep and published to Clojars, but their
   internal namespaces are not an API — the commands are.
+* A namespace marked `^:no-doc`: unfinished work that may change or go in any
+  release.
 * Generated code. The scaffolder's output becomes yours; we change the
   generator, not your files.
 * Database schemas of the framework's own tables, other than through migrations
