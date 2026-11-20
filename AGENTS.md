@@ -146,7 +146,8 @@ REPL restart instructions are in the development reference.
 Comments, docstrings, commits, PRs, reviews and issues must be short and human.
 Explain non-obvious reasons; avoid filler, diff narration, tool signatures,
 "Generated with" footers and `Co-Authored-By` trailers. Reference the ticket; a commit
-subject ends with it, `<what changed> (BOU-123)`.
+subject ends with it, `<what changed> (BOU-123)`. Before a push to main, follow "Review before main" in
+CONTRIBUTING.md: simplify, `review-pr local`, fix, and the trailers it names.
 Comments/docstrings usually need only one or two sentences.
 
 Changelog entries have a hard limit of two lines: what changed and what the user

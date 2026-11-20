@@ -90,7 +90,8 @@
       (process/shell "bb" "bump" version)
       (process/shell "bb" "check:versions")
       (process/shell "bb" "release:check" version)
-      (process/shell "git" "commit" "--quiet" "-am" (str "Release " version))
+      (process/shell "git" "commit" "--quiet" "-am" (str "Release " version)
+                     "-m" "Review-skipped: version bump and changelog move by bb release")
       (catch Exception e
         (fail! (str "release aborted before its commit: " (ex-message e))
                "Undo the bump with: git restore .")))))

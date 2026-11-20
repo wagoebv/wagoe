@@ -63,6 +63,23 @@
           (is (= 1 (hook! main)))
           (is (not (fs/exists? ran)))
           (sh {} "git" "update-ref" "refs/remotes/origin/main" "HEAD"))
+        (testing "every commit needs Reviewed-by and Simplified-by, or Review-skipped (BOU-1041)"
+          (let [ok      "Do a thing (BOU-1)\n\nReviewed-by: review-pr\nSimplified-by: simplify"
+                commit! (fn [& msgs]
+                          (doseq [m msgs]
+                            (sh {} "git" "-c" "user.email=t@t" "-c" "user.name=t" "commit" "-q" "--allow-empty" "-m" m))
+                          (push-line "refs/heads/main" (str/trim (:out (sh {} "git" "rev-parse" "HEAD")))))]
+            (doseq [[want msgs why] [[1 ["Do a thing (BOU-1)"] "no trailers"]
+                                     [1 ["Do a thing (BOU-1)\n\nReviewed-by: review-pr"] "only reviewed"]
+                                     [1 ["Do a thing (BOU-1)\n\nSimplified-by: simplify"] "only simplified"]
+                                     [1 ["Tab\tin it (BOU-1)\n\nReviewed-by: review-pr"] "a tab in the subject"]
+                                     [1 ["Do a thing (BOU-1)" ok] "an earlier commit without them"]
+                                     [0 [ok] "both"]
+                                     [0 ["Fix a typo (BOU-1)\n\nReview-skipped: typo in a docstring"] "skipped, with a reason"]
+                                     [0 ["Revert \"Do a thing (BOU-1)\"\n\nThis reverts commit abc."] "a revert"]]]
+              (is (= want (hook! (apply commit! msgs))) why)
+              (when (= 1 want) (is (not (fs/exists? ran)) why))
+              (sh {} "git" "reset" "-q" "--hard" "refs/remotes/origin/main"))))
         (testing "a dirty tree is refused before bb check runs"
           (spit (str repo "/x.txt") "x")
           (is (= 1 (hook! main)))

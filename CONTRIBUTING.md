@@ -144,6 +144,31 @@ clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
   `bb check` fails a branch that changes `src/` without one. A release turns
   `[Unreleased]` into its version.
 
+### 🔍 **Review before main**
+
+Without a pull request there is no review before `main`, so it happens locally, per ticket, before the push
+(BOU-1041):
+
+1. Finish the work and run `simplify` on the diff against `origin/main`.
+2. Run `review-pr local` on the same diff, after simplify, so it sees the final code.
+3. Fix the blocking findings (CRITICAL, IMPORTANT, a failing gate). Fix each non-blocking one, file a Linear
+   ticket for it, or reject it with a reason. A fix that changes logic or structure gets `review-pr` again on the
+   changes since; a small fix needs only `bb check`.
+4. Commit with the trailers that record it:
+
+   ```
+   Keep the tenant through after-commit (BOU-987)
+
+   Simplified-by: simplify
+   Reviewed-by: review-pr
+   ```
+
+   A trivial commit (a typo, a docs line) carries `Review-skipped: <reason>` instead, so the history shows it.
+   A `git revert` needs neither: it is the way out of a red main.
+5. Push. The pre-push hook refuses a commit to main without either, then runs `bb check`.
+
+The trailer proves the review ran, not that it was good; review on `main` afterwards still counts.
+
 ### 🎯 **Pull Request Process**
 
 1. **Create feature branch**: `git checkout -b feature/your-feature-name`
