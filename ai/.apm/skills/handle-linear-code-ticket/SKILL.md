@@ -1,13 +1,13 @@
 ---
 name: handle-linear-code-ticket
-description: Take a Linear code ticket from start to merge - implement, PR, review-pr, simplify, rebase, green CI, merge, Done - then ask for the next ticket. Use when the user says "handle BOU-123", "pick up a ticket" or "next ticket".
+description: Take a Linear code ticket to a reviewed local commit on main's trunk-based flow - implement, simplify, review-pr local, fix, verify, commit with trailers - then hand the push to the developer and ask for the next ticket. Use when the user says "handle BOU-123", "pick up a ticket" or "next ticket".
 argument-hint: "[Linear issue id, e.g. BOU-123 — asks when empty]"
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob, Agent, Skill
 ---
 
 # Handle a Linear code ticket
 
-Run one ticket through the full loop, then ask for the next one and repeat. Invoking this skill is the user's approval to commit and push on the ticket branch; it is **not** approval to merge, which the user does.
+Run one ticket to a reviewed local commit, then ask for the next one and repeat. The core team commits straight to `main` (ADR-044); an agent commits locally and **never pushes or tags**: the developer reads the diff and pushes. See AGENTS.md "Trunk-based flow" and CONTRIBUTING.md "Review before main".
 
 ## 1. Pick up the ticket
 
@@ -23,7 +23,18 @@ git switch -c <gitBranchName> origin/main
 
 ## 2. Implement
 
-Follow `AGENTS.md` and the guides it names for the task (scaffold first, FC/IS, i18n, migrations). Write the minimum change plus tests. Then verify:
+Follow `AGENTS.md` and the guides it names for the task (scaffold first, FC/IS, i18n, migrations). Work in small steps that each leave `main` releasable; unfinished work follows CONTRIBUTING.md "Unfinished work on main". Write the minimum change plus tests, and a CHANGELOG line under `[Unreleased]` for shipped code.
+
+A change that is breaking or touches a stable port, is security-sensitive, or adds a library or a framework migration still goes through a reviewed pull request (CONTRIBUTING.md "Still a pull request"): say so before starting, and hand it over as a branch for a PR instead of a push to main.
+
+## 3. Simplify, then review
+
+1. Run the `simplify` skill on the diff against `origin/main` and keep its changes.
+2. Run the `review-pr` skill in `local` mode on the same diff.
+3. Fix the blocking findings (CRITICAL, IMPORTANT, a failing gate). Fix each non-blocking one, file a Linear ticket for it, or reject it with a reason. If a fix is impossible or contradicts the ticket, stop and ask the user.
+4. A fix that changes logic or structure gets `review-pr local` again on the changes since.
+
+## 4. Verify
 
 ```bash
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
@@ -31,67 +42,32 @@ bb check
 clojure -M:test:test/all :<suite>   # suites of the touched libs; bb test:all when shared code changed
 ```
 
-All green before moving on.
+All green before committing.
 
-## 3. Commit, push, PR
+## 5. Commit and hand over
 
-```bash
-git add <files> && git commit -m "<what changed> (BOU-123)"
-git push -u origin HEAD
-gh pr create --title "<title> (BOU-123)" --body "<what and why>
-
-Fixes BOU-123"
-```
-
-Write short (AGENTS.md "Write short"); no attribution footer or trailer. Set the issue **In Review** and add the PR link as a comment.
-
-## 4. Review and fix everything
-
-1. Run the `review-pr` skill on the PR.
-2. Fix **every** finding — CRITICAL, IMPORTANT, SUGGESTION, NIT, convention notes and boy-scout items. Do not skip, defer or argue one away. If a fix is impossible or contradicts the ticket, stop and ask the user; never drop it silently.
-3. Re-run the step 2 checks, commit (`Address review findings (BOU-123)`), push.
-
-## 5. Simplify
-
-Run the `simplify` skill on the branch and keep all its changes. Re-run the step 2 checks, commit (`Simplify (BOU-123)`), push. Skip the commit when simplify changed nothing.
-
-## 6. Rebase
-
-Run the `rebase` skill. Its "do not push" hand-off does not apply here: check `git log --oneline origin/main..HEAD` shows all ticket commits, re-run the touched suites, then:
+Commit locally with the ticket at the end of the subject and the review trailers. Every commit for main carries them, so each small step gets its own review; a trivial commit carries `Review-skipped: <reason>` instead.
 
 ```bash
-git push --force-with-lease
+git commit -m "<what changed> (BOU-123)" -m "Fixes BOU-123
+
+Simplified-by: simplify
+Reviewed-by: review-pr"
 ```
 
-## 7. Green CI
+`Fixes BOU-123` goes only on the commit that finishes the ticket. Write short (AGENTS.md "Write short"); no attribution footer or `Co-Authored-By`.
 
-```bash
-gh pr checks <n> --watch --fail-fast
-```
+Then rebase: `git fetch origin main && git rebase origin/main` (the `rebase` skill on a conflict). If main moved, re-run the step 4 checks.
 
-On a failure: read the log (`gh run view <run-id> --log-failed`), fix the cause (never weaken or skip a test), run the check locally, commit, push, watch again. A flake: rerun once (`gh run rerun <run-id> --failed`); if it fails again, treat it as real. Loop until every required check is green, including e2e.
+Do not push, tag, run `bb release` or pass `--no-verify`. Report the commits (`git log --oneline origin/main..HEAD`) and ask the developer to read the diff and push, e.g. `git push origin HEAD:main`; the pre-push hook checks the trailers and runs `bb check`.
 
-If main moved and the PR is behind or conflicts, go back to step 6.
+## 6. After the developer pushed
 
-## 8. Merge and close
+1. Check the commits reached main: `git fetch origin main && git branch -r --contains <sha> | grep origin/main`.
+2. CI on main runs the full suite. A red run opens a "main is red" issue: help revert first, debug afterwards (CONTRIBUTING.md "Stop the line").
+3. Set the Linear issue **Done** with a comment naming the commits, unless the Linear GitHub integration closed it through `Fixes BOU-123`.
+4. Clean up: `git switch main && git pull --ff-only && git branch -d <branch>`. If `-d` refuses, some commits did not reach main: stop and report.
 
-1. Report green CI and ask whether to merge. Merge only on an explicit yes, pinned to the commit CI passed on:
+## 7. Next
 
-```bash
-gh pr merge <n> --merge --match-head-commit <sha>
-```
-
-Without a yes, the user merges.
-2. Then check, on its own:
-
-```bash
-gh pr view <n> --json state,mergedAt
-```
-
-Act only on `MERGED`; otherwise say so and wait.
-3. Set the Linear issue **Done** by hand (the GitHub integration is not connected) with a comment linking the PR.
-4. Clean up: `git switch main && git pull --ff-only && git branch -d <branch>`.
-
-## 9. Next
-
-Report in two or three lines: ticket, PR, what changed. Ask for the next ticket id and start again at step 1. Stop when the user says they are done.
+Report in two or three lines: ticket, commits, what changed. Ask for the next ticket id and start again at step 1. Stop when the user says they are done.

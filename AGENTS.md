@@ -5,15 +5,13 @@
 - Don't assume or hide confusion; surface tradeoffs.
 - Write the minimum code that solves the problem. Touch only what you must and clean up your own changes.
 - Define success criteria and verify them before declaring work complete.
-- Never commit or push without explicit user approval. Show the intended changes and wait for "commit" or "push".
+- Commit locally as the trunk-based flow below says; never push or tag. The developer pushes.
 - Before changing a library, read its `libs/<library>/AGENTS.md` if present.
 
-## Trunk-based flow (from the cut-over, BOU-1042)
+## Trunk-based flow
 
-While this paragraph is here, the cut-over has not happened: use the
-pull-request flow and the rules above. BOU-1042 removes it; from then on this
-section replaces the ban on committing in the first bullet above. Agents still
-never push.
+Since 20 November 2026 the core team commits straight to `main` (ADR-044).
+Agents work like this:
 
 - Work on one Linear ticket, in small steps, on a branch rebased on
   `origin/main`. Unfinished work follows "Unfinished work on main" in
@@ -28,6 +26,9 @@ never push.
   the commit and stop.
 - Never push, tag, run `bb release` or pass `--no-verify`. The developer reads
   the diff and pushes with their own rights.
+- A change CONTRIBUTING.md lists under "Still a pull request" (breaking, stable
+  port, security, new library or migration) goes to a branch for a pull
+  request instead; say so before starting.
 
 ## Read before the relevant task
 

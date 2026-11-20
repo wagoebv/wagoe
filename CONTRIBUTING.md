@@ -116,8 +116,7 @@ When adding new functionality:
 
 ### 👥 **Core team: straight to main**
 
-Until the cut-over day (BOU-1042) the core team still works through pull
-requests, like external contributors. From then on:
+Since 20 November 2026 (ADR-044):
 
 1. Take a Linear ticket and work in small steps, each leaving `main`
    releasable ("Unfinished work on main").
@@ -192,7 +191,7 @@ Only `check:ports-diff` is automated; `^:no-doc` and the tiers rely on review.
 
 ### 🔍 **Review before main**
 
-For the core team, from the cut-over: without a pull request there is no review before `main`, so it happens
+For the core team: without a pull request there is no review before `main`, so it happens
 locally, per ticket, before the push (BOU-1041):
 
 1. Finish the work and run `simplify` on the diff against `origin/main`.
