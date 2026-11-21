@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A storage image upload with a huge `thumbnail-size` allocated an image that size** (BOU-1084). A thumbnail is
+  never larger than its image now, and always a PNG (a JPEG one was empty). Nothing to do.
 - **Storage checked the type a client declared but served a file by its extension** (BOU-1078): `x.exe` passed as
   `image/png`. The extension decides the type now: an allowed type needs its extension, an unknown one is octet-stream.
 - **The storage upload route took its size and type limits from the query string** (BOU-1076). They now come from

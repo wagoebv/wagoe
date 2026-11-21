@@ -250,7 +250,7 @@
     (is (= 201 (upload "/storage/upload" text {})) "within the configuration")
     (is (= 400 (upload "/storage/upload/image" (make-multipart-file "a.png" "image/png" "png") {}))
         "the image route keeps to the configured types")
-    (testing "a thumbnail scaled up past max-size is not stored"
+    (testing "a thumbnail is a PNG, named and typed one"
       (let [png  (let [out (java.io.ByteArrayOutputStream.)]
                    (javax.imageio.ImageIO/write (java.awt.image.BufferedImage. 1 1 java.awt.image.BufferedImage/TYPE_INT_RGB)
                                                 "png" out)
@@ -258,19 +258,14 @@
             svc  (service/create-storage-service
                   {:storage         (local/create-local-storage {:base-path test-dir})
                    :image-processor (image-processor/create-image-processor {})})
-            up   (fn [limits]
-                   ((sut/upload-image-handler svc nil limits)
-                    {:multipart-params {"file" {:filename "a.png" :content-type "image/png" :bytes png}
-                                        "create-thumbnail" "true" "thumbnail-size" "800"}
-                     :user {:id "u"}}))]
-        (let [thumb (get-in (up nil) [:body :thumbnail])]
-          (is (some? thumb) "without a limit it is made")
-          (testing "a JPEG, named and typed one (BOU-1078)"
-            (is (clojure.string/ends-with? (:key thumb) ".jpg"))
-            (is (= "image/jpeg" (:content-type thumb)))))
-        (let [resp (up {:max-size 1000})]
-          (is (= 201 (:status resp)) "the original fits")
-          (is (nil? (get-in resp [:body :thumbnail]))))))))
+            thumb (get-in ((sut/upload-image-handler svc)
+                           {:multipart-params {"file" {:filename "a.png" :content-type "image/png" :bytes png}
+                                               "create-thumbnail" "true" "thumbnail-size" "800"}
+                            :user {:id "u"}})
+                          [:body :thumbnail])]
+        (is (some? thumb))
+        (is (clojure.string/ends-with? (:key thumb) ".png"))
+        (is (= "image/png" (:content-type thumb)))))))
 
 (deftest ^:unit ^:security the-apps-own-check-narrows-every-route
   ;; A member who left a conversation kept minting URLs for its files (BOU-1075).

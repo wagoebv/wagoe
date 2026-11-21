@@ -133,6 +133,20 @@
           thumb (ports/create-thumbnail (processor) original 80)]
       (is (< (count thumb) (count original)) "thumbnail should be smaller"))))
 
+(deftest ^:integration ^:security a-thumbnail-is-never-larger-than-its-image
+  ;; BOU-1084: size 50000 on a 1x1 image allocated a 50000x50000 one.
+  (let [info #(ports/get-image-info (processor) (ports/create-thumbnail (processor) (make-png-bytes 2 1) %))]
+    (is (= [2 1] ((juxt :width :height) (info 50000))))
+    (is (= [1 1] ((juxt :width :height) (info 1))) "and at least one pixel"))
+  (testing "a JPEG's thumbnail is a PNG, not an empty file"
+    (let [jpg   (let [out (java.io.ByteArrayOutputStream.)]
+                  (javax.imageio.ImageIO/write (java.awt.image.BufferedImage. 40 20 java.awt.image.BufferedImage/TYPE_INT_RGB)
+                                               "jpg" out)
+                  (.toByteArray out))
+          thumb (ports/create-thumbnail (processor) jpg 10)]
+      (is (pos? (alength ^bytes thumb)))
+      (is (= "png" (:format (ports/get-image-info (processor) thumb)))))))
+
 (deftest ^:integration invalid-image-bytes-test
   (testing "resize-image throws on invalid bytes"
     (is (thrown? clojure.lang.ExceptionInfo
