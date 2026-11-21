@@ -5,7 +5,7 @@
   No external dependencies required."
   (:require [wagoe.storage.ports :as ports]
             [wagoe.observability.logging.ports :as logging])
-(:import [java.awt RenderingHints]
+  (:import [java.awt RenderingHints]
            [java.awt.image BufferedImage]
            [java.io ByteArrayInputStream ByteArrayOutputStream]
            [javax.imageio ImageIO]))
@@ -57,7 +57,10 @@
   "Convert BufferedImage to byte array."
   [^BufferedImage image format]
   (let [output-stream (ByteArrayOutputStream.)]
-    (ImageIO/write image format output-stream)
+    ;; false, not an exception, when no writer takes the image (an ARGB JPEG),
+    ;; which left an empty file (BOU-1084)
+    (when-not (ImageIO/write image ^String format output-stream)
+      (throw (ex-info (str "No " format " writer for this image") {:type :storage-error :format format})))
     (.toByteArray output-stream)))
 
 (defn- calculate-dimensions
@@ -163,18 +166,17 @@
             orig-width (.getWidth original)
             orig-height (.getHeight original)
 
-            ;; Calculate thumbnail dimensions (maintain aspect ratio)
-            ratio (/ (double size) (max orig-width orig-height))
-            thumb-width (int (* orig-width ratio))
-            thumb-height (int (* orig-height ratio))
+            ;; Aspect ratio kept, never scaled up: a 1x1 image with size 50000
+            ;; allocated a 50000x50000 image (BOU-1084). At least one pixel.
+            ratio (min 1.0 (/ (double size) (max orig-width orig-height)))
+            thumb-width (max 1 (int (* orig-width ratio)))
+            thumb-height (max 1 (int (* orig-height ratio)))
 
             ;; Create thumbnail
             thumbnail (resize-buffered-image original thumb-width thumb-height)
 
-            ;; Detect format
-            format (detect-image-format image-bytes nil)
-
-            ;; Convert to bytes
+            ;; Always PNG: it keeps alpha, which the JPEG writer refuses (BOU-1084)
+            format "png"
             result-bytes (buffered-image->bytes thumbnail format)]
 
         (when logger

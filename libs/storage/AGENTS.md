@@ -277,7 +277,11 @@ built by `wagoe.platform.core.http.problem-details`.
 ## Gotchas
 
 1. **`create-thumbnail` takes an integer**, not a map — `size` is the max
-   dimension (aspect ratio preserved). Passing a map will break.
+   dimension (aspect ratio preserved), and it never scales up (BOU-1084). Passing
+   a map will break. A thumbnail is always a PNG, named `thumb-<filename>.png`,
+   so `:upload-limits` must allow PNG for one to be stored. `resize-image` keeps
+   the source format and throws on a JPEG (no RGB path yet) instead of returning
+   empty bytes.
 2. **Validation never throws.** The service also catches adapter exceptions and
    returns `{:success false :errors [{:code :storage-error ...}]}`.
 3. **Image processor is optional.** `upload-image` only builds a thumbnail
