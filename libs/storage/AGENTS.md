@@ -265,6 +265,10 @@ stays behind login:
 | DELETE | `/storage/delete/{*file-key}` | 204 on success, 404 otherwise |
 | GET | `/storage/url/{*file-key}` | query `expiration` (default 3600) → JSON `{:url :expiration-seconds}` |
 
+`:may-access?` in config (a fn or qualified symbol, `(fn [request file-key])`)
+narrows every key route beside the tenant rule, admins included: refused is a
+404, and an upload may not replace that key (BOU-1075).
+
 `/storage` is the default `:base-path` (`:http-base-path` in config). `{*file-key}` matches the whole key, slashes included.
 
 Errors are the framework's one JSON error body, `{"error": {"type" "message" "details"}}`,

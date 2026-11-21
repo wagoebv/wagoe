@@ -120,6 +120,23 @@ The index feeds two privacy contributions:
 :wagoe/privacy {:retention {:storage/uploads {:retain "P1Y"}}}
 ----
 
+== HTTP routes
+
+With `:expose-http? true` the module mounts upload, download, delete and URL
+routes under `/api/v1/storage`. A file is reached by its tenant's members, or,
+outside a tenant, by its uploader. An app with a narrower rule passes its own
+check, a function or a qualified symbol naming one:
+
+[source,clojure]
+----
+:wagoe/storage {:provider :local :root "uploads" :expose-http? true
+                :may-access? myapp.files/may-access?} ; (fn [request file-key]) => truthy
+----
+
+A key it refuses is a 404 on download, delete and URL, and an upload may not
+replace it; a new key is not checked. It runs for platform admins too. A signed download link is checked
+when the URL is issued, not when it is used.
+
 == Data export as a background job
 
 With the jobs module enabled, a signed-in user can have their export built in

@@ -91,7 +91,8 @@
 (def ^:private module-keys
   "What `module-wiring` reads beside the adapter's own options."
   [[:expose-http? {:optional true} [:or boolean? string?]]
-   [:http-base-path {:optional true} string?]])
+   [:http-base-path {:optional true} string?]
+   [:may-access? {:optional true} [:or qualified-symbol? fn?]]])
 
 (defn- provider-config [provider schema]
   (into schema (cons [:provider {:optional true} [:= provider]] module-keys)))

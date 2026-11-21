@@ -217,6 +217,35 @@
         (is (.exists (io/file test-dir tenant-file)) "and the file is still there")
         (is (= 204 (:status (delete (as tenant-file {:id "alice"} "t1" true)))) "its tenant deletes it")))))
 
+(deftest ^:unit ^:security the-apps-own-check-narrows-every-route
+  ;; A member who left a conversation kept minting URLs for its files (BOU-1075).
+  (let [k      ".tenants/t1/a1/chat.pdf" ; where an upload to path a1 in tenant t1 lands
+        _      (do (.mkdirs (.getParentFile (io/file test-dir k))) (spit (io/file test-dir k) "pdf"))
+        svc    (indexed-service {k {:key k :user-id "alice" :tenant-id "t1"}})
+        check  (fn [request key] (or (not= k key) (= "alice" (get-in request [:user :id]))))
+        routes (into {} (for [[path data] (sut/storage-routes svc {:may-access? check})
+                              [_ {:keys [handler]}] data]
+                          [path handler]))
+        as     (fn [user] {:path-params {:file-key k} :query-params {} :user {:id user}
+                           :tenant {:id "t1"} :tenant-membership {:role :member}})]
+    (doseq [route ["/storage/download/{*file-key}" "/storage/url/{*file-key}" "/storage/delete/{*file-key}"]]
+      (testing route
+        (is (= 404 (:status ((routes route) (as "bob")))) "a tenant member the app refuses")))
+    (is (.exists (io/file test-dir k)) "and the file is still there")
+    (testing "nor may it replace the file by upload"
+      (is (= 403 (:status ((routes "/storage/upload")
+                           (assoc (as "bob") :multipart-params
+                                  {"file" (make-multipart-file "chat.pdf" "application/pdf" "bob's") "path" "a1"})))))
+      (is (= "pdf" (slurp (io/file test-dir k)))))
+    (testing "the app's yes does not widen the tenant rule"
+      (is (= 404 (:status ((routes "/storage/url/{*file-key}")
+                           (assoc (as "alice") :tenant {:id "t2"}))))))
+    (testing "without a check, the tenant rule alone"
+      (is (= 200 (:status ((sut/get-file-url-handler svc) (as "bob"))))))
+    (testing "a member the app allows"
+      (is (= 200 (:status ((routes "/storage/download/{*file-key}") (as "alice")))))
+      (is (= 204 (:status ((routes "/storage/delete/{*file-key}") (as "alice"))))))))
+
 (deftest ^:unit ^:security an-upload-cannot-replace-another-users-file
   ;; A named path is a predictable local key; the upload overwrote the file and took its record (BOU-950).
   (let [files  {"file" ["report.pdf" "application/pdf"] "image" ["pic.png" "image/png"]}
