@@ -24,7 +24,8 @@
     "Upload a file with validation.
 
     Parameters:
-    - file-data: Map with :bytes and :content-type
+    - file-data: Map with :bytes; a :content-type is ignored, the filename's
+      extension decides it (BOU-1078)
     - metadata: Map with :filename and optional :path, :visibility, and
       :owner {:user-id :tenant-id}, which the upload index records
     - options: Map with optional :max-size, :allowed-types, :allowed-extensions
@@ -130,6 +131,8 @@
             sanitized-metadata (-> metadata
                                    (update :filename validation/sanitize-filename)
                                    (assoc :path (cond-> path on-local? (in-tenant-dir (:tenant-id (:owner metadata))))))
+            ;; Validated as it is served: by the name's extension (BOU-1078)
+            file-data          (assoc file-data :content-type (validation/content-type-of (:filename sanitized-metadata)))
 
             ;; Validate file
             validation-result (validation/validate-file file-data sanitized-metadata options)]
@@ -185,14 +188,8 @@
       (let [{:keys [create-thumbnail thumbnail-size]} options
             thumbnail-size (or thumbnail-size 200)
 
-            ;; Preserve the real content type — detect from the filename extension
-            ;; rather than assuming JPEG (a PNG/WebP/GIF upload must keep its type).
-            original-content-type (or (validation/mime-type-from-extension (:filename metadata))
-                                      "image/jpeg")
-
-            ;; Upload original image
-            original-data {:bytes image-bytes
-                           :content-type original-content-type}
+            ;; upload-file types it by the name's extension (BOU-1078)
+            original-data {:bytes image-bytes}
 
             ;; Images only, within any configured types (BOU-1076). None left is a
             ;; refusal: validation reads an empty list as any type.
@@ -215,10 +212,10 @@
             (let [thumb-bytes (ports/create-thumbnail image-processor
                                                       image-bytes
                                                       thumbnail-size)
-                  thumb-filename (str "thumb-" (:filename metadata))
+                  ;; A JPEG, so named one: the extension decides its type (BOU-1078)
+                  thumb-filename (str "thumb-" (:filename metadata) ".jpg")
                   thumb-metadata (assoc metadata :filename thumb-filename)
-                  thumb-data {:bytes thumb-bytes
-                              :content-type "image/jpeg"}
+                  thumb-data {:bytes thumb-bytes}
                   ;; Under the original's limits: a large thumbnail-size scales up (BOU-1076)
                   thumb-result (upload-file this thumb-data thumb-metadata
                                             (assoc (select-keys options [:may-replace? :max-size :allowed-extensions])

@@ -311,8 +311,7 @@
                    (Files/exists file-path (make-array java.nio.file.LinkOption 0)))
           (let [bytes (Files/readAllBytes file-path)
                 size (alength bytes)
-                content-type (or (validation/mime-type-from-extension file-key)
-                                 "application/octet-stream")]
+                content-type (validation/content-type-of file-key)]
 
             (when logger
               (logging/debug logger "File retrieved"

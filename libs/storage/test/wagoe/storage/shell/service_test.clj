@@ -201,11 +201,10 @@
                                      {:filename "photo.png"} {})]
         (is (:success result))
         (is (= "image/png" (-> result :original :content-type)))))
-    (testing "unknown extension falls back to image/jpeg"
+    (testing "no image extension, no image: it would be served as octet-stream (BOU-1078)"
       (let [result (sut/upload-image service (.getBytes "bytes")
                                      {:filename "photo"} {})]
-        (is (:success result))
-        (is (= "image/jpeg" (-> result :original :content-type)))))))
+        (is (not (:success result)))))))
 
 (defn- recording-index
   "An IUploadIndex over an atom, or one whose record-upload! throws."
