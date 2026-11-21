@@ -197,3 +197,16 @@
     ;; A platform admin passes the tenant rule; only the app's check refuses here.
     (is (= 404 (:status (url {:path-params {:file-key "a/b.txt"} :query-params {}
                               :user {:id "root" :role :admin}}))))))
+
+(deftest ^:unit ^:security the-routes-carry-the-configured-upload-limits
+  ;; BOU-1076: a request may not ask for more than :upload-limits allows.
+  (let [component (ig/init-key :wagoe/storage {:provider :local :root test-root :upload-index lookup
+                                               :upload-limits {:max-size 3}})
+        upload    (some (fn [[path data]] (when (str/ends-with? path "/upload") (get-in data [:post :handler])))
+                        (:api (ig/init-key :wagoe/storage-routes {:storage component})))]
+    (try
+      (is (= 400 (:status (upload {:multipart-params {"file" {:filename "a.txt" :content-type "text/plain"
+                                                              :bytes (.getBytes "hello")}}
+                                   :query-params     {"max-size" "1000"}
+                                   :user             {:id "u"}}))))
+      (finally (cleanup)))))

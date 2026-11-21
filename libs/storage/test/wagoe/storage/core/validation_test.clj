@@ -156,3 +156,17 @@
     (let [result (sut/generate-unique-filename* "README" "1712745600000-abc12345")]
       (is (= "1712745600000-abc12345" result))
       (is (not (re-find #"\." result))))))
+
+(deftest ^:unit ^:security a-request-only-tightens-the-configured-limits
+  ;; BOU-1076: the query string set its own limits.
+  (let [configured {:max-size 100 :allowed-types ["text/plain" "application/pdf"]}]
+    (testing "a larger max-size or another type does not loosen them"
+      (is (= 100 (get-in (sut/tighten-limits configured {:max-size 5000}) [:limits :max-size])))
+      (is (:error (sut/tighten-limits configured {:allowed-types ["image/png"]})))
+      (is (:error (sut/tighten-limits {:allowed-extensions ["pdf"]} {:allowed-extensions ["exe"]}))))
+    (testing "a smaller max-size or fewer types narrow them"
+      (is (= {:max-size 10 :allowed-types ["application/pdf"] :allowed-extensions nil}
+             (:limits (sut/tighten-limits configured {:max-size 10 :allowed-types ["application/pdf" "image/png"]})))))
+    (testing "without configuration, the library default caps the size"
+      (is (= sut/default-max-file-size
+             (get-in (sut/tighten-limits nil {:max-size Integer/MAX_VALUE}) [:limits :max-size]))))))

@@ -194,8 +194,15 @@
             original-data {:bytes image-bytes
                            :content-type original-content-type}
 
-            original-result (upload-file this original-data metadata
-                                         (assoc options :allowed-types (vec validation/image-mime-types)))
+            ;; Images only, within any configured types (BOU-1076). None left is a
+            ;; refusal: validation reads an empty list as any type.
+            image-types     (let [types (:allowed-types options)]
+                              (vec (cond->> validation/image-mime-types (seq types) (filter (set types)))))
+            original-result (if (seq image-types)
+                              (upload-file this original-data metadata (assoc options :allowed-types image-types))
+                              {:success false
+                               :errors  [{:code    :invalid-content-type
+                                          :message "The configuration allows no image type"}]})
 
             result (if (:success original-result)
                      {:success true
@@ -212,7 +219,10 @@
                   thumb-metadata (assoc metadata :filename thumb-filename)
                   thumb-data {:bytes thumb-bytes
                               :content-type "image/jpeg"}
-                  thumb-result (upload-file this thumb-data thumb-metadata (select-keys options [:may-replace?]))]
+                  ;; Under the original's limits: a large thumbnail-size scales up (BOU-1076)
+                  thumb-result (upload-file this thumb-data thumb-metadata
+                                            (assoc (select-keys options [:may-replace? :max-size :allowed-extensions])
+                                                   :allowed-types image-types))]
 
               (if (:success thumb-result)
                 (do

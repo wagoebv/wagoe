@@ -90,7 +90,9 @@
      ;; this route's public URL (BOU-421).
      :http-base-path (:http-base-path config)
      ;; The app's own rule on a key, beside the tenant one (BOU-1075)
-     :may-access?    (some-> (:may-access? config) resolve-access-check)}))
+     :may-access?    (some-> (:may-access? config) resolve-access-check)
+     ;; What any upload through the routes may be; a request only narrows it (BOU-1076)
+     :upload-limits  (:upload-limits config)}))
 
 (defmethod ig/halt-key! :wagoe/storage
   [_ {:keys [provider storage]}]
@@ -170,7 +172,8 @@
             (:service storage)
             {:signing-secret (:signing-secret (:storage storage))
              :base-path      (:http-base-path storage)
-             :may-access?    (:may-access? storage)})
+             :may-access?    (:may-access? storage)
+             :upload-limits  (:upload-limits storage)})
    :web    []
    :static []})
 

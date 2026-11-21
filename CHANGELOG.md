@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **The storage upload route took its size and type limits from the query string** (BOU-1076). They now come from
+  `:upload-limits` on `:wagoe/storage`; a request can only narrow them. Set it, or the 10 MB default applies.
 - **The storage routes let every member of a file's tenant download, delete or sign it** (BOU-1075). An app with a
   narrower rule sets `:may-access?` on `:wagoe/storage`, a `(fn [request file-key])`; without it nothing changes.
 - **The storage `:signing-secret` and the push `:callback-secret` took any length** (BOU-1049): a short one could be
