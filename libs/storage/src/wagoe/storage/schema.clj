@@ -92,7 +92,12 @@
   "What `module-wiring` reads beside the adapter's own options."
   [[:expose-http? {:optional true} [:or boolean? string?]]
    [:http-base-path {:optional true} string?]
-   [:may-access? {:optional true} [:or qualified-symbol? fn?]]])
+   [:may-access? {:optional true} [:or qualified-symbol? fn?]]
+   [:upload-limits {:optional true} [:map
+                                     [:max-size {:optional true} pos-int?]
+                                     ;; Not empty: validation reads an empty list as any
+                                     [:allowed-types {:optional true} [:vector {:min 1} string?]]
+                                     [:allowed-extensions {:optional true} [:vector {:min 1} string?]]]]])
 
 (defn- provider-config [provider schema]
   (into schema (cons [:provider {:optional true} [:= provider]] module-keys)))

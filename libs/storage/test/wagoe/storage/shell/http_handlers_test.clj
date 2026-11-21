@@ -4,6 +4,7 @@
             [wagoe.storage.shell.http-handlers :as sut]
             [wagoe.storage.shell.service :as service]
             [wagoe.storage.shell.adapters.local :as local]
+            [wagoe.storage.shell.adapters.image-processor :as image-processor]
             [wagoe.storage.core.validation :as validation]
             [wagoe.storage.ports]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
@@ -216,6 +217,41 @@
         (is (= 404 (:status (delete (as tenant-file {:id "bob"} "t2" true)))) "a member of another tenant")
         (is (.exists (io/file test-dir tenant-file)) "and the file is still there")
         (is (= 204 (:status (delete (as tenant-file {:id "alice"} "t1" true)))) "its tenant deletes it")))))
+
+(deftest ^:unit ^:security an-upload-cannot-loosen-the-configured-limits
+  ;; BOU-1076: max-size and allowed-types came from the query string.
+  (let [routes (into {} (for [[path data] (sut/storage-routes (create-test-service)
+                                                              {:upload-limits {:max-size 10 :allowed-types ["text/plain"]}})
+                              [_ {:keys [handler]}] data]
+                          [path handler]))
+        upload (fn [route file query]
+                 (:status ((routes route) {:multipart-params {"file" file} :query-params query :user {:id "u"}})))
+        text   (make-multipart-file "a.txt" "text/plain" "hello")]
+    (is (= 400 (upload "/storage/upload" (make-multipart-file "a.txt" "text/plain" "more than ten bytes")
+                       {"max-size" "1000000"})) "a larger max-size")
+    (is (= 400 (upload "/storage/upload" (make-multipart-file "a.png" "image/png" "png")
+                       {"allowed-types" "image/png"})) "another type")
+    (is (= 400 (upload "/storage/upload" text {"max-size" "2"})) "a smaller max-size holds")
+    (is (= 201 (upload "/storage/upload" text {})) "within the configuration")
+    (is (= 400 (upload "/storage/upload/image" (make-multipart-file "a.png" "image/png" "png") {}))
+        "the image route keeps to the configured types")
+    (testing "a thumbnail scaled up past max-size is not stored"
+      (let [png  (let [out (java.io.ByteArrayOutputStream.)]
+                   (javax.imageio.ImageIO/write (java.awt.image.BufferedImage. 1 1 java.awt.image.BufferedImage/TYPE_INT_RGB)
+                                                "png" out)
+                   (.toByteArray out))
+            svc  (service/create-storage-service
+                  {:storage         (local/create-local-storage {:base-path test-dir})
+                   :image-processor (image-processor/create-image-processor {})})
+            up   (fn [limits]
+                   ((sut/upload-image-handler svc nil limits)
+                    {:multipart-params {"file" {:filename "a.png" :content-type "image/png" :bytes png}
+                                        "create-thumbnail" "true" "thumbnail-size" "800"}
+                     :user {:id "u"}}))]
+        (is (some? (get-in (up nil) [:body :thumbnail])) "without a limit it is made")
+        (let [resp (up {:max-size 1000})]
+          (is (= 201 (:status resp)) "the original fits")
+          (is (nil? (get-in resp [:body :thumbnail]))))))))
 
 (deftest ^:unit ^:security the-apps-own-check-narrows-every-route
   ;; A member who left a conversation kept minting URLs for its files (BOU-1075).

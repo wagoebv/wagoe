@@ -133,6 +133,18 @@ check, a function or a qualified symbol naming one:
                 :may-access? myapp.files/may-access?} ; (fn [request file-key]) => truthy
 ----
 
+What an upload may be comes from configuration; the request's `max-size`,
+`allowed-types` and `allowed-extensions` can only narrow it:
+
+[source,clojure]
+----
+:wagoe/storage {:provider :local :root "uploads" :expose-http? true
+                :upload-limits {:max-size 5242880 :allowed-types ["application/pdf"]}}
+----
+
+Without `:upload-limits`, any type up to 10 MB is accepted. The image route
+accepts only image types within them, and so does its JPEG thumbnail.
+
 A key it refuses is a 404 on download, delete and URL, and an upload may not
 replace it; a new key is not checked. It runs for platform admins too. A signed download link is checked
 when the URL is issued, not when it is used.

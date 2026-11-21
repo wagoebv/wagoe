@@ -259,7 +259,7 @@ stays behind login:
 
 | Method | Path | Handler |
 |--------|------|---------|
-| POST | `/storage/upload` | multipart `file` + `path`/`visibility`; query `max-size`, `allowed-types`, `allowed-extensions` |
+| POST | `/storage/upload` | multipart `file` + `path`/`visibility`; query `max-size`, `allowed-types`, `allowed-extensions` only narrow `:upload-limits` (BOU-1076) |
 | POST | `/storage/upload/image` | multipart `file` + `create-thumbnail`, `thumbnail-size` |
 | GET | `/storage/download/{*file-key}` | streams bytes with `Content-Disposition: attachment` |
 | DELETE | `/storage/delete/{*file-key}` | 204 on success, 404 otherwise |

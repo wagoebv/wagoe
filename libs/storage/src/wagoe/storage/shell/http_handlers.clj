@@ -147,11 +147,11 @@
   - path: Storage path (optional)
   - visibility: 'public' or 'private' (optional, default: private)
 
-  Query parameters:
+  Query parameters, which can only tighten the configured `limits` (BOU-1076):
   - max-size: Maximum file size in bytes
   - allowed-types: Comma-separated list of allowed MIME types
   - allowed-extensions: Comma-separated list of allowed extensions"
-  [storage-service & [may-access?]]
+  [storage-service & [may-access? limits]]
   (fn [{:keys [multipart-params query-params] :as request}]
     (if-let [bad (or (repeated-params multipart-params ["path" "visibility"])
                      (repeated-params query-params
@@ -183,17 +183,17 @@
                           :path path
                           :visibility visibility
                           :owner (request-owner request)}
-                options {:max-size max-size
-                         :allowed-types allowed-types
-                         :allowed-extensions allowed-extensions
-                         :may-replace? #(reachable? storage-service may-access? request %)}
-
-                result (service/upload-file storage-service file-data metadata options)]
-
-            (cond
-              (:success result)       {:status 201 :body (:data result)}
-              (upload-refused result) (upload-refused result)
-              :else                   (bad-request "File validation failed" {:errors (:errors result)}))))))))
+                tightened (validation/tighten-limits limits {:max-size           max-size
+                                                             :allowed-types      allowed-types
+                                                             :allowed-extensions allowed-extensions})
+                options (assoc (:limits tightened) :may-replace? #(reachable? storage-service may-access? request %))]
+            (if-let [error (:error tightened)]
+              (bad-request error)
+              (let [result (service/upload-file storage-service file-data metadata options)]
+                (cond
+                  (:success result)       {:status 201 :body (:data result)}
+                  (upload-refused result) (upload-refused result)
+                  :else                   (bad-request "File validation failed" {:errors (:errors result)}))))))))))
 
 (defn upload-image-handler
   "Handler for image upload endpoint with processing options.
@@ -203,8 +203,10 @@
   - path: Storage path (optional)
   - visibility: 'public' or 'private' (optional)
   - create-thumbnail: 'true' to create thumbnail (optional)
-  - thumbnail-size: Thumbnail max dimension in pixels (optional, default: 200)"
-  [storage-service & [may-access?]]
+  - thumbnail-size: Thumbnail max dimension in pixels (optional, default: 200)
+
+  The configured `limits` hold here too (BOU-1076)."
+  [storage-service & [may-access? limits]]
   (fn [{:keys [multipart-params] :as request}]
     (if-let [bad (repeated-params multipart-params
                                   ["path" "visibility" "create-thumbnail" "thumbnail-size"])]
@@ -229,9 +231,10 @@
                           :path path
                           :visibility visibility
                           :owner (request-owner request)}
-                options {:create-thumbnail create-thumbnail
-                         :thumbnail-size thumbnail-size
-                         :may-replace? #(reachable? storage-service may-access? request %)}
+                options (assoc (:limits (validation/tighten-limits limits {}))
+                               :create-thumbnail create-thumbnail
+                               :thumbnail-size thumbnail-size
+                               :may-replace? #(reachable? storage-service may-access? request %))
 
                 result (service/upload-image storage-service
                                              (:bytes file-data)
@@ -371,20 +374,21 @@
   Parameters:
   - storage-service: Instance of IStorageService
   - options: Map with optional :base-path (default: \"/storage\") and
-    :may-access?, the app's check on a key (libs/storage/AGENTS.md, BOU-1075)"
+    :may-access?, the app's check on a key (libs/storage/AGENTS.md, BOU-1075),
+    and :upload-limits, {:max-size :allowed-types :allowed-extensions} (BOU-1076)"
   ([storage-service] (storage-routes storage-service {}))
-  ([storage-service {:keys [base-path signing-secret may-access?]}]
+  ([storage-service {:keys [base-path signing-secret may-access? upload-limits]}]
    (let [base-path (or base-path "/storage")]
    ;; `{*file-key}` catches the whole key, slashes included: the local adapter
    ;; sharded every key it hands back (`2a/photo.jpg`), so a single-segment
    ;; `:file-key` could never match the key it had just returned (BOU-421).
      [[(str base-path "/upload")
-       {:post {:handler     (upload-file-handler storage-service may-access?)
+       {:post {:handler     (upload-file-handler storage-service may-access? upload-limits)
                :summary     "Upload a file"
                :description "Upload a file with validation (max-size, allowed-types, allowed-extensions)."}}]
 
       [(str base-path "/upload/image")
-       {:post {:handler     (upload-image-handler storage-service may-access?)
+       {:post {:handler     (upload-image-handler storage-service may-access? upload-limits)
                :summary     "Upload an image with optional processing"
                :description "Upload an image and optionally create a thumbnail."}}]
 

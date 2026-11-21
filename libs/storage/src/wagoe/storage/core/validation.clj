@@ -156,6 +156,28 @@
        {:extension          ext
         :allowed-extensions allowed-extensions}))))
 
+(defn- narrow
+  "What `requested` asks for, within `configured`; nil for no list."
+  [configured requested]
+  (cond (empty? requested)  configured
+        (empty? configured) requested
+        :else               (filterv (set configured) requested)))
+
+(defn tighten-limits
+  "The limits an upload runs under: `configured`, narrowed by what the request
+   asks. A request never loosens them (BOU-1076). Returns {:limits ...}, or
+   {:error ...} when the request leaves no type or extension to accept."
+  [configured requested]
+  (let [cap   (or (:max-size configured) default-max-file-size)
+        types (narrow (:allowed-types configured) (:allowed-types requested))
+        exts  (narrow (:allowed-extensions configured) (:allowed-extensions requested))]
+    (if (or (and (seq (:allowed-types requested)) (empty? types))
+            (and (seq (:allowed-extensions requested)) (empty? exts)))
+      {:error "The upload asks for types or extensions the configuration does not allow"}
+      {:limits {:max-size           (min cap (or (:max-size requested) cap))
+                :allowed-types      types
+                :allowed-extensions exts}})))
+
 ;; ============================================================================
 ;; Image Validation
 ;; ============================================================================
