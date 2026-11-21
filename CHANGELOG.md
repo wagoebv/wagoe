@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **Storage checked the type a client declared but served a file by its extension** (BOU-1078): `x.exe` passed as
+  `image/png`. The extension decides the type now: an allowed type needs its extension, an unknown one is octet-stream.
 - **The storage upload route took its size and type limits from the query string** (BOU-1076). They now come from
   `:upload-limits` on `:wagoe/storage`; a request can only narrow them. Set it, or the 10 MB default applies.
 - **The storage routes let every member of a file's tenant download, delete or sign it** (BOU-1075). An app with a

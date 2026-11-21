@@ -26,6 +26,9 @@
    "png"  "image/png"
    "gif"  "image/gif"
    "webp" "image/webp"
+   "bmp"  "image/bmp"
+   "tif"  "image/tiff"
+   "tiff" "image/tiff"
    "svg"  "image/svg+xml"
    "pdf"  "application/pdf"
    "txt"  "text/plain"
@@ -36,7 +39,24 @@
    "doc"  "application/msword"
    "docx" "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
    "xls"  "application/vnd.ms-excel"
-   "xlsx" "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})
+   "xlsx" "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+   "ppt"  "application/vnd.ms-powerpoint"
+   "pptx" "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+   "odt"  "application/vnd.oasis.opendocument.text"
+   "ods"  "application/vnd.oasis.opendocument.spreadsheet"
+   "odp"  "application/vnd.oasis.opendocument.presentation"
+   "rtf"  "application/rtf"
+   "md"   "text/markdown"
+   "heic" "image/heic"
+   "avif" "image/avif"
+   "ico"  "image/x-icon"
+   "mp3"  "audio/mpeg"
+   "wav"  "audio/wav"
+   "ogg"  "audio/ogg"
+   "mp4"  "video/mp4"
+   "webm" "video/webm"
+   "mov"  "video/quicktime"
+   "gz"   "application/gzip"})
 
 (def image-mime-types
   "Set of image MIME types."
@@ -95,6 +115,13 @@
   [filename]
   (when-let [ext (get-file-extension filename)]
     (get common-mime-types ext)))
+
+(defn content-type-of
+  "The type a file named `filename` is validated, stored and served as: its
+   extension's, or application/octet-stream. Never the client's word, which the
+   local adapter ignores when it serves by extension (BOU-1078)."
+  [filename]
+  (or (mime-type-from-extension filename) "application/octet-stream"))
 
 (defn extension-matches-mime-type?
   "Check if file extension matches the declared MIME type."
@@ -267,10 +294,13 @@
   (when filename
     (let [max-length 255
           ;; Remove path separators and dangerous characters
+          ;; Idempotent: the local adapter sanitizes a named key again, and a
+          ;; second pass that changed the extension changed the served type (BOU-1078)
           safe-name (-> filename
-                        (str/replace #"\.\." "")       ; Remove ".."
                         (str/replace #"[/\\]" "")      ; Remove path separators
                         (str/replace #"[^\w.]" "")     ; Keep only word chars and dots
+                        (str/replace #"\.{2,}" ".")    ; No ".." left
+                        (str/replace #"^\." "")        ; Nor a hidden name
                         (str/trim))
           ;; Limit length while preserving extension
           ext (get-file-extension safe-name)
@@ -280,8 +310,9 @@
           max-base-length (if ext
                             (- max-length (count ext) 1)
                             max-length)
+          ;; A cut just after a dot would leave ".." before the extension
           truncated-base (if (> (count base) max-base-length)
-                           (subs base 0 max-base-length)
+                           (str/replace (subs base 0 max-base-length) #"\.+$" "")
                            base)]
       (if ext
         (str truncated-base "." ext)

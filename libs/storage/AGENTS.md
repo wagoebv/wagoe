@@ -283,9 +283,10 @@ built by `wagoe.platform.core.http.problem-details`.
 3. **Image processor is optional.** `upload-image` only builds a thumbnail
    `(when (and create-thumbnail image-processor) ...)`; a failed thumbnail does
    not fail the original upload.
-4. **`upload-image` detects the original content-type** from the filename
-   extension (`mime-type-from-extension`), falling back to `image/jpeg` for
-   unknown extensions — a PNG/WebP/GIF keeps its real type.
+4. **The extension decides a file's type** (`validation/content-type-of`), on
+   every upload: it is validated, stored and served as that type, whatever the
+   client declared. An unknown extension is `application/octet-stream`, so the
+   image route refuses it (BOU-1078).
 5. **Cloud resources must be released** — call `close-s3-storage` /
    `close-gcs-storage` on shutdown (the `:wagoe/storage` halt-key does this).
 6. **Local signed URLs** are real HMAC-SHA256 signatures **only with a

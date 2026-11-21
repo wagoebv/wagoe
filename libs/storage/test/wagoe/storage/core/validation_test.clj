@@ -170,3 +170,19 @@
     (testing "without configuration, the library default caps the size"
       (is (= sut/default-max-file-size
              (get-in (sut/tighten-limits nil {:max-size Integer/MAX_VALUE}) [:limits :max-size]))))))
+
+(deftest ^:unit the-extension-decides-the-type
+  ;; BOU-1078
+  (is (= "image/png" (sut/content-type-of "a.PNG")))
+  (is (= "image/tiff" (sut/content-type-of "scan.tif")))
+  (is (= "image/svg+xml" (sut/content-type-of "x.png.svg")))
+  (doseq [name ["x.exe" "noextension" nil]]
+    (is (= "application/octet-stream" (sut/content-type-of name)) (pr-str name))))
+
+(deftest ^:unit ^:security sanitizing-twice-changes-nothing
+  ;; BOU-1078: "a.s./.vg" was validated as "a.s..vg" and stored as "a.svg".
+  (doseq [name ["a.s./.vg" "a.x./.ml" "a.s.!.vg" "../../etc/passwd" "report. . .pdf" "..hidden" "a....b"
+                (str (apply str (repeat 250 "a")) ".bbbbbbbbbb.jpg")]]
+    (let [once (sut/sanitize-filename name)]
+      (is (= once (sut/sanitize-filename once)) name)
+      (is (not (re-find #"\.\." once)) name))))

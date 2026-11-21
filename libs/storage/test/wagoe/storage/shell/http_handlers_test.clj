@@ -218,6 +218,21 @@
         (is (.exists (io/file test-dir tenant-file)) "and the file is still there")
         (is (= 204 (:status (delete (as tenant-file {:id "alice"} "t1" true)))) "its tenant deletes it")))))
 
+(deftest ^:unit ^:security a-file-is-checked-as-the-type-it-is-served-as
+  ;; BOU-1078: the declared type was checked, the extension served.
+  (let [svc    (create-test-service)
+        upload (sut/upload-file-handler svc nil {:allowed-types ["image/png"]})
+        send   (fn [filename declared]
+                 (upload {:multipart-params {"file" (make-multipart-file filename declared "<svg onload=alert(1)>")}
+                          :query-params {} :user {:id "u"}}))]
+    (doseq [name ["evil.svg" "x.exe" "page.html" "noextension"]]
+      (is (= 400 (:status (send name "image/png"))) (str name " sent as image/png")))
+    (testing "a name the allowlist accepts is stored as its extension's type, whatever was declared"
+      (let [resp (send "logo.png" "text/html")]
+        (is (= 201 (:status resp)))
+        (is (= "image/png" (get-in resp [:body :content-type])))
+        (is (= "image/png" (:content-type (service/download-file svc (get-in resp [:body :key])))))))))
+
 (deftest ^:unit ^:security an-upload-cannot-loosen-the-configured-limits
   ;; BOU-1076: max-size and allowed-types came from the query string.
   (let [routes (into {} (for [[path data] (sut/storage-routes (create-test-service)
@@ -248,7 +263,11 @@
                     {:multipart-params {"file" {:filename "a.png" :content-type "image/png" :bytes png}
                                         "create-thumbnail" "true" "thumbnail-size" "800"}
                      :user {:id "u"}}))]
-        (is (some? (get-in (up nil) [:body :thumbnail])) "without a limit it is made")
+        (let [thumb (get-in (up nil) [:body :thumbnail])]
+          (is (some? thumb) "without a limit it is made")
+          (testing "a JPEG, named and typed one (BOU-1078)"
+            (is (clojure.string/ends-with? (:key thumb) ".jpg"))
+            (is (= "image/jpeg" (:content-type thumb)))))
         (let [resp (up {:max-size 1000})]
           (is (= 201 (:status resp)) "the original fits")
           (is (nil? (get-in resp [:body :thumbnail]))))))))

@@ -142,7 +142,9 @@ What an upload may be comes from configuration; the request's `max-size`,
                 :upload-limits {:max-size 5242880 :allowed-types ["application/pdf"]}}
 ----
 
-Without `:upload-limits`, any type up to 10 MB is accepted. The image route
+Without `:upload-limits`, any type up to 10 MB is accepted. A file's type is
+its name's extension, whatever the client declared: it is checked, stored and
+served as that type, and an unknown extension is `application/octet-stream`. The image route
 accepts only image types within them, and so does its JPEG thumbnail.
 
 A key it refuses is a 404 on download, delete and URL, and an upload may not
