@@ -212,11 +212,11 @@
             (let [thumb-bytes (ports/create-thumbnail image-processor
                                                       image-bytes
                                                       thumbnail-size)
-                  ;; A JPEG, so named one: the extension decides its type (BOU-1078)
-                  thumb-filename (str "thumb-" (:filename metadata) ".jpg")
+                  ;; A PNG, so named one: the extension decides its type (BOU-1078, BOU-1084)
+                  thumb-filename (str "thumb-" (:filename metadata) ".png")
                   thumb-metadata (assoc metadata :filename thumb-filename)
                   thumb-data {:bytes thumb-bytes}
-                  ;; Under the original's limits: a large thumbnail-size scales up (BOU-1076)
+                  ;; Under the original's limits: as a PNG it can outgrow a JPEG (BOU-1076)
                   thumb-result (upload-file this thumb-data thumb-metadata
                                             (assoc (select-keys options [:may-replace? :max-size :allowed-extensions])
                                                    :allowed-types image-types))]
