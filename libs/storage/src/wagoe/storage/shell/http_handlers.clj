@@ -124,11 +124,14 @@
    :tenant-id (when (access/in-tenant-scope? request) (get-in request [:tenant :id]))})
 
 (defn- reachable?
-  "`uploads/may-access?` for the request's caller (BOU-945); an admin needs no lookup."
-  [storage-service request file-key]
+  "`uploads/may-access?` for the request's caller (BOU-945); an admin needs no lookup.
+   The app's own `may-access?`, `(fn [request file-key])`, must agree as well (BOU-1075)."
+  [storage-service may-access? request file-key]
   (let [caller (assoc (request-owner request) :admin? (access/platform-admin? (:user request)))]
-    (or (:admin? caller)
-        (uploads/may-access? (service/upload-at storage-service file-key) caller))))
+    (boolean
+     (and (or (:admin? caller)
+              (uploads/may-access? (service/upload-at storage-service file-key) caller))
+          (or (nil? may-access?) (may-access? request file-key))))))
 
 (defn- upload-refused
   "A 403 when the service refused to replace another caller's file (BOU-950)."
@@ -148,7 +151,7 @@
   - max-size: Maximum file size in bytes
   - allowed-types: Comma-separated list of allowed MIME types
   - allowed-extensions: Comma-separated list of allowed extensions"
-  [storage-service]
+  [storage-service & [may-access?]]
   (fn [{:keys [multipart-params query-params] :as request}]
     (if-let [bad (or (repeated-params multipart-params ["path" "visibility"])
                      (repeated-params query-params
@@ -183,7 +186,7 @@
                 options {:max-size max-size
                          :allowed-types allowed-types
                          :allowed-extensions allowed-extensions
-                         :may-replace? #(reachable? storage-service request %)}
+                         :may-replace? #(reachable? storage-service may-access? request %)}
 
                 result (service/upload-file storage-service file-data metadata options)]
 
@@ -201,7 +204,7 @@
   - visibility: 'public' or 'private' (optional)
   - create-thumbnail: 'true' to create thumbnail (optional)
   - thumbnail-size: Thumbnail max dimension in pixels (optional, default: 200)"
-  [storage-service]
+  [storage-service & [may-access?]]
   (fn [{:keys [multipart-params] :as request}]
     (if-let [bad (repeated-params multipart-params
                                   ["path" "visibility" "create-thumbnail" "thumbnail-size"])]
@@ -228,7 +231,7 @@
                           :owner (request-owner request)}
                 options {:create-thumbnail create-thumbnail
                          :thumbnail-size thumbnail-size
-                         :may-replace? #(reachable? storage-service request %)}
+                         :may-replace? #(reachable? storage-service may-access? request %)}
 
                 result (service/upload-image storage-service
                                              (:bytes file-data)
@@ -246,7 +249,7 @@
   Path parameter:
   - file-key: Storage key of the file"
   ([storage-service] (download-file-handler storage-service nil))
-  ([storage-service signing-secret]
+  ([storage-service signing-secret & [may-access?]]
    (fn [{:keys [path-params query-params] :as request}]
      (let [file-key (let [k (get path-params :file-key)] (when-not (str/blank? k) k))
            version  (get query-params "v")]
@@ -268,7 +271,7 @@
                      :version   version
                      :signature (get query-params "signature")})))
          (forbidden "Missing, invalid or expired signature")
-         (and (not signing-secret) (not (reachable? storage-service request file-key)))
+         (and (not signing-secret) (not (reachable? storage-service may-access? request file-key)))
          (not-found "File not found" {:file-key file-key})
 
          :else
@@ -295,7 +298,7 @@
 
   Path parameter:
   - file-key: Storage key of the file"
-  [storage-service]
+  [storage-service & [may-access?]]
   (fn [{:keys [path-params] :as request}]
     (let [file-key (let [k (get path-params :file-key)] (when-not (str/blank? k) k))]
 
@@ -304,7 +307,7 @@
          "Missing required parameter: file-key"
          {:missing-parameter "file-key"})
 
-        (if (and (reachable? storage-service request file-key)
+        (if (and (reachable? storage-service may-access? request file-key)
                  (service/remove-file storage-service file-key))
           {:status 204
            :body nil}
@@ -321,7 +324,7 @@
 
   Query parameter:
   - expiration: Expiration time in seconds (optional, default: 3600)"
-  [storage-service]
+  [storage-service & [may-access?]]
   (fn [{:keys [path-params query-params] :as request}]
     (if-let [bad (repeated-params query-params ["expiration"])]
       (repeated-params-response bad)
@@ -342,7 +345,7 @@
 
           :else
 
-          (if-let [url (and (reachable? storage-service request file-key)
+          (if-let [url (and (reachable? storage-service may-access? request file-key)
                             (service/get-file-url storage-service file-key expiration))]
             {:status 200
              :body {:url url
@@ -367,38 +370,39 @@
 
   Parameters:
   - storage-service: Instance of IStorageService
-  - options: Map with optional :base-path (default: \"/storage\")"
+  - options: Map with optional :base-path (default: \"/storage\") and
+    :may-access?, the app's check on a key (libs/storage/AGENTS.md, BOU-1075)"
   ([storage-service] (storage-routes storage-service {}))
-  ([storage-service {:keys [base-path signing-secret]}]
+  ([storage-service {:keys [base-path signing-secret may-access?]}]
    (let [base-path (or base-path "/storage")]
    ;; `{*file-key}` catches the whole key, slashes included: the local adapter
    ;; sharded every key it hands back (`2a/photo.jpg`), so a single-segment
    ;; `:file-key` could never match the key it had just returned (BOU-421).
      [[(str base-path "/upload")
-       {:post {:handler     (upload-file-handler storage-service)
+       {:post {:handler     (upload-file-handler storage-service may-access?)
                :summary     "Upload a file"
                :description "Upload a file with validation (max-size, allowed-types, allowed-extensions)."}}]
 
       [(str base-path "/upload/image")
-       {:post {:handler     (upload-image-handler storage-service)
+       {:post {:handler     (upload-image-handler storage-service may-access?)
                :summary     "Upload an image with optional processing"
                :description "Upload an image and optionally create a thumbnail."}}]
 
       [(str base-path "/download/{*file-key}")
      ;; With a signing secret the signature is the credential, so a signed link
      ;; works without a session. Without one this stays behind login (BOU-568).
-       {:get (cond-> {:handler (download-file-handler storage-service signing-secret)
+       {:get (cond-> {:handler (download-file-handler storage-service signing-secret may-access?)
                       :summary "Download a file"
                       :openapi file-key-openapi}
                signing-secret (assoc :public true))}]
 
       [(str base-path "/delete/{*file-key}")
-       {:delete {:handler (delete-file-handler storage-service)
+       {:delete {:handler (delete-file-handler storage-service may-access?)
                  :summary "Delete a file"
                  :openapi file-key-openapi}}]
 
       [(str base-path "/url/{*file-key}")
-       {:get {:handler (get-file-url-handler storage-service)
+       {:get {:handler (get-file-url-handler storage-service may-access?)
               :summary "Get a direct or signed URL for a file"
               :openapi {:parameters
                         [{:name "file-key" :in "path" :required true :schema {:type "string"}

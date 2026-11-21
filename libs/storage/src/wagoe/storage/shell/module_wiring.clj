@@ -61,6 +61,16 @@
     (throw (ex-info "Unknown storage provider"
                     {:type :unknown-provider :provider provider}))))
 
+(defn- resolve-access-check
+  "`:may-access?` as config names it: a function or a qualified symbol naming one."
+  [x]
+  (let [f (if (qualified-symbol? x) (wagoe-config/resolve-symbol x) x)]
+    ;; fn?, not ifn?: a keyword or map called with two arguments returns the second, a yes
+    (if (or (fn? f) (instance? clojure.lang.MultiFn f))
+      f
+      (throw (ex-info ":wagoe/storage :may-access? must be a function or a qualified symbol naming one"
+                      {:type :configuration-error :value x})))))
+
 (defmethod ig/init-key :wagoe/storage
   [_ {:keys [provider logger upload-index] :or {provider :local} :as config}]
   (log/info "Initializing storage component" {:provider provider})
@@ -78,7 +88,9 @@
      ;; signed URL has to arrive at the route that verifies it: the adapter
      ;; emits `<url-base>/<key>?expires&signature`, so `:url-base` must be
      ;; this route's public URL (BOU-421).
-     :http-base-path (:http-base-path config)}))
+     :http-base-path (:http-base-path config)
+     ;; The app's own rule on a key, beside the tenant one (BOU-1075)
+     :may-access?    (some-> (:may-access? config) resolve-access-check)}))
 
 (defmethod ig/halt-key! :wagoe/storage
   [_ {:keys [provider storage]}]
@@ -157,7 +169,8 @@
   {:api    (http-handlers/storage-routes
             (:service storage)
             {:signing-secret (:signing-secret (:storage storage))
-             :base-path      (:http-base-path storage)})
+             :base-path      (:http-base-path storage)
+             :may-access?    (:may-access? storage)})
    :web    []
    :static []})
 

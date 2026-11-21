@@ -176,3 +176,24 @@
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"at least 32"
                           (ig/init-key :wagoe/storage {:provider :local :root "target/x" :signing-secret "s3cr3t"}))
         "boot refuses it")))
+
+(defn refuse-all [_request _key] false)
+
+(deftest ^:unit may-access-is-a-function-or-a-symbol-naming-one
+  ;; BOU-1075: the app's check, as config.edn names it.
+  (is (= refuse-all (:may-access? (ig/init-key :wagoe/storage {:provider :local :root test-root
+                                                               :may-access? `refuse-all}))))
+  (doseq [bad [42 :myapp/may-access? {}]]
+    (is (= :configuration-error
+           (:type (ex-data (try (ig/init-key :wagoe/storage {:provider :local :root test-root :may-access? bad})
+                                (catch clojure.lang.ExceptionInfo e e)))))
+        (pr-str bad))))
+
+(deftest ^:unit ^:security the-routes-carry-the-apps-check
+  (let [component (ig/init-key :wagoe/storage {:provider :local :root test-root :upload-index lookup
+                                               :may-access? `refuse-all})
+        url       (some (fn [[path data]] (when (str/includes? path "/url/") (get-in data [:get :handler])))
+                        (:api (ig/init-key :wagoe/storage-routes {:storage component})))]
+    ;; A platform admin passes the tenant rule; only the app's check refuses here.
+    (is (= 404 (:status (url {:path-params {:file-key "a/b.txt"} :query-params {}
+                              :user {:id "root" :role :admin}}))))))
