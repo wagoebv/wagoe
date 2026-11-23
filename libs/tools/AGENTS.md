@@ -101,8 +101,9 @@ Summary: 4 passed, 1 warning, 1 error
 **Known valid providers** (used by the `providers` check):
 
 ```clojure
-{:wagoe/logging          #{:no-op :stdout :slf4j :file}
- :wagoe/metrics          #{:no-op :prometheus :datadog-statsd}
+{:wagoe/logging          #{:no-op :stdout :slf4j}
+ :wagoe/metrics          #{:no-op :prometheus :datadog-statsd :otlp}
+ :wagoe/tracing          #{:no-op :logging :otlp}
  :wagoe/error-reporting  #{:no-op :sentry}
  :wagoe/payment-provider #{:mock :mollie :stripe}
  :wagoe/ai-service       #{:ollama :anthropic :openai :replicate :no-op}

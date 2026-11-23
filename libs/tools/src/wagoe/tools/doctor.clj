@@ -25,8 +25,11 @@
 ;; =============================================================================
 
 (def known-providers
-  {:wagoe/logging          #{:no-op :stdout :slf4j :file}
-   :wagoe/metrics          #{:no-op :prometheus :datadog-statsd}
+  {;; Mirror the cases in wagoe.platform.shell.system.wiring's init-keys, which
+   ;; refuse an unknown provider outside dev (BOU-1094); a test pins them (BOU-1096).
+   :wagoe/logging          #{:no-op :stdout :slf4j}
+   :wagoe/metrics          #{:no-op :prometheus :datadog-statsd :otlp}
+   :wagoe/tracing          #{:no-op :logging :otlp}
    :wagoe/error-reporting  #{:no-op :sentry}
    :wagoe/payment-provider #{:mock :mollie :stripe}
    ;; Mirrors wagoe.ai.shell.module-wiring/build-provider. doctor is Babashka

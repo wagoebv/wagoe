@@ -29,6 +29,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`bb doctor` passed a `:file` logging provider and refused `:otlp` metrics** (BOU-1096). It now knows what the
+  app boots, tracing included. If it now flags logging `:file`, use `:slf4j`: `:file` never existed.
+
 ## [1.3.0] — 2026-11-23
 
 ### Breaking

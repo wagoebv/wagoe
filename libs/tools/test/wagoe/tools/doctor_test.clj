@@ -532,6 +532,24 @@
           (str "doctor accepts " (pr-str (set/difference known dispatched))
                " which init-key cannot build")))))
 
+(deftest ^:unit observability-providers-match-what-wiring-boots
+  ;; Outside dev an unknown provider refuses to boot (BOU-1094), so doctor
+  ;; passing one, or flagging a real one, is wrong both ways (BOU-1096).
+  (let [src (or (some #(when (.exists (io/file %)) (slurp %))
+                      ["libs/platform/src/wagoe/platform/shell/system/wiring.clj"
+                       "../platform/src/wagoe/platform/shell/system/wiring.clj"])
+                (throw (ex-info "wiring.clj not found — cannot compare"
+                                {:cwd (System/getProperty "user.dir")})))]
+    (doseq [k [:wagoe/logging :wagoe/metrics :wagoe/tracing :wagoe/error-reporting]]
+      (let [;; The init-key's case arms: `:provider (` at the start of a line.
+            body       (second (re-find (re-pattern (str "(?s)\\(defmethod ig/init-key " k "\\s(.*?)\\n\\(def"))
+                                        src))
+            dispatched (set (map (comp keyword second) (re-seq #"(?m)^\s+:([a-z0-9-]+)\s+\(" (str body))))
+            known      (get doctor/known-providers k)]
+        (is (<= 2 (count dispatched)) (str k " parsed to " (pr-str dispatched)))
+        (is (= dispatched known)
+            (str k ": wiring builds " (pr-str (sort dispatched)) ", doctor knows " (pr-str (sort known))))))))
+
 (deftest ^:unit every-profile-config-in-this-repo-parses
   ;; The reader table listed twelve Aero tags and not #boolean, which acc and
   ;; prod both use. `bb doctor --env prod` answered "config.edn could not be
