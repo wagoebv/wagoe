@@ -171,8 +171,11 @@ the app layer; never hard-code them in a module.
 ### Dev sender (no real delivery)
 
 `(log-sender/create-logging-sender)` returns a `LoggingEmailSender` that prints
-to `*err*` and records emails in-memory instead of delivering them. Inspect with
-`list-sent-emails` / `latest-sent-email`; reset with `clear-sent-emails!`.
+to `*err*` and records the last 100 emails in-memory instead of delivering them.
+Inspect with `list-sent-emails` / `latest-sent-email`; reset with
+`clear-sent-emails!`. Through `:wagoe/email` it does so only under dev, test and
+local; elsewhere it logs only the recipients, because a body's invite and reset
+links sign people in (BOU-1092). An unknown `:provider` falls back to it.
 
 ## Common pitfalls
 

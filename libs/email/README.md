@@ -380,7 +380,8 @@ docker run -d -p 127.0.0.1:1025:1025 -p 127.0.0.1:8025:8025 mailhog/mailhog
 ```
 
 The keys sit directly under `:wagoe/email`. Without `:provider :smtp` the
-module uses the logging sender and sends nothing.
+module uses the logging sender and sends nothing: under dev, test and local it
+prints each email; elsewhere it logs only the recipients and warns at boot.
 
 **Environment variables**:
 
