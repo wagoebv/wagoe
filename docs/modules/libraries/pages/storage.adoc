@@ -146,7 +146,9 @@ Without `:upload-limits`, any type up to 10 MB is accepted. A file's type is
 its name's extension, whatever the client declared: it is checked, stored and
 served as that type, and an unknown extension is `application/octet-stream`. The image route
 accepts only image types within them, and so does its thumbnail: a PNG,
-never larger than the image, stored only when the limits allow PNG.
+never larger than the image, stored only when the limits allow PNG. An image
+over 50 megapixels, or over 200 MB decoded, gets no thumbnail: the image
+processor refuses it before decoding.
 
 A key it refuses is a 404 on download, delete and URL, and an upload may not
 replace it; a new key is not checked. It runs for platform admins too. A signed download link is checked

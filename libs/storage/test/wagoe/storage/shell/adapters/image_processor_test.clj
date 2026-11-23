@@ -147,6 +147,59 @@
       (is (pos? (alength ^bytes thumb)))
       (is (= "png" (:format (ports/get-image-info (processor) thumb)))))))
 
+(defn- claiming
+  "`png` with its header claiming `width` x `height`: IHDR's fields, bytes 16-23."
+  [^bytes png width height]
+  (let [b (aclone png)
+        bb (java.nio.ByteBuffer/wrap b)]
+    (.putInt bb 16 (int width))
+    (.putInt bb 20 (int height))
+    b))
+
+(defn- float-tiff
+  "A 4 KB little-endian TIFF claiming `w` x `h` with `spp` 32-bit float samples
+   a pixel, and no pixel data."
+  [w h spp]
+  (let [b       (.order (java.nio.ByteBuffer/allocate 4096) java.nio.ByteOrder/LITTLE_ENDIAN)
+        bps-at  2000
+        entries [[256 4 1 w] [257 4 1 h] [258 3 spp bps-at] [259 3 1 1] [262 3 1 2]
+                 [273 4 1 3000] [277 3 1 spp] [278 4 1 h] [279 4 1 16] [338 3 1 0] [339 3 1 3]]]
+    (-> b (.put (byte 73)) (.put (byte 73)) (.putShort 42) (.putInt 8) (.putShort (count entries)))
+    (doseq [[tag type n v] entries]
+      (.putShort b (short tag)) (.putShort b (short type)) (.putInt b (int n))
+      (if (and (= 3 type) (= 1 n)) (do (.putShort b (short v)) (.putShort b 0)) (.putInt b (int v))))
+    (.putInt b 0)
+    (.position b bps-at)
+    (dotimes [_ spp] (.putShort b 32))
+    (.array b)))
+
+(deftest ^:integration ^:security an-image-claiming-too-many-pixels-is-not-decoded
+  ;; BOU-1085: a small PNG claiming 30000x30000 allocated about 3.6 GB. Decoding
+  ;; it here would fail with an OutOfMemoryError, not this refusal.
+  (let [bomb (claiming (make-png-bytes 8 8) 30000 30000)]
+    (doseq [[op f] {"create-thumbnail" #(ports/create-thumbnail (processor) bomb 80)
+                    "resize-image"     #(ports/resize-image (processor) bomb {:width 10})
+                    "get-image-info"   #(ports/get-image-info (processor) bomb)}]
+      (is (re-find #"exceeds" (str (try (f) nil (catch clojure.lang.ExceptionInfo e (:error (ex-data e))))))
+          op))
+    (is (false? (ports/is-image? (processor) bomb nil))))
+  (testing "nor one whose samples make it large: 4 MP at 64 floats a pixel is 1 GB"
+    (let [bomb (float-tiff 2000 2000 64)]
+      (is (re-find #"exceeds" (str (try (ports/create-thumbnail (processor) bomb 80) nil
+                                        (catch clojure.lang.ExceptionInfo e (:error (ex-data e)))))))))
+  (testing "nor a 1-bit one, which drawing turns into ARGB: a 35-byte GIF claiming 14000x14000"
+    (let [le   (fn [n] [(bit-and n 0xff) (bit-shift-right n 8)])
+          gif  (byte-array (map unchecked-byte
+                                (concat (map int "GIF89a") (le 14000) (le 14000) [0x80 0 0] [0 0 0 255 255 255]
+                                        [0x2c 0 0 0 0] (le 14000) (le 14000) [0 2 0] [0x3b])))]
+      (is (re-find #"exceeds" (str (try (ports/create-thumbnail (processor) gif 80) nil
+                                        (catch clojure.lang.ExceptionInfo e (:error (ex-data e)))))))))
+  (testing "nor is one produced: a resize to 30000x30000"
+    (is (thrown? clojure.lang.ExceptionInfo
+                 (ports/resize-image (processor) (make-png-bytes 8 8) {:width 30000 :height 30000}))))
+  (testing "a normal image still works"
+    (is (= [8 8] ((juxt :width :height) (ports/get-image-info (processor) (make-png-bytes 8 8)))))))
+
 (deftest ^:integration invalid-image-bytes-test
   (testing "resize-image throws on invalid bytes"
     (is (thrown? clojure.lang.ExceptionInfo

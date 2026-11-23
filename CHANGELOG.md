@@ -38,6 +38,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **Storage decoded any image a header claimed, so a small PNG saying 30000x30000 took 3.6 GB** (BOU-1085). An image
+  over 50 megapixels or 200 MB decoded is refused before decoding, and none over 50 megapixels is produced.
 - **Sentry no longer sends `ex-data` or uncaught exceptions unredacted** (BOU-1094). Every extra is PII-redacted
   before sending, and the SDK's uncaught-exception handler is off: report through the error reporter.
 - **User service reads returned the TOTP secret and backup codes** (BOU-1072): `list-users`, `get-user-by-id`,
