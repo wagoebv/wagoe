@@ -505,6 +505,28 @@
        (is (nil? (ports/find-job s (:id dead))) (str label ": the purged job is gone"))
        (is (some? (ports/find-job s (:id alive))) (str label ": a job not dead-lettered is kept"))))))
 
+(deftest ^:integration ^:security completed-retention-deletes-only-older-finished-jobs
+  ;; BOU-1101: a finished job, args and all, stayed in the store for good.
+  (each-store
+   (fn [s label]
+     (let [done      (stored)
+           cancelled (stored)
+           queued    (stored)
+           running   (stored)
+           dead      (stored :max-retries 1 :retry-count 5)]
+       (doseq [j [done cancelled queued running dead]] (ports/save-job! s j))
+       (ports/update-job-status! s (:id done) :completed {:sent true})
+       (ports/update-job-status! s (:id cancelled) :cancelled nil)
+       (ports/update-job-status! s (:id running) :running nil)
+       (ports/update-job-status! s (:id dead) :failed {:error "boom"})
+       (is (zero? (ports/purge-completed-jobs-before! s (.minusSeconds (Instant/now) 3600)))
+           (str label ": a job finished after the cutoff was purged"))
+       (is (= 2 (ports/purge-completed-jobs-before! s (.plusSeconds (Instant/now) 3600)))
+           (str label ": the older completed and cancelled jobs were not both purged"))
+       (is (every? nil? (map #(ports/find-job s (:id %)) [done cancelled])) (str label ": the purged jobs are gone"))
+       (is (every? some? (map #(ports/find-job s (:id %)) [queued running dead]))
+           (str label ": a queued, running or dead-lettered job was purged"))))))
+
 (deftest ^:integration find-jobs-filters-on-what-it-documents
   (each-store
    (fn [s label]

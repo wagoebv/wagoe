@@ -274,6 +274,14 @@
     "Delete every dead-lettered job that finally failed before `cutoff`, an
      Instant. Returns the count."))
 
+(defprotocol ICompletedJobRetention
+  "Retention for finished jobs: a stored job keeps its args, which can hold a
+   mail's links or a secret, for as long as the store keeps it (BOU-1101)."
+
+  (purge-completed-jobs-before! [this cutoff]
+    "Delete every completed or cancelled job that finished before `cutoff`, an
+     Instant. Dead letters are `IDeadLetterRetention`'s. Returns the count."))
+
 ;; =============================================================================
 ;; Job Statistics Ports
 ;; =============================================================================

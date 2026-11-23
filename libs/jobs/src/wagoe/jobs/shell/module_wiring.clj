@@ -56,6 +56,10 @@
      The `:jobs/dead-letter` retention policy, contributed under `:retention`.
      Runs only when `:wagoe/privacy :retention` names it.
 
+   :wagoe/job-completed-retention
+     The `:jobs/completed` retention policy, likewise: completed and cancelled
+     jobs, whose args a store otherwise keeps (BOU-1101).
+
    Until BOU-418 this namespace wired none of it: `:wagoe/jobs` was a settings
    passthrough, so `java -jar wagoe.jar worker` booted and processed nothing."
   (:require [clojure.tools.logging :as log]
@@ -181,6 +185,14 @@
     (reify privacy/IRetentionPolicy
       (purge-before! [_ cutoff] (ports/purge-dead-letters-before! store cutoff)))
     (log/warn "Jobs: the job store does not implement IDeadLetterRetention, so :jobs/dead-letter retention cannot run"
+              {:store (some-> store class .getName)})))
+
+(defmethod ig/init-key :wagoe/job-completed-retention
+  [_ {:keys [store]}]
+  (if (satisfies? ports/ICompletedJobRetention store)
+    (reify privacy/IRetentionPolicy
+      (purge-before! [_ cutoff] (ports/purge-completed-jobs-before! store cutoff)))
+    (log/warn "Jobs: the job store does not implement ICompletedJobRetention, so :jobs/completed retention cannot run"
               {:store (some-> store class .getName)})))
 
 ;; =============================================================================
@@ -323,8 +335,10 @@
                             :on-outcome     (:on-outcome settings)
                             :report-failures-every-ms (:report-failures-every-ms settings)
                             :idempotency    (ig/ref :wagoe/idempotency-store)}
-       :wagoe/job-dead-letter-retention {:store (ig/ref :wagoe/job-store)}}
-      :retention {:jobs/dead-letter (ig/ref :wagoe/job-dead-letter-retention)}}
+       :wagoe/job-dead-letter-retention {:store (ig/ref :wagoe/job-store)}
+       :wagoe/job-completed-retention   {:store (ig/ref :wagoe/job-store)}}
+      :retention {:jobs/dead-letter (ig/ref :wagoe/job-dead-letter-retention)
+                  :jobs/completed   (ig/ref :wagoe/job-completed-retention)}}
       ;; Tenant's, so jobs runs a tenant's job without depending on tenant.
       tenancy?
       (assoc-in [:components :wagoe/job-workers :tenant-runner]

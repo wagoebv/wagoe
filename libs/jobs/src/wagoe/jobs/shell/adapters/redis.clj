@@ -479,6 +479,10 @@
                                 job)
                   serialized (codec/encode-job updated-job)]
               (.set redis job-key serialized)
+              ;; As save-job! does: a plain SET dropped the TTL, so the worker's
+              ;; finished jobs stayed for good (BOU-1101). Dead letters keep theirs.
+              (when (#{:completed :cancelled} (:status updated-job))
+                (.expire redis job-key (int (* 7 24 60 60))))
 
               ;; If job failed and no more retries, move to dead letter queue
               (when (and (= status :failed) (not (job/can-retry? updated-job)))
@@ -621,6 +625,23 @@
             (long (.eval redis ^String purge-dead-letters-script
                          ^java.util.List (into [(dead-letter-key)] (map (comp job-key first)) candidates)
                          ^java.util.List (into [] cat candidates)))))))))
+
+(extend-type RedisJobStore
+  ports/ICompletedJobRetention
+  (purge-completed-jobs-before! [{:keys [pool]} cutoff]
+    ;; Finished keys expire after 7 days anyway; this honours a shorter period. A finished job is not written again, so no script.
+    (with-redis pool
+      (fn [^Jedis redis]
+        (reduce (fn [n page]
+                  (let [raws (.mget redis ^"[Ljava.lang.String;" (into-array String page))
+                        gone (for [[k raw] (map vector page raws)
+                                   :let [{:keys [status completed-at]} (some-> raw codec/decode-job)]
+                                   :when (and (#{:completed :cancelled} status) completed-at
+                                              (.isBefore ^Instant completed-at cutoff))]
+                               k)]
+                    (+ n (if (seq gone) (.del redis ^"[Ljava.lang.String;" (into-array String gone)) 0))))
+                0
+                (partition-all 500 (scan-keys redis "job:*")))))))
 
 ;; IJobOutcomes: a hash per job type, written by one script so the failure
 ;; count goes up or back to 0 atomically.

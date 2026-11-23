@@ -394,6 +394,15 @@
     @(:outcomes state)))
 
 (extend-type InMemoryJobStore
+  ports/ICompletedJobRetention
+  (purge-completed-jobs-before! [{:keys [state]} cutoff]
+    (let [old? (fn [{:keys [status completed-at]}]
+                 (and (#{:completed :cancelled} status) completed-at
+                      (.isBefore ^Instant completed-at cutoff)))
+          gone (keep (fn [[id job]] (when (old? job) id)) @(:jobs state))]
+      (swap! (:jobs state) #(apply dissoc % gone))
+      (count gone)))
+
   ports/IDeadLetterRetention
   (purge-dead-letters-before! [{:keys [state]} cutoff]
     (let [jobs @(:jobs state)

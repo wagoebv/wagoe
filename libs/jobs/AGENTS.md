@@ -12,7 +12,7 @@ Background job processing with priority queues, scheduled execution, automatic r
 |-----------|---------|
 | `wagoe.jobs.core.job` | Pure functions: job creation, state transitions, retry logic |
 | `wagoe.jobs.core.cron` | Pure cron parsing, `next-run`, `latest-run`, `due-tick` |
-| `wagoe.jobs.ports` | Protocols: IJobQueue, IJobStore, IJobStats, IJobOutcomes, IJobWorker, IJobRegistry, ITransactionalJobQueue, ILeasedJobQueue, IDeadLetterRetention, IIdempotencyStore, IRecurringState |
+| `wagoe.jobs.ports` | Protocols: IJobQueue, IJobStore, IJobStats, IJobOutcomes, IJobWorker, IJobRegistry, ITransactionalJobQueue, ILeasedJobQueue, IDeadLetterRetention, ICompletedJobRetention, IIdempotencyStore, IRecurringState |
 | `wagoe.jobs.core.outcome` | Pure: a run's outcome, a job type's record, the error-tracker throttle |
 | `wagoe.jobs.shell.outcomes` | Where outcomes go: store, `:wagoe/metrics`, `:wagoe/error-reporting`, `:on-outcome` |
 | `wagoe.jobs.schema` | Malli schemas: job states, priorities, retry config |
@@ -57,6 +57,7 @@ several slots.
 | `:wagoe/job-scheduler` | The recurring-job ticker; `recurring/schedule-recurring!` takes it |
 | `:wagoe/idempotency-store` | `IIdempotencyStore` on the provider's backend, for any module |
 | `:wagoe/job-dead-letter-retention` | The `:jobs/dead-letter` retention policy over the store's `IDeadLetterRetention`; nil for a store without it, so configuring the policy fails the boot |
+| `:wagoe/job-completed-retention` | The `:jobs/completed` retention policy over `ICompletedJobRetention`, likewise; a finished job's args otherwise stay in `job_store` for good (BOU-1101) |
 
 Set `:workers {:count 0}` on a web node in the web/worker split — it enqueues
 and processes nothing. The default of 1 is a single process that does both,
