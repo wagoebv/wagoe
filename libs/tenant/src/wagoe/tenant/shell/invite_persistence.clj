@@ -144,10 +144,15 @@
                                              :revoked_at
                                              :accepted_by_user_id
                                              :updated_at])
+             ;; Accept and revoke both leave pending, and only pending: revoke
+             ;; reads unlocked, so an accept between its read and this write
+             ;; was set back to revoked with its membership standing (BOU-1093).
              query {:update :public.tenant_member_invites
                     :set updates
-                    :where [:= :id (:id db-record)]}]
-         (db/execute-update! ctx query)
+                    :where [:and [:= :id (:id db-record)] [:= :status "pending"]]}]
+         (when (zero? (db/execute-update! ctx query))
+           (throw (ex-info "The invite is no longer pending"
+                           {:type :validation-error :invite-id (:id invite-entity)})))
          invite-entity))
      ctx)))
 

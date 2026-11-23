@@ -56,3 +56,26 @@
             (testing "so the invite encodes as JSON"
               (is (string? (json/generate-string read)))))
           (finally (close!)))))))
+
+(deftest ^:integration an-invite-accepted-meanwhile-is-not-revoked
+  ;; BOU-1093: revoke read the invite unlocked and wrote by id alone, so an
+  ;; accept between the two was set back to revoked.
+  (doseq [[label open] (backends)]
+    (testing label
+      (let [[ctx close!] (open)
+            now          (.truncatedTo (Instant/now) ChronoUnit/MILLIS)]
+        (try
+          (tenant-persistence/initialize-tenant-schema! ctx)
+          (let [repo    (sut/create-invite-repository ctx nil nil)
+                invite  {:id (random-uuid) :tenant-id (random-uuid) :email "a@example.test" :role :member
+                         :status :pending :token-hash (str (random-uuid))
+                         :expires-at (.plus now 7 ChronoUnit/DAYS) :created-at now :updated-at now}
+                _       (ports/create-invite repo invite)
+                read    (ports/find-invite-by-id repo (:id invite))]
+            ;; The accept lands between revoke's read and its write.
+            (ports/update-invite repo (assoc read :status :accepted :accepted-at now :updated-at now))
+            (is (= :validation-error
+                   (try (ports/update-invite repo (assoc read :status :revoked :revoked-at now :updated-at now)) nil
+                        (catch clojure.lang.ExceptionInfo e (:type (ex-data e))))))
+            (is (= :accepted (:status (ports/find-invite-by-id repo (:id invite))))))
+          (finally (close!)))))))

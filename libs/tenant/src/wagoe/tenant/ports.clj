@@ -73,7 +73,9 @@
   (find-pending-invite-by-email-and-tenant [this tenant-id email])
   (find-invites-by-tenant [this tenant-id options])
   (create-invite [this invite-entity])
-  (update-invite [this invite-entity]))
+  (update-invite [this invite-entity]
+    "Writes the invite's status and timestamps, only while it is pending; throws
+     :validation-error otherwise, so a revoke cannot undo an accept (BOU-1093)."))
 
 (defprotocol ITenantInviteService
   (invite-external-member [this tenant-id email role options])
