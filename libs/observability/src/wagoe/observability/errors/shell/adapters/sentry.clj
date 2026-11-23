@@ -37,8 +37,9 @@
    [clojure.tools.logging :as log]
    [sentry-clj.core :as sentry])
   (:import
+   (io.sentry Breadcrumb SentryEvent)
    (java.time Instant)
-   (java.util UUID)))
+   (java.util HashMap UUID)))
 
 (defn- current-timestamp
   "Get current timestamp as Instant.
@@ -390,12 +391,29 @@
 ;; Factory Functions
 ;; =============================================================================
 
+(defn- redact-event
+  "`event` with its extras and breadcrumb data PII-redacted. sentry-clj copies
+   each `ex-data` in the cause chain into the extras after `capture!` redacted
+   its own, and breadcrumbs it passes as they are (BOU-1094)."
+  ^SentryEvent [^SentryEvent event state]
+  (when-let [extras (.getExtras event)]
+    (.setExtras event (HashMap. ^java.util.Map (pii/redact-pii extras state))))
+  (doseq [^Breadcrumb crumb (.getBreadcrumbs event)
+          :let [data (.getData crumb)]
+          :when (seq data)]
+    ;; Every key comes back, so putAll replaces each value.
+    (.putAll data ^java.util.Map (pii/redact-pii data state)))
+  event)
+
 (defn- init-sentry!
   [{:keys [dsn environment release debug server-name traces-sample-rate] :as config}]
   (when-not dsn
     (throw (ex-info "Sentry DSN is required" {:type :configuration-error :config config})))
   ;; :sample-rate is applied per event by the filter, so it can change at runtime.
-  (sentry/init! dsn (cond-> {}
+  ;; No uncaught handler: what it sends skips `redacted-exception` (BOU-1094).
+  (sentry/init! dsn (cond-> {:enable-uncaught-exception-handler false
+                             :before-send-fn (let [state (pii/build-redact-state config)]
+                                               (fn [event _hint] (redact-event event state)))}
                       environment        (assoc :environment (name environment))
                       release            (assoc :release release)
                       traces-sample-rate (assoc :traces-sample-rate traces-sample-rate)

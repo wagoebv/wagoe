@@ -54,7 +54,7 @@ A Datadog logging adapter exists (`create-datadog-logging-component`) but is not
 | `:provider` | Use Case |
 |---------|----------|
 | `:no-op` | Testing, disabled metrics |
-| `:prometheus` | In-memory registry served at `GET /metrics` |
+| `:prometheus` | In-memory registry served at `GET /metrics` on its own `:port` |
 | `:otlp` | Push to an OpenTelemetry collector |
 | `:datadog-statsd` | Datadog over DogStatsD (UDP) |
 

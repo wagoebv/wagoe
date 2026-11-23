@@ -542,14 +542,14 @@
 (defn- platform-routes
   "The endpoints every Wagoe application serves, whoever it is.
 
-   Health, readiness, liveness, the Prometheus scrape and the `/` redirect,
-   which a module's `:static` route at `/` replaces.
+   Health, readiness, liveness and the `/` redirect, which a module's
+   `:static` route at `/` replaces.
    `:skip-interceptors?` and `:public` on all of them: a liveness probe that
    needs a session is not a liveness probe.
 
    Reitit route data, used as-is — handlers are vars and functions rather than
    quoted symbols resolved at boot, so a typo is a lint error (ADR-037)."
-  [{:keys [config db-context cache metrics-emitter]}]
+  [{:keys [config db-context cache]}]
   (require 'wagoe.platform.shell.interfaces.http.common)
   (let [health-fn      (ns-resolve 'wagoe.platform.shell.interfaces.http.common 'health-check-handler)
         readiness-fn   (ns-resolve 'wagoe.platform.shell.interfaces.http.common 'readiness-handler)
@@ -574,18 +574,7 @@
                                   {:handler (fn [_] {:status 200
                                                      :headers {"Content-Type" "application/json"}
                                                      :body (cheshire.core/generate-string {:status "alive"})})
-                                   :summary "Liveness check"})}]
-     ;; Serves the text exposition format from the active metrics component; the
-     ;; :no-op and :datadog-statsd providers return an empty body, :prometheus
-     ;; returns real metrics.
-     ["/metrics" {:get (merge internal
-                              {:handler (fn [_]
-                                          {:status  200
-                                           :headers {"Content-Type" "text/plain; version=0.0.4; charset=utf-8"}
-                                           :body    (if (satisfies? metrics-ports/IMetricsExporter metrics-emitter)
-                                                      (metrics-ports/export-metrics metrics-emitter :prometheus)
-                                                      "")})
-                               :summary "Prometheus metrics scrape endpoint"})}]]))
+                                   :summary "Liveness check"})}]]))
 
 (defn- authorization-mode
   "`:wagoe/authorization :mode`, `:off` when unset. Throws on any other value:
@@ -606,8 +595,7 @@
   (require 'wagoe.platform.shell.interfaces.http.common)
   (let [platform-routes (platform-routes {:config          config
                                           :db-context      db-context
-                                          :cache           cache
-                                          :metrics-emitter metrics-emitter})
+                                          :cache           cache})
 
         ;; Every module's routes, framework and scaffolded alike, arrive as a
         ;; collection. Six named slots used to live in this destructuring —
@@ -782,6 +770,18 @@
 ;; Logging Component
 ;; =============================================================================
 
+(defn- unknown-provider
+  "`(fallback config)` for no `:provider`, or an unknown one in dev, test or
+   local; elsewhere an unknown one refuses to boot. A typo in prod booted
+   without metrics or error reports, with only a warning nobody read (BOU-1094)."
+  [component {:keys [provider] :wagoe/keys [profile] :as config} fallback]
+  (when-not (or (nil? provider) (wagoe-config/dev-like? profile))
+    (throw (ex-info (str component " :provider " (pr-str provider) " is unknown.")
+                    {:type :unknown-provider :key component :provider provider :profile profile})))
+  (when provider
+    (log/warn "Unknown provider, falling back to no-op" {:component component :provider provider}))
+  (fallback config))
+
 (defmethod ig/init-key :wagoe/logging
   [_ config]
   (log/info "Initializing logging component" {:provider (:provider config)})
@@ -792,10 +792,7 @@
                  ;; adapter and nothing clojure.tools.logging writes (BOU-528).
                  :slf4j (vary-meta (logging-slf4j/create-logging-component config)
                                    assoc ::previous-levels (logging-slf4j/apply-level! config))
-                 (do
-                   (log/warn "Unknown logging provider, falling back to no-op"
-                             {:provider (:provider config)})
-                   (logging-no-op/create-logging-component config)))]
+                 (unknown-provider :wagoe/logging config logging-no-op/create-logging-component))]
     (log/info "Logging component initialized" {:provider (:provider config)})
     logger))
 
@@ -808,26 +805,40 @@
 ;; Metrics Component
 ;; =============================================================================
 
+(defn- start-scrape-server
+  "Serves `metrics`' text format at `:path` on `:host`:`:port`, loopback unless
+   `:host` says otherwise; nil without `:port`. On the app port it was public
+   (BOU-1094)."
+  [metrics {:keys [host port path]}]
+  ;; `or`, not `:or`: `:host #env X` with X unset is nil, and Jetty binds nil to
+  ;; every interface.
+  (when port
+    (let [host (or host "127.0.0.1")
+          path (or path "/metrics")]
+      (jetty/run-jetty (fn [{:keys [uri]}]
+                         (if (= uri path)
+                           {:status  200
+                            :headers {"Content-Type" "text/plain; version=0.0.4; charset=utf-8"}
+                            :body    (metrics-ports/export-metrics metrics :prometheus)}
+                           {:status 404}))
+                       {:host host :port port :join? false}))))
+
 (defmethod ig/init-key :wagoe/metrics
   [_ config]
   (log/info "Initializing metrics component" {:provider (:provider config)})
   (let [metrics (case (:provider config)
                   :no-op          (metrics-no-op/create-metrics-component config)
                   :datadog-statsd (metrics-datadog/create-datadog-metrics-component config)
-                  :prometheus     (metrics-prometheus/create-metrics-component config)
+                  :prometheus     (let [c (metrics-prometheus/create-metrics-component config)]
+                                    (vary-meta c assoc ::scrape-server (start-scrape-server c config)))
                   :otlp           (metrics-otlp/create-metrics-component config)
-                  ;; Future providers will be added here:
-                  ;; :statsd (statsd-adapter/create-metrics-component config)
-                  ;; :cloudwatch (cloudwatch-adapter/create-metrics-component config)
-                  (do
-                    (log/warn "Unknown metrics provider, falling back to no-op"
-                              {:provider (:provider config)})
-                    (metrics-no-op/create-metrics-component config)))]
+                  (unknown-provider :wagoe/metrics config metrics-no-op/create-metrics-component))]
     (log/info "Metrics component initialized" {:provider (:provider config)})
     metrics))
 
 (defmethod ig/halt-key! :wagoe/metrics
-  [_ _metrics]
+  [_ metrics]
+  (some-> ^org.eclipse.jetty.server.Server (::scrape-server (meta metrics)) .stop)
   (log/info "Metrics component halted"))
 
 ;; =============================================================================
@@ -841,10 +852,7 @@
                  :no-op   (tracing-no-op/create-tracing-component config)
                  :logging (tracing-logging/create-tracing-component config)
                  :otlp    (tracing-otlp/create-tracing-component config)
-                 (do
-                   (log/warn "Unknown tracing provider, falling back to no-op"
-                             {:provider (:provider config)})
-                   (tracing-no-op/create-tracing-component config)))]
+                 (unknown-provider :wagoe/tracing config tracing-no-op/create-tracing-component))]
     (log/info "Tracing component initialized" {:provider (:provider config)})
     tracer))
 
@@ -866,13 +874,8 @@
   (let [error-reporter (case (:provider config)
                          :no-op (error-reporting-no-op/create-error-reporting-component config)
                          :sentry (error-reporting-sentry/create-sentry-error-reporting-component config)
-                         ;; Future providers will be added here:
-                         ;; :rollbar (rollbar-adapter/create-error-reporting-component config)
-                         ;; :bugsnag (bugsnag-adapter/create-error-reporting-component config)
-                         (do
-                           (log/warn "Unknown error reporting provider, falling back to no-op"
-                                     {:provider (:provider config)})
-                           (error-reporting-no-op/create-error-reporting-component config)))]
+                         (unknown-provider :wagoe/error-reporting config
+                                           error-reporting-no-op/create-error-reporting-component))]
     (log/info "Error reporting component initialized" {:provider (:provider config)})
     error-reporter))
 

@@ -96,10 +96,9 @@ the system and exits 143. Keep `terminationGracePeriodSeconds` above
   and no active `:wagoe/cache`, the limiter would count per process — an
   effective limit of `limit × replicas`, which is not a limit. The app fails at
   startup rather than offering that. Activate `:wagoe/cache` first.
-- **`GET /metrics` is unauthenticated** when Prometheus is the metrics
-  provider. That is the scrape convention, and it exposes internal counters and
-  route cardinality — keep it off the public ingress and scrape the pod
-  directly.
+- **The Prometheus scrape is unauthenticated** and on its own `:port`, loopback
+  by default. For a scraper in another container set `:host "0.0.0.0"` and keep
+  that port off the public ingress.
 - **Heap is container-aware** (`-XX:MaxRAMPercentage=75`); tune via `JAVA_OPTS`.
 
 ## When a deploy fails
