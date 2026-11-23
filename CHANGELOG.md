@@ -29,6 +29,11 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+### Security
+
+- **The `:logging` email sender wrote whole emails, invite and reset links included, to the log** (BOU-1092). Outside
+  dev, test and local it logs only the recipients, keeps no list, and warns at boot that mail is not delivered.
+
 ### Fixed
 
 - **Audit and security log lines left actor, resource, action, result, event type and severity empty** (BOU-1098). The
