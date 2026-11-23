@@ -53,13 +53,20 @@
 ;; =============================================================================
 
 (def ^:private mdc-key-mapping
-  "Mapping from Wagoe context keys to MDC keys."
+  "Mapping from Wagoe context keys to MDC keys. The audit and security keys
+   are the ones logback.xml's AUDIT and SECURITY patterns read (BOU-1098)."
   {:correlation-id "correlationId"
    :request-id "requestId"
    :tenant-id "tenantId"
    :user-id "userId"
    :trace-id "traceId"
-   :span-id "spanId"})
+   :span-id "spanId"
+   :actor "actor"
+   :resource "resource"
+   :action "action"
+   :result "result"
+   :event-type "eventType"
+   :severity "severity"})
 
 (defn- populate-mdc!
   "Populate SLF4J MDC with context values.

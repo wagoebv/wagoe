@@ -99,7 +99,10 @@
   (testing "an audit event logs at info, flagged in the MDC"
     (let [[^ILoggingEvent e] (capture (fn [l] (ports/audit-event l :user-action "u1" "order/7" :delete :success {})))]
       (is (= ["INFO" "Audit: u1 performed delete on order/7 -> success"] (summary e)))
-      (is (= "true" (get (.getMDCPropertyMap e) "audit")))))
+      (is (= "true" (get (.getMDCPropertyMap e) "audit")))
+      (is (= {"actor" "u1" "resource" "order/7" "action" "delete" "result" "success"}
+             (select-keys (.getMDCPropertyMap e) ["actor" "resource" "action" "result"]))
+          "the AUDIT pattern's fields (BOU-1098)")))
 
   (testing "security severity picks the level"
     (let [events (capture (fn [l]
@@ -107,7 +110,10 @@
                               (ports/security-event l :login-failed s {} {}))))]
       (is (= ["ERROR" "ERROR" "WARN" "INFO"] (mapv (comp first summary) events)))
       (is (= "[FATAL] Security [critical]: login-failed" (second (summary (first events)))))
-      (is (every? #(= "true" (get (.getMDCPropertyMap ^ILoggingEvent %) "security")) events)))))
+      (is (every? #(= "true" (get (.getMDCPropertyMap ^ILoggingEvent %) "security")) events))
+      (is (= {"eventType" "login-failed" "severity" "critical"}
+             (select-keys (.getMDCPropertyMap ^ILoggingEvent (first events)) ["eventType" "severity"]))
+          "the SECURITY pattern's fields (BOU-1098)"))))
 
 (deftest ^:unit set-config-merges-and-returns-the-old-config
   (capture (fn [l]

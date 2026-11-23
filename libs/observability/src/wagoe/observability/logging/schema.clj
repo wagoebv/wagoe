@@ -15,9 +15,11 @@
 (def LogLevel
   [:enum :trace :debug :info :warn :error :fatal])
 
-;; Types of logging providers supported.
+;; Logging providers. `:wagoe/logging` boots :no-op, :stdout and :slf4j; it
+;; boots none of the rest, which stay only because removing them breaks this
+;; stable schema before 2.0 (BOU-1098).
 (def LogProvider
-  [:enum :stdout :json :structured :file :syslog :datadog :custom])
+  [:enum :no-op :stdout :slf4j :json :structured :file :syslog :datadog :custom])
 
 ;; Configuration for correlation ID handling.
 (def CorrelationConfig
@@ -62,6 +64,20 @@
     [:include-timestamp {:optional true} :boolean]
     [:include-level {:optional true} :boolean]
     [:include-thread {:optional true} :boolean]]])
+
+;; Configuration for the no-op provider: logs nothing.
+(def NoOpLoggingConfig
+  [:and BaseLoggingConfig
+   [:map {:title "No-op Logging Configuration"}
+    [:provider [:= :no-op]]]])
+
+;; Configuration for the SLF4J provider: logs through Logback, whose levels
+;; `:level` sets.
+(def Slf4jLoggingConfig
+  [:and BaseLoggingConfig
+   [:map {:title "SLF4J Logging Configuration"}
+    [:provider [:= :slf4j]]
+    [:logger-name {:optional true} [:string {:min 1}]]]])
 
 ;; Configuration for JSON logging provider.
 (def JsonLoggingConfig
@@ -125,7 +141,9 @@
 (def LoggingConfig
   [:multi {:dispatch :provider
            :title    "Logging Configuration"}
+   [:no-op NoOpLoggingConfig]
    [:stdout StdoutLoggingConfig]
+   [:slf4j Slf4jLoggingConfig]
    [:json JsonLoggingConfig]
    [:file FileLoggingConfig]
    [:structured StructuredLoggingConfig]
@@ -280,7 +298,9 @@
     :system-logging-config SystemLoggingConfig
     :audit-config          AuditLoggingConfig}
    :providers
-   {:stdout     StdoutLoggingConfig
+   {:no-op      NoOpLoggingConfig
+    :stdout     StdoutLoggingConfig
+    :slf4j      Slf4jLoggingConfig
     :json       JsonLoggingConfig
     :file       FileLoggingConfig
     :structured StructuredLoggingConfig

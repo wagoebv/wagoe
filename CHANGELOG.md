@@ -31,6 +31,9 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Audit and security log lines left actor, resource, action, result, event type and severity empty** (BOU-1098). The
+  `:slf4j` logger puts them in the MDC that logback.xml's AUDIT and SECURITY patterns read. Nothing to do.
+- **The logging schema refused `:slf4j` and `:no-op`, the providers apps use** (BOU-1098). It accepts both. Nothing to do.
 - **`bb doctor` passed a `:file` logging provider and refused `:otlp` metrics** (BOU-1096). It now knows what the
   app boots, tracing included. If it now flags logging `:file`, use `:slf4j`: `:file` never existed.
 
