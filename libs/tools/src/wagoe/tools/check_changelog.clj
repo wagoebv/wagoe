@@ -219,21 +219,26 @@
 
 (defn- unreleased-breaks [changelog] (section-breaks changelog "Unreleased"))
 
-(defn- unexcepted-breaks
-  "The `[Unreleased]` `### Breaking` entries the stability page's \"Security
-   breaks in 1.x\" section does not cover: after 1.0.0 only a recorded security
-   fix may break (BOU-1094). An entry's ticket is the one after its bold title;
-   each item there naming it covers one entry."
-  [changelog stability]
-  (let [section  (second (re-find #"(?s)## \[Unreleased\][^\n]*(.*?)(?=\n## \[|\z)" changelog))
-        breaking (second (re-find #"(?s)### Breaking\s*\n(.*?)(?=\n### |\z)" (str section)))
-        excepted (second (re-find #"(?s)=== Security breaks in 1\.x\s*\n(.*?)(?=\n==|\z)" stability))
-        allowed  (frequencies (map second (re-seq #"(?m)^\* .*?\(([A-Z]+-\d+)\)" (str excepted))))
-        entries  (re-seq #"(?ms)^- .*?(?=\n- |\z)" (str breaking))
-        ticket   #(second (re-find #"(?s)^- \*\*.*?\*\*\s*\(([A-Z]+-\d+)\)" %))]
-    (->> entries
-         (group-by ticket)
-         (mapcat (fn [[t es]] (drop (if t (get allowed t 0) 0) es))))))
+(defn- excepted-breaks
+  "How many breaks \"Security breaks in 1.x\" on the stability page still
+   allows the next release (BOU-1094): its items for that release, less the
+   breaks its candidates shipped. The release is `current` without `-rc-N`
+   when that is a candidate, else the nearest listed version above it. Counts,
+   not tickets: the page is public and names none."
+  [changelog stability current]
+  (let [excepted (second (re-find #"(?s)=== Security breaks in 1\.x\s*\n(.*?)(?=\n==|\z)" stability))
+        parse    #(mapv parse-long (str/split % #"\."))
+        items    (map second (re-seq #"(?m)^\* \*`(1\.\d+\.\d+)`" (str excepted)))
+        [_ base rc] (re-find #"^(1\.\d+\.\d+)(-rc-\d+)?$" (str current))
+        target   (if rc
+                   base
+                   (first (sort-by parse (filter #(pos? (compare (parse %) (parse base))) items))))
+        shipped  (when rc
+                   (reduce + (map #(section-breaks changelog %)
+                                  (map second (re-seq (re-pattern (str "## \\[(" (java.util.regex.Pattern/quote base)
+                                                                       "-rc-\\d+)\\]"))
+                                                      changelog)))))]
+    (- (count (filter #{target} items)) (or shipped 0))))
 
 (defn- listed-items
   "How many `**` items the paragraph for `version` lists."
@@ -262,7 +267,7 @@
                   [v (number word)])
         rcs     (into {} counted)
         breaks  (unreleased-breaks changelog)
-        unexcepted (when final? (unexcepted-breaks changelog stability))
+        unexcepted (when final? (- breaks (excepted-breaks changelog stability version)))
         nxt     (some-> current inc)
         nxt-v   (some->> nxt (str "1.0.0-rc-"))
         items   (when nxt-v (listed-items stability nxt-v))
@@ -280,10 +285,10 @@
       (and current (pos? breaks) (not= breaks items))
       (conj (str "the rc-" nxt " paragraph lists " (or items 0) " items for " breaks " breaking entries"))
 
-      (and final? (seq unexcepted))
-      (conj (str "`[Unreleased]` has " (count unexcepted)
-                 " breaking entries after 1.0.0 that \"Security breaks in 1.x\" on the stability page"
-                 " does not name; any other breaking change needs a major version"))
+      (and final? (pos? unexcepted))
+      (conj (str "`[Unreleased]` has " unexcepted " more breaking entries after 1.0.0 than \"Security breaks in"
+                 " 1.x\" on the stability page lists for the next release; any other breaking change needs a major"
+                 " version"))
 
       (and final? (not= shipped (get rcs "1.0.0" 0)))
       (conj (str "`[1.0.0]` has " shipped " breaking entries; the 1.0.0 paragraph counts " (get rcs "1.0.0" 0)))
