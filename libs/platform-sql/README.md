@@ -11,7 +11,7 @@ directly when you want Wagoe's data access without Jetty, Reitit or Muuntaja —
 for example next to your own HTTP wiring.
 
 ```clojure
-{:deps {com.wagoe/wagoe-platform-sql {:mvn/version "1.2.0"}
+{:deps {com.wagoe/wagoe-platform-sql {:mvn/version "1.3.0"}
         ;; Choose your database driver
         org.postgresql/postgresql {:mvn/version "42.7.12"}}}
 ```

@@ -302,12 +302,12 @@ pushes the release commit, waits for CI on main to pass and pushes the tag;
 
 ```clojure
 ;; Validation utilities only
-{:deps {com.wagoe/wagoe-core {:mvn/version "1.2.0"}}}
+{:deps {com.wagoe/wagoe-core {:mvn/version "1.3.0"}}}
 
 ;; Full web application stack
-{:deps {com.wagoe/wagoe-platform {:mvn/version "1.2.0"}
-        com.wagoe/wagoe-user     {:mvn/version "1.2.0"}
-        com.wagoe/wagoe-admin    {:mvn/version "1.2.0"}}}
+{:deps {com.wagoe/wagoe-platform {:mvn/version "1.3.0"}
+        com.wagoe/wagoe-user     {:mvn/version "1.3.0"}
+        com.wagoe/wagoe-admin    {:mvn/version "1.3.0"}}}
 ```
 
 ---

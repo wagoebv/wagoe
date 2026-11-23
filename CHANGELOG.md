@@ -29,6 +29,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-11-23
+
 ### Breaking
 
 - **`/metrics` is gone from the app port, where it was public** (BOU-1094). `:prometheus` serves it on its own
