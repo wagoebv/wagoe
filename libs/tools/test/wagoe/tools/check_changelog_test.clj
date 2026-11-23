@@ -141,7 +141,27 @@
   (is (seq (sut/stability-findings
             (str/replace released-changelog "### Fixed\n\n- **D** (X-4)."
                          "### Breaking\n\n- **E** (X-5). Do e.")
-            (released-stability "Two" ["a" "b"] "Four" "seven")))))
+            (released-stability "Two" ["a" "b"] "Four" "seven"))))
+  (testing "unless the stability page records it as a security break (BOU-1094)"
+    (let [changelog (str/replace released-changelog "### Fixed\n\n- **D** (X-4)."
+                                 "### Breaking\n\n- **E** (X-5). Do e.")
+          page      (released-stability "Two" ["a" "b"] "Four" "seven")]
+      (is (empty? (sut/stability-findings
+                   changelog (str page "\n=== Security breaks in 1.x\n\n* *`1.1.0`, e* (X-5). Why.\n"))))
+      (is (seq (sut/stability-findings
+                changelog (str page "\n=== Security breaks in 1.x\n\n* *`1.1.0`, f* (X-6). Why.\n")))
+          "another ticket's record does not cover it")
+      (testing "a ticket wrapped onto the entry's second line counts"
+        (is (empty? (sut/stability-findings
+                     (str/replace changelog "- **E** (X-5)." "- **E**\n  (X-5).")
+                     (str page "\n=== Security breaks in 1.x\n\n* *`1.1.0`, e* (X-5). Why.\n")))))
+      (testing "one record covers one break, and a ticket merely mentioned covers none"
+        (is (seq (sut/stability-findings
+                  (str/replace changelog "- **E** (X-5). Do e." "- **E** (X-5). Do e.\n- **F** (X-5). Do f.")
+                  (str page "\n=== Security breaks in 1.x\n\n* *`1.1.0`, e* (X-5). Why.\n"))))
+        (is (seq (sut/stability-findings
+                  (str/replace changelog "- **E** (X-5). Do e." "- **E** (X-9), unlike X-5. Do e.")
+                  (str page "\n=== Security breaks in 1.x\n\n* *`1.1.0`, e* (X-5). Why.\n"))))))))
 
 (deftest ^:unit a-patch-release-is-held-to-the-1-0-0-rules
   ;; 1.0.1 failed this gate with "no current version": the pattern knew only

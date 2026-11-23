@@ -219,6 +219,22 @@
 
 (defn- unreleased-breaks [changelog] (section-breaks changelog "Unreleased"))
 
+(defn- unexcepted-breaks
+  "The `[Unreleased]` `### Breaking` entries the stability page's \"Security
+   breaks in 1.x\" section does not cover: after 1.0.0 only a recorded security
+   fix may break (BOU-1094). An entry's ticket is the one after its bold title;
+   each item there naming it covers one entry."
+  [changelog stability]
+  (let [section  (second (re-find #"(?s)## \[Unreleased\][^\n]*(.*?)(?=\n## \[|\z)" changelog))
+        breaking (second (re-find #"(?s)### Breaking\s*\n(.*?)(?=\n### |\z)" (str section)))
+        excepted (second (re-find #"(?s)=== Security breaks in 1\.x\s*\n(.*?)(?=\n==|\z)" stability))
+        allowed  (frequencies (map second (re-seq #"(?m)^\* .*?\(([A-Z]+-\d+)\)" (str excepted))))
+        entries  (re-seq #"(?ms)^- .*?(?=\n- |\z)" (str breaking))
+        ticket   #(second (re-find #"(?s)^- \*\*.*?\*\*\s*\(([A-Z]+-\d+)\)" %))]
+    (->> entries
+         (group-by ticket)
+         (mapcat (fn [[t es]] (drop (if t (get allowed t 0) 0) es))))))
+
 (defn- listed-items
   "How many `**` items the paragraph for `version` lists."
   [stability version]
@@ -246,6 +262,7 @@
                   [v (number word)])
         rcs     (into {} counted)
         breaks  (unreleased-breaks changelog)
+        unexcepted (when final? (unexcepted-breaks changelog stability))
         nxt     (some-> current inc)
         nxt-v   (some->> nxt (str "1.0.0-rc-"))
         items   (when nxt-v (listed-items stability nxt-v))
@@ -263,8 +280,10 @@
       (and current (pos? breaks) (not= breaks items))
       (conj (str "the rc-" nxt " paragraph lists " (or items 0) " items for " breaks " breaking entries"))
 
-      (and final? (pos? breaks))
-      (conj (str "`[Unreleased]` has " breaks " breaking entries after 1.0.0; a breaking change needs a major version"))
+      (and final? (seq unexcepted))
+      (conj (str "`[Unreleased]` has " (count unexcepted)
+                 " breaking entries after 1.0.0 that \"Security breaks in 1.x\" on the stability page"
+                 " does not name; any other breaking change needs a major version"))
 
       (and final? (not= shipped (get rcs "1.0.0" 0)))
       (conj (str "`[1.0.0]` has " shipped " breaking entries; the 1.0.0 paragraph counts " (get rcs "1.0.0" 0)))
