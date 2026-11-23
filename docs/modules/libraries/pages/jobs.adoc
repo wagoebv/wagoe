@@ -14,7 +14,7 @@ automatic retries with exponential backoff, and multi-tenant support.
 | Pure functions: job creation, state transitions, retry logic
 
 | `wagoe.jobs.ports`
-| Protocols: `IJobQueue`, `IJobStore`, `IJobStats`, `IJobOutcomes`, `IJobWorker`, `IJobRegistry`, `IIdempotencyStore`, `IRecurringState`, `ITransactionalJobQueue`, `ILeasedJobQueue`, `IDeadLetterRetention`
+| Protocols: `IJobQueue`, `IJobStore`, `IJobStats`, `IJobOutcomes`, `IJobWorker`, `IJobRegistry`, `IIdempotencyStore`, `IRecurringState`, `ITransactionalJobQueue`, `ILeasedJobQueue`, `IDeadLetterRetention`, `ICompletedJobRetention`
 
 | `wagoe.jobs.core.cron`
 | Pure cron parsing and next-run calculation
@@ -230,6 +230,11 @@ and each next one twice as long, capped at a minute, plus up to 100 ms of jitter
 `:retry-config` (`:backoff-strategy`, `:initial-delay-ms`, `:max-delay-ms`,
 `:jitter`) changes it. After `max-retries` attempts (default 3) the job is failed for
 good and lands in the dead letter queue.
+
+A finished job stays in the store with its args: the `:db` store keeps it until
+a retention policy deletes it, `:redis` for seven days. Args can hold a mail's
+links, so name `:jobs/completed` (and `:jobs/dead-letter`) under
+`:wagoe/privacy :retention`, for example `{:retain "P7D"}`.
 
 == Redis counters
 

@@ -527,6 +527,14 @@
     (db/delete-in-batches! (db/context-of ds) :job_store
                            [:and [:= :dead_letter true] [:< :updated_at (ts cutoff)]])))
 
+(extend-type DbJobStore
+  ports/ICompletedJobRetention
+  (purge-completed-jobs-before! [{:keys [ds]} cutoff]
+    ;; updated_at is when it finished: a finished job is not written again.
+    (db/delete-in-batches! (db/context-of ds) :job_store
+                           [:and [:in :status ["completed" "cancelled"]]
+                            [:= :dead_letter false] [:< :updated_at (ts cutoff)]])))
+
 (defn create-db-job-store
   "Create a DB-backed job store over the given `next.jdbc` datasource `ds`.
    Call `create-job-store-table!` once before use (or run the migration)."

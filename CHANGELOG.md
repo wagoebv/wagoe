@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **A finished job stayed in the `:db` job store for good, args included, such as a mail's links** (BOU-1101). A new
+  `:jobs/completed` retention policy deletes them; name it under `:wagoe/privacy :retention`, e.g. `{:retain "P7D"}`.
 - **An email queued through the jobs module stored the SMTP username and password in the job** (BOU-1100). Pass the
   sender: `(register-email-job-handler! registry sender)`; change the SMTP password and delete old `send-email` jobs.
 - **The `:logging` email sender wrote whole emails, invite and reset links included, to the log** (BOU-1092). Outside
@@ -38,6 +40,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **On `:redis`, a job the worker finished kept its key for good; only `save-job!` set the 7-day expiry** (BOU-1101).
+  Finishing a job sets it too. Nothing to do.
 - **Audit and security log lines left actor, resource, action, result, event type and severity empty** (BOU-1098). The
   `:slf4j` logger puts them in the MDC that logback.xml's AUDIT and SECURITY patterns read. Nothing to do.
 - **The logging schema refused `:slf4j` and `:no-op`, the providers apps use** (BOU-1098). It accepts both. Nothing to do.
