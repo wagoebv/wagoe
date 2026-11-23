@@ -178,8 +178,8 @@
    only `:password-hash` let them ride along on a request's `:user` (BOU-373).
 
    `:mfa-enabled` is deliberately not here: whether MFA is on is not a secret,
-   and handlers render it."
-  [:password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used])
+   and handlers render it. The API strips the same set (BOU-1072)."
+  schema/credential-fields)
 
 (defn without-credentials
   "`user` with its secrets removed."

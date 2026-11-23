@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **User service reads returned the TOTP secret and backup codes** (BOU-1072): `list-users`, `get-user-by-id`,
+  `update-user-profile` and `register-user` return no credential now. Nothing to do.
 - **A storage image upload with a huge `thumbnail-size` allocated an image that size** (BOU-1084). A thumbnail is
   never larger than its image now, and always a PNG (a JPEG one was empty). Nothing to do.
 - **Storage checked the type a client declared but served a file by its extension** (BOU-1078): `x.exe` passed as

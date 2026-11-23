@@ -33,7 +33,7 @@
          (filter #(= email (:email %)))
          first))
   (find-users [_ _options]
-    {:users [] :total-count 0})
+    {:users (vec (vals @state)) :total-count (count @state)})
   (create-user [_ user-entity]
     (swap! state assoc (:id user-entity) user-entity)
     user-entity)
@@ -390,6 +390,21 @@
              (ports/get-user-by-email service "safe@example.nl")))
       (is (= {:users [(dissoc user :password-hash)] :total-count 1}
              (ports/list-users service {:limit 10}))))))
+
+(deftest ^:unit ^:security no-read-returns-the-mfa-secret-or-backup-codes
+  ;; BOU-1072: list-users rows carried the TOTP secret and backup codes.
+  (let [user-id (UUID/randomUUID)
+        user    {:id user-id :email "mfa@example.nl" :name "M" :role :user :active true :created-at (Instant/now)
+                 :password-hash "h" :mfa-enabled true :mfa-secret "JBSWY3DPEHPK3PXP"
+                 :mfa-backup-codes ["c1"] :mfa-backup-codes-used [] :failed-login-count 2}
+        service (sut/->UserService (->UserRepoStub (atom {user-id user})) nil (->AuditRepoStub) {} nil)
+        secret? #(some % [:password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used])]
+    (is (not (secret? (ports/get-user-by-id service user-id))))
+    (is (not-any? secret? (:users (ports/list-users service {:filter-ids [user-id]}))))
+    (testing "what is not a secret stays: the admin's sign-in panel reads it"
+      (is (= [true 2] ((juxt :mfa-enabled :failed-login-count) (ports/get-user-by-id service user-id)))))
+    ;; Last: the stub's update keeps only what it is given.
+    (is (not (secret? (ports/update-user-profile service {:id user-id :name "N"}))))))
 
 (deftest ^:unit user-mutation-operations-test
   (testing "logout writes an audit entry for an existing session"
