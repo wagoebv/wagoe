@@ -352,7 +352,7 @@
 
   (register-user [this user-data])
   ;; user-data: {:email :name :role :password …}. Hashes the password, writes an
-  ;; audit entry. Returns the created user without :password-hash.
+  ;; audit entry. Returns the created user without credentials.
   ;; :self-registered true marks an account whose email nobody proved, such as a
   ;; sign-up page's: OIDC never links it by email (BOU-1009).
   ;; Throws :validation-error, :user-exists, :business-rule-violation.
@@ -373,7 +373,7 @@
   ;;          :auth-result …}.
 
   (get-user-by-id [this user-id])
-  ;; Returns the user without :password-hash, or nil. Not cached.
+  ;; Returns the user without credentials, or nil. Not cached.
 
   (get-user-by-email [this email])
   ;; Returns the user without credentials, or nil. Deprecated (BOU-995): an
@@ -382,11 +382,11 @@
 
   (list-users [this options])
   ;; options as IUserRepository/find-users.
-  ;; Returns {:users [...] :total-count n}, none carrying :password-hash.
+  ;; Returns {:users [...] :total-count n}, none carrying credentials.
 
   (update-user-profile [this user-entity])
   ;; Takes an entity with :id; required keys it leaves out keep their stored
-  ;; values. Returns it without :password-hash. A changed :role or a
+  ;; values. Returns it without credentials. A changed :role or a
   ;; deactivation revokes the user's sessions (BOU-191, BOU-665). A role or
   ;; active change is audited in its transaction, for the rights timeline: a
   ;; failed audit write rolls it back and throws. Other fields are audited

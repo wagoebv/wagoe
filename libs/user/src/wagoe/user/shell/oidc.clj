@@ -223,7 +223,7 @@
       (audit! client user login-context provider-id true nil)
       (log/info "OIDC sign-in" {:user-id (:id user) :provider provider-id :linked? (boolean link?)})
       {:ok {:outcome   :signed-in
-            :user      (dissoc user :password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used)
+            :user      (user-core/without-credentials user)
             :session   session
             :return-to (:return-to sign-in)}})))
 

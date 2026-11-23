@@ -426,8 +426,7 @@
                             ;; Log audit failure but don't fail the operation
                             (warn-audit-failed e)))
 
-                        ;; Remove sensitive data before returning
-                        (dissoc created-user :password-hash))))
+                        (user-core/without-credentials created-user))))
                   (observability this))]
       result))
 
@@ -653,7 +652,7 @@
      {:user-id user-id}
      (fn [{:keys [params]}]
        (some-> (.find-user-by-id user-repository (:user-id params))
-               (dissoc :password-hash)))
+               user-core/without-credentials))
      ;; The JWT middleware's read on every request, like validate-session.
      (dissoc (observability this) :logger)))
 
@@ -677,8 +676,7 @@
        (let [result (.find-users user-repository options)
              users (:users result)
              total-count (:total-count result)
-             cleaned-users (map #(dissoc % :password-hash) users)]
-         ;; Remove sensitive data from all users and return with pagination info
+             cleaned-users (map user-core/without-credentials users)]
          {:users cleaned-users
           :total-count total-count}))
      (observability this)))
@@ -746,8 +744,7 @@
                (catch Exception e
                  (warn-audit-failed e))))
 
-           ;; Remove sensitive data before returning.
-           (some-> after (dissoc :password-hash)))))
+           (some-> after user-core/without-credentials))))
      (observability this)))
 
   (deactivate-user [this user-id]

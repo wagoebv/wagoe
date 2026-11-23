@@ -181,7 +181,7 @@
   (boolean
    (if-let [hook (get-in auth-service [:auth-config :mfa-required?])]
      (try
-       (hook (dissoc user :password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used)
+       (hook (user-core/without-credentials user)
              (dissoc login-context :mfa-code))
        (catch Exception e
          (throw (ex-info "The :mfa-required? hook failed" {:type :internal-error} e))))
@@ -412,7 +412,7 @@
                       :requires-mfa? true
                       :error {:type    :mfa-required
                               :message "MFA code required"}
-                      :user (dissoc user :password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used)})
+                      :user (user-core/without-credentials user)})
 
                    ;; MFA code provided but invalid
                    (and (:requires-mfa? mfa-requirement)
@@ -442,7 +442,7 @@
                                 :session-duration (:session-duration-hours session-policy)})
 
                      {:success? true
-                      :user (dissoc user :password-hash :mfa-secret :mfa-backup-codes :mfa-backup-codes-used) ; Don't return sensitive data
+                      :user (user-core/without-credentials user)
                       :session session
                       :risk-analysis login-risk
                       :mfa-verified? (or (not (:requires-mfa? mfa-requirement)) (:valid? mfa-verification))

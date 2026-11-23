@@ -1114,3 +1114,10 @@
                   (is (= 3 left) (str label ": nothing removed")))
               (do (is (nil? e) label)
                   (is (zero? left) (str label ": every group expires"))))))))))
+
+(deftest ^:unit ^:security the-membership-hook-gets-no-credentials
+  ;; BOU-1072: app code logging its argument logged the TOTP secret.
+  (let [seen (atom nil)]
+    (#'sut/provider-groups (fn [u] (reset! seen u) #{"G"}) nil
+                           {:id 1 :email "a@example.com" :mfa-secret "S" :mfa-backup-codes ["c"] :password-hash "h"})
+    (is (= {:id 1 :email "a@example.com"} @seen))))

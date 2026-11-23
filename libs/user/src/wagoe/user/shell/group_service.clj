@@ -15,6 +15,7 @@
             [wagoe.user.core.audit :as audit-core]
             [wagoe.user.core.grant :as grant-core]
             [wagoe.user.core.group :as group-core]
+            [wagoe.user.core.user :as user-core]
             [wagoe.user.ports :as ports]
             [wagoe.user.schema :as user-schema]
             [wagoe.user.shell.service :as user-service])
@@ -222,7 +223,8 @@
   [membership user-repository user]
   (when membership
     (when-let [user (if (map? user) user (ports/find-user-by-id user-repository user))]
-      (set (membership user)))))
+      ;; App code: it gets no secret to log, as the :mfa-required? hook does not.
+      (set (membership (user-core/without-credentials user))))))
 
 (defn with-tenant
   "Call `f` with the group service and repository working in tenant
