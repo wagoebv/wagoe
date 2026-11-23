@@ -94,6 +94,7 @@
     [:port {:optional true} [:int {:min 1024 :max 65535}]]
     [:path {:optional true} [:string {:min 1 :max 100}]]
     [:registry-name {:optional true} [:string {:min 1 :max 100}]]
+    ;; Heap, GC, thread and process series on each scrape; on unless false (BOU-1097).
     [:enable-default-metrics {:optional true} :boolean]
     [:include-help-text {:optional true} :boolean]
     [:histogram-buckets {:optional true}

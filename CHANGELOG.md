@@ -38,6 +38,11 @@ for what is public API, what is internal, and how deprecations are announced.
 - **The `:logging` email sender wrote whole emails, invite and reset links included, to the log** (BOU-1092). Outside
   dev, test and local it logs only the recipients, keeps no list, and warns at boot that mail is not delivered.
 
+### Added
+
+- **`:prometheus` scrapes carry the JVM: heap and pools, GC, threads, process CPU and file descriptors** (BOU-1097),
+  under Prometheus' client_java 1.x names. `:enable-default-metrics false` turns them off.
+
 ### Fixed
 
 - **On `:redis`, a job the worker finished kept its key for good; only `save-job!` set the 7-day expiry** (BOU-1101).

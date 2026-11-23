@@ -234,7 +234,8 @@
 
 (deftest ^:unit test-registry-and-config-and-reset
   (testing "registration is idempotent; reset clears series; config accessors work"
-    (let [c (prom/create-metrics-component {})]
+    ;; The app's own series only: the JVM's are read live and outlast a reset.
+    (let [c (prom/create-metrics-component {:enable-default-metrics false})]
       (is (= :c (ports/register-counter! c :c "counter" {})))
       ;; idempotent re-registration keeps existing data
       (ports/inc-counter! c :c 4)
@@ -322,3 +323,36 @@
             "exactly one route_name label in the series")
         (is (str/includes? line "route_name=\"x\"")
             "lexicographically-first value wins deterministically")))))
+
+(deftest ^:unit jvm-series-come-with-every-scrape
+  ;; BOU-1097: a leak on a 1 GB container went unseen until the OOM kill.
+  (let [out   (ports/export-metrics (prom/create-metrics-component {}) :prometheus)
+        value (fn [series] (some->> (re-find (re-pattern (str "(?m)^" series " (\\S+)$")) out) second parse-double))]
+    (doseq [family ["jvm_memory_used_bytes" "jvm_memory_max_bytes" "jvm_memory_pool_used_bytes"
+                    "jvm_gc_collection_seconds"
+                    "jvm_threads_current" "jvm_threads_daemon" "jvm_threads_peak" "jvm_threads_deadlocked"
+                    "process_cpu_seconds_total" "process_start_time_seconds"]]
+      (is (re-find (re-pattern (str "(?m)^# TYPE " family " ")) out) family))
+    (testing "the values are plausible"
+      (is (pos? (value "jvm_memory_used_bytes\\{area=\"heap\"\\}")))
+      (is (<= (value "jvm_memory_used_bytes\\{area=\"heap\"\\}") (.maxMemory (Runtime/getRuntime))))
+      (is (pos? (value "jvm_threads_current")))
+      (is (<= (value "jvm_threads_current") (value "jvm_threads_peak")))
+      (is (< 1.5e9 (value "process_start_time_seconds") (/ (System/currentTimeMillis) 1000.0))))
+    (testing "every sample belongs to the family its TYPE line names"
+      (is (empty? (second (reduce (fn [[family bad] l]
+                                    (cond (str/starts-with? l "# TYPE ") [(nth (str/split l #" ") 2) bad]
+                                          (str/starts-with? l "#") [family bad]
+                                          (and family (str/starts-with? l family)) [family bad]
+                                          :else [family (conj bad l)]))
+                                  [nil []] (lines out)))))))
+  (testing "an app's own series of a JVM name wins: one TYPE line per name"
+    (let [c (prom/create-metrics-component {})]
+      (ports/register-gauge! c :jvm_threads_current "app's own" {})
+      (ports/set-gauge! c :jvm_threads_current 1)
+      (let [out (ports/export-metrics c :prometheus)]
+        (is (= 1 (count (re-seq #"(?m)^# TYPE jvm_threads_current " out))))
+        (is (re-find #"(?m)^jvm_threads_current 1$" out)))))
+  (testing ":enable-default-metrics false leaves them out"
+    (is (not (str/includes? (ports/export-metrics (prom/create-metrics-component {:enable-default-metrics false}) :prometheus)
+                            "jvm_")))))

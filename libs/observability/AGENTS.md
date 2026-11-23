@@ -289,6 +289,19 @@ Without `:port` nothing serves it; the app port never does.
 
 Point a Prometheus/Grafana Agent (or any OpenMetrics scraper) at that port.
 
+Each scrape also carries the JVM, read from the `java.lang.management` MXBeans
+then (no sampling thread), under Prometheus' client_java 1.x names so standard JVM
+dashboards work. `:enable-default-metrics false` leaves them out. Prometheus
+only: OTLP and StatsD export the app's metrics alone.
+
+| Series | Labels |
+|---|---|
+| `jvm_memory_used_bytes`, `jvm_memory_committed_bytes`, `jvm_memory_max_bytes` | `area` (`heap`, `nonheap`) |
+| `jvm_memory_pool_used_bytes`, `_committed_bytes`, `_max_bytes` | `pool` |
+| `jvm_gc_collection_seconds` (summary: `_count`, `_sum`) | `gc` |
+| `jvm_threads_current`, `jvm_threads_daemon`, `jvm_threads_peak`, `jvm_threads_deadlocked` | — |
+| `process_cpu_seconds_total`, `process_start_time_seconds`, `process_open_fds`, `process_max_fds` | — |
+
 ### OTLP (push to an OpenTelemetry collector)
 
 Bridges the metrics ports onto OpenTelemetry instruments (counter→LongCounter,

@@ -23,7 +23,7 @@ warning and falls back to `:no-op`.
 .4+| Metrics +
 `:wagoe/metrics`
 | `:no-op` | Drops everything.
-| `:prometheus` | In-memory registry; `GET :path` (`/metrics`) on its own `:port`, bound to `:host` (`127.0.0.1`), serves the Prometheus text format. Without `:port` nothing serves it.
+| `:prometheus` | In-memory registry; `GET :path` (`/metrics`) on its own `:port`, bound to `:host` (`127.0.0.1`), serves the Prometheus text format. Without `:port` nothing serves it. Each scrape adds the JVM's heap, pool, GC, thread and process series under Prometheus' client_java 1.x names (`jvm_memory_used_bytes`, `jvm_gc_collection_seconds_count`, `process_cpu_seconds_total`, …); `:enable-default-metrics false` leaves them out.
 | `:otlp` | Pushes to an OpenTelemetry collector over OTLP/HTTP every `:interval-ms`.
 | `:datadog-statsd` | Sends DogStatsD lines over UDP to a Datadog agent (`:host`, `:port`).
 

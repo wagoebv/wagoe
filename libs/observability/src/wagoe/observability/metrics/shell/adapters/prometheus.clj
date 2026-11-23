@@ -47,7 +47,10 @@
    [wagoe.observability.metrics.ports :as ports]
    [wagoe.observability.metrics.schema :as schema]
    [clojure.string :as str]
-   [clojure.tools.logging :as log]))
+   [clojure.tools.logging :as log])
+  (:import
+   (com.sun.management OperatingSystemMXBean UnixOperatingSystemMXBean)
+   (java.lang.management GarbageCollectorMXBean ManagementFactory MemoryPoolMXBean MemoryUsage)))
 
 ;; =============================================================================
 ;; Formatting helpers
@@ -302,6 +305,69 @@
     (str (str/join "\n" lines) "\n")
     ""))
 
+;; =============================================================================
+;; JVM series (BOU-1097)
+;; =============================================================================
+
+(defn- family
+  "Exposition lines for one metric family: HELP and TYPE, then each
+   [suffix labels value] sample, nil values skipped. Nothing when `taken`
+   holds the name: an app's own series of that name wins, as a second TYPE
+   line for one name is refused by promtool and Telegraf."
+  [{:keys [include-help? taken]} prom-name type help samples]
+  (let [samples (remove (comp nil? last) samples)]
+    (when (and (seq samples) (not (contains? taken prom-name)))
+      (concat (when include-help? [(str "# HELP " prom-name " " (escape-help help))])
+              [(str "# TYPE " prom-name " " type)]
+              (for [[suffix labels v] samples]
+                (str prom-name suffix (render-labels (sorted-label-pairs labels)) " " (fmt-num v)))))))
+
+(defn- non-negative
+  "An MXBean's -1 means undefined; the exposition has no value for it."
+  [n]
+  (when (and n (not (neg? n))) n))
+
+(defn- jvm-lines
+  "Heap, pools, GC, threads and process, read from the MXBeans now, under
+   Prometheus' client_java 1.x names, so standard JVM dashboards work. A leak
+   on a 1 GB container went unseen until the OOM kill (BOU-1097)."
+  [opts]
+  (let [mem     (ManagementFactory/getMemoryMXBean)
+        areas   [[{:area "heap"} (.getHeapMemoryUsage mem)] [{:area "nonheap"} (.getNonHeapMemoryUsage mem)]]
+        pools   (for [^MemoryPoolMXBean p (ManagementFactory/getMemoryPoolMXBeans)] [{:pool (.getName p)} (.getUsage p)])
+        threads (ManagementFactory/getThreadMXBean)
+        os      (ManagementFactory/getOperatingSystemMXBean)
+        unix    (when (instance? UnixOperatingSystemMXBean os) os)
+        f       (partial family opts)
+        one     (fn [v] [["" {} v]])]
+    (concat
+     (apply concat
+            (for [[prefix of samples] [["jvm_memory" "area" areas] ["jvm_memory_pool" "pool" pools]]
+                  [kind Kind read]    [["used" "Used" #(.getUsed ^MemoryUsage %)]
+                                       ["committed" "Committed" #(.getCommitted ^MemoryUsage %)]
+                                       ["max" "Max" #(.getMax ^MemoryUsage %)]]]
+              (f (str prefix "_" kind "_bytes") "gauge" (str Kind " bytes of a JVM memory " of ".")
+                 (for [[labels ^MemoryUsage u] samples] ["" labels (non-negative (read u))]))))
+     (f "jvm_gc_collection_seconds" "summary" "Time spent in a given JVM garbage collector, in seconds."
+        (mapcat (fn [^GarbageCollectorMXBean g]
+                  [["_count" {:gc (.getName g)} (non-negative (.getCollectionCount g))]
+                   ["_sum" {:gc (.getName g)} (some-> (non-negative (.getCollectionTime g)) (/ 1000.0))]])
+                (ManagementFactory/getGarbageCollectorMXBeans)))
+     (f "jvm_threads_current" "gauge" "Current thread count of the JVM." (one (.getThreadCount threads)))
+     (f "jvm_threads_daemon" "gauge" "Daemon thread count of the JVM." (one (.getDaemonThreadCount threads)))
+     (f "jvm_threads_peak" "gauge" "Peak thread count of the JVM." (one (.getPeakThreadCount threads)))
+     (f "jvm_threads_deadlocked" "gauge" "Threads deadlocked on monitors or ownable synchronizers."
+        (one (count (.findDeadlockedThreads threads))))
+     (f "process_cpu_seconds_total" "counter" "CPU time the process used, in seconds."
+        (one (when (instance? OperatingSystemMXBean os)
+               (some-> (non-negative (.getProcessCpuTime ^OperatingSystemMXBean os)) (/ 1e9)))))
+     (f "process_start_time_seconds" "gauge" "Start time of the process since the Unix epoch, in seconds."
+        (one (/ (.getStartTime (ManagementFactory/getRuntimeMXBean)) 1000.0)))
+     (f "process_open_fds" "gauge" "Open file descriptors."
+        (one (some-> ^UnixOperatingSystemMXBean unix .getOpenFileDescriptorCount)))
+     (f "process_max_fds" "gauge" "Maximum open file descriptors."
+        (one (some-> ^UnixOperatingSystemMXBean unix .getMaxFileDescriptorCount))))))
+
 (defn- render-all
   "Render every active metric, ordered by name."
   [state]
@@ -434,7 +500,11 @@
   ports/IMetricsExporter
   (export-metrics [_ format]
     (if (prometheus-format? format)
-      (render-all @state)
+      (let [s @state]
+        (str (render-all s)
+             (when (:jvm-metrics? s)
+               (lines->text (jvm-lines {:include-help? (:include-help? s)
+                                        :taken         (set (map name->prom (keys (:metrics s))))})))))
       ""))
 
   (export-metric [_ metric-name format]
@@ -510,7 +580,9 @@
      :export-interval 0
      :include-help?   include-help?
      :default-buckets (vec (sort buckets))
-     :registry-name   (:registry-name config)}))
+     :registry-name   (:registry-name config)
+     ;; Prometheus' "default metrics": off with `:enable-default-metrics false`.
+     :jvm-metrics?    (not (false? (:enable-default-metrics config)))}))
 
 (defn create-metrics-component
   "Create a Prometheus metrics component implementing all four metrics
