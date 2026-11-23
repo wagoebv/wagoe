@@ -293,12 +293,6 @@
    :environment "development"
    :global-tags ["service:wagoe" "environment:development"]}
 
-  :wagoe/logging-with-file
-  {:provider :file
-   :level    :debug
-   :file     "logs/dev-service.log"
-   :format   :json}
-
   :wagoe/logging-no-op
   {:provider :no-op}
 

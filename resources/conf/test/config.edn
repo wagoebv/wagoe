@@ -49,16 +49,9 @@
    ;; system/handler config. See wagoe.platform.shell.security-test.
    :security   {:csrf {:enabled? false}}}
 
-  ;; Test logging configuration
+  ;; No-op: tests log through clojure.tools.logging and logback-test.xml.
   :wagoe/logging
-  {:level     :debug  ; Verbose logging for debugging tests
-   :console   true    ; Log to console during tests
-   :appenders [{:appender       :rolling-file
-                :file           "logs/wagoe-test.log"
-                :rolling-policy {:type        :time-based
-                                 :max-history 3  ; Keep only 3 days of test logs
-                                 :max-size    5000000 ; 5MB
-                                 :pattern     ".%d{yyyy-MM-dd}.%i.gz"}}]}
+  {:provider :no-op}
 
   ;; Error reporting configuration for tests
   ;; Defaults to no-op; can be switched to Sentry via ERROR_REPORTING_PROVIDER

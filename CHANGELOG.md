@@ -144,6 +144,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **The reference app's prod and acc configs named no logging `:provider`, so they ran the no-op logger** (BOU-1095).
+  They use `:slf4j` now. An app that copied them: set `:provider :slf4j` on `:wagoe/logging`.
 - **`/health`, `/health/ready`, `/health/live` and `/` answered HEAD with 405** (BOU-1094), so an uptime checker
   that sends HEAD reported the app down. They answer HEAD as they answer GET. Nothing to do.
 - **The user menu button had an `aria-label` its visible initials were not part of** (BOU-1054, WCAG 2.5.3); hidden

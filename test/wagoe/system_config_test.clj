@@ -210,6 +210,12 @@
       (doseq [k [:wagoe/postgresql :wagoe/logging :wagoe/error-reporting :wagoe/http]]
         (is (contains? active k) (str k " disappeared from the prod profile"))))))
 
+(deftest ^:integration every-deployed-profile-logs-somewhere
+  ;; BOU-1095: prod and acc named no :provider and ran the no-op logger.
+  (doseq [profile [:acc :prod]]
+    (let [logging (:wagoe/logging (platform-config/system-config (sut/load-config {:profile profile})))]
+      (is (= :slf4j (:provider logging)) (str profile)))))
+
 (deftest ^:integration every-profile-switches-user-on-in-config
   ;; Not through :extra-modules: `migrate up` reads only :active, so a user
   ;; module enabled in code never got its tables (BOU-669).

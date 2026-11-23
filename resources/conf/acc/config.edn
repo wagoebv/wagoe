@@ -38,14 +38,9 @@
 
   ;; Acceptance logging configuration
   :wagoe/logging
-  {:level     :info
-   :console   false
-   :appenders [{:appender       :rolling-file
-                :file           "logs/wagoe-acc.log"
-                :rolling-policy {:type        :time-based
-                                 :max-history 30
-                                 :max-size    20000000
-                                 :pattern     ".%d{yyyy-MM-dd}.%i.gz"}}]}
+  ;; Through Logback, as prod (BOU-1095).
+  {:provider :slf4j
+   :level    :info}
 
   ;; HTTP server — CSRF enforcement explicitly ON for acc (lib default is opt-in/off).
   ;; Secret must come from the environment; no literal fallback. The wiring guard throws

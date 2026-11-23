@@ -74,14 +74,9 @@
 
   ;; Production logging configuration
   :wagoe/logging
-  {:level :info
-   :console false ; No console logging in production
-   :appenders [{:appender :rolling-file
-                :file "logs/wagoe-prod.log"
-                :rolling-policy {:type :time-based
-                                 :max-history 90 ; Keep 90 days
-                                 :max-size 50000000 ; 50MB
-                                 :pattern ".%d{yyyy-MM-dd}.%i.gz"}}]}
+  ;; Through Logback; resources/logback.xml says where it goes.
+  {:provider :slf4j
+   :level    :info}
 
   ;; Remote-port endpoint, used only by `service` launch mode (BOU-91). A
   ;; `server` or `worker` boot ignores it — the listener is added to the
