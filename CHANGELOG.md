@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **An email queued through the jobs module stored the SMTP username and password in the job** (BOU-1100). Pass the
+  sender: `(register-email-job-handler! registry sender)`; change the SMTP password and delete old `send-email` jobs.
 - **The `:logging` email sender wrote whole emails, invite and reset links included, to the log** (BOU-1092). Outside
   dev, test and local it logs only the recipients, keeps no list, and warns at boot that mail is not delivered.
 

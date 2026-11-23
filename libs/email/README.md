@@ -495,7 +495,7 @@ For high-volume email sending with automatic retries and monitoring, integrate w
 (def job-registry (worker/create-job-registry))
 
 ;; Register email job handler
-(email-jobs/register-email-job-handler! job-registry)
+(email-jobs/register-email-job-handler! job-registry email-sender)
 ```
 
 ### 3. Queue Emails for Async Sending
@@ -759,8 +759,8 @@ Send email synchronously (blocks until complete).
 ```
 
 **Args:**
-- `email-sender` - SmtpEmailSender instance
-- `email` - Prepared email map
+- `email-sender` - Unused; the worker sends with its own sender
+- `email` - Prepared email map, stored in the job (no SMTP credentials)
 
 **Returns:** Result map with:
 - `:success?` - Boolean
@@ -786,8 +786,8 @@ Send email asynchronously using Clojure future.
 ```
 
 **Args:**
-- `email-sender` - SmtpEmailSender instance
-- `email` - Prepared email map
+- `email-sender` - Unused; the worker sends with its own sender
+- `email` - Prepared email map, stored in the job (no SMTP credentials)
 
 **Returns:** Future that will contain result map
 
@@ -848,8 +848,8 @@ Queue email for async sending via jobs module.
 
 **Args:**
 - `job-queue` - IJobQueue instance from jobs module
-- `email-sender` - SmtpEmailSender instance
-- `email` - Prepared email map
+- `email-sender` - Unused; the worker sends with its own sender
+- `email` - Prepared email map, stored in the job (no SMTP credentials)
 
 **Returns:** Job ID (UUID)
 
@@ -866,17 +866,18 @@ Queue email for async sending via jobs module.
 Register email job handler with jobs module.
 
 ```clojure
-(register-email-job-handler! job-registry)
+(register-email-job-handler! job-registry email-sender)
 ```
 
 **Args:**
 - `job-registry` - IJobRegistry instance from jobs module
+- `email-sender` - The sender the worker sends with, usually `:wagoe/email`
 
 **Returns:** `:send-email` (job type keyword)
 
 **Example:**
 ```clojure
-(register-email-job-handler! job-registry)
+(register-email-job-handler! job-registry email-sender)
 ;; => :send-email
 ```
 

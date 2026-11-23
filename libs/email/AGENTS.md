@@ -91,13 +91,15 @@ in-memory queue is per-process and lost on restart.
 `requiring-resolve`. If it is absent, these throw `ex-info` with
 `:type :missing-dependency`.
 
-- `(queue-email-job! job-queue email-sender email)` — extracts SMTP config from
-  `email-sender`, builds a `:send-email` job, enqueues it on `:emails`. Returns
-  the job id.
-- `(register-email-job-handler! job-registry)` — registers `process-email-job`
-  for the `:send-email` job type. Call once at startup.
-- `(process-email-job job-args)` — the handler: rebuilds an `SmtpEmailSender`
-  from `:sender-config`, sends, returns `{:success? ... :result/:error}`.
+- `(queue-email-job! job-queue email-sender email)` — builds a `:send-email` job
+  holding only the email (no SMTP credentials: jobs are stored, BOU-1100) and
+  enqueues it on `:emails`. `email-sender` is unused. Returns the job id.
+- `(register-email-job-handler! job-registry email-sender)` — registers
+  `process-email-job` for `:send-email`, sending with `email-sender` (usually
+  the system's `:wagoe/email`). Call once at startup on the worker.
+- `(process-email-job email-sender job-args)` — the handler: sends, returns
+  `{:success? ... :result/:error}`. A job queued before BOU-1100 still carries
+  `:sender-config` and is sent with that.
 
 ## Wiring & configuration
 
