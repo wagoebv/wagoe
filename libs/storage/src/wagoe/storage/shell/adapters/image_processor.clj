@@ -8,7 +8,7 @@
   (:import [java.awt RenderingHints]
            [java.awt.image BufferedImage]
            [java.io ByteArrayInputStream ByteArrayOutputStream]
-           [javax.imageio ImageIO]))
+           [javax.imageio ImageIO ImageReader]))
 
 ;; ============================================================================
 ;; Image Format Detection
@@ -47,11 +47,58 @@
 ;; Image Manipulation
 ;; ============================================================================
 
+(def ^:private max-pixels
+  "The most pixels an image may have or be resized to: 50 megapixels, 200 MB as ARGB."
+  ;; ponytail: one cap for every app; make it :wagoe/storage config if one needs more.
+  50000000)
+
+(def ^:private max-decoded-bytes
+  "The most an image may take decoded: what `max-pixels` takes as ARGB. A small
+   PNG can claim 30000x30000, and a 4 KB TIFF 64 float samples a pixel (BOU-1085)."
+  (* 4 max-pixels))
+
+(defn- check-pixels!
+  [width height]
+  (when (> (* (long width) (long height)) max-pixels)
+    (throw (ex-info (str "Image of " width "x" height " exceeds " max-pixels " pixels")
+                    {:type :validation-error}))))
+
+(defn- check-decoded-size!
+  "Refuses `reader`'s image 0 over `max-pixels`, or when decoding it would take
+   over `max-decoded-bytes`: its size times its bits per pixel, from the header.
+   Both: drawing a 1-bit image converts it to ARGB first."
+  [^ImageReader reader]
+  (let [w    (.getWidth reader 0)
+        h    (.getHeight reader 0)
+        spec ^javax.imageio.ImageTypeSpecifier (first (iterator-seq (.getImageTypes reader 0)))
+        bits (if spec (reduce + (.getSampleSize (.getSampleModel spec 1 1))) 32)]
+    (check-pixels! w h)
+    (when (> (quot (* (long w) (long h) (long bits)) 8) max-decoded-bytes)
+      (throw (ex-info (str "Image of " w "x" h " at " bits " bits a pixel exceeds " max-decoded-bytes " bytes")
+                      {:type :validation-error})))))
+
+(defn- with-reader
+  "`(f reader)` on a reader of `bytes` whose header was read and whose image
+   decodes within `max-decoded-bytes`, or nil when no reader knows them (BOU-1085)."
+  [bytes f]
+  (with-open [in (ImageIO/createImageInputStream (ByteArrayInputStream. bytes))]
+    (when-let [^ImageReader reader (some-> (ImageIO/getImageReaders in) iterator-seq first)]
+      (try
+        (.setInput reader in true true)
+        (check-decoded-size! reader)
+        (f reader)
+        (finally (.dispose reader))))))
+
 (defn- bytes->buffered-image
-  "Convert byte array to BufferedImage."
+  "`bytes` decoded, or nil when no reader knows them; never over `max-decoded-bytes`."
   [bytes]
-  (let [input-stream (ByteArrayInputStream. bytes)]
-    (ImageIO/read input-stream)))
+  (with-reader bytes (fn [^ImageReader r] (.read r 0))))
+
+(defn- image-size
+  "`[width height]` from `bytes`' header, without decoding; nil when no
+   reader knows them."
+  [bytes]
+  (with-reader bytes (fn [^ImageReader r] [(.getWidth r 0) (.getHeight r 0)])))
 
 (defn- buffered-image->bytes
   "Convert BufferedImage to byte array."
@@ -130,6 +177,7 @@
 
             ;; Calculate target dimensions
             {:keys [width height]} (calculate-dimensions orig-width orig-height dimensions)
+            _ (check-pixels! width height)
 
             ;; Resize image
             resized (resize-buffered-image original width height)
@@ -203,9 +251,8 @@
 
   (get-image-info [_ image-bytes]
     (try
-      (let [original (bytes->buffered-image image-bytes)
-            width (.getWidth original)
-            height (.getHeight original)
+      (let [[width height] (or (image-size image-bytes)
+                               (throw (ex-info "Not an image" {:type :validation-error})))
             format (detect-image-format image-bytes nil)]
 
         {:width width
@@ -225,8 +272,7 @@
 
   (is-image? [_ bytes _content-type]
     (try
-      (let [image (bytes->buffered-image bytes)]
-        (boolean image))
+      (boolean (image-size bytes))
       (catch Exception _
         false))))
 
