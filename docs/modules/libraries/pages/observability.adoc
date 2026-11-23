@@ -7,7 +7,8 @@ depends on a protocol and the provider is chosen in config.
 == What works, per provider
 
 Each signal has its own Integrant key; `:provider` picks the adapter. An
-unknown provider logs a warning and falls back to `:no-op`.
+unknown provider refuses to boot outside dev, test and local; there it logs a
+warning and falls back to `:no-op`.
 
 [cols="1,1,3",options="header"]
 |===
@@ -22,7 +23,7 @@ unknown provider logs a warning and falls back to `:no-op`.
 .4+| Metrics +
 `:wagoe/metrics`
 | `:no-op` | Drops everything.
-| `:prometheus` | In-memory registry; `GET /metrics` serves the Prometheus text format.
+| `:prometheus` | In-memory registry; `GET :path` (`/metrics`) on its own `:port`, bound to `:host` (`127.0.0.1`), serves the Prometheus text format. Without `:port` nothing serves it.
 | `:otlp` | Pushes to an OpenTelemetry collector over OTLP/HTTP every `:interval-ms`.
 | `:datadog-statsd` | Sends DogStatsD lines over UDP to a Datadog agent (`:host`, `:port`).
 

@@ -33,3 +33,18 @@
           (is (= "[REDACTED]" (get-in @captured [:tags :token])))
           (is (re-find #".*\*\*\*@example\.com$"
                        (get-in @captured [:extra :email]))))))))
+
+(deftest ^:unit ^:security ex-data-in-the-cause-chain-is-redacted
+  ;; BOU-1094: sentry-clj copied every ex-data into extras unredacted.
+  (let [opts (atom nil)]
+    (with-redefs [sentry/init! (fn [_dsn o] (reset! opts o))]
+      (sentry-adapter/create-sentry-error-reporter test-config))
+    (is (false? (:enable-uncaught-exception-handler @opts)) "the uncaught handler skips the redactor")
+    (let [cause  (ex-info "inner" {:password "pw" :nested {:token "t"}})
+          event  (#'sentry/map->event {:throwable   (ex-info "outer" {:email "user@example.com"} cause)
+                                       :breadcrumbs [{:message "call" :data {:email "bob@example.com"}}]})
+          extras (.getExtras ^io.sentry.SentryEvent ((:before-send-fn @opts) event nil))]
+      (is (re-find #"^u\*\*\*@example\.com$" (get-in extras ["ex-data" "email"])))
+      (is (= "[REDACTED]" (get-in extras ["ex-data, cause 1: inner" "password"])))
+      (is (= "[REDACTED]" (get-in extras ["ex-data, cause 1: inner" "nested" "token"])))
+      (is (= "b***@example.com" (get (.getData ^io.sentry.Breadcrumb (first (.getBreadcrumbs event))) "email"))))))

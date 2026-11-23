@@ -44,13 +44,15 @@
   (let [active   (:active config)
         ;; The port strategy decides by profile: prod binds exactly (BOU-566).
         http-cfg (cond-> (config/http-config config)
-                   (:wagoe/profile config) (assoc :profile (:wagoe/profile config)))]
+                   (:wagoe/profile config) (assoc :profile (:wagoe/profile config)))
+        ;; Outside dev an unknown provider refuses to boot (BOU-1094).
+        profiled #(cond-> % (:wagoe/profile config) (assoc :wagoe/profile (:wagoe/profile config)))]
     {:wagoe/settings        (:wagoe/settings active)
      :wagoe/db-context      (config/db-spec config)
-     :wagoe/logging         (config/logging-config config)
-     :wagoe/metrics         (config/metrics-config config)
-     :wagoe/tracing         (config/tracing-config config)
-     :wagoe/error-reporting (config/error-reporting-config config)
+     :wagoe/logging         (profiled (config/logging-config config))
+     :wagoe/metrics         (profiled (config/metrics-config config))
+     :wagoe/tracing         (profiled (config/tracing-config config))
+     :wagoe/error-reporting (profiled (config/error-reporting-config config))
      :wagoe/router          (get active :wagoe/router {:coercion :malli :middleware []})
 
      :wagoe/http-handler

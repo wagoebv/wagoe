@@ -21,13 +21,13 @@ Cross-cutting observability for services and persistence layers: structured logg
 
 ## What Works, Per Provider
 
-One Integrant key per signal; `:provider` picks the adapter, and an unknown one
-logs a warning and falls back to `:no-op`.
+One Integrant key per signal; `:provider` picks the adapter. An unknown one
+refuses to boot outside dev, test and local; there it falls back to `:no-op`.
 
 | Signal | Key | `:no-op` | console | OTel (`:otlp`) | Sentry | Datadog |
 |--------|-----|----------|---------|----------------|--------|---------|
 | Logging | `:wagoe/logging` | drops | `:stdout` (text/JSON); `:slf4j` (Logback) | — no log export | — | adapter exists (`create-datadog-logging-component`), not selectable in config |
-| Metrics | `:wagoe/metrics` | drops | — (`:prometheus` serves `GET /metrics`) | push over OTLP/HTTP | — | `:datadog-statsd` (UDP) |
+| Metrics | `:wagoe/metrics` | drops | — (`:prometheus` serves `GET /metrics` on its own `:port`) | push over OTLP/HTTP | — | `:datadog-statsd` (UDP) |
 | Tracing | `:wagoe/tracing` | records nothing | `:logging` (span start/end in logs) | export over OTLP/HTTP | — | via an OTel collector |
 | Errors | `:wagoe/error-reporting` | drops | — | — | `:sentry` | — |
 
@@ -274,20 +274,20 @@ no-op stub):
 
 Pure-Clojure in-memory registry (`metrics.shell.adapters.prometheus`) that renders
 the Prometheus text exposition format — no external client dependency. When
-`:wagoe/metrics {:provider :prometheus}` is active, platform mounts a
-**`GET /metrics`** endpoint that serves the scrape output (counters, gauges,
-histograms with `_bucket`/`_sum`/`_count`). Other providers leave `/metrics`
-returning an empty body.
+`:wagoe/metrics {:provider :prometheus :port 9090}` is active, platform serves the scrape output (counters, gauges, histograms with
+`_bucket`/`_sum`/`_count`) at `:path` (`/metrics`) on `:host` (`127.0.0.1`).
+Without `:port` nothing serves it; the app port never does.
 
 ```clojure
 ;; resources/conf/prod/config.edn
 {:wagoe/metrics {:provider :prometheus
+                    :port 9090                ; :host "0.0.0.0" for a scraper in another container
                     :include-help-text true
                     ;; optional default histogram buckets (seconds)
                     :histogram-buckets [0.005 0.01 0.025 0.05 0.1 0.25 0.5 1 2.5 5 10]}}
 ```
 
-Point a Prometheus/Grafana Agent (or any OpenMetrics scraper) at `GET /metrics`.
+Point a Prometheus/Grafana Agent (or any OpenMetrics scraper) at that port.
 
 ### OTLP (push to an OpenTelemetry collector)
 

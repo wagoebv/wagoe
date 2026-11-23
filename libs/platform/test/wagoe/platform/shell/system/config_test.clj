@@ -34,8 +34,13 @@
       (is (= "mem:wagoe;DB_CLOSE_DELAY=-1" (:database-path (:wagoe/db-context c)))))
 
     (testing "and observability defaults to inert rather than absent"
-      (is (= {:provider :no-op} (:wagoe/logging c)))
-      (is (= {:provider :no-op} (:wagoe/tracing c))))))
+      (is (= :no-op (:provider (:wagoe/logging c))))
+      (is (= :no-op (:provider (:wagoe/tracing c)))))
+
+    (testing "and carries the profile, which decides whether an unknown provider boots (BOU-1094)"
+      (let [c (sut/system-config (assoc (config) :wagoe/profile :prod))]
+        (doseq [k [:wagoe/logging :wagoe/metrics :wagoe/tracing :wagoe/error-reporting]]
+          (is (= :prod (:wagoe/profile (k c))) (str k)))))))
 
 (deftest ^:unit a-scaffolded-module-is-wired-and-its-routes-reach-the-handler
   ;; Two halves of one defect. `bb scaffold generate tasks` produced a module

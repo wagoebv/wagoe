@@ -31,6 +31,12 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **`/metrics` is gone from the app port, where it was public** (BOU-1094). `:prometheus` serves it on its own
+  `:port` (and `:path`), bound to `127.0.0.1` unless `:host` says otherwise: set `:port` to keep scraping.
+- **Sentry no longer sends `ex-data` or uncaught exceptions unredacted** (BOU-1094). Every extra is PII-redacted
+  before sending, and the SDK's uncaught-exception handler is off: report through the error reporter.
+- **An unknown observability `:provider` refuses to boot outside dev, test and local** (BOU-1094). It booted as
+  no-op with a warning; fix the `:provider` of `:wagoe/logging`, `:metrics`, `:tracing` or `:error-reporting`.
 - **User service reads returned the TOTP secret and backup codes** (BOU-1072): `list-users`, `get-user-by-id`,
   `update-user-profile` and `register-user` return no credential now. Nothing to do.
 - **A storage image upload with a huge `thumbnail-size` allocated an image that size** (BOU-1084). A thumbnail is

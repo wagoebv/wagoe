@@ -302,12 +302,22 @@
                 (fn [config] [:metrics-no-op config])
                 wagoe.observability.errors.shell.adapters.no-op/create-error-reporting-component
                 (fn [config] [:errors-no-op config])]
-    (is (= [:logging-no-op {:provider :mystery}]
-           (ig/init-key :wagoe/logging {:provider :mystery})))
-    (is (= [:metrics-no-op {:provider :mystery}]
-           (ig/init-key :wagoe/metrics {:provider :mystery})))
-    (is (= [:errors-no-op {:provider :mystery}]
-           (ig/init-key :wagoe/error-reporting {:provider :mystery})))))
+    (let [c {:provider :mystery :wagoe/profile :test}]
+      (is (= [:logging-no-op c] (ig/init-key :wagoe/logging c)))
+      (is (= [:metrics-no-op c] (ig/init-key :wagoe/metrics c)))
+      (is (= [:errors-no-op c] (ig/init-key :wagoe/error-reporting c))))))
+
+(deftest ^:unit ^:security an-unknown-provider-refuses-to-boot-outside-dev
+  ;; BOU-1094: `:provider :wire` ran prod without metrics or error reports.
+  (doseq [k [:wagoe/logging :wagoe/metrics :wagoe/tracing :wagoe/error-reporting]
+          profile [:prod :acc]]
+    (is (= :unknown-provider
+           (try (ig/init-key k {:provider :wire :wagoe/profile profile})
+                nil
+                (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))
+        (pr-str k profile)))
+  (testing "no :provider is no-op, as prod's logging config has none"
+    (is (some? (ig/init-key :wagoe/logging {:level :info :wagoe/profile :prod})))))
 
 (defn- logged-after-init
   "Initialises :wagoe/logging with `config` on Logback with its root at
@@ -430,30 +440,40 @@
         (is (re-find #"# TYPE requests_total counter" out))
         (is (re-find #"requests_total\S* 1" out))))))
 
-(deftest ^:unit metrics-endpoint-serves-prometheus-text
-  (testing "the /metrics route exports the active component's Prometheus text"
-    (let [metrics (ig/init-key :wagoe/metrics {:provider :prometheus})
-          h       (metrics-ports/register-counter! metrics :http_requests_total "reqs" {})
-          _       (metrics-ports/inc-counter! metrics h)
-          captured-routes (atom nil)
-          config  {:active {:wagoe/settings {:name "B" :version "1"}}}]
-      (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
-                    (fn [routes _cfg] (reset! captured-routes routes) (fn [_] {:status 200}))
-                    wagoe.platform.shell.interfaces.http.common/health-check-handler
-                    (fn [_ _ _] (fn [_] {:status 200}))
-                    wagoe.platform.shell.http.versioning/apply-versioning (fn [routes _] (vec routes))
-                    wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers (fn [hh _] hh)]
-        (ig/init-key :wagoe/http-handler
-                     {:module-routes [] :router ::r :logger ::l :metrics-emitter metrics
-                      :error-reporter ::e :config config}))
-      ;; Reitit data: ["/metrics" {:get {:handler ...}}] (ADR-037).
-      (let [metrics-route (first (filter #(= "/metrics" (first %)) @captured-routes))
-            handler       (get-in (second metrics-route) [:get :handler])
-            resp          (handler {})]
-        (is (some? metrics-route) "/metrics route is mounted")
-        (is (= 200 (:status resp)))
-        (is (re-find #"text/plain" (get-in resp [:headers "Content-Type"])))
-        (is (re-find #"http_requests_total" (:body resp)))))))
+(deftest ^:unit ^:security the-app-port-serves-no-metrics
+  ;; BOU-1094: /metrics was :public on the app port.
+  (let [captured-routes (atom nil)]
+    (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                  (fn [routes _cfg] (reset! captured-routes routes) (fn [_] {:status 200}))
+                  wagoe.platform.shell.interfaces.http.common/health-check-handler
+                  (fn [_ _ _] (fn [_] {:status 200}))
+                  wagoe.platform.shell.http.versioning/apply-versioning (fn [routes _] (vec routes))
+                  wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers (fn [hh _] hh)]
+      (ig/init-key :wagoe/http-handler
+                   {:module-routes [] :router ::r :logger ::l :metrics-emitter ::m
+                    :error-reporter ::e :config {:active {:wagoe/settings {:name "B" :version "1"}}}}))
+    (is (seq @captured-routes))
+    (is (not-any? #(= "/metrics" (first %)) @captured-routes))
+    (is (nil? (:wagoe.platform.shell.system.wiring/scrape-server
+               (meta (ig/init-key :wagoe/metrics {:provider :prometheus}))))
+        "without :port nothing serves it")))
+
+(deftest ^:unit ^:security prometheus-scrapes-on-its-own-loopback-port
+  (let [port    (with-open [s (java.net.ServerSocket. 0)] (.getLocalPort s))
+        ;; :host nil, as `#env` gives for an unset variable, is still loopback.
+        metrics (ig/init-key :wagoe/metrics {:provider :prometheus :port port :host nil})]
+    (try
+      (metrics-ports/inc-counter! metrics (metrics-ports/register-counter! metrics :http_requests_total "reqs" {}))
+      (let [conn ^java.net.HttpURLConnection (.openConnection (java.net.URL. (str "http://127.0.0.1:" port "/metrics")))]
+        (is (= 200 (.getResponseCode conn)))
+        (is (re-find #"text/plain" (.getContentType conn)))
+        (is (re-find #"http_requests_total" (slurp (.getInputStream conn)))))
+      (is (= 404 (.getResponseCode ^java.net.HttpURLConnection
+                  (.openConnection (java.net.URL. (str "http://127.0.0.1:" port "/other"))))))
+      (is (= "127.0.0.1" (.getHost ^org.eclipse.jetty.server.ServerConnector
+                          (first (.getConnectors ^org.eclipse.jetty.server.Server
+                                  (:wagoe.platform.shell.system.wiring/scrape-server (meta metrics)))))))
+      (finally (ig/halt-key! :wagoe/metrics metrics)))))
 
 (deftest ^:unit tracing-component-selects-provider
   (testing ":no-op, :logging, and an unknown provider (falls back to no-op) all satisfy ITracer"

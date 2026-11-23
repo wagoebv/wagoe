@@ -89,6 +89,8 @@
   [:and BaseMetricsConfig
    [:map {:title "Prometheus Metrics Configuration"}
     [:provider [:= :prometheus]]
+    ;; Where the scrape listens; nothing serves it without :port (BOU-1094).
+    [:host {:optional true} [:string {:min 1}]]
     [:port {:optional true} [:int {:min 1024 :max 65535}]]
     [:path {:optional true} [:string {:min 1 :max 100}]]
     [:registry-name {:optional true} [:string {:min 1 :max 100}]]
