@@ -111,7 +111,8 @@
                "Undo the bump with: git restore .")))))
 
 (defn- release! [version]
-  (process/shell "git" "fetch" "--quiet" "--tags" "origin" "main")
+  ;; --force: CI moves the `green` tag, and a stale local one refused the fetch.
+  (process/shell "git" "fetch" "--quiet" "--force" "--tags" "origin" "main")
   (let [subject  (str "Release " version)
         [ahead behind] (map parse-long (str/split (out "git" "rev-list" "--left-right" "--count" "HEAD...origin/main") #"\s+"))
         released? (seq (out "git" "log" "origin/main" "--format=%H" "-1" "--fixed-strings" (str "--grep=" subject)))
@@ -154,5 +155,8 @@
     (release! version)
     (catch clojure.lang.ExceptionInfo e
       (binding [*out* *err*]
-        (println (ansi/red (str "bb release: " (ex-message e)))))
+        ;; A failed command throws with no message; name the command instead.
+        (println (ansi/red (str "bb release: " (or (not-empty (ex-message e))
+                                                   (some->> (:cmd (ex-data e)) (str/join " ") (str "failed: "))
+                                                   "failed")))))
       (System/exit 1))))
