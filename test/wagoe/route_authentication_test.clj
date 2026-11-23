@@ -68,6 +68,7 @@
    from a parent route, or added without a reason, changes this set and fails
    the test below. The unversioned `/api/...` redirects are checked by rule."
   #{[:get "/"] [:get "/health"] [:get "/health/live"] [:get "/health/ready"]
+    [:head "/"] [:head "/health"] [:head "/health/live"] [:head "/health/ready"]
     [:get "/openapi.json"] [:get "/swagger.json"] [:get "/api-docs/*"]
     [:post "/test/reset"]
     [:post "/api/v1/auth/login"] [:post "/api/v1/sessions"]

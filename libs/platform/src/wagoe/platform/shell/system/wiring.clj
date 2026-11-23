@@ -539,13 +539,20 @@
   [routes default? taken]
   (remove #(and (default? %) (taken (first %))) routes))
 
+(defn- get-and-head
+  "Route data answering GET and HEAD with `data`: uptime checkers send HEAD and
+   read a 405 as down (BOU-1094). Jetty drops a HEAD's body and keeps the GET's
+   Content-Length, so the handler must not."
+  [data]
+  {:get data :head data})
+
 (defn- platform-routes
   "The endpoints every Wagoe application serves, whoever it is.
 
    Health, readiness, liveness and the `/` redirect, which a module's
    `:static` route at `/` replaces.
    `:skip-interceptors?` and `:public` on all of them: a liveness probe that
-   needs a session is not a liveness probe.
+   needs a session is not a liveness probe. HEAD on all of them, too.
 
    Reitit route data, used as-is — handlers are vars and functions rather than
    quoted symbols resolved at boot, so a typo is a lint error (ADR-037)."
@@ -559,22 +566,22 @@
                         nil)
         ready-handler  (readiness-fn db-context cache)
         internal       {:no-doc true :skip-interceptors? true :public true}]
-    [["/" {:get (merge internal
-                       {:handler (fn [request]
-                                   ;; Signed in or not decides where "/" goes.
-                                   (if (:user request)
-                                     {:status 302 :headers {"Location" "/web/users"}}
-                                     {:status 302 :headers {"Location" "/web/login"}}))
-                        :summary "Home page (redirects to login or users)"})}]
-     ["/health" {:get (merge internal {:handler health-handler
-                                       :summary "Health check endpoint"})}]
-     ["/health/ready" {:get (merge internal {:handler ready-handler
-                                             :summary "Readiness check with dependency health"})}]
-     ["/health/live" {:get (merge internal
-                                  {:handler (fn [_] {:status 200
-                                                     :headers {"Content-Type" "application/json"}
-                                                     :body (cheshire.core/generate-string {:status "alive"})})
-                                   :summary "Liveness check"})}]]))
+    [["/" (get-and-head (merge internal
+                               {:handler (fn [request]
+                                           ;; Signed in or not decides where "/" goes.
+                                           (if (:user request)
+                                             {:status 302 :headers {"Location" "/web/users"}}
+                                             {:status 302 :headers {"Location" "/web/login"}}))
+                                :summary "Home page (redirects to login or users)"}))]
+     ["/health" (get-and-head (merge internal {:handler health-handler
+                                               :summary "Health check endpoint"}))]
+     ["/health/ready" (get-and-head (merge internal {:handler ready-handler
+                                                     :summary "Readiness check with dependency health"}))]
+     ["/health/live" (get-and-head (merge internal
+                                          {:handler (fn [_] {:status 200
+                                                             :headers {"Content-Type" "application/json"}
+                                                             :body (cheshire.core/generate-string {:status "alive"})})
+                                           :summary "Liveness check"}))]]))
 
 (defn- authorization-mode
   "`:wagoe/authorization :mode`, `:off` when unset. Throws on any other value:

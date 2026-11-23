@@ -458,6 +458,22 @@
                (meta (ig/init-key :wagoe/metrics {:provider :prometheus}))))
         "without :port nothing serves it")))
 
+(deftest ^:unit health-routes-answer-head
+  ;; BOU-1094: uptime checkers send HEAD, and a 405 read as down.
+  (let [captured-routes (atom nil)]
+    (with-redefs [wagoe.platform.shell.http.reitit-router/compile-routes
+                  (fn [routes _cfg] (reset! captured-routes routes) (fn [_] {:status 200}))
+                  wagoe.platform.shell.http.versioning/apply-versioning (fn [routes _] (vec routes))
+                  wagoe.platform.shell.http.versioning/wrap-handler-with-version-headers (fn [hh _] hh)]
+      (ig/init-key :wagoe/http-handler
+                   {:module-routes [] :router ::r :logger ::l :metrics-emitter ::m
+                    :error-reporter ::e :config {:active {:wagoe/settings {:name "B" :version "1"}}}}))
+    (let [route (into {} (map (juxt first second)) @captured-routes)
+          call  (fn [path method] ((get-in route [path method :handler]) {:request-method method :uri path}))]
+      ;; The body is the server's to drop: Jetty keeps the GET's Content-Length.
+      (doseq [path ["/" "/health" "/health/live"]]
+        (is (= (:status (call path :get)) (:status (call path :head))) path)))))
+
 (deftest ^:unit ^:security prometheus-scrapes-on-its-own-loopback-port
   (let [port    (with-open [s (java.net.ServerSocket. 0)] (.getLocalPort s))
         ;; :host nil, as `#env` gives for an unset variable, is still loopback.
