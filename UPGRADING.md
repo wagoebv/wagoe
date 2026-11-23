@@ -10,9 +10,40 @@ mode you'd see without it, and the fix.
 > says where it went. Before deploying, `bb doctor --env prod` also catches
 > rate limiting with no active cache (BOU-456).
 
-## 1.2.x → Unreleased
+## 1.2.x → 1.3.0
 
-### 1. One account per tenant (BOU-995)
+### 1. `/metrics` moved off the app port (BOU-1094)
+
+The `:prometheus` metrics provider served `/metrics` on the app's own port,
+where anyone could read it. It now serves `:path` (`/metrics`) on its own
+`:port`, bound to `:host` (`127.0.0.1`), and without `:port` nothing serves it:
+your scraper gets a 404 on the app port. Set a port, and a `:host` if the
+scraper is on another machine:
+
+```clojure
+:wagoe/metrics {:provider :prometheus :port 9090 :path "/metrics"}
+```
+
+### 2. An unknown observability `:provider` refuses to boot (BOU-1094, BOU-1095)
+
+`:wagoe/logging`, `:wagoe/metrics`, `:wagoe/tracing` and
+`:wagoe/error-reporting` booted as `:no-op` on a provider they did not know.
+Outside dev, test and local that refuses to boot now; there it still warns and
+falls back. Name a real provider
+on each, or leave the key out. The reference app's prod and acc configs named
+none for logging and ran the no-op logger: if yours started from them, set
+`:provider :slf4j` on `:wagoe/logging`.
+
+### 3. Short and example secrets refuse to boot (BOU-1014, BOU-1021, BOU-1049)
+
+`CSRF_SECRET`, the webhook encryption key, the OIDC `:state-secret`, the
+storage `:signing-secret` and the push `:callback-secret` took any value. Each
+is refused at boot when set and under 32 characters, and outside dev, test and
+local when it is a published example, as `JWT_SECRET` and the RPC service key
+are. The example files ship them empty now. Make each one with
+`openssl rand -base64 32`.
+
+### 4. One account per tenant (BOU-995)
 
 An email is unique within a tenant, not across them; the migration copies each
 profile's tenant onto `auth_users` and replaces the email key on PostgreSQL.
@@ -28,7 +59,7 @@ calls `find-user-by-email` gets any one account of the email, and
 its new account in no tenant and refuses an email of several accounts unless
 the URL names the tenant.
 
-### 2. Roles and groups per tenant (BOU-996)
+### 5. Roles and groups per tenant (BOU-996)
 
 Groups and managed roles belong to a tenant now, and a tenant's admins manage
 them at `/web/admin/groups`; a platform admin manages those of the tenant the
@@ -42,7 +73,7 @@ on the groups of no tenant; wrap it in
 group repository of your own keeps the pages a platform admin's until it
 implements `ITenantGroups` and honours the tenant.
 
-### 3. The admin service refuses keys that are not fields (BOU-998)
+### 6. The admin service refuses keys that are not fields (BOU-998)
 
 `create-entity`, `create-entity-with-children` and `update-entity` turned every
 key into a column. They now answer a `:validation-error` with `:errors {key
@@ -52,7 +83,7 @@ writer sees the data. A form only posts its fields, so it needs no change; code
 that calls the service with snake_case or extra keys must pass the kebab-case
 field names only.
 
-### 4. A scaffolded workflow takes the roles held in the tenant (BOU-1005)
+### 7. A scaffolded workflow takes the roles held in the tenant (BOU-1005)
 
 A workflow transition took the caller's own role in every tenant, so an admin
 of one tenant made another tenant's admin-only transitions where they were
@@ -65,7 +96,7 @@ only a member. The workflow API is fixed. A module scaffolded with
 - In `shell/<entity>_workflow.clj`, `transition-<entity>-workflow!` takes
   `roles (vec (:roles actor))` instead of the actor's `:role`.
 
-### 5. A JWT ends with its session (BOU-1006)
+### 8. A JWT ends with its session (BOU-1006)
 
 A `jwtToken` carries the id of the session it was issued with, and is refused
 once that session ends. Tokens issued before the upgrade carry none: API
@@ -73,7 +104,7 @@ clients sign in again. A user service of your own must implement
 `IJwtSessions`: the user module refuses to boot without it (WGE-107), and the
 JWT middleware built on one without it refuses every JWT.
 
-### 6. A session slides by its own hours, at most a week (BOU-1007)
+### 9. A session slides by its own hours, at most a week (BOU-1007)
 
 A session slid to 24 hours whenever under 2 remained, and never ended. It
 slides by the hours its sign-in got now, up to `:max-session-days` (7) after
@@ -82,7 +113,7 @@ upgrade slides 24 hours as it did, but one opened more than
 `:max-session-days` ago ends at the upgrade: those users sign in again. A page
 of your own layout gets the dialog only through `page-layout`.
 
-### 7. An account made at `/web/register` is not linked by OIDC email (BOU-1009)
+### 10. An account made at `/web/register` is not linked by OIDC email (BOU-1009)
 
 Such accounts are marked now. Ones made before the upgrade are not, and stay
 linkable by email when a provider has `:link-by-email? true`; boot warns, with
@@ -92,12 +123,60 @@ TRUE and the rest to FALSE, and the warning stops:
 `UPDATE auth_users SET self_registered = TRUE WHERE id IN (…)`, then
 `UPDATE auth_users SET self_registered = FALSE WHERE self_registered IS NULL`.
 
-### 8. A TOTP code is accepted once (BOU-1016)
+### 11. A TOTP code is accepted once (BOU-1016)
 
 `auth_users.mfa_last_step` records the 30 s window of the last code accepted,
 and a code from that window or an earlier one is refused. The migration adds
 the column. A user repository of your own must implement `ITotpSteps`: the MFA
 service refuses to boot without it (WGE-107).
+
+### 12. Platform-only tenant fields (BOU-1011)
+
+A tenant's admin could change their own tenant's status, features and limits
+in the admin, or delete it. Two keys in your `tenants.edn` keep those for a
+platform admin; without them the gap stays open:
+
+```clojure
+:platform-fields #{:status :settings}
+:permissions     {:delete :platform-admin}
+```
+
+### 13. One user list (BOU-1003)
+
+`/web/admin/users` redirects to `/web/users` through the admin option
+`:list-url`. Add `:list-url "/web/users"` to your `admin/users.edn`; without it
+`/web/admin/users` stays as it was.
+
+### 14. Storage limits come from config (BOU-1076, BOU-1075)
+
+The upload route read its size and type limits from the query string. They come
+from `:upload-limits` on `:wagoe/storage` now, and a request can only narrow
+them; without it any type up to 10 MB is accepted. A file's type is its
+extension now (BOU-1078), so an upload whose name lacks the extension of an
+allowed type is refused. Every member of a file's tenant may download, delete
+or sign it, as before; a narrower rule goes in `:may-access?`, a
+`(fn [request file-key])`.
+
+### 15. The session token leaves the URL (BOU-1015)
+
+`GET`/`DELETE /api/v1/sessions/{token}` put a live token in URLs and access
+logs. Use `GET`/`DELETE /api/v1/session` with an `X-Session-Token` header. The
+path form still works and is deprecated; Wagoe's logs mask its token.
+
+### 16. `require-role` reads the role held in the tenant (BOU-1020)
+
+`require-role` and `require-role-middleware` matched the user's own role in
+every tenant. They match the role held where the request runs now, so a
+membership's role counts in its tenant and nowhere else. A route guarded with a
+role of your own: check that role is granted in the tenant.
+
+### 17. The compose files bind to 127.0.0.1 (BOU-1019)
+
+The dev and test compose files published Postgres, MySQL and Redis with
+default credentials on every interface. They bind to `127.0.0.1` now. A
+`docker-compose.override.yml` copied from its example still publishes them:
+copy it again, or prefix each port with `127.0.0.1:`. Then
+`docker compose up -d` and `bb test:services up`.
 
 ## 1.1.x → 1.2.0
 
