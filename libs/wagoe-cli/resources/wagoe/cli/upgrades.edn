@@ -153,6 +153,6 @@
   :manual "Pass the context or datasource the code writes through: (current-transaction ctx). A rewrite cannot tell which that is."}
 
  {:ticket "BOU-995"
-  :since  "Unreleased"
+  :since  "1.3.0"
   :note   "wagoe.user.ports/get-user-by-email: an email is unique per tenant now, so it answers nil when the email has accounts in several tenants."
   :manual "Call wagoe.user.ports/get-user-by-tenant-and-email with the tenant the code acts in (nil for none). A rewrite cannot tell which tenant that is."}]

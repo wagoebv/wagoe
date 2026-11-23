@@ -11,6 +11,11 @@
     (is (nil? (release/release-changelog "# C\n\n## [Unreleased]\n\n## [1.2.0] — x\n" "1.3.0" "d")))
     (is (nil? (release/release-changelog "# C\n\n## [1.2.0] — x\n" "1.3.0" "d")))))
 
+(deftest ^:unit an-unreleased-deprecation-names-the-release
+  (is (= "[{:ticket \"X-1\" :since  \"1.3.0\"} {:ticket \"X-0\" :since \"1.2.0\"}]"
+         (release/release-upgrades "[{:ticket \"X-1\" :since  \"Unreleased\"} {:ticket \"X-0\" :since \"1.2.0\"}]"
+                                   "1.3.0"))))
+
 (def ^:private fresh {:version "1.3.0" :branch "main" :behind 0 :ahead 0})
 
 (deftest ^:unit a-release-starts-only-from-an-up-to-date-clean-main

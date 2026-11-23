@@ -22,6 +22,15 @@
   (when (seq (some-> (release-check/changelog-section text "Unreleased") str/trim))
     (str/replace-first text "## [Unreleased]" (str "## [Unreleased]\n\n## [" version "] — " date))))
 
+(def ^:private upgrades-path "libs/wagoe-cli/resources/wagoe/cli/upgrades.edn")
+
+(defn release-upgrades
+  "upgrades.edn text with each `:since \"Unreleased\"` naming `version`: the
+   deprecation's `### Deprecated` entry moves to that heading with the rest.
+   1.3.0's CI failed on the one left behind."
+  [text version]
+  (str/replace text #"(:since\s+)\"Unreleased\"" (str "$1\"" version "\"")))
+
 (defn preflight
   "Reasons not to start a release, from facts about the checkout. `released?`:
    the release commit is on origin/main already, so only waiting and tagging
@@ -90,8 +99,10 @@
                  (fail! "CHANGELOG.md has nothing under [Unreleased] to release."))]
     (try
       (spit "CHANGELOG.md" text)
+      (spit upgrades-path (release-upgrades (slurp upgrades-path) version))
       (process/shell "bb" "bump" version)
       (process/shell "bb" "check:versions")
+      (process/shell "bb" "check:changelog")
       (process/shell "bb" "release:check" version)
       (process/shell "git" "commit" "--quiet" "-am" (str "Release " version)
                      "-m" "Review-skipped: version bump and changelog move by bb release")
