@@ -128,22 +128,38 @@
         (error-response 500 "Internal server error")))))
 
 (defn list-members-handler
-  "GET /api/tenants/:tenant-id/memberships"
+  "GET /api/tenants/:tenant-id/memberships
+   With `after`, a member id, the page after it by id, stable while members
+   join and leave; `after=` empty starts there. A full page names the next
+   `after` in `X-Next-After` (BOU-1108): platform's Link builder is a shell
+   namespace of another module, and names it `cursor`. Without `after`,
+   `limit`/`offset` pages as before."
   [membership-service]
   (fn [request]
     (try
-      (let [tenant-id-str (get-in request [:path-params :tenant-id])
-            tenant-id     (parse-uuid-safe tenant-id-str)]
-        (if-not tenant-id
-          (error-response 400 "Invalid tenant ID format")
-          (let [params  (:params request)
-                limit   (min (or (some-> (:limit params) parse-long) 50) 100)
-                offset  (or (some-> (:offset params) parse-long) 0)
-                status  (some-> (:status params) keyword)
-                options (cond-> {:limit limit :offset offset}
-                          status (assoc :status status))
-                members (membership-ports/list-tenant-members membership-service tenant-id options)]
-            (json-response 200 members))))
+      ;; String keys, as the router's params middleware leaves them: read by
+      ;; keyword, limit, offset and status were never seen (BOU-1108)
+      (let [tenant-id (parse-uuid-safe (get-in request [:path-params :tenant-id]))
+            params    (:query-params request)
+            number    #(some-> (get params %) str parse-long)
+            keyset?   (contains? params "after")
+            after     (some-> (get params "after") str not-empty)
+            after-id  (some-> after parse-uuid-safe)
+            limit     (-> (or (number "limit") 50) (max 1) (min 100))
+            opts      (cond-> {:limit limit}
+                        (get params "status") (assoc :status (keyword (str (get params "status")))))]
+        (cond
+          (not tenant-id)            (error-response 400 "Invalid tenant ID format")
+          (and after (not after-id)) (error-response 400 "Invalid after ID format")
+          keyset?
+          (let [members (membership-ports/tenant-members membership-service tenant-id (assoc opts :after-id after-id))]
+            (cond-> (json-response 200 members)
+              (and (seq members) (= limit (count members)))
+              (assoc-in [:headers "X-Next-After"] (str (:id (peek members))))))
+          :else
+          (json-response 200 (membership-ports/list-tenant-members
+                              membership-service tenant-id
+                              (assoc opts :offset (max 0 (or (number "offset") 0)))))))
       (catch Exception e
         (log/error e "Failed to list members")
         (error-response 500 "Internal server error")))))
@@ -308,7 +324,18 @@
                :middleware  [member]
                :summary     "List tenant members"
                :tags        ["memberships"]
-               :responses   {200 {:description "List of memberships"}
+               :openapi     {:parameters
+                             [{:name "tenant-id" :in "path" :required true :schema {:type "string" :format "uuid"}}
+                              {:name "after" :in "query" :required false :allowEmptyValue true
+                               :schema {:type "string" :format "uuid"}
+                               :description "Page by id after this member, empty for the first page; a full page sends X-Next-After"}
+                              {:name "limit" :in "query" :required false :schema {:type "integer" :minimum 1 :maximum 100}
+                               :description "Page size, default 50"}
+                              {:name "offset" :in "query" :required false :schema {:type "integer"}
+                               :description "Without after: rows to skip, newest first"}
+                              {:name "status" :in "query" :required false
+                               :schema {:type "string" :enum ["invited" "active" "suspended" "revoked"]}}]}
+               :responses   {200 {:description "List of memberships; with after, a full page names the next in X-Next-After"}
                              400 {:description "Bad request"}}}}]
 
       ["/tenants/:tenant-id/memberships/:id"

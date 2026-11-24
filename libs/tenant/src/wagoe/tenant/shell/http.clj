@@ -109,12 +109,15 @@
   [tenant-service]
   (fn [request]
     (with-typed-errors "list tenants"
-      #(let [params  (:params request)
-             limit   (min (or (some-> (:limit params) parse-long) 20) 100)
-             offset  (or (some-> (:offset params) parse-long) 0)
+      ;; String keys, as the router's params middleware leaves them: read by
+      ;; keyword, none of these was ever seen (BOU-1108)
+      #(let [params  (:query-params request)
+             number  (fn [k] (some-> (get params k) str parse-long))
+             limit   (-> (or (number "limit") 20) (max 1) (min 100))
+             offset  (max 0 (or (number "offset") 0))
              options (cond-> {:limit limit :offset offset}
-                       (:status params) (assoc :status (keyword (:status params)))
-                       (:search params) (assoc :search (:search params)))]
+                       (get params "status") (assoc :status (keyword (str (get params "status"))))
+                       (get params "search") (assoc :search (str (get params "search"))))]
          (json-response 200 (tenant-ports/list-tenants tenant-service options))))))
 
 (defn get-tenant-handler

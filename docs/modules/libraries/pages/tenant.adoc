@@ -119,7 +119,10 @@ To read every member in code, use `tenant-members` on `:wagoe/membership-service
 ----
 
 It orders by id, so a member who joins or leaves between pages neither repeats
-nor skips a row. An index on `(tenant_id, status, id)` serves a page with a
+nor skips a row. `GET /api/v1/tenants/:tenant-id/memberships?after=` pages the
+same way over HTTP: start with an empty `after`, and pass the `X-Next-After` a
+full page returns; a page without it is the last. `limit` and `offset` without
+`after` page by newest first, as before. An index on `(tenant_id, status, id)` serves a page with a
 `:status`.
 
 == Testing

@@ -11,6 +11,7 @@
             [wagoe.tenant.ports :as ports]
             [cheshire.core :as json]
             [reitit.ring :as ring]
+            [ring.middleware.params]
             [clojure.test :refer [deftest is testing use-fixtures]])
   (:import (java.util UUID)))
 
@@ -104,6 +105,36 @@
       (is (= [] (parse-body (list-in (str other-tenant))))))
     (testing "400 for invalid tenant UUID"
       (is (= 400 (:status (list-in "bad-uuid")))))))
+
+(deftest ^:contract list-members-pages-by-keyset
+  ;; BOU-1108: offset pages shift as members join; a page after an id does not.
+  ;; Through ring's params, as the router hands them over: string keys.
+  (let [handler #((sut/list-members-handler *service*)
+                  (ring.middleware.params/params-request
+                   (assoc (make-request :get {:tenant-id (str tenant-id-1)}) :query-string %)))
+        extra   (doall (for [_ (range 3)] (ports/invite-user *service* tenant-id-1 (UUID/randomUUID) :member)))
+        all     (sort (map str (concat [*invited-id* *active-id*] (map :id extra))))
+        page1   (handler "after=&limit=2")
+        next1   (get-in page1 [:headers "X-Next-After"])
+        page2   (handler (str "after=" next1 "&limit=2"))
+        page3   (handler (str "after=" (get-in page2 [:headers "X-Next-After"]) "&limit=2"))]
+    (is (= (take 2 all) (map :id (parse-body page1))))
+    (is (= (str (second all)) next1) "a full page names where to go on")
+    (is (= (take 2 (drop 2 all)) (map :id (parse-body page2))))
+    (is (= (drop 4 all) (map :id (parse-body page3))))
+    (is (nil? (get-in page3 [:headers "X-Next-After"])) "a short page is the last")
+    (testing "a status narrows it"
+      (is (= [(str *active-id*)] (map :id (parse-body (handler "after=&status=active"))))))
+    (testing "400 for an after that is no id"
+      (is (= 400 (:status (handler "after=nope")))))
+    (testing "a limit below one is one, so a page always moves on"
+      (let [r (handler "after=&limit=0")]
+        (is (= 1 (count (parse-body r))))
+        (is (= (str (first all)) (get-in r [:headers "X-Next-After"])))))
+    (testing "without after, limit and offset page as before, and are read at last"
+      (is (= 2 (count (parse-body (handler "limit=2")))))
+      (is (= 1 (count (parse-body (handler "limit=2&offset=4")))))
+      (is (= 5 (count (parse-body (handler "offset=-3"))))))))
 
 ;; =============================================================================
 ;; get-membership-handler

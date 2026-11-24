@@ -48,6 +48,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`GET /tenants/:tenant-id/memberships` pages by keyset with `?after=`** (BOU-1108), stable while members join and
+  leave; a full page names the next in `X-Next-After`. `limit`/`offset` callers are unchanged.
 - **A storage upload streams from a file or a stream, and a local signed URL no longer rehashes the file** (BOU-1080):
   `upload-file` takes `{:file}` or `{:input-stream}`. The local adapter records versions under `.versions/` in its root.
 - **A storage download can be shown in place, named, and cached while its signed URL lasts** (BOU-1079):
@@ -70,6 +72,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **`GET /tenants` and `/tenants/:tenant-id/memberships` ignored `limit`, `offset`, `status` and `search`** (BOU-1108):
+  they read keys the router never sets. They apply now; a limit is 1 to 100.
 - **Storage leftovers** (BOU-1082): `wagoe add storage` writes the config when deps.edn has a newer version, uploads
   no longer log filenames, and `:export-job-routes? false` leaves the export-job routes unmounted.
 - **Upload retention deleted files an app still referred to** (BOU-1081). Give `:wagoe/storage` an `:in-use?`

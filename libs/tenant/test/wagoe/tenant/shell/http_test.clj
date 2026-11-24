@@ -12,7 +12,9 @@
             [wagoe.tenant.shell.service :as tenant-service]
             [wagoe.tenant.ports :as tenant-ports]
             [cheshire.core :as json]
-            [clojure.test :refer [deftest is testing use-fixtures]])
+            [clojure.test :refer [deftest is testing use-fixtures]]
+            [ring.middleware.params :as params]
+            [ring.util.codec :as codec])
   (:import [java.util UUID]))
 
 ^{:kaocha.testable/meta {:contract true :tenant true}}
@@ -89,7 +91,9 @@
   (create! "acme-corp" "ACME Corporation")
   (create! "beta-inc" "Beta Inc")
   (tenant-ports/suspend-tenant *service* (:id (tenant-ports/get-tenant-by-slug *service* "beta-inc")))
-  (let [list-with #(let [r ((tenant-http/list-tenants-handler *service*) {:params %})]
+  ;; Through ring's params, as the router hands them over: string keys (BOU-1108)
+  (let [list-with #(let [r ((tenant-http/list-tenants-handler *service*)
+                            (params/params-request {:query-string (codec/form-encode (update-keys % name))}))]
                      [(:status r) (body r)])
         slugs     #(set (map :slug %))]
     (testing "lists every tenant"
