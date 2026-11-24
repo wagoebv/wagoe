@@ -8,8 +8,7 @@
             [support.test-db :as test-db]
             [cheshire.core :as json]
             [clojure.test :refer [deftest is testing]]
-            [wagoe.tenant.shell.persistence :as tenant-persistence]
-            [support.embedded-pg :as epg])
+            [wagoe.tenant.shell.persistence :as tenant-persistence])
   (:import [java.time Instant]
            [java.util UUID]
            [org.postgresql.util PGobject]))
@@ -302,16 +301,15 @@
       (finally (factory/close-db-context! ctx)))))
 
 (deftest ^:integration a-name-search-ignores-accents-on-postgresql
-  ;; BOU-1099: "jose" did not find José.
-  (let [pg  (epg/start!)
-        ctx (epg/db-context pg)]
-    (try
+  ;; BOU-1099: "jose" did not find José. Accents only where unaccent is, which
+  ;; the PostgreSQL job (WAGOE_TEST_DB=pg) proves; elsewhere names match as before.
+  (test-db/with-db "user_unaccent"
+    (fn [ctx]
       (sut/initialize-user-schema! ctx)
       (sut/create-unaccent! ctx)
-      (let [repo (sut/create-user-repository ctx)]
+      (let [repo  (sut/create-user-repository ctx)
+            names #(mapv :name (:users (ports/find-users repo {:filter-name-contains %})))]
         (ports/create-user repo {:email "jose@example.com" :name "José Núñez" :role :user :active true :password-hash "x"})
-        (is (= ["José Núñez"] (mapv :name (:users (ports/find-users repo {:filter-name-contains "jose nun"})))))
-        (is (= ["José Núñez"] (mapv :name (:users (ports/find-users repo {:filter-name-contains "JOSÉ"}))))))
-      (finally
-        (factory/close-db-context! ctx)
-        (epg/stop! pg)))))
+        (is (= ["José Núñez"] (names "JOSÉ")))
+        (when (= :pg test-db/engine)
+          (is (= ["José Núñez"] (names "jose nun"))))))))

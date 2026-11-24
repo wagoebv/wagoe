@@ -1011,6 +1011,12 @@ jobs:
           WAGOE_TEST_DB: pg
         run: clojure -M:test:test/pg :jobs --focus wagoe.jobs.shell.adapters.db-test --focus wagoe.jobs.shell.outcomes-test
 
+      - name: Run the user name search on PostgreSQL
+        env:
+          JWT_SECRET: "ci-test-secret-minimum-32-characters"
+          WAGOE_TEST_DB: pg
+        run: clojure -M:test:test/pg :user --focus wagoe.user.shell.persistence-test/a-name-search-ignores-accents-on-postgresql
+
       - name: Run webhooks on PostgreSQL
         env:
           JWT_SECRET: "ci-test-secret-minimum-32-characters"
