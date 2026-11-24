@@ -183,6 +183,13 @@ A key it refuses is a 404 on download, delete and URL, and an upload may not
 replace it; a new key is not checked. It runs for platform admins too. A signed download link is checked
 when the URL is issued, not when it is used.
 
+A download is an attachment named after the key's last segment. Append
+`&name=report.pdf` to name it (it keeps the stored file's extension), and `&disposition=inline` to show a PNG, JPEG,
+GIF, WebP, AVIF or PDF in place; any other type still downloads. A signed URL
+names one version of a file, so the browser may keep it until the URL expires
+(`Cache-Control: private, max-age=…, immutable`); a download behind a session
+is checked each time (`private, no-cache`).
+
 == Data export as a background job
 
 With the jobs module enabled, a signed-in user can have their export built in

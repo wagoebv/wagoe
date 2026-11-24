@@ -58,6 +58,11 @@
    "mov"  "video/quicktime"
    "gz"   "application/gzip"})
 
+(def inline-safe-types
+  "What a download may show in the browser: none of these runs script on the
+   app's origin, as an SVG or HTML file would (BOU-1079)."
+  #{"image/png" "image/jpeg" "image/gif" "image/webp" "image/avif" "application/pdf"})
+
 (def image-mime-types
   "Set of image MIME types."
   #{"image/jpeg"

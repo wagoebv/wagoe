@@ -44,7 +44,7 @@
        (MessageDigest/isEqual (.getBytes a StandardCharsets/UTF_8)
                               (.getBytes b StandardCharsets/UTF_8))))
 
-(defn- now-epoch-seconds ^long []
+(defn now-epoch-seconds ^long []
   (quot (System/currentTimeMillis) 1000))
 
 (defn canonical-key

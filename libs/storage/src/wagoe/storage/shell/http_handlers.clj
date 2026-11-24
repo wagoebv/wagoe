@@ -246,11 +246,58 @@
               (upload-refused result) (upload-refused result)
               :else                   (bad-request "Image upload failed" {:errors (:errors result)}))))))))
 
+(defn- utf8-filename
+  "`name` for `filename*`: percent-encoded UTF-8, without control or bidi
+   characters, which could make `x.png` read as another name, nor slashes."
+  [name]
+  (-> (str/replace name #"[\p{Cc}\p{Cf}/\\]" "")
+      (java.net.URLEncoder/encode "UTF-8")
+      (str/replace "+" "%20")
+      (str/replace "*" "%2A")))
+
+(defn- download-headers
+  "`?disposition=inline` shows a safe type in place; `?name=` names the
+   download, ending in the stored file's extension. Neither is signed, and
+   neither needs to be. A signed URL names one version of a file, so the
+   browser keeps it until the URL expires."
+  [file-key {:keys [content-type size]} query-params signed?]
+  (let [inline? (and (= "inline" (get query-params "disposition"))
+                     (validation/inline-safe-types content-type))
+        own     (last (str/split file-key #"/"))
+        ext     (not-empty (validation/get-file-extension own))
+        asked   (get query-params "name")
+        ;; The stored file's extension, whatever the link asks: `x.pdf.exe` must
+        ;; not save an upload checked as a PDF as a program
+        name    (cond
+                  (not (and (string? asked) (not (str/blank? asked)))) own
+                  (= ext (validation/get-file-extension asked))         asked
+                  ext                                                   (str asked "." ext)
+                  ;; No extension stored, none given
+                  (nil? (validation/get-file-extension asked))          asked
+                  :else                                                 own)
+        expires (some-> (get query-params "expires") str parse-long)
+        max-age (when (and signed? expires) (max 0 (- expires (local/now-epoch-seconds))))]
+    {"Content-Type"        content-type
+     "Content-Length"      (str size)
+     ;; An ASCII name, sanitized as a `"` broke the header, and the name itself
+     ;; for browsers that read filename* (RFC 6266), accents and spaces kept
+     "Content-Disposition" (str (if inline? "inline" "attachment")
+                                "; filename=\"" (let [ascii (validation/sanitize-filename name)]
+                                                  ;; Nothing of a non-ASCII name may be left but its extension
+                                                  (if (and (not (str/blank? ascii))
+                                                           (= ext (validation/get-file-extension ascii)))
+                                                    ascii
+                                                    (validation/sanitize-filename own)))
+                                "\"; filename*=UTF-8''" (utf8-filename name))
+     "Cache-Control"       (if max-age (str "private, max-age=" max-age ", immutable") "private, no-cache")}))
+
 (defn download-file-handler
   "Handler for file download endpoint.
 
   Path parameter:
-  - file-key: Storage key of the file"
+  - file-key: Storage key of the file
+  Query parameters, beside a signed URL's own: `disposition=inline` and
+  `name`, see `download-headers`."
   ([storage-service] (download-file-handler storage-service nil))
   ([storage-service signing-secret & [may-access?]]
    (fn [{:keys [path-params query-params] :as request}]
@@ -284,12 +331,7 @@
            (if (and signing-secret (not= version (:version file-data)))
              (forbidden "Missing, invalid or expired signature")
              {:status 200
-              :headers {"Content-Type" (:content-type file-data)
-                        "Content-Length" (str (:size file-data))
-                        ;; The key's last segment, sanitized: a `"` in a path broke the header
-                        "Content-Disposition" (str "attachment; filename=\""
-                                                   (validation/sanitize-filename (last (str/split file-key #"/")))
-                                                   "\"")}
+              :headers (download-headers file-key file-data query-params (some? signing-secret))
               :body (io/input-stream (:bytes file-data))})
 
            (not-found
@@ -397,7 +439,12 @@
      ;; works without a session. Without one this stays behind login (BOU-568).
        {:get (cond-> {:handler (download-file-handler storage-service signing-secret may-access?)
                       :summary "Download a file"
-                      :openapi file-key-openapi}
+                      :openapi (update file-key-openapi :parameters into
+                                       [{:name "disposition" :in "query" :required false
+                                         :schema {:type "string" :enum ["inline" "attachment"]}
+                                         :description "inline shows a raster image or PDF in place; anything else downloads"}
+                                        {:name "name" :in "query" :required false :schema {:type "string"}
+                                         :description "The download's filename; default the key's last segment"}])}
                signing-secret (assoc :public true))}]
 
       [(str base-path "/delete/{*file-key}")

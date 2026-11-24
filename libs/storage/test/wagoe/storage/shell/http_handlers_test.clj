@@ -537,3 +537,49 @@
         (is (= 201 (:status r)))
         (is (= (str b "/docs/report.pdf") (key-of r)))
         (is (= "b's" (slurp (io/file test-dir (key-of in-b)))))))))
+
+(deftest ^:unit ^:security a-download-is-shown-in-place-only-when-safe-and-cached-while-signed
+  ;; BOU-1079
+  (.mkdirs (io/file test-dir))
+  (doseq [f ["photo.png" "page.svg"]] (spit (io/file test-dir f) "content"))
+  (let [secret  "s3cr3t"
+        storage (local/create-local-storage {:base-path test-dir :url-base "http://x/files" :signing-secret secret})
+        svc     (service/create-storage-service {:storage storage})
+        signed  #(sut/download-file-handler svc secret)
+        cd      #(get % "Content-Disposition")
+        cc-of   #(get % "Cache-Control")
+        headers (fn [handler key extra]
+                  (let [params (query-of (wagoe.storage.ports/generate-signed-url storage key 600))]
+                    (:headers (handler {:path-params {:file-key key} :query-params (merge params extra)}))))]
+    (testing "an attachment named after the key, unless asked otherwise"
+      (is (= "attachment; filename=\"photo.png\"; filename*=UTF-8''photo.png" (cd (headers (signed) "photo.png" {})))))
+    (testing "inline for a raster image, under the name given, sanitized"
+      (is (= "inline; filename=\"holiday.png\"; filename*=UTF-8''holiday.png"
+             (cd (headers (signed) "photo.png" {"disposition" "inline" "name" "holiday.png"}))))
+      (is (= 2 (count (re-seq #"\"" (cd (headers (signed) "photo.png" {"name" "a\"b.png"})))))
+          "a quote in the name cannot end the header's")
+      (is (re-find #"^attachment; filename=\"Invoice.pdf.exe.png\"; filename\*=UTF-8''Invoice.pdf.exe.png$"
+                   (cd (headers (signed) "photo.png" {"name" "Invoice.pdf.exe"})))
+          "a link cannot change what the file is saved as")
+      (is (re-find #"filename\*=UTF-8''Offerte%20Jos%C3%A9.png$"
+                   (cd (headers (signed) "photo.png" {"name" "Offerte José.png"})))
+          "accents and spaces kept for browsers that read filename*")
+      (is (re-find #"filename=\"photo.png\"; filename\*=UTF-8''%E6%97%A5.png$"
+                   (cd (headers (signed) "photo.png" {"name" "日"})))
+          "a name with no ASCII falls back to the key's for the old field")
+      (is (re-find #"filename\*=UTF-8''abc.png$"
+                   (cd (headers (signed) "photo.png" {"name" "a\u202Eb/c\r\n.png"})))
+          "no bidi override, slash or line break")
+      (is (re-find #"filename=\"notes\""
+                   (cd (#'sut/download-headers "ab/notes" {:content-type "application/octet-stream" :size 1}
+                                               {"name" "notes.exe"} true)))
+          "a key with no extension gets no name that has one"))
+    (testing "never inline for a type that could run script"
+      (is (re-find #"^attachment" (cd (headers (signed) "page.svg" {"disposition" "inline"})))))
+    (testing "a signed URL is kept until it expires; one behind a session is checked each time"
+      (let [cc (cc-of (headers (signed) "photo.png" {}))
+            age (parse-long (second (re-find #"max-age=(\d+)" cc)))]
+        (is (re-find #"^private, max-age=\d+, immutable$" cc))
+        (is (<= 590 age 600)))
+      (is (= "private, no-cache"
+             (cc-of (#'sut/download-headers "photo.png" {:content-type "image/png" :size 7} {} false)))))))

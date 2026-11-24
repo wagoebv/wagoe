@@ -243,11 +243,12 @@ Response: 201 Created
 ### Download File
 
 ```
-GET /api/v1/storage/download/:file-key
+GET /api/v1/storage/download/:file-key[?disposition=inline][&name=report.pdf]
 
 Response: 200 OK
 Content-Type: <file-content-type>
-Content-Disposition: attachment; filename="..."
+Content-Disposition: attachment; filename="..."; filename*=UTF-8''...
+Cache-Control: private, max-age=<until the signed URL expires>, immutable
 
 <file bytes>
 ```

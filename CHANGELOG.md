@@ -48,6 +48,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **A storage download can be shown in place, named, and cached while its signed URL lasts** (BOU-1079):
+  `?disposition=inline` for raster images and PDF, `?name=`, and a `Cache-Control` on every download.
 - **The storage service and signed-URL checks are on `wagoe.storage.ports`** (BOU-1077): `IStorageService` and
   `ISignedFiles/signed-file`. An app can drop its `check-ports.edn` entries for `wagoe.storage.shell.*`.
 - **`tenant-members` reads every member of a tenant, or a keyset page of them** (BOU-1090), ordered by id so joins
