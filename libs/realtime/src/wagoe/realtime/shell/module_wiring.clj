@@ -4,6 +4,7 @@
    Config key: :wagoe/realtime
      {:provider :memory | :redis        ; :in-memory is the pre-1.0 spelling
       :max-streams 32                   ; concurrent SSE streams on this node
+      :max-websockets 10000             ; concurrent WebSocket connections on this node
       ;; redis only:
       :host \"localhost\" :port 6379
       :password \"...\" :database 0        ; auth + db selection (production)
@@ -77,7 +78,8 @@
                                              :pubsub-manager pubsub-manager
                                              :bus bus
                                              :error-reporter error-reporter
-                                             :max-streams (:max-streams config))]
+                                             :max-streams (:max-streams config)
+                                             :max-websockets (:max-websockets config))]
     (log/info "Realtime component initialized" {:provider provider})
     {:service svc :registry conn-registry :pubsub-manager pubsub-manager
      :bus bus :pool pool}))

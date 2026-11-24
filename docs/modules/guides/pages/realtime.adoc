@@ -106,7 +106,9 @@ seconds. For hundreds of streams, run the listener on virtual threads and
 raise `:max-virtual-threads` above `:max-streams` (see the scaling page). A handler accepts at most `:max-topics` (16) topics per stream.
 Pass the handler `:max-streams-per-user` so one user cannot take a node's
 streams: one more for that user is a 429. An admin viewing as a member counts as
-the admin.
+the admin. WebSocket connections have their own cap, `:max-websockets` on
+`:wagoe/realtime` (default 10000), and `websocket-handler` takes
+`:max-connections-per-user`; over either the upgrade is a 429.
 
 An open stream does not see a logout by itself. Pass `:revalidate`, asked every
 heartbeat, and the stream closes once it answers false; the browser reconnects
@@ -135,6 +137,7 @@ keeps a sliding session alive.
 :wagoe/realtime
 {:provider     :memory              ; or :redis, to share topics across replicas
  :max-streams  32                   ; SSE streams per node
+ :max-websockets 10000              ; WebSocket connections per node
  :jwt-verifier #ig/ref :my-app/jwt-verifier} ; your IJWTVerifier; realtime ships none
 
 ;; :redis also takes :host, :port, :password, :database, :channel and :key-prefix

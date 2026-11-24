@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **WebSocket connections had no cap, so one user could open them until the node ran out** (BOU-1102). `:max-websockets`
+  caps a node at 10000 (raise it if one holds more); give `websocket-handler` `:max-connections-per-user`.
 - **One signed-in user could open SSE streams until a node had none left for anyone else** (BOU-1089). Give `sse-handler`
   `:max-streams-per-user`, e.g. 5: one more for that user is a 429. Without it only the node is capped.
 - **An upload's temp files stayed on disk for an hour, even when the app refused it** (BOU-1087). They are deleted when

@@ -183,6 +183,11 @@
 ;; Factory Functions
 ;; =============================================================================
 
+(defn- slot-pool
+  "A node's slots of one kind: `limit` of them, and a count per user."
+  [limit]
+  {:open (AtomicInteger.) :limit limit :per-user (ConcurrentHashMap.)})
+
 (defn create-realtime-service
   "Create realtime service for WebSocket messaging.
 
@@ -194,30 +199,63 @@
                       InMemoryMessageBus for single-node use)
      :max-streams     concurrent SSE streams on this node, default 32 — each
                       holds a server thread, and Jetty's pool defaults to 50
+     :max-websockets  concurrent WebSocket connections on this node, default
+                      10000 — a ceiling against running out of memory or file
+                      descriptors, not a tight limit (BOU-1102)
 
    On construction the service registers a node-local delivery-fn with the bus
    (start-subscriber!). Pass a shared bus to two services to relay between them."
   [connection-registry jwt-verifier
-   & {:keys [pubsub-manager logger error-reporter bus max-streams]}]
+   & {:keys [pubsub-manager logger error-reporter bus max-streams max-websockets]}]
   (let [bus (or bus (in-memory-bus/create-in-memory-bus))
-        svc (->RealtimeService connection-registry jwt-verifier
-                               pubsub-manager logger error-reporter bus
-                               {:open (AtomicInteger.) :limit (or max-streams 32)
-                                :per-user (ConcurrentHashMap.)})]
+        svc (-> (->RealtimeService connection-registry jwt-verifier
+                                   pubsub-manager logger error-reporter bus
+                                   (slot-pool (or max-streams 32)))
+                (assoc :ws-slots (slot-pool (or max-websockets 10000))))]
     ;; Service handlers run on a bus thread, or inside the publisher's request.
     (ports/start-subscriber! bus (delivery/make-delivery-fn connection-registry pubsub-manager
                                                             #(with-clean-error-context svc %)))
     svc))
 
 (defn- adjust-user!
-  "Add `delta` to `owner`'s open streams, atomically; an owner at 0 is removed,
-   so the map holds only users with streams open. Returns the new count."
+  "Add `delta` to `owner`'s open slots, atomically; an owner at 0 is removed,
+   so the map holds only users with something open. Returns the new count."
   [^ConcurrentHashMap per-user owner delta]
   (let [n (.compute per-user owner
                     (reify BiFunction
                       (apply [_ _ v]
                         (let [n (+ (or v 0) delta)] (when (pos? n) n)))))]
     (or n 0)))
+
+(defn- take-slot!
+  "One of `pool`'s slots, and with an `owner` and a `cap` one of theirs; false
+   when either is full, taking neither. No pool is uncapped."
+  [pool owner cap]
+  (if-let [{:keys [^AtomicInteger open limit per-user]} pool]
+    (cond
+      (> (.incrementAndGet open) limit)
+      (do (.decrementAndGet open) false)
+
+      (and owner cap (> (adjust-user! per-user owner 1) cap))
+      (do (adjust-user! per-user owner -1) (.decrementAndGet open) false)
+
+      :else true)
+    true))
+
+(defn- give-slot!
+  "Give back what `take-slot!` took."
+  [pool owner cap]
+  (when-let [{:keys [^AtomicInteger open per-user]} pool]
+    (when (and owner cap)
+      (adjust-user! per-user owner -1))
+    (.decrementAndGet open)))
+
+(defn- full?
+  "Whether `pool` would refuse one more, for the node or for `owner` under `cap`."
+  [pool owner cap]
+  (when-let [{:keys [^AtomicInteger open limit ^ConcurrentHashMap per-user]} pool]
+    (or (>= (.get open) limit)
+        (boolean (and owner cap (>= (or (.get per-user owner) 0) cap))))))
 
 (defn user-streams
   "How many SSE streams `owner` has open on this node."
@@ -229,24 +267,27 @@
    one of theirs; false when either is full, taking neither. A service
    without slots (another IRealtimeService) is uncapped."
   ([svc] (acquire-stream! svc nil nil))
-  ([svc owner cap]
-   (if-let [{:keys [^AtomicInteger open limit per-user]} (:stream-slots svc)]
-     (cond
-       (> (.incrementAndGet open) limit)
-       (do (.decrementAndGet open) false)
-
-       (and owner cap (> (adjust-user! per-user owner 1) cap))
-       (do (adjust-user! per-user owner -1) (.decrementAndGet open) false)
-
-       :else true)
-     true)))
+  ([svc owner cap] (take-slot! (:stream-slots svc) owner cap)))
 
 (defn release-stream!
   "Give back what `acquire-stream!` took: the node's slot, and `owner`'s when
    it counted one under a `cap`."
   ([svc] (release-stream! svc nil nil))
-  ([svc owner cap]
-   (when-let [{:keys [^AtomicInteger open per-user]} (:stream-slots svc)]
-     (when (and owner cap)
-       (adjust-user! per-user owner -1))
-     (.decrementAndGet open))))
+  ([svc owner cap] (give-slot! (:stream-slots svc) owner cap)))
+
+(defn websockets-full?
+  "Whether one more WebSocket for `owner` under `cap` would be refused, so the
+   upgrade can be refused before it happens (BOU-1102)."
+  [svc owner cap]
+  (full? (:ws-slots svc) owner cap))
+
+(defn acquire-websocket!
+  "As `acquire-stream!`, for WebSocket connections: their own pool, as one
+   holds no server thread (BOU-1102)."
+  [svc owner cap]
+  (take-slot! (:ws-slots svc) owner cap))
+
+(defn release-websocket!
+  "Give back what `acquire-websocket!` took."
+  [svc owner cap]
+  (give-slot! (:ws-slots svc) owner cap))

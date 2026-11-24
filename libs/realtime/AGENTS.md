@@ -111,7 +111,10 @@ and sends it as an SSE event, over the bus, so any replica can push.
   slot is taken inside the body, and over the cap the client gets `retry:` and
   a close. `:max-streams-per-user` on the handler caps one user's on the node
   (429, or `retry:` for a burst past the check; view-as counts the admin,
-  BOU-1089). `:max-topics` (16) per stream, else 400. Heartbeat every 15 s; a
+  BOU-1089). `:max-topics` (16) per stream, else 400. WebSockets have their
+  own pool: `:max-websockets` (10000) per node, `websocket-handler`'s
+  `:max-connections-per-user`; 429 before the upgrade, slot taken on open and
+  freed once on close or error (BOU-1102). Heartbeat every 15 s; a
   dead client is noticed at the next write and deregistered.
 - Logout does not reach an open stream: pass `:revalidate (fn [request])`,
   asked every heartbeat (the guide shows wiring it to the user service).
