@@ -216,6 +216,14 @@ succeeded, is not late: its failures are reported already. Nor is a type this
 node has no handler for, such as one switched off by config. A report the
 tracker refuses is logged and tried again on the next check.
 
+A queue whose waiting jobs have not shrunk for `:stalled-queue-ms` (default
+900000, 15 minutes; `0` turns it off) is logged as a warning once: no worker
+polls it, or its workers fall behind. The scheduler's lease holder checks it, so
+a web node in a split deploy reports it too; for it every node tries that lease
+each `:tick-ms`, even with no recurring jobs. A node holding the lease fires only
+its own schedules, so give every node the same `:recurring`. At boot, a node with workers warns
+when a `:recurring` job goes to a queue it does not poll.
+
 To list only the job types this node has handlers for:
 
 [source,clojure]

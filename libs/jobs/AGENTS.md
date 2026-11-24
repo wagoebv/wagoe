@@ -69,9 +69,11 @@ within the database pool. Off by default; see the virtual threads section of
 `docs/modules/architecture/pages/scaling.adoc`.
 
 **A worker polls one queue.** Work enqueued on a queue no pool names is never
-processed and nothing reports it — push enqueued on `:push` while the only pool
-polled `:default`, and every push sat there (BOU-418). If a module enqueues on
-its own queue, list that queue here.
+processed — push enqueued on `:push` while the only pool polled `:default`, and
+every push sat there (BOU-418). If a module enqueues on its own queue, list that
+queue here. The scheduler's lease holder logs a queue that has not shrunk for
+`:stalled-queue-ms`, and boot warns on a `:recurring` job on an unpolled queue
+(BOU-1088); handlers name no queue, so they cannot be checked.
 
 **Contributing handlers.** A module ships a component returning
 `{job-type handler-fn}` and lists it under `:job-handlers` in its `ig-config`,

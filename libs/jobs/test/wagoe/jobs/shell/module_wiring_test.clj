@@ -3,7 +3,9 @@
    `:db`. It accepts the other modules' spellings so that moving between config
    blocks does not mean remembering which one wanted which word (BOU-436)."
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.tools.logging.test :as log-test]
             [integrant.core :as ig]
+            [wagoe.jobs.core.job :as job]
             [wagoe.jobs.ports :as ports]
             [wagoe.jobs.shell.adapters.in-memory :as mem]
             [wagoe.jobs.shell.module-wiring :as wiring]
@@ -100,3 +102,53 @@
         (let [e (try (ig/init-key :wagoe/job-scheduler {:runtime runtime :expect-success bad})
                      (catch clojure.lang.ExceptionInfo e e))]
           (is (= :validation-error (:type (ex-data e))) (pr-str bad)))))))
+
+(deftest ^:unit a-queue-that-does-not-shrink-is-reported-once
+  (let [queue   (mem/create-in-memory-job-queue)
+        t0      (java.time.Instant/now)
+        at      #(.plus t0 (java.time.Duration/ofMinutes %))
+        watch   (wiring/queue-watch queue (* 15 60000) (* 20 60000))
+        warned? #(some (fn [e] (re-find #"queue :orphans" (str (:message e)))) (log-test/the-log))]
+    (dotimes [_ 2]
+      (ports/enqueue-job! queue :orphans (job/create-job {:job-type :x :queue :orphans} (random-uuid) t0)))
+    (log-test/with-log
+      (watch t0)
+      (watch (at 10))
+      (is (not (warned?)) "not yet stalled")
+      (watch (at 16))
+      (watch (at 30))
+      (is (= 1 (count (filter #(re-find #"queue :orphans" (str (:message %))) (log-test/the-log))))
+          "reported once per stall"))
+    (testing "a queue that shrinks starts over"
+      (ports/dequeue-job! queue :orphans "w1")
+      (log-test/with-log
+        (watch (at 31))
+        (watch (at 40))
+        (is (not (warned?)))))
+    (testing "after a gap, as when the lease was elsewhere, it starts over"
+      (log-test/with-log
+        (watch (at 70))
+        (is (not (warned?)) "39 min since it shrank, but this node did not see them")))))
+
+(deftest ^:unit the-queue-watch-is-on-by-default
+  (let [runtime (ig/init-key :wagoe/jobs-runtime {:provider :memory})
+        config  (get-in (wiring/ig-config {} {:enabled #{:wagoe/jobs}}) [:components :wagoe/job-scheduler])
+        start   #(ig/init-key :wagoe/job-scheduler (merge config {:runtime runtime :registry nil :error-reporter nil} %))]
+    (let [s (start {})]
+      (try (is (fn? (:watch s))) (finally (ig/halt-key! :wagoe/job-scheduler s))))
+    (let [s (start {:stalled-queue-ms 0})]
+      (try (is (nil? (:watch s)) "off, and with it the lease") (finally (ig/halt-key! :wagoe/job-scheduler s))))))
+
+(deftest ^:unit a-recurring-job-on-an-unpolled-queue-warns-at-boot
+  (let [runtime (ig/init-key :wagoe/jobs-runtime {:provider :memory})
+        boot    #(ig/init-key :wagoe/job-scheduler {:runtime runtime :workers % :stalled-queue-ms 0
+                                                    :recurring {:report {:cron "0 2 * * *" :queue :reports}
+                                                                :sweep  {:cron "0 3 * * *"}}})]
+    (log-test/with-log
+      (ig/halt-key! :wagoe/job-scheduler (boot {:queues [:default]}))
+      (is (log-test/logged? 'wagoe.jobs.shell.module-wiring :warn #"\{:report :reports\}")))
+    (testing "not when a pool polls it, nor on a node without workers"
+      (doseq [workers [{:queues [:default :reports]} {:count 0}]]
+        (log-test/with-log
+          (ig/halt-key! :wagoe/job-scheduler (boot workers))
+          (is (not (log-test/logged? 'wagoe.jobs.shell.module-wiring :warn #"does not poll")) (pr-str workers)))))))

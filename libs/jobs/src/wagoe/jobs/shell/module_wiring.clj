@@ -13,7 +13,8 @@
         :scheduler {:tick-ms 5000 :lease-ms 30000 :zone \"UTC\"}
         :on-outcome my.app.jobs/on-outcome   ; optional, (fn [outcome])
         :report-failures-every-ms 3600000    ; error-tracker throttle
-        :expect-success {:nightly-report 26}} ; job type -> hours, else reported
+        :expect-success {:nightly-report 26}  ; job type -> hours, else reported
+        :stalled-queue-ms 900000}            ; waiting jobs, queue not shrinking; 0 off
 
    :wagoe/jobs-runtime
      Queue, store and stats from one adapter, so the three share a backend.
@@ -71,7 +72,8 @@
             [wagoe.jobs.shell.adapters.redis :as redis]
             [wagoe.jobs.shell.outcomes :as outcomes]
             [wagoe.jobs.shell.recurring :as recurring]
-            [wagoe.jobs.shell.worker :as worker]))
+            [wagoe.jobs.shell.worker :as worker])
+  (:import (java.time Instant)))
 
 (defmethod ig/init-key :wagoe/jobs [_ config] config)
 
@@ -219,6 +221,11 @@
                         {:type :configuration-error :symbol hook})))
     hook))
 
+(defn- polled-queues
+  "The queues this node's workers poll: `:queues`, else the one `:queue-name`."
+  [workers]
+  (or (seq (:queues workers)) [(:queue-name workers :default)]))
+
 (defmethod ig/init-key :wagoe/job-workers
   [_ {:keys [queue store registry workers tenant-runner metrics error-reporter
              on-outcome report-failures-every-ms idempotency]}]
@@ -239,8 +246,7 @@
         ;; enqueued on :push while the only pool polled :default, and every
         ;; push sat there (BOU-418 review). Naming the queues here is what
         ;; makes that arrangement deliberate instead of silent.
-        queues  (or (seq (:queues workers))
-                    [(:queue-name workers :default)])]
+        queues  (polled-queues workers)]
     (if (pos? count*)
       (into []
             (mapcat (fn [q]
@@ -267,10 +273,53 @@
                     {:type :validation-error :expect-success expect-success})))
   expect-success)
 
+(defn queue-watch
+  "A watch, (fn [now]), that logs a queue whose waiting jobs have not shrunk
+   for `stall-ms`: nothing polls it, or its workers fall behind. Once per stall.
+   A call more than `max-gap-ms` after the last starts over: the node lost the
+   lease meanwhile, so what it saw then is stale."
+  [queue stall-ms max-gap-ms]
+  ;; ponytail: size as a proxy for dequeues; a queue whose intake matches its
+  ;; drain for stall-ms is reported too. Track dequeues per queue if that bites.
+  (let [seen (atom {}) last-t (atom nil)]
+    (fn [^Instant now]
+      (let [t     (.toEpochMilli now)
+            known (if (and @last-t (<= (- t @last-t) max-gap-ms)) @seen {})]
+        (reset! last-t t)
+        (reset! seen
+                (into {} (for [q (ports/list-queues queue)
+                               :let [n (ports/queue-size queue q)]
+                               :when (pos? n)
+                               :let [{:keys [size] :as prev} (get known q)
+                                     e        (if (and size (<= size n)) (assoc prev :size n) {:size n :since t})
+                                     stalled? (>= (- t (:since e)) stall-ms)]]
+                           (do (when (and stalled? (not (:reported? e)))
+                                 (log/warn (str "Jobs on queue " q " have waited " (quot (- t (:since e)) 60000)
+                                                " min without the queue shrinking: no worker polls it, or its"
+                                                " workers fall behind. Check :wagoe/jobs :workers :queues on the worker nodes.")
+                                           {:queue q :size n}))
+                               [q (cond-> e stalled? (assoc :reported? true))]))))))))
+
+(defn- warn-unpolled-recurring!
+  "Warn when a node with workers schedules a recurring job on a queue it does not poll."
+  [recurring workers]
+  (when (pos? (:count workers 1))
+    (let [polled  (set (polled-queues workers))
+          ;; nil goes to :default, as job/create-job does
+          missing (into (sorted-map) (keep (fn [[job-type {:keys [queue]}]]
+                                             (let [q (or queue :default)]
+                                               (when-not (polled q) [job-type q]))))
+                        recurring)]
+      (when (seq missing)
+        (log/warn (str "Recurring jobs go to queues this node does not poll: " (pr-str missing)
+                       ". Fine if worker nodes poll them; otherwise add them to :wagoe/jobs :workers :queues.")
+                  {:job-types missing :polled (vec polled)})))))
+
 (defmethod ig/init-key :wagoe/job-scheduler
   [_ {:keys [runtime registry recurring scheduler expect-success error-reporter
-             report-failures-every-ms]}]
-  (let [watch (when (seq (expect-success! expect-success))
+             report-failures-every-ms workers stalled-queue-ms]}]
+  (warn-unpolled-recurring! recurring workers)
+  (let [stale (when (seq (expect-success! expect-success))
                 (let [opts {:store                    (:store runtime)
                             :registry                 registry
                             :idempotency              (:idempotency runtime)
@@ -279,6 +328,19 @@
                             :report-failures-every-ms report-failures-every-ms}]
                   (log/info "Jobs: expecting successes" {:hours expect-success})
                   #(outcomes/check-stale! opts %)))
+        ;; On the lease holder only, so a split deploy reports a queue once
+        stall (let [ms (or stalled-queue-ms 900000)]
+                (when (pos? ms)
+                  ;; It runs on a tick, so no closer together than the larger of the two
+                  (let [{:keys [watch-ms tick-ms]} (merge recurring/defaults scheduler)]
+                    (queue-watch (:queue runtime) ms (* 2 (max watch-ms tick-ms))))))
+        ;; Answers what check-stale! does; a failing queue watch must not stop it
+        ;; nil with nothing to watch, so the node takes no ticker lease for it
+        watch (when (or stall stale)
+                (fn [now]
+                  (when stall
+                    (try (stall now) (catch Exception e (log/error e "Queue watch failed"))))
+                  (when stale (stale now))))
         s     (recurring/create-scheduler {:queue       (:queue runtime)
                                            :state       (:recurring-state runtime)
                                            :idempotency (:idempotency runtime)
@@ -324,7 +386,9 @@
                              :scheduler      (:scheduler settings)
                              :expect-success (:expect-success settings)
                              :error-reporter (ig/ref :wagoe/error-reporting)
-                             :report-failures-every-ms (:report-failures-every-ms settings)}
+                             :report-failures-every-ms (:report-failures-every-ms settings)
+                             :workers        (:workers settings)
+                             :stalled-queue-ms (:stalled-queue-ms settings)}
        :wagoe/job-registry {:handler-maps []}
        :wagoe/job-workers  {:queue          (ig/ref :wagoe/job-queue)
                             :store          (ig/ref :wagoe/job-store)
