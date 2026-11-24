@@ -1,6 +1,7 @@
 (ns wagoe.storage.shell.service-test
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [wagoe.storage.ports :as ports]
             [wagoe.storage.shell.service :as sut]
             [wagoe.storage.shell.adapters.local :as local]
@@ -245,3 +246,30 @@
     (is (= [:storage-error] (map :code (:errors result))))
     (is (empty? (filter #(.isFile ^java.io.File %) (file-seq (io/file test-dir))))
         "the stored file was left behind")))
+
+(defn- query-params [url]
+  (into {} (for [kv (str/split (second (str/split url #"\?")) #"&")]
+             (str/split kv #"=" 2))))
+
+(deftest ^:integration ^:security an-app-uploads-signs-and-serves-through-the-port
+  ;; BOU-1077: no storage shell namespace needed
+  (let [storage (local/create-local-storage {:base-path test-dir :url-base "http://x/files"
+                                             :signing-secret "q8Zr3vLx0pT6wN2mHc9sYbK4dF7jA1eU"})
+        service (sut/create-storage-service {:storage storage})
+        key     (get-in (ports/upload-file service {:bytes (.getBytes "hello")} {:filename "a.txt"} {}) [:data :key])
+        params  (query-params (ports/get-file-url service key 60))]
+    (is (= "hello" (String. ^bytes (:bytes (ports/signed-file service key params)))))
+    (testing "nil for a tampered, missing or another key's signature, or a stale version"
+      (is (nil? (ports/signed-file service key (assoc params "signature" (apply str (repeat 64 "0"))))))
+      (is (nil? (ports/signed-file service key {})))
+      (is (nil? (ports/signed-file service (str key "x") params)))
+      (is (nil? (ports/signed-file service key (assoc params "v" "other")))))
+    (testing "every port method reaches the service"
+      (is (= "hello" (String. ^bytes (:bytes (ports/download-file service key)))))
+      (is (contains? (ports/upload-image service (.getBytes "png") {:filename "x.png"} {}) :success)
+          "answered by the service, not an IllegalArgumentException")
+      (is (true? (ports/remove-file service key)))
+      (is (nil? (ports/download-file service key))))
+    (testing "an adapter without a signing secret serves nothing"
+      (let [plain (sut/create-storage-service {:storage (local/create-local-storage {:base-path test-dir})})]
+        (is (nil? (ports/signed-file plain key params)))))))

@@ -19,8 +19,7 @@
   [_ {:keys [job-queue storage email queue from]}]
   (service/create-report-service {:job-queue    job-queue
                                   :queue-name   queue
-                                  ;; :wagoe/storage is {:storage <IFileStorage> …}. Its
-                                  ;; IStorageService is not on storage's port.
+                                  ;; The raw adapter: a report is stored as it is, not validated
                                   :file-storage (:storage storage)
                                   :email-sender email
                                   :from         from}))

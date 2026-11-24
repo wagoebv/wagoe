@@ -28,7 +28,9 @@
     (let [component (ig/init-key :wagoe/storage {:provider :local :root test-root})]
       (testing "returns the provider + a usable IStorageService"
         (is (= :local (:provider component)))
-        (is (satisfies? service/IStorageService (:service component))))
+        (is (satisfies? service/IStorageService (:service component)))
+        (is (satisfies? ports/IStorageService (:service component)) "an app's way in (BOU-1077)")
+        (is (satisfies? ports/ISignedFiles (:service component))))
       (testing "the service round-trips a file to :root"
         (let [{:keys [success data]} (service/upload-file
                                       (:service component)

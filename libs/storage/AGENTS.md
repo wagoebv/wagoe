@@ -14,7 +14,7 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 
 | Namespace | Purpose |
 |-----------|---------|
-| `wagoe.storage.ports` | Protocols: `IFileStorage`, `IStreamingFileStorage`, `IUploadIndex`, `IExportJobStore`, `IImageProcessor` |
+| `wagoe.storage.ports` | Protocols: `IFileStorage`, `IStreamingFileStorage`, `IStorageService`, `ISignedFiles`, `IUploadIndex`, `IExportJobStore`, `IImageProcessor` |
 | `wagoe.storage.core.validation` | Pure: size/type/extension validation, filename sanitization, MIME lookup |
 | `wagoe.storage.core.uploads` | Pure: the upload index record and the data-export section |
 | `wagoe.storage.shell.upload-index` | `JdbcUploadIndex` on `storage_uploads`, and its boot-time table creation |
@@ -204,8 +204,13 @@ delegates to the adapter, wrapping results as `{:success bool ...}`.
 
 ## Usage — service layer (`IStorageService`)
 
+`wagoe.storage.ports/IStorageService` has the shell protocol's methods, so
+another module or an app uses the service without a storage shell namespace,
+which `bb check:ports` refuses (BOU-1077). `StorageService` gets it by `extend`:
+inline, its methods would clash with the shell protocol's same-named ones.
+
 ```clojure
-(require '[wagoe.storage.shell.service :as service])
+(require '[wagoe.storage.shell.service :as service]) ; or wagoe.storage.ports
 
 ;; Upload with validation options
 (service/upload-file svc
@@ -225,6 +230,11 @@ delegates to the adapter, wrapping results as `{:success bool ...}`.
 (service/remove-file   svc file-key)   ; => boolean
 (service/get-file-url  svc file-key 3600) ; signed (S3 private) or public URL
 ```
+
+`ports/signed-file` serves what `get-file-url` signed from an app's own route:
+`(ports/signed-file svc file-key (:query-params request))` is the file when the
+signature is valid, unexpired and for the file as it is now, else nil. On S3
+and GCS it is nil: their own store checks their URLs.
 
 To bypass the service, call the `wagoe.storage.ports` fns directly on an
 adapter (`store-file`, `retrieve-file`, `file-exists?`, `delete-file`,

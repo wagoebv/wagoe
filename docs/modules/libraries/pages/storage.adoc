@@ -55,6 +55,35 @@ Includes file validation, image processing, and signed URL generation.
 (ports/generate-signed-url storage key 3600)  ; local signs only with :signing-secret
 ----
 
+== The service, from an app
+
+`:service` of `:wagoe/storage` validates, indexes the upload and keeps a
+tenant's files in its directory. Use it through `wagoe.storage.ports`: an app
+needs no storage shell namespace.
+
+[source,clojure]
+----
+(let [svc (:service (:wagoe/storage system))
+      key (get-in (ports/upload-file svc {:bytes bytes} {:filename "a.pdf" :owner owner} {})
+                  [:data :key])]
+  (ports/get-file-url svc key 300))           ; signed and expiring on local, S3 and GCS
+
+;; In the app's own route, serving that URL (local storage with :signing-secret):
+(if-let [file (ports/signed-file svc file-key (:query-params request))]
+  {:status  200
+   :headers {"Content-Type"        (:content-type file)
+             ;; A download, as the storage route sends it: an uploaded SVG or HTML
+             ;; served inline would run on the app's origin
+             "Content-Disposition" (str "attachment; filename=\""
+                                        (validation/sanitize-filename (last (str/split file-key #"/")))
+                                        "\"")}
+   :body    (:bytes file)}
+  {:status 403})
+----
+
+`signed-file` is nil for a bad, expired or stale signature, and on S3 and GCS,
+whose URLs their own store checks.
+
 == File validation
 
 [source,clojure]
