@@ -65,6 +65,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **Upload retention deleted files an app still referred to** (BOU-1081). Give `:wagoe/storage` an `:in-use?`
+  function, `(fn [upload])`, and retention keeps what it says is in use. Without it, nothing changes.
 - **A per-route `http-rate-limit` also counted every other request, and its htmx toast was English** (BOU-1086). Pass
   `{:bucket "uploads"}` as the fourth argument to count only that route. The /web toast or page is now translated.
 - **Revoking an invite the invitee accepted at the same moment set it back to revoked, membership and all** (BOU-1093).

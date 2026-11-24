@@ -138,6 +138,15 @@
   (uploads-stored-before [this cutoff limit]
     "At most `limit` uploads stored before `cutoff`, an Instant."))
 
+(defprotocol IUploadPages
+  "Beside `IUploadIndex`, which is stable: old uploads a page at a time, so
+  upload retention reads past the ones an app keeps without reading them again
+  (BOU-1081)."
+
+  (uploads-stored-after [this cutoff after limit]
+    "At most `limit` uploads stored before `cutoff`, ordered by stored-at and
+    then key, after the upload `after`; from the oldest when `after` is nil."))
+
 (defprotocol IUploadLookup
   "Who owns one file. Beside `IUploadIndex`, not in it, so an index written
   before it still compiles; the storage routes refuse to boot without it."
