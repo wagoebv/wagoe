@@ -14,13 +14,13 @@ Includes file validation, image processing, and signed URL generation.
 | Pure: file validation (size, type, extension), filename sanitization
 
 | `wagoe.storage.ports`
-| Protocols: `IFileStorage`, `IStreamingFileStorage`, `IUploadIndex`, `IExportJobStore`, `IImageProcessor`
+| Protocols: `IFileStorage`, `IStreamingFileStorage`, `IStorageService`, `ISignedFiles`, `IUploadIndex`, `IUploadPages`, `IExportJobStore`, `IImageProcessor`
 
 | `wagoe.storage.schema`
 | Malli schemas: `FileData`, `FileMetadata`, `StorageResult`
 
 | `wagoe.storage.shell.service`
-| Service layer orchestrating validation + storage
+| `create-storage-service`; its protocol is deprecated, call the service through `wagoe.storage.ports`
 
 | `wagoe.storage.shell.adapters.local`
 | Local filesystem adapter (content-addressed with SHA-256)

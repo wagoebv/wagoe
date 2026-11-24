@@ -64,7 +64,7 @@
     (into #{} (map #(.getName ^ZipEntry %)) (take-while some? (repeatedly #(.getNextEntry zip))))))
 
 (defn- upload! [service user-id]
-  (-> (service/upload-file service {:bytes (.getBytes "mine") :content-type "text/plain"}
+  (-> (ports/upload-file service {:bytes (.getBytes "mine") :content-type "text/plain"}
                            {:filename "note.txt" :owner {:user-id user-id}} {})
       :data :key))
 

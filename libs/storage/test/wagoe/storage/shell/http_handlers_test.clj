@@ -6,7 +6,7 @@
             [wagoe.storage.shell.adapters.local :as local]
             [wagoe.storage.shell.adapters.image-processor :as image-processor]
             [wagoe.storage.core.validation :as validation]
-            [wagoe.storage.ports]
+            [wagoe.storage.ports :as ports]
             [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [clojure.string]))
 
@@ -113,7 +113,7 @@
         file-data {:bytes (.getBytes "url test")
                    :content-type "text/plain"
                    :size 8}
-        upload-result (service/upload-file service file-data {:filename "url.txt"} {})
+        upload-result (ports/upload-file service file-data {:filename "url.txt"} {})
         file-key (-> upload-result :data :key)
         handler (sut/get-file-url-handler service)]
 
@@ -231,7 +231,7 @@
       (let [resp (send "logo.png" "text/html")]
         (is (= 201 (:status resp)))
         (is (= "image/png" (get-in resp [:body :content-type])))
-        (is (= "image/png" (:content-type (service/download-file svc (get-in resp [:body :key])))))))))
+        (is (= "image/png" (:content-type (ports/download-file svc (get-in resp [:body :key])))))))))
 
 (deftest ^:unit ^:security an-upload-cannot-loosen-the-configured-limits
   ;; BOU-1076: max-size and allowed-types came from the query string.
@@ -466,7 +466,7 @@
   (let [secret   "s3cr3t"
         storage  (local/create-local-storage {:base-path test-dir :url-base "http://x/files" :signing-secret secret})
         svc      (service/create-storage-service {:storage storage})
-        put!     #(-> (service/upload-file svc {:bytes (.getBytes ^String %) :content-type "text/plain"}
+        put!     #(-> (ports/upload-file svc {:bytes (.getBytes ^String %) :content-type "text/plain"}
                                            {:filename "a.txt" :path "docs"} {})
                       :data)
         stored   (put! "first")
@@ -490,7 +490,7 @@
       (is (= key (:key (put! "second"))))
       (is (= 403 (:status (download query)))))
     (testing "nor a deleted one"
-      (service/remove-file svc key)
+      (ports/remove-file svc key)
       (is (= 404 (:status (download query)))))))
 
 (deftest ^:unit a-streamed-file-reports-a-url-its-route-serves
@@ -505,7 +505,7 @@
 
 (deftest ^:unit a-url-asks-between-one-second-and-the-cap
   (let [svc (create-test-service)
-        key (-> (service/upload-file svc {:bytes (.getBytes "x") :content-type "text/plain"} {:filename "u.txt"} {}) :data :key)
+        key (-> (ports/upload-file svc {:bytes (.getBytes "x") :content-type "text/plain"} {:filename "u.txt"} {}) :data :key)
         ask #(:status ((sut/get-file-url-handler svc) {:path-params {:file-key key} :query-params {"expiration" %}}))]
     (doseq [bad ["0" "-1" (str (inc validation/max-signed-seconds))]]
       (is (= 400 (ask bad)) bad))
@@ -587,7 +587,7 @@
 (deftest ^:unit an-uploaded-temp-file-is-streamed-into-storage
   ;; BOU-1080: the route passes Ring's temp file on, not its bytes
   (let [received (atom nil)
-        spy      (reify service/IStorageService
+        spy      (reify ports/IStorageService
                    (upload-file [_ file-data _ _]
                      (reset! received file-data)
                      {:success true :data {:key "a.txt"}})

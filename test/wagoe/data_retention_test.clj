@@ -10,7 +10,6 @@
             [wagoe.platform.ports.privacy :as privacy]
             [wagoe.storage.ports :as storage-ports]
             [wagoe.storage.shell.export-jobs :as export-jobs]
-            [wagoe.storage.shell.service :as storage]
             [wagoe.system-config :as sys-config]
             [wagoe.user.ports :as user-ports])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream]
@@ -70,7 +69,7 @@
             upload-index (:wagoe.storage/upload-index system)
             data-export  (:wagoe/data-export system)
             user-id      (random-uuid)
-            upload!      #(-> (storage/upload-file service {:bytes (.getBytes ^String %) :content-type "text/plain"}
+            upload!      #(-> (storage-ports/upload-file service {:bytes (.getBytes ^String %) :content-type "text/plain"}
                                                    {:filename "note.txt" :owner {:user-id user-id}} {})
                               :data :key)
             old          (upload! "old")

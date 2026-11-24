@@ -155,4 +155,13 @@
  {:ticket "BOU-995"
   :since  "1.3.0"
   :note   "wagoe.user.ports/get-user-by-email: an email is unique per tenant now, so it answers nil when the email has accounts in several tenants."
-  :manual "Call wagoe.user.ports/get-user-by-tenant-and-email with the tenant the code acts in (nil for none). A rewrite cannot tell which tenant that is."}]
+  :manual "Call wagoe.user.ports/get-user-by-tenant-and-email with the tenant the code acts in (nil for none). A rewrite cannot tell which tenant that is."}
+
+ {:ticket    "BOU-1107"
+  :since     "Unreleased"
+  :note      "wagoe.storage.shell.service/IStorageService: the same methods are on wagoe.storage.ports/IStorageService. A reify or extend of the shell protocol changes by hand."
+  :fn-rename {wagoe.storage.shell.service/upload-file   wagoe.storage.ports/upload-file
+              wagoe.storage.shell.service/upload-image  wagoe.storage.ports/upload-image
+              wagoe.storage.shell.service/download-file wagoe.storage.ports/download-file
+              wagoe.storage.shell.service/remove-file   wagoe.storage.ports/remove-file
+              wagoe.storage.shell.service/get-file-url  wagoe.storage.ports/get-file-url}}]

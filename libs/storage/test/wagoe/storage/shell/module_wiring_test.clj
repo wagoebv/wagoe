@@ -4,7 +4,6 @@
   (:require [clojure.test :refer [deftest is testing]]
             [wagoe.storage.shell.module-wiring]
             [wagoe.storage.shell.http-handlers :as http-handlers]
-            [wagoe.storage.shell.service :as service]
             [wagoe.storage.ports :as ports]
             [integrant.core :as ig]
             [clojure.java.io :as io]
@@ -28,11 +27,10 @@
     (let [component (ig/init-key :wagoe/storage {:provider :local :root test-root})]
       (testing "returns the provider + a usable IStorageService"
         (is (= :local (:provider component)))
-        (is (satisfies? service/IStorageService (:service component)))
         (is (satisfies? ports/IStorageService (:service component)) "an app's way in (BOU-1077)")
         (is (satisfies? ports/ISignedFiles (:service component))))
       (testing "the service round-trips a file to :root"
-        (let [{:keys [success data]} (service/upload-file
+        (let [{:keys [success data]} (ports/upload-file
                                       (:service component)
                                       {:bytes (.getBytes "hi") :content-type "text/plain"}
                                       {:filename "a.txt"} {})]

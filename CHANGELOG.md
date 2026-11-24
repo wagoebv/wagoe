@@ -63,6 +63,11 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`:prometheus` scrapes carry the JVM: heap and pools, GC, threads, process CPU and file descriptors** (BOU-1097),
   under Prometheus' client_java 1.x names. `:enable-default-metrics false` turns them off.
 
+### Deprecated
+
+- **`wagoe.storage.shell.service/IStorageService`** (BOU-1107): use `wagoe.storage.ports/IStorageService`, the same
+  methods, which the storage service implements too. The shell protocol stays until 2.0.
+
 ### Fixed
 
 - **Storage leftovers** (BOU-1082): `wagoe add storage` writes the config when deps.edn has a newer version, uploads

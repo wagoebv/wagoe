@@ -24,7 +24,7 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 | `wagoe.storage.shell.export-jobs` | Data export as a background job: request (one open job per subject and requester, `:export-requests-per-hour` per requester, default 5), job handler, download, `:storage/export-archives` retention |
 | `wagoe.storage.shell.export-job-http` | `/me/export-jobs` routes, mounted when the jobs module is on; `ExportJobs`, the `privacy/IExportJobs` other modules ask as `:wagoe/export-jobs` |
 | `wagoe.storage.schema` | Malli schemas: `FileData`, `FileMetadata`, `StorageResult`, `ImageInfo`, `*StorageConfig` |
-| `wagoe.storage.shell.service` | `IStorageService` protocol + `StorageService` record — validation + storage + optional image processing |
+| `wagoe.storage.shell.service` | `StorageService` record and `create-storage-service` — validation + storage + optional image processing; its own `IStorageService` is deprecated for the port's (BOU-1107) |
 | `wagoe.storage.shell.adapters.local` | `LocalFileStorage` — filesystem, content-addressed keys with directory sharding |
 | `wagoe.storage.shell.adapters.s3` | `S3FileStorage` — AWS S3 / S3-compatible (MinIO, DO Spaces) via AWS SDK v2 |
 | `wagoe.storage.shell.adapters.gcs` | `GCSFileStorage` — Google Cloud Storage via `google-cloud-storage`; V4 signed URLs |
@@ -214,16 +214,17 @@ delegates to the adapter, wrapping results as `{:success bool ...}`.
 
 ## Usage — service layer (`IStorageService`)
 
-`wagoe.storage.ports/IStorageService` has the shell protocol's methods, so
-another module or an app uses the service without a storage shell namespace,
-which `bb check:ports` refuses (BOU-1077). `StorageService` gets it by `extend`:
-inline, its methods would clash with the shell protocol's same-named ones.
+Call the service through `wagoe.storage.ports/IStorageService`: another module
+or an app then needs no storage shell namespace, which `bb check:ports` refuses
+(BOU-1077). `wagoe.storage.shell.service/IStorageService`, the same methods, is
+deprecated and stays until 2.0 (BOU-1107). `StorageService` gets the port one by
+`extend`: inline, its methods would clash with the shell protocol's.
 
 ```clojure
-(require '[wagoe.storage.shell.service :as service]) ; or wagoe.storage.ports
+(require '[wagoe.storage.ports :as ports])
 
 ;; Upload with validation options
-(service/upload-file svc
+(ports/upload-file svc
   {:bytes (.getBytes "hi") :content-type "text/plain"}
   {:filename "note.txt"}
   {:max-size 5242880 :allowed-types ["text/plain"] :allowed-extensions ["txt"]})
@@ -231,14 +232,14 @@ inline, its methods would clash with the shell protocol's same-named ones.
 ;=> {:success false :errors [{:code :file-too-large :message "..." :details {...}}]}
 
 ;; Upload an image, optionally producing a thumbnail
-(service/upload-image svc image-bytes
+(ports/upload-image svc image-bytes
   {:filename "pic.jpg"}
   {:create-thumbnail true :thumbnail-size 200})
 ;=> {:success true :original {...} :thumbnail {...}}
 
-(service/download-file svc file-key)   ; => {:bytes :content-type :size} or nil
-(service/remove-file   svc file-key)   ; => boolean
-(service/get-file-url  svc file-key 3600) ; signed (S3 private) or public URL
+(ports/download-file svc file-key)   ; => {:bytes :content-type :size} or nil
+(ports/remove-file   svc file-key)   ; => boolean
+(ports/get-file-url  svc file-key 3600) ; signed (S3 private) or public URL
 ```
 
 `ports/signed-file` serves what `get-file-url` signed from an app's own route:
