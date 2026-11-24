@@ -319,13 +319,34 @@
                  (contains? (ex-data %) :max-file-count))
             (take-while some? (iterate ex-cause e)))))
 
+(defn- with-request-store
+  "Call `(f store)` with a temp-file store that records each file before it
+   writes to it, then delete them all: when the request ends, refused or not,
+   rather than an hour later. Ring's store created the file first and an
+   over-size part threw mid-copy, unrecorded (BOU-1087)."
+  [f]
+  (let [made  (atom [])
+        store (fn [{:keys [stream] :as item}]
+                (let [file (java.io.File/createTempFile "ring-multipart-" nil)]
+                  (swap! made conj file)
+                  (io/copy stream file)
+                  (-> (select-keys item [:filename :content-type])
+                      (assoc :tempfile file :size (.length file)))))]
+    (try
+      (f store)
+      (finally
+        (doseq [^java.io.File file @made]
+          (.delete file))))))
+
 (defn- multipart-params
   "Decodes multipart bodies, which Reitit does only for routes declaring
    `:parameters :multipart` (BOU-638). Those are skipped, not parsed twice.
-   So are `:public` routes: the authentication guard does not cover them."
-  [limits]
-  (let [limits (merge default-multipart-limits limits)
-        refuse (fn [request e]
+   So are `:public` routes: the authentication guard does not cover them.
+   A route's `:multipart-limits` narrow or lift the router's (BOU-1087). Temp
+   files last as long as the request: a handler reads its file before it
+   returns, not from a future it leaves behind."
+  [router-limits]
+  (let [refuse (fn [limits request e]
                  (let [id (access/correlation-id request (str (random-uuid)))]
                    (if (limit-exceeded? e)
                      (errors/response 413 :validation-error "Upload exceeds the multipart limits"
@@ -337,16 +358,19 @@
      :compile (fn [data _opts]
                 (when-not (or (access/public? data)
                               (get-in data [:parameters :multipart]))
-                  (fn [handler]
-                    (fn [request]
-                      (let [decoded (try (multipart-params-request request limits)
-                                         (catch FileUploadException e e)
-                                         (catch clojure.lang.ExceptionInfo e e)
-                                         (catch RuntimeException e
-                                           (if (body-too-large? e) e (throw e))))]
-                        (if (instance? Throwable decoded)
-                          (refuse request decoded)
-                          (handler decoded)))))))}))
+                  (let [limits (merge default-multipart-limits router-limits (:multipart-limits data))]
+                    (fn [handler]
+                      (fn [request]
+                        (with-request-store
+                          (fn [store]
+                            (let [decoded (try (multipart-params-request request (assoc limits :store store))
+                                               (catch FileUploadException e e)
+                                               (catch clojure.lang.ExceptionInfo e e)
+                                               (catch RuntimeException e
+                                                 (if (body-too-large? e) e (throw e))))]
+                              (if (instance? Throwable decoded)
+                                (refuse limits request decoded)
+                                (handler decoded))))))))))}))
 
 (defn- reset-error-context
   "Outermost, so a report from route middleware, outside the interceptor stack,
