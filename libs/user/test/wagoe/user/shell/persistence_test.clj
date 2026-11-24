@@ -7,7 +7,8 @@
             [wagoe.user.shell.persistence :as sut]
             [support.test-db :as test-db]
             [cheshire.core :as json]
-            [clojure.test :refer [deftest is testing]])
+            [clojure.test :refer [deftest is testing]]
+            [wagoe.tenant.shell.persistence :as tenant-persistence])
   (:import [java.time Instant]
            [java.util UUID]
            [org.postgresql.util PGobject]))
@@ -248,3 +249,67 @@
         (ports/update-user repo (assoc (ports/find-user-by-id repo (:id u)) :mfa-enabled false :mfa-secret nil))
         (is (false? (read)))
         (is (false? (:mfa-enabled (ports/find-user-by-email repo "m@example.com"))))))))
+
+(deftest ^:integration find-users-searches-names-pages-stably-and-can-skip-the-total
+  ;; BOU-1099: a member search read three times what it showed.
+  (with-user-db
+    (fn [ctx]
+      (let [repo  (sut/create-user-repository ctx)
+            add!  (fn [email nm] (ports/create-user repo {:email email :name nm :role :user :active true :password-hash "x"}))
+            ann   (add! "ann@example.com" "Ann")
+            ann2  (add! "ann.two@example.com" "Ann")
+            _     (add! "anna-by-mail@example.com" "Bob")
+            names #(set (map :name (:users (ports/find-users repo %))))]
+        (testing "a name filter skips the address"
+          (is (= #{"Ann"} (names {:filter-name-contains "ann"}))))
+        (testing ":exclude-ids leaves those out"
+          (is (= [(:id ann2)] (mapv :id (:users (ports/find-users repo {:filter-name-contains "ann"
+                                                                        :exclude-ids [(:id ann)]}))))))
+        (testing "a shared name pages the same way each time: the id breaks the tie"
+          (let [page #(mapv :id (:users (ports/find-users repo {:filter-name-contains "ann" :sort-by :name
+                                                                :limit 1 :offset %})))]
+            (is (= (sort [(str (:id ann)) (str (:id ann2))]) (map str (concat (page 0) (page 1)))))))
+        (testing ":skip-total? leaves the count out"
+          (is (not (contains? (ports/find-users repo {:skip-total? true}) :total-count)))
+          (is (= 3 (:total-count (ports/find-users repo {})))))))))
+
+(deftest ^:integration find-users-finds-a-tenants-active-members
+  ;; BOU-1099: :filter-tenant-id is the tenant that owns the account, so a
+  ;; member whose account lives elsewhere was not found.
+  (let [ctx (factory/db-context (factory/h2-config (str "mem:user_members_" (System/nanoTime) ";DB_CLOSE_DELAY=-1")))]
+    (try
+      (sut/initialize-user-schema! ctx)
+      (tenant-persistence/initialize-tenant-schema! ctx)
+      (let [repo    (sut/create-user-repository ctx)
+            add!    #(ports/create-user repo {:email % :name % :role :user :active true :password-hash "x"})
+            tenant  (random-uuid)
+            member  (add! "member@example.com")
+            left    (add! "left@example.com")
+            _       (add! "outsider@example.com")
+            join!   (fn [user status]
+                      (db-core/execute-update! ctx {:insert-into :public.tenant_memberships
+                                                    :values [{:id (str (random-uuid)) :tenant_id (str tenant)
+                                                              :user_id (str (:id user)) :role "member" :status status
+                                                              :invited_at (java.time.Instant/now)
+                                                              :created_at (java.time.Instant/now)}]}))]
+        (join! member "active")
+        (join! left "revoked")
+        (is (= ["member@example.com"]
+               (mapv :email (:users (ports/find-users repo {:filter-active-member-of tenant})))))
+        (is (empty? (:users (ports/find-users repo {:filter-active-member-of nil})))
+            "no tenant finds nobody, not everyone"))
+      (finally (factory/close-db-context! ctx)))))
+
+(deftest ^:integration a-name-search-ignores-accents-on-postgresql
+  ;; BOU-1099: "jose" did not find José. Accents only where unaccent is, which
+  ;; the PostgreSQL job (WAGOE_TEST_DB=pg) proves; elsewhere names match as before.
+  (test-db/with-db "user_unaccent"
+    (fn [ctx]
+      (sut/initialize-user-schema! ctx)
+      (sut/create-unaccent! ctx)
+      (let [repo  (sut/create-user-repository ctx)
+            names #(mapv :name (:users (ports/find-users repo {:filter-name-contains %})))]
+        (ports/create-user repo {:email "jose@example.com" :name "José Núñez" :role :user :active true :password-hash "x"})
+        (is (= ["José Núñez"] (names "JOSÉ")))
+        (when (= :pg test-db/engine)
+          (is (= ["José Núñez"] (names "jose nun"))))))))

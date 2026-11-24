@@ -280,6 +280,7 @@
   [_ {:keys [ctx]}]
   (log/info "Initializing user module database schema")
   (user-persistence/initialize-user-schema! ctx)
+  (user-persistence/create-unaccent! ctx)
   (log/info "User module database schema initialized")
   {:status :initialized})
 

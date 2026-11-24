@@ -242,6 +242,50 @@
                     (db/execute-ddl! ctx "ALTER TABLE auth_users DROP CONSTRAINT IF EXISTS uk_auth_users_email"))
     nil))
 
+(defn create-unaccent!
+  "PostgreSQL's unaccent, so a name search finds José for \"jose\" (BOU-1099).
+   Trusted since PostgreSQL 13, so the database owner may create it; without
+   the right, names match with their accents, as before. Not part of
+   `initialize-user-schema!`: a refused statement aborts the migration's
+   transaction, so its migration runs it outside one, as search's pg_trgm."
+  [ctx]
+  (when (protocols/capable? (:adapter ctx) :full-text)
+    (try
+      (db/execute-ddl! ctx "CREATE EXTENSION IF NOT EXISTS unaccent")
+      (catch Exception e
+        (log/warn "PostgreSQL unaccent not created; name searches keep accents until it is, and a restart"
+                  {:error (ex-message e)})))))
+
+(def ^:private unaccent-schemas
+  "The schema unaccent lives in, or false, by datasource; weak, so a closed
+   pool's entry goes with it."
+  (java.util.Collections/synchronizedMap (java.util.WeakHashMap.)))
+
+(defn- unaccent-fn
+  "`unaccent` qualified by its schema, so a tenant's search_path cannot miss
+   it; nil without it. A failed lookup is not remembered."
+  [ctx]
+  (when (protocols/capable? (:adapter ctx) :full-text)
+    (let [ds (:datasource ctx)
+          known (.get ^java.util.Map unaccent-schemas ds)]
+      (if (some? known)
+        (when known (keyword (str known ".unaccent")))
+        (let [schema (some-> (db/execute-one! ctx {:select [[:n.nspname :schema]]
+                                                   :from   [[:pg_extension :e]]
+                                                   :join   [[:pg_namespace :n] [:= :n.oid :e.extnamespace]]
+                                                   :where  [:= :e.extname "unaccent"]})
+                             :schema)]
+          (.put ^java.util.Map unaccent-schemas ds (or schema false))
+          (when schema (keyword (str schema ".unaccent"))))))))
+
+(defn- name-contains
+  "`u.name` contains `q`, ignoring case, and accents where the database can."
+  [ctx q]
+  (if-let [unaccent (unaccent-fn ctx)]
+    [:escape [:ilike [unaccent :u.name] [unaccent (protocols/like-pattern :contains q)]]
+     [:inline protocols/like-escape]]
+    (protocols/like (:adapter ctx) :u.name :contains q)))
+
 (defn initialize-user-schema!
   "Initialize database schema for user entities using Malli schema definitions.
 
@@ -632,6 +676,22 @@
                         (conj (let [q (:filter-name-or-email-contains options)]
                                 [:or (contains :a.email q) (contains :u.name q)]))
 
+                        ;; Members search each other by name, not address (BOU-1099).
+                        (:filter-name-contains options)
+                        (conj (name-contains ctx (:filter-name-contains options)))
+
+                        ;; Active members, wherever their account lives: :filter-tenant-id
+                        ;; is the tenant that owns the account (BOU-1099). Tenancy's table.
+                        ;; nil is nobody, as with :filter-ids: no tenant is no search of all.
+                        (contains? options :filter-active-member-of)
+                        (conj [:in :a.id {:select [:user_id]
+                                          :from   [:public.tenant_memberships]
+                                          :where  [:and [:= :tenant_id (type-conversion/uuid->string (:filter-active-member-of options))]
+                                                   [:= :status "active"]]}])
+
+                        (seq (:exclude-ids options))
+                        (conj [:not [:in :a.id (mapv str (:exclude-ids options))]])
+
                         ;; The ids an access filter admits (BOU-1002); none admits nobody.
                         ;; ponytail: one bound parameter per id; past ~65k holders PostgreSQL
                         ;; refuses it, a subquery on the holders' groups when that matters
@@ -654,7 +714,9 @@
 
           ;; Build pagination & ordering (default to a.created_at)
           pagination (db/build-pagination options)
-          ordering (db/build-ordering (assoc options :sort-by (get user-sort-columns (:sort-by options) :a.created_at)) :a.created_at)
+          ;; The id breaks ties, so a name two users share pages the same each time (BOU-1099).
+          ordering (conj (db/build-ordering (assoc options :sort-by (get user-sort-columns (:sort-by options) :a.created_at)) :a.created_at)
+                         [:a.id :asc])
 
           ;; Build query with JOIN - select all fields from both tables.
           ;; COUNT(*) OVER() is a window function that returns the total matching rows
@@ -687,21 +749,23 @@
                                   :u.notifications_sms
                                   :u.theme
                                   :u.language
-                                  :u.timezone
-                                  [[:raw "COUNT(*) OVER()"] :total_count]]
+                                  :u.timezone]
                          :from [[:auth_users :a]]
                          :join [[:users :u] [:= :a.id :u.id]]
                          :order-by ordering
                          :limit (:limit pagination)
                          :offset (:offset pagination)}
-                  where-clause (assoc :where where-clause))
+                  where-clause (assoc :where where-clause)
+                  ;; The total makes the database find every match; a search
+                  ;; box asking for the first ten need not (BOU-1099).
+                  (not (:skip-total? options)) (update :select conj [[:raw "COUNT(*) OVER()"] :total_count]))
 
           rows (db/execute-query! ctx query)
           ;; execute-query! converts snake_case → kebab-case, so total_count → :total-count
           total-count (or (some-> rows first :total-count long) 0)
           users (vec (map #(db->user-entity ctx %) rows))]
-      {:users users
-       :total-count total-count}))
+      (cond-> {:users users}
+        (not (:skip-total? options)) (assoc :total-count total-count))))
 
   (create-user [_ user-entity]
     (persistence-interceptors/execute-persistence-operation

@@ -527,10 +527,10 @@
       ;; The whole point: a suite that does not need the heavy deps must not
       ;; resolve them.
       ;; events runs its outbox test on PostgreSQL in the MySQL job (BOU-448),
-      ;; jobs its DB queue test (BOU-689).
+      ;; jobs its DB queue test (BOU-689), user its accent-blind name search (BOU-1099).
       (doseq [[s alias] in-ci
               :when (not (#{"admin" "platform" "platform-sql" "tenant" "scaffolder" "workflow" "observability"
-                            "devtools" "app" "events" "jobs" "external"} s))]
+                            "devtools" "app" "events" "jobs" "user" "external"} s))]
         (is (= "-M:test" alias)
             (str s " requests " alias " but needs nothing beyond :test"))))))
 

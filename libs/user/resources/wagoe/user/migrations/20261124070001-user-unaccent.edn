@@ -1,0 +1,7 @@
+;; PostgreSQL's unaccent, so a member search by name ignores accents
+;; (BOU-1099). Outside a transaction, so a refused CREATE EXTENSION aborts
+;; nothing; the extension stays on down: something else may use it.
+{:ns           wagoe.user.shell.user-tables
+ :up-fn        "unaccent-up"
+ :down-fn      nil
+ :transaction? false}

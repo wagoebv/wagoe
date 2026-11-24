@@ -26,8 +26,10 @@
   ;;           :filter-active :filter-email-contains
   ;;           :filter-name-or-email-contains :exclude-group-members (a group id)
   ;;           :filter-ids (the users an access filter admits, BOU-1002)
-  ;;           :include-deleted?}
-  ;; Returns {:users [...] :total-count n}. Soft-deleted users are excluded
+  ;;           :filter-name-contains :filter-active-member-of (a tenant id)
+  ;;           :exclude-ids :skip-total? :include-deleted?}
+  ;; Returns {:users [...] :total-count n}, without :total-count under
+  ;; :skip-total?. Ties in the sort go by id. Soft-deleted users are excluded
   ;; unless :include-deleted? is true.
 
   (create-user [this user-entity])

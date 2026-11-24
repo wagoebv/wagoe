@@ -44,6 +44,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`list-users` searches a tenant's members by name, cheaply** (BOU-1099): `:filter-active-member-of`,
+  `:filter-name-contains` (accents ignored on PostgreSQL via `unaccent`), `:exclude-ids`, `:skip-total?`; ties sort by id.
 - **`:prometheus` scrapes carry the JVM: heap and pools, GC, threads, process CPU and file descriptors** (BOU-1097),
   under Prometheus' client_java 1.x names. `:enable-default-metrics false` turns them off.
 
