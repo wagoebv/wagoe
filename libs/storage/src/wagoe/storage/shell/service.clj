@@ -330,7 +330,26 @@
                          {:event ::file-url-generation-error
                           :key file-key
                           :error (.getMessage e)}))
-        nil))))
+        nil)))
+
+  ports/ISignedFiles
+  (signed-file [this file-key {:strs [expires v signature]}]
+    ;; The local adapter signs with its secret; a cloud store checks its own URLs
+    (when-let [secret (:signing-secret storage)]
+      (when (local/verify-signed-url secret file-key {:expires expires :version v :signature signature})
+        ;; A URL serves the file it was signed for, not one written there since (BOU-991)
+        (when-let [file (download-file this file-key)]
+          (when (= v (:version file)) file))))))
+
+;; The port's, so an app requires no shell namespace (BOU-1077). By `extend`:
+;; inline, its methods would clash with this namespace's same-named ones.
+(extend StorageService
+  ports/IStorageService
+  {:upload-file  upload-file
+   :upload-image upload-image
+   :download-file download-file
+   :remove-file  remove-file
+   :get-file-url get-file-url})
 
 (defn file-at?
   "Whether the storage backend holds a file at `file-key`."

@@ -48,6 +48,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **The storage service and signed-URL checks are on `wagoe.storage.ports`** (BOU-1077): `IStorageService` and
+  `ISignedFiles/signed-file`. An app can drop its `check-ports.edn` entries for `wagoe.storage.shell.*`.
 - **`tenant-members` reads every member of a tenant, or a keyset page of them** (BOU-1090), ordered by id so joins
   and leaves do not shift a page. Use it instead of offset pages of `list-tenant-members`; a migration adds its index.
 - **A queue no worker polls is reported instead of waiting silently** (BOU-1088). A queue that has not shrunk for 15

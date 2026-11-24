@@ -74,6 +74,45 @@
     When `write!` throws, nothing is stored and its exception propagates."))
 
 ;; ============================================================================
+;; Service Ports
+;; ============================================================================
+
+(defprotocol IStorageService
+  "The storage service, `:service` of `:wagoe/storage`: validation, the upload
+  index and the tenant directory around the adapter. The same methods as
+  `wagoe.storage.shell.service/IStorageService`, here so another module needs
+  no storage shell namespace (BOU-1077)."
+
+  (upload-file [this file-data metadata options]
+    "Upload `file-data` {:bytes}; the filename's extension decides its type.
+    `metadata` {:filename :path :visibility :owner {:user-id :tenant-id}},
+    `options` {:max-size :allowed-types :allowed-extensions}. Returns
+    `{:success true :data {:key :url :size :content-type}}`, or
+    `{:success false :errors [...]}`.")
+
+  (upload-image [this image-bytes metadata options]
+    "Upload an image; `options` {:resize :create-thumbnail :thumbnail-size}.
+    Returns {:original :thumbnail}.")
+
+  (download-file [this file-key]
+    "The file {:bytes :content-type :size}, or nil.")
+
+  (remove-file [this file-key]
+    "Remove the file and its upload record; true when it was removed.")
+
+  (get-file-url [this file-key expiration-seconds]
+    "A URL for the file: signed and expiring for a private one."))
+
+(defprotocol ISignedFiles
+  "Serving what `get-file-url` signed, from an app's own route."
+
+  (signed-file [this file-key query-params]
+    "The file a signed URL names, when its `query-params` (Ring's, string
+    keys: \"expires\", \"v\", \"signature\") carry a valid, unexpired
+    signature for the file as it is now; nil otherwise. Nil too on an adapter
+    whose URLs its own store checks, such as S3."))
+
+;; ============================================================================
 ;; Upload Index Port
 ;; ============================================================================
 
