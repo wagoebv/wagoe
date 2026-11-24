@@ -224,6 +224,10 @@ too long to stream:
   and GCS it redirects to a signed URL that lives five minutes; on local
   storage the route sends the file.
 
+`:wagoe/storage {:export-job-routes? false}` mounts none of these routes. The
+admin exports below still queue a job, but nobody can follow or download it
+then: leave the routes on if you use them.
+
 Platform admins ask for someone else's export the same way, at
 `POST /api/v1/users/:id/export-jobs` and `POST /api/v1/tenants/:id/export-jobs`,
 and follow it at the `Location` they get back, under `/api/v1/me/export-jobs`.

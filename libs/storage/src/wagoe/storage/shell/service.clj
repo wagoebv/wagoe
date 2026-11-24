@@ -85,7 +85,7 @@
              (catch Exception de
                (when logger
                  (logging/warn logger "Could not delete a file the upload index did not record"
-                               {:event ::unindexed-file-kept :key (:key stored) :error (.getMessage de)}))))
+                               {:event ::unindexed-file-kept :key (validation/key-for-log (:key stored)) :error (.getMessage de)}))))
         (throw e)))))
 
 (def ^:private tenants-dir
@@ -161,7 +161,6 @@
     (when logger
       (logging/info logger "Upload file started"
                     {:event ::upload-file-started
-                     :filename (:filename metadata)
                      :content-type (:content-type file-data)}))
 
     (try
@@ -185,7 +184,6 @@
             (when logger
               (logging/warn logger "Upload file validation failed"
                             {:event ::upload-file-validation-failed
-                             :filename (:filename metadata)
                              :errors (:errors validation-result)}))
             {:success false
              :errors (:errors validation-result)})
@@ -205,7 +203,7 @@
             (when logger
               (logging/info logger "Upload file completed"
                             {:event ::upload-file-completed
-                             :key (:key result)
+                             :key (validation/key-for-log (:key result))
                              :size (:size result)}))
             {:success true
              :data result})))
@@ -218,7 +216,6 @@
           (do (when logger
                 (logging/error logger "Upload file error"
                                {:event ::upload-file-error
-                                :filename (:filename metadata)
                                 :error (.getMessage e)}))
               {:success false
                :errors [{:code :storage-error
@@ -230,7 +227,6 @@
     (when logger
       (logging/info logger "Upload image started"
                     {:event ::upload-image-started
-                     :filename (:filename metadata)
                      :options options}))
 
     (try
@@ -275,8 +271,8 @@
                   (when logger
                     (logging/info logger "Thumbnail uploaded"
                                   {:event ::thumbnail-uploaded
-                                   :original-key (:key (:original result))
-                                   :thumbnail-key (:key (:data thumb-result))}))
+                                   :original-key (validation/key-for-log (:key (:original result)))
+                                   :thumbnail-key (validation/key-for-log (:key (:data thumb-result)))}))
                   (assoc result :thumbnail (:data thumb-result)))
                 (do
                   (when logger
@@ -298,7 +294,6 @@
         (when logger
           (logging/error logger "Upload image error"
                          {:event ::upload-image-error
-                          :filename (:filename metadata)
                           :error (.getMessage e)}))
         {:success false
          :errors [{:code :storage-error
@@ -308,7 +303,7 @@
     (when logger
       (logging/debug logger "Download file requested"
                      {:event ::download-file-requested
-                      :key file-key}))
+                      :key (validation/key-for-log file-key)}))
 
     (try
       (let [file-data (ports/retrieve-file storage file-key)]
@@ -316,18 +311,18 @@
           (if file-data
             (logging/debug logger "Download file completed"
                            {:event ::download-file-completed
-                            :key file-key
+                            :key (validation/key-for-log file-key)
                             :size (:size file-data)})
             (logging/debug logger "Download file not found"
                            {:event ::download-file-not-found
-                            :key file-key})))
+                            :key (validation/key-for-log file-key)})))
         file-data)
 
       (catch Exception e
         (when logger
           (logging/error logger "Download file error"
                          {:event ::download-file-error
-                          :key file-key
+                          :key (validation/key-for-log file-key)
                           :error (.getMessage e)}))
         nil)))
 
@@ -335,7 +330,7 @@
     (when logger
       (logging/info logger "Remove file requested"
                     {:event ::remove-file-requested
-                     :key file-key}))
+                     :key (validation/key-for-log file-key)}))
 
     (try
       (let [success (ports/delete-file storage file-key)]
@@ -349,14 +344,14 @@
                         {:event (if success
                                   ::remove-file-completed
                                   ::remove-file-failed)
-                         :key file-key}))
+                         :key (validation/key-for-log file-key)}))
         success)
 
       (catch Exception e
         (when logger
           (logging/error logger "Remove file error"
                          {:event ::remove-file-error
-                          :key file-key
+                          :key (validation/key-for-log file-key)
                           :error (.getMessage e)}))
         false)))
 
@@ -366,7 +361,7 @@
         (when logger
           (logging/debug logger "File URL generated"
                          {:event ::file-url-generated
-                          :key file-key
+                          :key (validation/key-for-log file-key)
                           :expiration-seconds expiration-seconds
                           :url-type (if (and url (re-find #"X-Amz-|X-Goog-|signature=" url))
                                       :signed
@@ -377,7 +372,7 @@
         (when logger
           (logging/error logger "File URL generation error"
                          {:event ::file-url-generation-error
-                          :key file-key
+                          :key (validation/key-for-log file-key)
                           :error (.getMessage e)}))
         nil)))
 

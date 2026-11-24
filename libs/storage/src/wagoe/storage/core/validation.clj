@@ -121,6 +121,19 @@
   (when-let [ext (get-file-extension filename)]
     (get common-mime-types ext)))
 
+(defn key-for-log
+  "`file-key` as a log line may show it. A key an adapter generated, a
+   timestamp and a uuid or random hex, is kept; a named one keeps its directory
+   and a known extension, as its name is the uploader's filename (BOU-1082)."
+  [file-key]
+  (when file-key
+    (let [segs (str/split (str file-key) #"/")
+          base (peek segs)]
+      (if (re-matches #"\d+-[0-9a-f]{8}((-[0-9a-f]{4}){3}-[0-9a-f]{12}(-[0-9a-f]{16})?)?(\.\w+)?" base)
+        file-key
+        (let [ext (get-file-extension base)]
+          (str/join "/" (conj (pop segs) (cond-> "*" (contains? common-mime-types ext) (str "." ext)))))))))
+
 (defn content-type-of
   "The type a file named `filename` is validated, stored and served as: its
    extension's, or application/octet-stream. Never the client's word, which the

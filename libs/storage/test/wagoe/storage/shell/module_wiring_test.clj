@@ -92,6 +92,16 @@
                                   (assoc base :expose-http? v) {}))))
             (pr-str v))))))
 
+(deftest ^:unit the-export-job-routes-are-the-configs-choice
+  ;; BOU-1082: with jobs on they were mounted whether the app wanted them or not
+  (let [mounted? #(boolean (some #{(ig/ref :wagoe.storage/export-job-routes)}
+                                 (:routes (wagoe.storage.shell.module-wiring/ig-config
+                                           (merge {:provider :local :root "/tmp/x"} %)
+                                           {:enabled #{:wagoe/jobs}}))))]
+    (is (mounted? {}) "on by default, as released")
+    (doseq [v [false "false"]]
+      (is (not (mounted? {:export-job-routes? v})) (pr-str v)))))
+
 (deftest ^:unit ig-config-indexes-uploads-and-contributes-them-to-privacy
   (let [{:keys [components data-export retention]}
         (wagoe.storage.shell.module-wiring/ig-config {:provider :local :root "/tmp/x"} {})]

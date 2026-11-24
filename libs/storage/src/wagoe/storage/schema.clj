@@ -93,6 +93,9 @@
   [[:expose-http? {:optional true} [:or boolean? string?]]
    [:http-base-path {:optional true} string?]
    [:may-access? {:optional true} [:or qualified-symbol? fn?]]
+   [:in-use? {:optional true} [:or qualified-symbol? fn?]]
+   ;; #env yields strings; "no" would read as on, so it is refused
+   [:export-job-routes? {:optional true} [:or boolean? [:enum "true" "false"]]]
    [:upload-limits {:optional true} [:map
                                      [:max-size {:optional true} pos-int?]
                                      ;; Not empty: validation reads an empty list as any

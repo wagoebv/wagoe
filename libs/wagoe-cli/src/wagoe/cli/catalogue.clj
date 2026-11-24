@@ -1,6 +1,20 @@
 (ns wagoe.cli.catalogue
   (:require [clojure.java.io :as io]
-            [clojure.edn :as edn]))
+            [clojure.edn :as edn]
+            [clojure.string :as str]))
+
+(defn version-parts
+  "A Maven version's numbers, padded to four: `compare` orders vectors by length first."
+  [v]
+  (let [ns (mapv parse-long (re-seq #"\d+" (first (str/split (str v) #"-"))))]
+    (into ns (repeat (- 4 (count ns)) 0))))
+
+(defn older-version?
+  "Whether Maven version `a` is older than `b`; on the same numbers a
+   pre-release is older than its release, 1.4.0-SNAPSHOT than 1.4.0."
+  [a b]
+  (let [c (compare (version-parts a) (version-parts b))]
+    (or (neg? c) (and (zero? c) (str/includes? (str a) "-") (not (str/includes? (str b) "-"))))))
 
 (def ^:private catalogue-path "wagoe/cli/modules-catalogue.edn")
 

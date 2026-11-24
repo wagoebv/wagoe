@@ -330,7 +330,7 @@
   [logger url-base signing-secret storage-key size content-type version]
   (when logger
     (logging/info logger "File stored"
-                  {:event ::file-stored :key storage-key :size size :content-type content-type}))
+                  {:event ::file-stored :key (validation/key-for-log storage-key) :size size :content-type content-type}))
   {:key          storage-key
    :url          (file-url url-base signing-secret storage-key version)
    :size         size
@@ -358,11 +358,9 @@
         (when logger
           (logging/error logger "Failed to store file"
                          {:event ::store-file-failed
-                          :filename (:filename metadata)
                           :error (.getMessage e)}))
         (throw (ex-info "Failed to store file"
                         {:type :storage-error
-                         :filename (:filename metadata)
                          :error (.getMessage e)}
                         e)))))
 
@@ -380,7 +378,7 @@
             (when logger
               (logging/debug logger "File retrieved"
                              {:event ::file-retrieved
-                              :key file-key
+                              :key (validation/key-for-log file-key)
                               :size size}))
 
             {:bytes bytes
@@ -394,7 +392,7 @@
         (when logger
           (logging/error logger "Failed to retrieve file"
                          {:event ::retrieve-file-failed
-                          :key file-key
+                          :key (validation/key-for-log file-key)
                           :error (.getMessage e)}))
         nil)))
 
@@ -412,7 +410,7 @@
             (when logger
               (logging/info logger "File deleted"
                             {:event ::file-deleted
-                             :key file-key}))
+                             :key (validation/key-for-log file-key)}))
 
             true)
           false))
@@ -421,7 +419,7 @@
         (when logger
           (logging/error logger "Failed to delete file"
                          {:event ::delete-file-failed
-                          :key file-key
+                          :key (validation/key-for-log file-key)
                           :error (.getMessage e)}))
         false)))
 
@@ -437,7 +435,7 @@
         (when logger
           (logging/error logger "File exists check failed"
                          {:event ::file-exists-check-failed
-                          :key file-key
+                          :key (validation/key-for-log file-key)
                           :error (.getMessage e)}))
         (throw (ex-info "Could not check whether the file exists"
                         {:type :storage-error :key file-key}

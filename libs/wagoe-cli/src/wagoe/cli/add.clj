@@ -497,11 +497,14 @@
 
             ;; A core module's version moves with the rest of Wagoe, and
             ;; switching it on touches config only (BOU-667).
-            (and dep-present? existing-ver (not= existing-ver (:version module))
-                 (not (:module-key module)))
+            ;; A newer one, a snapshot of the next release say, is left as it
+            ;; is and the config still written (BOU-1082).
+            (and dep-present? existing-ver (not (:module-key module))
+                 (cat/older-version? existing-ver (:version module)))
             (do (println (str "Warning: " module-name " is already in deps.edn at version " existing-ver
-                              " (catalogue version: " (:version module) ")."))
-                (println "Resolve the version conflict manually — no changes made."))
+                              ", older than the catalogue's " (:version module) "."))
+                (println (str "Set it to " (:version module) " in deps.edn and run `wagoe add " module-name
+                              "` again — no changes made.")))
 
             wired?
             (println (str "Module '" module-name "' is already installed."))

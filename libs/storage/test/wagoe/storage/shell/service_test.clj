@@ -2,6 +2,8 @@
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [wagoe.observability.logging.ports :as log-ports]
+            [wagoe.storage.core.validation :as validation]
             [wagoe.storage.ports :as ports]
             [wagoe.storage.shell.service :as sut]
             [wagoe.storage.shell.adapters.local :as local]
@@ -307,3 +309,37 @@
       (is (= :invalid-path (-> (ports/upload-file service {:bytes (.getBytes "x")} {:filename "x.txt" :path path} {})
                                :errors first :code))
           path))))
+
+(defn- capturing-logger [entries]
+  (let [log! (fn [& args] (swap! entries conj (pr-str args)) nil)]
+    (reify log-ports/ILogger
+      (log* [_ l m c e] (log! l m c e))
+      (trace [_ m] (log! m)) (trace [_ m c] (log! m c))
+      (debug [_ m] (log! m)) (debug [_ m c] (log! m c))
+      (info [_ m] (log! m)) (info [_ m c] (log! m c))
+      (warn [_ m] (log! m)) (warn [_ m c] (log! m c)) (warn [_ m c e] (log! m c e))
+      (error [_ m] (log! m)) (error [_ m c] (log! m c)) (error [_ m c e] (log! m c e))
+      (fatal [_ m] (log! m)) (fatal [_ m c] (log! m c)) (fatal [_ m c e] (log! m c e)))))
+
+(deftest ^:integration ^:security an-uploaders-filename-stays-out-of-the-logs
+  ;; BOU-1082: a named path's key ends in the filename, which is user content
+  (let [entries (atom [])
+        logger  (capturing-logger entries)
+        service (sut/create-storage-service {:storage (local/create-local-storage {:base-path test-dir :logger logger})
+                                             :logger  logger})
+        r       (ports/upload-file service {:bytes (.getBytes "cv")} {:filename "cv-jan-jansen.pdf" :path "docs"} {})]
+    (is (:success r))
+    (ports/get-file-url service (get-in r [:data :key]) 60)
+    (ports/remove-file service (get-in r [:data :key]))
+    (is (seq @entries))
+    (is (not-any? #(str/includes? % "jan-jansen") @entries) (pr-str @entries))
+    (is (some #(str/includes? % "docs/*.pdf") @entries) "the directory and type still show")))
+
+(deftest ^:unit a-generated-key-is-logged-whole
+  (let [k "2c/1795518158704-201233d6-3b90-4250-acc8-43585e30b64d-2cf24dba5fb0a30e.txt"]
+    (is (= k (validation/key-for-log k))))
+  (is (= ".tenants/t1/docs/*.pdf" (validation/key-for-log ".tenants/t1/docs/cv.pdf")))
+  (is (= "*" (validation/key-for-log "notes")))
+  (is (= "uploads/1795518158704-a1b2c3d4.pdf" (validation/key-for-log "uploads/1795518158704-a1b2c3d4.pdf"))
+      "an S3 or GCS key")
+  (is (= "*" (validation/key-for-log "Jan.Jansen")) "a name's last word is no extension"))

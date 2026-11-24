@@ -101,12 +101,10 @@
         (logging/error logger "Failed to store file in GCS"
                        {:event ::gcs-store-failed
                         :bucket bucket
-                        :filename (:filename metadata)
                         :error (.getMessage e)}))
       (throw (ex-info "Failed to store file in GCS"
                       {:type :storage-error
                        :bucket bucket
-                       :filename (:filename metadata)
                        :error (.getMessage e)}
                       e)))))
 

@@ -16,7 +16,8 @@
    export and the `:storage/uploads` retention policy. With the jobs module it
    also serves a user's export as a background job (`export-jobs`), offers
    other modules the same as `:wagoe/export-jobs` (privacy/IExportJobs), and
-   contributes the `:storage/export-archives` retention policy.
+   contributes the `:storage/export-archives` retention policy. Its routes are
+   mounted unless `:export-job-routes? false`.
 
    The `:local` provider accepts the catalogue's `:root` as an alias for the
    local adapter's `:base-path`."
@@ -245,6 +246,8 @@
                    :wagoe.storage/export-job-handlers      {:export-jobs (ig/ref :wagoe.storage/export-jobs)}
                    :wagoe.storage/export-job-routes        {:export-jobs (ig/ref :wagoe.storage/export-jobs)}
                    :wagoe.storage/export-archive-retention {:export-jobs (ig/ref :wagoe.storage/export-jobs)}})
-          (update :routes (fnil conj []) (ig/ref :wagoe.storage/export-job-routes))
+          ;; The app's choice: `:export-job-routes? false` keeps the jobs, mounts no routes (BOU-1082)
+          (cond-> (not (contains? #{false "false"} (:export-job-routes? settings)))
+            (update :routes (fnil conj []) (ig/ref :wagoe.storage/export-job-routes)))
           (assoc :job-handlers [(ig/ref :wagoe.storage/export-job-handlers)])
           (assoc-in [:retention :storage/export-archives] (ig/ref :wagoe.storage/export-archive-retention))))))

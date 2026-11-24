@@ -147,18 +147,12 @@
                  first
                  (#(str (str/replace (.getName ^java.io.File %) "_" "-") ".system-config"))))))
 
-(defn- version-parts
-  "Padded to four numbers: `compare` orders vectors by length first."
-  [v]
-  (let [ns (mapv parse-long (re-seq #"\d+" (first (str/split v #"-"))))]
-    (into ns (repeat (- 4 (count ns)) 0))))
-
 (defn version-note
   "Why the app's wagoe-user may be too old for these steps, or nil."
   [deps]
   (let [have  (get-in deps [:deps 'com.wagoe/wagoe-user :mvn/version])
         known (:version (cat/find-module "user"))]
-    (when (and have known (neg? (compare (version-parts have) (version-parts known))))
+    (when (and have known (neg? (compare (cat/version-parts have) (cat/version-parts known))))
       (str "deps.edn has wagoe-user " have " and this CLI ships " known
            ". Bump every com.wagoe/* in deps.edn first: the steps below run in the app."))))
 

@@ -723,3 +723,35 @@
       (finally
         (System/setProperty "user.dir" home)
         (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
+
+(deftest ^:unit a-version-is-older-by-number-then-pre-release
+  (is (cat/older-version? "1.4.0" "1.5.0-SNAPSHOT"))
+  (is (cat/older-version? "1.4.0-SNAPSHOT" "1.4.0"))
+  (is (cat/older-version? "1.9.9" "2.0"))
+  (is (not (cat/older-version? "1.4.0" "1.4.0-SNAPSHOT")))
+  (is (not (cat/older-version? "1.4.0-SNAPSHOT" "1.3.0")))
+  (is (not (cat/older-version? "1.4.0" "1.4.0"))))
+
+(deftest ^:integration a-newer-dep-than-the-catalogue-still-gets-its-config
+  ;; BOU-1082: an app on the next snapshot added storage and got no config
+  (let [tmp  (str (System/getProperty "java.io.tmpdir") "/wagoe-add-newer-" (System/currentTimeMillis))
+        home (System/getProperty "user.dir")
+        deps (fn [v] (spit (io/file tmp "deps.edn")
+                           (str "{:deps {com.wagoe/wagoe-core {:mvn/version \"1.0.0\"}"
+                                " com.wagoe/wagoe-storage {:mvn/version \"" v "\"}}}")))]
+    (try
+      (make-wagoe-project! tmp)
+      (System/setProperty "user.dir" tmp)
+      (deps "99.0.0-SNAPSHOT")
+      (let [out (with-out-str (add/-main ["storage"]))]
+        (is (str/includes? out "storage added") out)
+        (is (contains? (active-of tmp "dev") :wagoe/storage)))
+      (testing "an older one is refused, saying what to do"
+        (spit (io/file tmp "resources/conf/dev/config.edn") "{\n :active\n {\n }\n\n :inactive\n {}\n}")
+        (deps "0.0.1")
+        (let [out (with-out-str (add/-main ["storage"]))]
+          (is (str/includes? out "run `wagoe add storage` again") out)
+          (is (not (contains? (active-of tmp "dev") :wagoe/storage)))))
+      (finally
+        (System/setProperty "user.dir" home)
+        (doseq [f (reverse (file-seq (io/file tmp)))] (.delete f))))))
