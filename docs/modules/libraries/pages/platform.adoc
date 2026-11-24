@@ -70,6 +70,9 @@ is applied to every route unless the route opts out with `:skip-interceptors? tr
 * `http-error-handler` — maps an exception's `:type` to an HTTP status
 
 `(http-rate-limit limit window-ms cache)` builds a fixed limit to attach per route.
+Pass `{:bucket "uploads"}` as a fourth argument to count only that route's requests;
+without it they count toward the global limit too. On a /web route a browser sees the 429
+in its own language when the catalogue has `:common/error-<type>` for it.
 
 NOTE: `:skip-interceptors?` is independent of `:no-doc`. `:no-doc` only excludes a
 route from the OpenAPI document; it does **not** affect interceptors. All `/web` routes are

@@ -546,12 +546,22 @@
    :leave add-correlation-id
    :error add-correlation-id})
 
+(defn- translate-error
+  "`error` with its message in the request's language when the catalogue has
+   `:common/error-<type>`; as it is otherwise."
+  [request {:keys [type] :as error}]
+  (let [k (keyword "common" (str "error-" type))
+        m (when-let [t (and type (:i18n/t request))] (t k))]
+    (cond-> error
+      ;; A missing key comes back as "common/error-<type>"
+      (and m (not= m (str (symbol k)))) (assoc :message m))))
+
 (defn web-error-page
   "`response` as a browser should see it: an error body on a /web request
    becomes a page, rendered by the app's `:error-page` when `system` has one,
    or a toast for htmx. Anything else is returned as it is."
   [system request response]
-  (let [error (error-pages/page-error request response)]
+  (let [error (some->> (error-pages/page-error request response) (translate-error request))]
     (cond
       (nil? error)                response
       (error-pages/htmx? request) (error-pages/htmx-response response error)
@@ -951,10 +961,12 @@
 (defn- rate-limit-enter
   "Run a single rate-limit check and either annotate the context or short-circuit
    with a 429. Uses the Redis fixed-window counter when a cache is supplied (safe
-   across replicas), otherwise the in-process fallback (single-node only)."
-  [{:keys [request] :as ctx} limit window-ms cache]
+   across replicas), otherwise the in-process fallback (single-node only).
+   `bucket` counts in its own bucket, apart from the global limiter's."
+  [{:keys [request] :as ctx} limit window-ms cache bucket]
   (let [window-seconds (max 1 (int (/ window-ms 1000)))
-        client-id      (get-client-id request)
+        client-id      (cond->> (get-client-id request)
+                         bucket (str "bucket:" bucket ":"))
         rate-check     (if cache
                          (check-rate-limit-redis cache client-id limit window-seconds)
                          (check-rate-limit-memory client-id limit window-ms))]
@@ -1001,6 +1013,8 @@
      limit:        Maximum requests per time window (default: 100)
      window-ms:    Time window in milliseconds (default: 60000 = 1 minute)
      cache:        (optional) IAtomicCache + ICache implementation for distributed limiting
+     opts:         {:bucket \"uploads\"} counts only the requests this limiter
+                   sees; without it they share the global limiter's count
 
    Returns:
      Rate limiting interceptor map
@@ -1008,14 +1022,17 @@
    Example:
      (http-rate-limit)                   ; 100 req/min, in-memory
      (http-rate-limit 30 60000)          ; 30 req/min, in-memory
-     (http-rate-limit 100 60000 cache)   ; 100 req/min, Redis-backed"
+     (http-rate-limit 100 60000 cache)   ; 100 req/min, Redis-backed
+     (http-rate-limit 30 3600000 cache {:bucket \"uploads\"}) ; 30 uploads/hour"
   ([]
    (http-rate-limit 100 60000 nil))
   ([limit window-ms]
    (http-rate-limit limit window-ms nil))
   ([limit window-ms cache]
+   (http-rate-limit limit window-ms cache {}))
+  ([limit window-ms cache {:keys [bucket]}]
    {:name  :http-rate-limit
-    :enter (fn [ctx] (rate-limit-enter ctx limit window-ms cache))
+    :enter (fn [ctx] (rate-limit-enter ctx limit window-ms cache bucket))
     :leave rate-limit-leave}))
 
 (def http-rate-limit-protection
@@ -1035,7 +1052,7 @@
             (let [{:keys [enabled? limit window-ms]
                    :or   {enabled? false limit 100 window-ms 60000}} (:rate-limit system)]
               (if enabled?
-                (rate-limit-enter ctx limit window-ms (:cache system))
+                (rate-limit-enter ctx limit window-ms (:cache system) nil)
                 ctx)))
    :leave rate-limit-leave})
 

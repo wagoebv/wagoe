@@ -196,3 +196,50 @@
           "map held at the cap — least-recently-active clients evicted, no unbounded growth")
       (is (contains? @@#'itc/rate-limit-state "newcomer-4")
           "the newest client is tracked"))))
+
+(defn- run-stack
+  "A request through the global limiter and then a per-route one."
+  [system route-limiter request]
+  (itc/run-http-interceptors
+   (fn [_req] {:status 200 :headers {} :body "ok"})
+   [itc/http-rate-limit-protection route-limiter]
+   (merge {:request-method :post :uri "/web/upload" :remote-addr "10.0.0.60" :headers {}}
+          request)
+   system))
+
+(deftest ^:unit ^:security route-bucket-counts-apart-from-global
+  (let [system {:rate-limit {:enabled? true :limit 3 :window-ms 60000}}]
+    (testing "a route limiter with its own bucket does not spend the global count"
+      (let [route (itc/http-rate-limit 10 60000 nil {:bucket "uploads"})]
+        (is (= [200 200 200 429] (vec (for [_ (range 4)] (:status (run-stack system route {}))))))))
+    (testing "without a bucket both count in one: each request is counted twice"
+      (reset! @#'itc/rate-limit-state {})
+      (let [route (itc/http-rate-limit 10 60000)]
+        (is (= [200 200 429] (vec (for [_ (range 3)] (:status (run-stack system route {}))))))))))
+
+(deftest ^:unit ^:security limited-htmx-request-gets-a-translated-toast
+  (let [route   (itc/http-rate-limit 1 60000 nil {:bucket "uploads"})
+        t       {:common/error-rate-limit-exceeded "Te veel verzoeken."}
+        request {:request-method :post :uri "/web/upload" :remote-addr "10.0.0.61"
+                 :headers {"hx-request" "true"} :i18n/t #(get t % (str (symbol %)))}
+        send    #(itc/run-http-interceptors (fn [_] {:status 200 :headers {} :body "ok"})
+                                            [itc/http-web-error-pages route] request {})
+        _       (send)
+        resp    (send)]
+    (is (= 429 (:status resp)))
+    (is (= "{\"showToast\":{\"type\":\"error\",\"message\":\"Te veel verzoeken.\"}}"
+           (get-in resp [:headers "HX-Trigger"]))))
+  (testing "a type the catalogue lacks keeps its own message"
+    (let [page (itc/web-error-page {} {:uri "/web/x" :headers {"hx-request" "true"} :i18n/t #(str (symbol %))}
+                                   {:status 404 :body {:error {:type :not-found :message "No such thing"}}})]
+      (is (re-find #"No such thing" (get-in page [:headers "HX-Trigger"]))))))
+
+(deftest ^:unit ^:security route-bucket-has-its-own-redis-key
+  (let [keys  (atom [])
+        cache (reify
+                cache-ports/IAtomicCache
+                (increment! [_ k _] (swap! keys conj k) 1)
+                cache-ports/ICache
+                (expire! [_ _ _] true))]
+    (run-stack {} (itc/http-rate-limit 5 60000 cache {:bucket "uploads"}) {})
+    (is (re-matches #"ratelimit:bucket:uploads:ip:10\.0\.0\.60:\d+" (first @keys)))))

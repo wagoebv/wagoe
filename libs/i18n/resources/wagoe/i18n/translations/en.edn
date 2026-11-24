@@ -2,6 +2,8 @@
  ;; Common — shared across all modules
  ;; =============================================================================
  :common/error-generic      "Something went wrong. Please try again later."
+ ;; :common/error-<type> translates that error on /web (BOU-1086); looked up, not a marker
+ :common/error-rate-limit-exceeded "Too many requests. Please try again later."
  :common/error-page-title     "Something went wrong"
  :common/error-page-not-found "Page not found"
  :common/error-page-reference "Reference:"
