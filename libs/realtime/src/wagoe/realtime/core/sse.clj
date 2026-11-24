@@ -42,6 +42,12 @@
      :roles   (own-roles user)
      :email   (:email user)}))
 
+(defn stream-owner
+  "Whose stream this is, for the per-user cap: the admin while viewing as a
+   member, so viewing as many members is still one admin's streams (BOU-1089)."
+  [request]
+  (some-> (or (get-in request [:viewing-as :admin :id]) (get-in request [:user :id])) str))
+
 (defn connection-tenant
   "The resolved tenant if the user may act in it, else the user's own; a client
    can name the resolved one in a header (BOU-947). The rule of

@@ -104,6 +104,9 @@ The `:wagoe/realtime` key caps streams per node with `:max-streams` (default
 32, under Jetty's 50 threads); a stream over the cap is told to retry in 10
 seconds. For hundreds of streams, run the listener on virtual threads and
 raise `:max-virtual-threads` above `:max-streams` (see the scaling page). A handler accepts at most `:max-topics` (16) topics per stream.
+Pass the handler `:max-streams-per-user` so one user cannot take a node's
+streams: one more for that user is a 429. An admin viewing as a member counts as
+the admin.
 
 An open stream does not see a logout by itself. Pass `:revalidate`, asked every
 heartbeat, and the stream closes once it answers false; the browser reconnects

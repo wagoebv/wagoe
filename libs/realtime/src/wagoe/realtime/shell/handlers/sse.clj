@@ -56,10 +56,11 @@
   "Take a stream slot, register `connection`, and pump. The slot is taken here,
    not in the handler, so a response that is never written holds none. Over
    the cap the client is told to retry later."
-  [realtime-service connection identity topics {:keys [heartbeat-ms revalidate]}
+  [realtime-service connection identity topics {:keys [heartbeat-ms revalidate owner per-user]}
    request ^OutputStream out]
   (try
-    (if-not (service/acquire-stream! realtime-service)
+    ;; Atomic, so a burst that passed the handler's per-user check retries later.
+    (if-not (service/acquire-stream! realtime-service owner per-user)
       (do (log/warn "SSE stream limit reached")
           (write! out sse/retry-later))
       (try
@@ -71,7 +72,7 @@
             (finally
               (ports/close connection)
               (ports/disconnect realtime-service cid))))
-        (finally (service/release-stream! realtime-service))))
+        (finally (service/release-stream! realtime-service owner per-user))))
     (catch IOException _ nil)
     (finally
       (try (.close out) (catch IOException _ nil)))))
@@ -86,6 +87,9 @@
 
    Each open stream holds a server thread; the service caps them per node
    (`:max-streams`), and a stream over the cap is told to retry in 10 s.
+   `:max-streams-per-user` caps one user's on the node too: one more is a 429,
+   or, racing past that, told to retry. An admin viewing as a member counts as
+   the admin (BOU-1089).
 
    Options:
      :authorize-topic (fn [request topic]) -> truthy to allow
@@ -93,8 +97,11 @@
                       asked every heartbeat, the stream closes when it fails
      :heartbeat-ms    comment line interval, default 15000
      :queue-size      events buffered per client before it is dropped, default 256
-     :max-topics      topics per stream, default 16"
-  [realtime-service & {:keys [authorize-topic heartbeat-ms queue-size max-topics revalidate]
+     :max-topics      topics per stream, default 16
+     :max-streams-per-user  open streams per user on this node; nil, the
+                      default, caps only the node"
+  [realtime-service & {:keys [authorize-topic heartbeat-ms queue-size max-topics revalidate
+                              max-streams-per-user]
                        :or   {authorize-topic (constantly false)
                               heartbeat-ms    15000
                               max-topics      16}}]
@@ -112,15 +119,26 @@
                                                 #(authorize-topic request %)
                                                 max-topics)
                      {:error {:type :unauthorized :message "Sign in required"}})]
-      (if-let [{:keys [type message]} (:error decision)]
-        {:status  (error-status type 400)
-         :headers {"Content-Type" "text/plain; charset=utf-8"}
-         :body    message}
+      (cond
+        (:error decision)
+        (let [{:keys [type message]} (:error decision)]
+          {:status  (error-status type 400)
+           :headers {"Content-Type" "text/plain; charset=utf-8"}
+           :body    message})
+
+        (and max-streams-per-user
+             (>= (service/user-streams realtime-service (sse/stream-owner request)) max-streams-per-user))
+        {:status  429
+         :headers {"Content-Type" "text/plain; charset=utf-8" "Retry-After" "10"}
+         :body    "Too many open streams"}
+
+        :else
         (let [connection (sse-adapter/create-sse-connection
                           (UUID/randomUUID)
                           (i18n-middleware/resolve-t-fn request)
                           :queue-size queue-size)
-              opts       {:heartbeat-ms heartbeat-ms :revalidate revalidate}]
+              opts       {:heartbeat-ms heartbeat-ms :revalidate revalidate
+                          :owner (sse/stream-owner request) :per-user max-streams-per-user}]
           {:status  200
            :headers {"Content-Type"      "text/event-stream; charset=utf-8"
                      "Cache-Control"     "no-cache"
