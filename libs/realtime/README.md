@@ -691,6 +691,7 @@ a stream closes after logout; see the realtime guide.
 :wagoe/realtime
 {:provider     :memory                    ; or :redis across replicas
  :max-streams  32                         ; concurrent SSE streams per node
+ :max-websockets 10000                    ; concurrent WebSocket connections per node
  :jwt-verifier #ig/ref :my-app/jwt-verifier}
 ```
 

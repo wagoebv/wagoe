@@ -9,12 +9,14 @@
 
      ;; In your route definitions
      [\"/ws\" {:get {:handler (ws-handler/websocket-handler realtime-service)}}]"
-  (:require [wagoe.realtime.ports :as realtime-ports]
+  (:require [wagoe.realtime.core.sse :as sse]
+            [wagoe.realtime.ports :as realtime-ports]
             [wagoe.realtime.shell.service :as service]
             [wagoe.realtime.shell.adapters.websocket-adapter :as ws-adapter]
             [clojure.tools.logging :as log]
             [ring.websocket :as ring-ws])
-  (:import [java.util UUID]))
+  (:import [java.util UUID]
+           [java.util.concurrent.atomic AtomicBoolean]))
 
 (defn websocket-handler
   "Returns a Ring handler that upgrades GET requests to WebSocket.
@@ -45,37 +47,63 @@
                      on the authenticated user's roles. Exceptions thrown by
                      this callback are logged and swallowed — they do not abort
                      the connection.
+     :max-connections-per-user - open connections per user on this node; nil,
+                     the default, caps only the node (`:max-websockets` on
+                     `:wagoe/realtime`). Over either cap the upgrade is a 429; a
+                     burst past that check is closed on open. An admin viewing
+                     as a member counts as the admin. It needs `:user` on the
+                     request, as the platform's auth sets (BOU-1102).
 
    Returns:
      Ring handler fn that returns a ::ring.websocket/listener response"
-  [realtime-service & {:keys [token-param on-message on-open]
+  [realtime-service & {:keys [token-param on-message on-open max-connections-per-user]
                        :or   {token-param "token"}}]
   (fn [request]
-    (let [token (get-in request [:query-params token-param])]
-      (if (nil? token)
+    (let [token (get-in request [:query-params token-param])
+          owner (sse/stream-owner request)
+          cap   max-connections-per-user]
+      (cond
+        (nil? token)
         {:status 400 :body (str "Missing " token-param " query parameter")}
-        (let [conn-id-atom (atom nil)]
+
+        ;; Before the upgrade, so a refused connection costs no socket.
+        (service/websockets-full? realtime-service owner cap)
+        {:status 429 :headers {"Retry-After" "10"} :body "Too many open connections"}
+
+        :else
+        (let [conn-id-atom (atom nil)
+              ;; Taken on open, not here: an upgrade that never completes
+              ;; would hold it. Released once, by whichever of close and
+              ;; error comes first.
+              held?        (AtomicBoolean. false)
+              release!     #(when (.compareAndSet held? true false)
+                              (service/release-websocket! realtime-service owner cap))]
           {::ring-ws/listener
            {:on-open
             (fn [ws-socket]
-              (try
-                (let [adapter-id    (UUID/randomUUID)
-                      ws-channel    {:send!  (fn [msg] (ring-ws/send ws-socket msg))
-                                     :close! (fn [] (ring-ws/close ws-socket))
-                                     :open?  (fn [] (ring-ws/open? ws-socket))}
-                      adapter       (ws-adapter/create-ring-websocket-adapter adapter-id ws-channel)
-                      connection-id (realtime-ports/connect realtime-service adapter {token-param token})]
-                  (reset! conn-id-atom connection-id)
-                  (log/debug "WebSocket connected" {:connection-id connection-id})
-                  (when on-open
+              (if-not (service/acquire-websocket! realtime-service owner cap)
+                (do (log/warn "WebSocket connection limit reached")
+                    (ring-ws/close ws-socket))
+                (do (.set held? true)
                     (try
-                      (service/with-clean-error-context realtime-service #(on-open connection-id))
+                      (let [adapter-id    (UUID/randomUUID)
+                            ws-channel    {:send!  (fn [msg] (ring-ws/send ws-socket msg))
+                                           :close! (fn [] (ring-ws/close ws-socket))
+                                           :open?  (fn [] (ring-ws/open? ws-socket))}
+                            adapter       (ws-adapter/create-ring-websocket-adapter adapter-id ws-channel)
+                            connection-id (realtime-ports/connect realtime-service adapter {token-param token})]
+                        (reset! conn-id-atom connection-id)
+                        (log/debug "WebSocket connected" {:connection-id connection-id})
+                        (when on-open
+                          (try
+                            (service/with-clean-error-context realtime-service #(on-open connection-id))
+                            (catch Exception e
+                              (log/warn e "on-open callback failed"
+                                        {:connection-id connection-id})))))
                       (catch Exception e
-                        (log/warn e "on-open callback failed"
-                                  {:connection-id connection-id})))))
-                (catch Exception e
-                  (log/warn "WebSocket auth failed — closing" {:error (.getMessage e)})
-                  (ring-ws/close ws-socket))))
+                        (log/warn "WebSocket auth failed — closing" {:error (.getMessage e)})
+                        (release!)
+                        (ring-ws/close ws-socket))))))
 
             :on-message
             (if on-message
@@ -86,6 +114,7 @@
 
             :on-close
             (fn [_ws-socket _code _reason]
+              (release!)
               (when-let [cid @conn-id-atom]
                 (try
                   (realtime-ports/disconnect realtime-service cid)
@@ -95,6 +124,7 @@
 
             :on-error
             (fn [_ws-socket err]
+              (release!)
               (when-let [cid @conn-id-atom]
                 (try
                   (realtime-ports/disconnect realtime-service cid)

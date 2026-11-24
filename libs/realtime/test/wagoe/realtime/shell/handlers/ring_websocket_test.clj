@@ -155,3 +155,51 @@
         (is (empty? (error-ports/current-context reporter)) "the thread keeps nothing")))
     (is (= 1 (count @sent)))
     (is (not (.contains (pr-str (first @sent)) "user-a")))))
+
+(deftest ^:contract ^:security websocket-connections-are-capped-per-node-and-per-user
+  ;; BOU-1102: the WebSocket path took no slot, so one user could open
+  ;; connections until the node ran out.
+  (let [reg     (registry/create-in-memory-registry)
+        jwt-a   (jwt/create-test-jwt-adapter {:expected-token "valid-token" :user-id test-user-id
+                                              :email "test@example.com" :roles #{:admin}})
+        svc     (service/create-realtime-service reg jwt-a :max-websockets 2)
+        handler (ws-handler/websocket-handler svc :max-connections-per-user 1)
+        req     (fn [user-id] {:query-params {"token" "valid-token"} :user {:id user-id}})
+        open!   (fn [user-id]
+                  (let [listener (:ring.websocket/listener (handler (req user-id)))
+                        m        (mock-ring-socket)]
+                    ((:on-open listener) (:socket m))
+                    (assoc m :listener listener)))
+        first   (open! test-user-id)]
+    (is (= 1 (ports/connection-count reg)))
+    (testing "one more for the same user is refused before the upgrade"
+      (is (= 429 (:status (handler (req test-user-id))))))
+    (testing "a burst that raced past that check is closed on open"
+      (let [listener (:ring.websocket/listener
+                      (with-redefs [service/websockets-full? (constantly false)] (handler (req test-user-id))))
+            m        (mock-ring-socket)]
+        ((:on-open listener) (:socket m))
+        (is (false? @(:open? m)))
+        (is (= 1 (ports/connection-count reg)))
+        (testing "and closing it gives back nothing it did not take"
+          ((:on-close listener) (:socket m) 1000 "")
+          (is (= 429 (:status (handler (req test-user-id))))))))
+    (testing "the node cap counts everyone"
+      (let [second (open! (random-uuid))]
+        (is (= 2 (ports/connection-count reg)))
+        (is (= 429 (:status (handler (req (random-uuid))))))
+        ((get-in second [:listener :on-close]) (:socket second) 1000 "")))
+    (testing "close frees the slot, once, even with an error after it"
+      ((get-in first [:listener :on-close]) (:socket first) 1000 "")
+      ((get-in first [:listener :on-error]) (:socket first) (Exception. "late"))
+      ;; Freed once: the node holds exactly its two again, not three.
+      (let [a (open! (random-uuid))
+            b (open! (random-uuid))]
+        (is (= 429 (:status (handler (req (random-uuid))))) "the node did not go below zero")
+        (doseq [x [a b]] ((get-in x [:listener :on-close]) (:socket x) 1000 ""))))
+    (testing "an admin viewing as a member counts as the admin"
+      (let [admin {:id (random-uuid)}
+            as-a  #(assoc (req (random-uuid)) :viewing-as {:admin admin})
+            l     (:ring.websocket/listener (handler (as-a)))]
+        ((:on-open l) (:socket (mock-ring-socket)))
+        (is (= 429 (:status (handler (as-a)))))))))
