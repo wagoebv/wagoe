@@ -24,7 +24,9 @@
             [wagoe.realtime.shell.delivery :as delivery]
             [clojure.tools.logging :as log])
   (:import (java.time Instant)
-           (java.util.concurrent.atomic AtomicInteger)))
+           (java.util.concurrent ConcurrentHashMap)
+           (java.util.concurrent.atomic AtomicInteger)
+           (java.util.function BiFunction)))
 
 ;; =============================================================================
 ;; Helper Functions (External Dependencies)
@@ -200,22 +202,51 @@
   (let [bus (or bus (in-memory-bus/create-in-memory-bus))
         svc (->RealtimeService connection-registry jwt-verifier
                                pubsub-manager logger error-reporter bus
-                               {:open (AtomicInteger.) :limit (or max-streams 32)})]
+                               {:open (AtomicInteger.) :limit (or max-streams 32)
+                                :per-user (ConcurrentHashMap.)})]
     ;; Service handlers run on a bus thread, or inside the publisher's request.
     (ports/start-subscriber! bus (delivery/make-delivery-fn connection-registry pubsub-manager
                                                             #(with-clean-error-context svc %)))
     svc))
 
-(defn acquire-stream!
-  "Take one of the node's SSE stream slots; false when all are taken. A service
-   without slots (another IRealtimeService) is uncapped."
-  [svc]
-  (if-let [{:keys [^AtomicInteger open limit]} (:stream-slots svc)]
-    (if (> (.incrementAndGet open) limit)
-      (do (.decrementAndGet open) false)
-      true)
-    true))
+(defn- adjust-user!
+  "Add `delta` to `owner`'s open streams, atomically; an owner at 0 is removed,
+   so the map holds only users with streams open. Returns the new count."
+  [^ConcurrentHashMap per-user owner delta]
+  (let [n (.compute per-user owner
+                    (reify BiFunction
+                      (apply [_ _ v]
+                        (let [n (+ (or v 0) delta)] (when (pos? n) n)))))]
+    (or n 0)))
 
-(defn release-stream! [svc]
-  (when-let [{:keys [^AtomicInteger open]} (:stream-slots svc)]
-    (.decrementAndGet open)))
+(defn user-streams
+  "How many SSE streams `owner` has open on this node."
+  [svc owner]
+  (or (some-> ^ConcurrentHashMap (get-in svc [:stream-slots :per-user]) (.get owner)) 0))
+
+(defn acquire-stream!
+  "Take one of the node's SSE stream slots, and with an `owner` and a `cap`
+   one of theirs; false when either is full, taking neither. A service
+   without slots (another IRealtimeService) is uncapped."
+  ([svc] (acquire-stream! svc nil nil))
+  ([svc owner cap]
+   (if-let [{:keys [^AtomicInteger open limit per-user]} (:stream-slots svc)]
+     (cond
+       (> (.incrementAndGet open) limit)
+       (do (.decrementAndGet open) false)
+
+       (and owner cap (> (adjust-user! per-user owner 1) cap))
+       (do (adjust-user! per-user owner -1) (.decrementAndGet open) false)
+
+       :else true)
+     true)))
+
+(defn release-stream!
+  "Give back what `acquire-stream!` took: the node's slot, and `owner`'s when
+   it counted one under a `cap`."
+  ([svc] (release-stream! svc nil nil))
+  ([svc owner cap]
+   (when-let [{:keys [^AtomicInteger open per-user]} (:stream-slots svc)]
+     (when (and owner cap)
+       (adjust-user! per-user owner -1))
+     (.decrementAndGet open))))

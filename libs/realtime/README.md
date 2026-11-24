@@ -678,7 +678,8 @@ extension, which ships in every ui-style JS bundle:
 `:authorize-topic` is `(fn [request topic])`; without it every topic is
 refused. Fragments render per subscriber, so `[:t ...]` markers use their
 locale. Each open stream holds one server thread; `:max-streams` on
-`:wagoe/realtime` (32) caps them per node. Pass `:revalidate (fn [request])` so
+`:wagoe/realtime` (32) caps them per node, and the handler's
+`:max-streams-per-user` one user's. Pass `:revalidate (fn [request])` so
 a stream closes after logout; see the realtime guide.
 
 ## Configuration

@@ -109,7 +109,9 @@ and sends it as an SSE event, over the bus, so any replica can push.
 - Each stream holds one Jetty thread (sync Ring). The service caps them per
   node (`:max-streams` on `:wagoe/realtime`, default 32; the pool is 50); the
   slot is taken inside the body, and over the cap the client gets `retry:` and
-  a close. `:max-topics` (16) per stream, else 400. Heartbeat every 15 s; a
+  a close. `:max-streams-per-user` on the handler caps one user's on the node
+  (429, or `retry:` for a burst past the check; view-as counts the admin,
+  BOU-1089). `:max-topics` (16) per stream, else 400. Heartbeat every 15 s; a
   dead client is noticed at the next write and deregistered.
 - Logout does not reach an open stream: pass `:revalidate (fn [request])`,
   asked every heartbeat (the guide shows wiring it to the user service).

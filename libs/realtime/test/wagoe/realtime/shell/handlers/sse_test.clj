@@ -152,6 +152,38 @@
       (is (await-until #(= 1 (ports/connection-count registry))) "a closed stream frees its slot")
       (reset! (:broken? again) true))))
 
+(deftest ^:integration ^:security one-user-cannot-fill-the-node
+  ;; BOU-1089: a user opening streams in a loop left none for anyone else.
+  (let [{:keys [service registry]} (system (in-memory-bus/create-in-memory-bus) :max-streams 10)
+        handler (sse/sse-handler service :authorize-topic allow-orders :heartbeat-ms 20
+                                 :max-streams-per-user 1)
+        req     (request {"topic" "order:1"})
+        held    (stream-on handler req)]
+    (is (await-until #(= 1 (ports/connection-count registry))))
+    (testing "one more for the same user is a 429"
+      (is (= 429 (:status (handler req)))))
+    (testing "a burst that raced past that check is told to retry at the slot"
+      (let [raced  (with-redefs [service/user-streams (constantly 0)] (handler req))
+            client (client-stream)]
+        (ring-protocols/write-body-to-stream (:body raced) raced (:out client))
+        (is (= "retry: 10000\n\n" ((:text client))))))
+    (testing "another user still gets a stream"
+      (let [other (stream-on handler (assoc-in req [:user :id] (str (random-uuid))))]
+        (is (await-until #(= 2 (ports/connection-count registry))))
+        (reset! (:broken? other) true)))
+    (testing "a closed stream frees its user's slot"
+      (reset! (:broken? held) true)
+      (deref (:done held) 2000 ::timeout)
+      (is (await-until #(zero? (service/user-streams service (str (:id user))))))
+      (is (= 200 (:status (handler req)))))
+    (testing "an admin viewing as a member counts as the admin"
+      (let [admin {:id (random-uuid)}
+            as-a  #(assoc req :user {:id (str (random-uuid)) :role :user :language "nl"} :viewing-as {:admin admin})
+            first (stream-on handler (as-a))]
+        (is (await-until #(= 1 (service/user-streams service (str (:id admin))))))
+        (is (= 429 (:status (handler (as-a)))) "a second member, the same admin")
+        (reset! (:broken? first) true)))))
+
 (deftest ^:integration a-response-never-written-holds-no-slot
   (let [{:keys [service registry]} (system (in-memory-bus/create-in-memory-bus) :max-streams 1)
         handler (sse/sse-handler service :authorize-topic allow-orders :heartbeat-ms 20)
