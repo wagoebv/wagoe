@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **`bootstrap-open?` said yes for a tenant whose admins were older than its newest 250 members** (BOU-1090). It
+  reads every active member now. An app that bootstraps a first admin on it needs nothing more.
 - **WebSocket connections had no cap, so one user could open them until the node ran out** (BOU-1102). `:max-websockets`
   caps a node at 10000 (raise it if one holds more); give `websocket-handler` `:max-connections-per-user`.
 - **One signed-in user could open SSE streams until a node had none left for anyone else** (BOU-1089). Give `sse-handler`
@@ -46,6 +48,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`tenant-members` reads every member of a tenant, or a keyset page of them** (BOU-1090), ordered by id so joins
+  and leaves do not shift a page. Use it instead of offset pages of `list-tenant-members`; a migration adds its index.
 - **A queue no worker polls is reported instead of waiting silently** (BOU-1088). A queue that has not shrunk for 15
   minutes is logged (`:stalled-queue-ms`, 0 off), and boot warns on a `:recurring` job on a queue the node does not poll.
 - **`list-users` searches a tenant's members by name, cheaply** (BOU-1099): `:filter-active-member-of`,

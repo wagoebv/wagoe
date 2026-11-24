@@ -1,6 +1,7 @@
 (ns wagoe.tenant.shell.data-export-test
   "A tenant's data export, and its route, on H2 and PostgreSQL."
-  (:require [cheshire.core :as json]
+  (:require [wagoe.tenant.shell.membership-service :as membership-service]
+            [cheshire.core :as json]
             [clojure.test :refer [deftest is testing]]
             [reitit.ring :as ring]
             [support.embedded-pg :as epg]
@@ -73,8 +74,8 @@
        (is (= ["new@example.com"] (map :email (:invites section))))
        (is (not (re-find #"token" (pr-str section))) "an invite's token hash stays out")
 
-       (testing "every member, read past one page, each once"
-         (with-redefs-fn {#'sut/page-size 1}
+       (testing "every member, also when invites are read a page at a time"
+         (with-redefs-fn {#'membership-service/page-size 1}
            #(is (= (sort (map str users))
                    (sort (map (comp str :user-id)
                               (:memberships (privacy/export-data exporter {:type :tenant :id (str (:id tenant))}))))))))

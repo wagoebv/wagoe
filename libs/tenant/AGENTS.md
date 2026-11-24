@@ -27,7 +27,7 @@ Multi-tenancy with schema-per-tenant isolation on PostgreSQL. Provides:
 
 | Namespace | Protocols |
 |-----------|-----------|
-| `wagoe.tenant.ports` | `ITenantRepository`, `ITenantService`, `ITenantMembershipRepository`, `ITenantMembershipDeletion`, `ITenantMembershipService`, `ITenantMembershipsOfUser`, `ITenantInviteRepository`, `ITenantInviteService`, `ITenantInviteAcceptanceService`, `ITenantSchemaProvider`, `ITenantAuditRepository` |
+| `wagoe.tenant.ports` | `ITenantRepository`, `ITenantService`, `ITenantMembershipRepository`, `ITenantMembershipDeletion`, `ITenantMembershipService`, `ITenantMembershipsOfUser`, `ITenantMembershipsByKeyset`, `ITenantMembers`, `ITenantInviteRepository`, `ITenantInviteService`, `ITenantInviteAcceptanceService`, `ITenantSchemaProvider`, `ITenantAuditRepository` |
 
 ### Shell (side-effecting)
 

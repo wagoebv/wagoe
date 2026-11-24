@@ -1,0 +1,5 @@
+;; idx_tenant_memberships_tenant_status, for tenant-members' keyset order
+;; (BOU-1090). The same idempotent definition boot runs.
+{:ns      wagoe.tenant.shell.tenant-tables
+ :up-fn   "up"
+ :down-fn "down"}

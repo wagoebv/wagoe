@@ -8,11 +8,40 @@
 (defn- generate-membership-id []
   (UUID/randomUUID))
 
+(def ^:private page-size 500)
+
+(defn all-pages
+  "Every row `(read {:limit :offset})` returns, a page at a time, each once: a
+   row inserted mid-read shifts the offsets and repeats one already read."
+  [read]
+  (loop [offset 0 seen #{} acc []]
+    (let [page (read {:limit page-size :offset offset})
+          acc  (into acc (remove (comp seen :id)) page)
+          seen (into seen (map :id) page)]
+      (if (< (count page) page-size)
+        acc
+        (recur (+ offset page-size) seen acc)))))
+
+(defn read-memberships
+  "The tenant's memberships as `find-memberships-after` gives them. A repository
+   without it, an app's own on the stable port, is read by offset pages."
+  [repository tenant-id {:keys [after-id limit status] :as options}]
+  (if (satisfies? ports/ITenantMembershipsByKeyset repository)
+    (ports/find-memberships-after repository tenant-id options)
+    (cond->> (->> (all-pages #(ports/find-memberships-by-tenant repository tenant-id (assoc % :status status)))
+                  ;; :status is not part of the stable port, so an app's own may ignore it
+                  (filter #(or (nil? status) (= status (:status %))))
+                  (sort-by (comp str :id))
+                  (drop-while #(and after-id (<= (compare (str (:id %)) (str after-id)) 0))))
+      limit (take limit)
+      true  vec)))
+
 (defn- active-admin-memberships
+  "Every one: a tenant with more than a page of members once read only its
+   newest 250, and a last-admin check could miss the admins (BOU-1090)."
   [membership-repository tenant-id]
-  (->> (ports/find-memberships-by-tenant membership-repository tenant-id {:limit 250 :offset 0})
-       (filter #(and (= :admin (:role %))
-                     (= :active (:status %))))))
+  (filter #(= :admin (:role %))
+          (read-memberships membership-repository tenant-id {:status :active})))
 
 (defrecord MembershipService [membership-repository logger metrics-emitter error-reporter]
   ports/ITenantMembershipService
@@ -189,6 +218,17 @@
         membership-repository
         (:tenant-id params)
         (:options params)))
+     {:logger          logger
+      :metrics-emitter metrics-emitter
+      :error-reporter  error-reporter}))
+
+  ports/ITenantMembers
+  (tenant-members [_ tenant-id options]
+    (service-interceptors/execute-service-operation
+     :tenant-members
+     {:tenant-id tenant-id :options options}
+     (fn [{:keys [params]}]
+       (read-memberships membership-repository (:tenant-id params) (:options params)))
      {:logger          logger
       :metrics-emitter metrics-emitter
       :error-reporter  error-reporter}))

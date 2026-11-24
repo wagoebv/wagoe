@@ -109,6 +109,19 @@ GET|PUT|DELETE /api/v1/tenants/:tenant-id/memberships/:id
 POST   /api/v1/memberships/:id/accept               # Accept an invitation
 ----
 
+To read every member in code, use `tenant-members` on `:wagoe/membership-service`
+(`wagoe.tenant.ports/ITenantMembers`), not offset pages of `list-tenant-members`:
+
+[source,clojure]
+----
+(ports/tenant-members membership-service tenant-id {:status :active})   ; all of them
+(ports/tenant-members membership-service tenant-id {:limit 500 :after-id last-id}) ; next page
+----
+
+It orders by id, so a member who joins or leaves between pages neither repeats
+nor skips a row. An index on `(tenant_id, status, id)` serves a page with a
+`:status`.
+
 == Testing
 
 [source,bash]

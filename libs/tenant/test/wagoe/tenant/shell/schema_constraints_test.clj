@@ -13,6 +13,7 @@
             [wagoe.tenant.ports :as ports]
             [wagoe.tenant.shell.invite-persistence :as invite-persistence]
             [wagoe.tenant.shell.membership-persistence :as membership-persistence]
+            [wagoe.tenant.shell.membership-service :as membership-service]
             [wagoe.tenant.shell.persistence :as sut])
   (:import [java.time Instant]
            [java.util.concurrent CountDownLatch]))
@@ -181,6 +182,66 @@
                                            (jdbc/execute! c ["EXPLAIN SELECT * FROM public.tenant_member_invites WHERE email = ?"
                                                              "a@example.test"])))]
               (is (str/includes? plan "idx_tenant_member_invites_email") plan)))))
+      (finally
+        (factory/close-db-context! ctx)
+        (epg/stop! pg)))))
+
+(deftest ^:integration tenant-members-page-by-keyset-on-their-index
+  (let [pg  (epg/start!)
+        ctx (epg/db-context pg)]
+    (try
+      (sut/initialize-tenant-schema! ctx)
+      (let [repo      (membership-persistence/create-membership-repository ctx nil nil)
+            tenant-id (random-uuid)
+            member    (fn [status]
+                        (let [m {:id (random-uuid) :tenant-id tenant-id :user-id (random-uuid) :role :member
+                                 :status status :invited-at (Instant/now) :created-at (Instant/now)}]
+                          (ports/create-membership repo m)
+                          m))
+            members   (mapv member [:active :active :active :revoked :active])
+            ids       #(mapv :id %)
+            sorted    (sort (map str (ids members)))]
+        (ports/create-membership repo (assoc (first members) :id (random-uuid) :tenant-id (random-uuid)
+                                             :user-id (random-uuid)))
+        (testing "every member of the tenant, ordered by id"
+          (is (= sorted (map str (ids (ports/find-memberships-after repo tenant-id {})))))
+          (is (= 4 (count (ports/find-memberships-after repo tenant-id {:status :active})))))
+        (testing "pages by keyset: a join before the cursor neither repeats nor skips a row"
+          (let [page1  (ports/find-memberships-after repo tenant-id {:limit 2})
+                cursor (str (:id (last page1)))
+                joined (member :active)
+                after  (filter #(pos? (compare % cursor)) (sort (map str (ids (conj members joined)))))
+                page2  (ports/find-memberships-after repo tenant-id {:limit 2 :after-id (:id (last page1))})]
+            (is (= (take 2 sorted) (map str (ids page1))))
+            (is (= (take 2 after) (map str (ids page2))) "the next two by id, the joiner among them only if after the cursor")))
+        (testing "the planner answers a status page from the index"
+          (with-open [c (jdbc/get-connection (:datasource ctx))]
+            (jdbc/execute! c ["SET enable_seqscan = off"])
+            (let [plan (str/join "\n" (map (comp first vals)
+                                           (jdbc/execute! c ["EXPLAIN SELECT * FROM public.tenant_memberships WHERE tenant_id = ? AND status = 'active' ORDER BY id LIMIT 2"
+                                                             (str tenant-id)])))]
+              (is (str/includes? plan "idx_tenant_memberships_tenant_status") plan)))))
+      (finally
+        (factory/close-db-context! ctx)
+        (epg/stop! pg)))))
+
+(deftest ^:integration ^:security an-early-admin-closes-the-bootstrap-past-250-members
+  ;; The check read the newest 250 only, so a tenant's first admin fell out of it
+  (let [pg  (epg/start!)
+        ctx (epg/db-context pg)]
+    (try
+      (sut/initialize-tenant-schema! ctx)
+      (let [repo      (membership-persistence/create-membership-repository ctx nil nil)
+            service   (membership-service/create-membership-service repo nil nil nil)
+            tenant-id (random-uuid)
+            t0        (Instant/parse "2026-01-01T00:00:00Z")
+            add!      (fn [i role]
+                        (ports/create-membership repo {:id (random-uuid) :tenant-id tenant-id :user-id (random-uuid)
+                                                       :role role :status :active :invited-at t0
+                                                       :created-at (.plusSeconds t0 i)}))]
+        (add! 0 :admin)
+        (doseq [i (range 1 261)] (add! i :member))
+        (is (false? (ports/bootstrap-open? service tenant-id))))
       (finally
         (factory/close-db-context! ctx)
         (epg/stop! pg)))))
