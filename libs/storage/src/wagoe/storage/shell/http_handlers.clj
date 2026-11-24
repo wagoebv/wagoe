@@ -2,7 +2,8 @@
   "HTTP handlers for file upload and download operations.
 
   Provides Ring-compatible handlers for file operations."
-  (:require [wagoe.storage.shell.service :as service]
+  (:require [wagoe.storage.ports :as ports]
+            [wagoe.storage.shell.service :as service]
             [wagoe.storage.shell.adapters.local :as local]
             [wagoe.storage.core.uploads :as uploads]
             [wagoe.storage.core.validation :as validation]
@@ -197,7 +198,7 @@
                 options (assoc (:limits tightened) :may-replace? #(reachable? storage-service may-access? request %))]
             (if-let [error (:error tightened)]
               (bad-request error)
-              (let [result (service/upload-file storage-service file-data metadata options)]
+              (let [result (ports/upload-file storage-service file-data metadata options)]
                 (cond
                   (:success result)       {:status 201 :body (:data result)}
                   (upload-refused result) (upload-refused result)
@@ -244,7 +245,7 @@
                                :thumbnail-size thumbnail-size
                                :may-replace? #(reachable? storage-service may-access? request %))
 
-                result (service/upload-image storage-service
+                result (ports/upload-image storage-service
                                              (:bytes file-data)
                                              metadata
                                              options)]
@@ -334,7 +335,7 @@
 
          :else
 
-         (if-let [file-data (service/download-file storage-service file-key)]
+         (if-let [file-data (ports/download-file storage-service file-key)]
            ;; A URL serves the file it was signed for, not one written there since (BOU-991)
            (if (and signing-secret (not= version (:version file-data)))
              (forbidden "Missing, invalid or expired signature")
@@ -361,7 +362,7 @@
          {:missing-parameter "file-key"})
 
         (if (and (reachable? storage-service may-access? request file-key)
-                 (service/remove-file storage-service file-key))
+                 (ports/remove-file storage-service file-key))
           {:status 204
            :body nil}
 
@@ -399,7 +400,7 @@
           :else
 
           (if-let [url (and (reachable? storage-service may-access? request file-key)
-                            (service/get-file-url storage-service file-key expiration))]
+                            (ports/get-file-url storage-service file-key expiration))]
             {:status 200
              :body {:url url
                     :expiration-seconds expiration}}
@@ -422,7 +423,7 @@
   Versioning prepends `/api/v1`, so paths here carry no `/api` prefix.
 
   Parameters:
-  - storage-service: Instance of IStorageService
+  - storage-service: a `wagoe.storage.ports/IStorageService`
   - options: Map with optional :base-path (default: \"/storage\") and
     :may-access?, the app's check on a key (libs/storage/AGENTS.md, BOU-1075),
     and :upload-limits, {:max-size :allowed-types :allowed-extensions} (BOU-1076)"

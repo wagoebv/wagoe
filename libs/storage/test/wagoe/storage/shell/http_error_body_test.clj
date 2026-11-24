@@ -28,7 +28,7 @@
 (defn- serve
   "POST /storage/upload through the platform router, with upload-file doing `f`."
   [f]
-  (upload (reify service/IStorageService
+  (upload (reify ports/IStorageService
             (upload-file [_ _ _ _] (f))
             (upload-image [_ _ _ _] nil)
             (download-file [_ _] nil)

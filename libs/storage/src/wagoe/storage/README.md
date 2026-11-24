@@ -40,7 +40,8 @@ File upload and storage functionality for the Wagoe framework. Supports local fi
 
 ```clojure
 (require '[wagoe.storage.shell.adapters.local :as local]
-         '[wagoe.storage.shell.service :as service]
+         '[wagoe.storage.shell.service :as service]   ; create-storage-service
+         '[wagoe.storage.ports :as ports]             ; what the service does
          '[wagoe.storage.shell.http-handlers :as handlers])
 
 ;; Create local storage adapter
@@ -57,7 +58,7 @@ File upload and storage functionality for the Wagoe framework. Supports local fi
 
 ;; Upload a file
 (def result
-  (service/upload-file storage-service
+  (ports/upload-file storage-service
     {:bytes file-bytes
      :content-type "image/jpeg"}
     {:filename "photo.jpg"
@@ -97,7 +98,7 @@ File upload and storage functionality for the Wagoe framework. Supports local fi
 
 ;; Upload image with thumbnail
 (def result
-  (service/upload-image storage-service
+  (ports/upload-image storage-service
     image-bytes
     {:filename "profile.jpg"}
     {:create-thumbnail true
@@ -105,7 +106,7 @@ File upload and storage functionality for the Wagoe framework. Supports local fi
 
 ;; Get signed URL (expires in 1 hour)
 (def signed-url
-  (service/get-file-url storage-service
+  (ports/get-file-url storage-service
     (:key (:original result))
     3600))
 ```
@@ -278,7 +279,7 @@ Response: 200 OK
 ### File Size Validation
 
 ```clojure
-(service/upload-file storage-service
+(ports/upload-file storage-service
   file-data
   metadata
   {:max-size (* 5 1024 1024)})  ; 5 MB limit
@@ -287,7 +288,7 @@ Response: 200 OK
 ### Content Type Validation
 
 ```clojure
-(service/upload-file storage-service
+(ports/upload-file storage-service
   file-data
   metadata
   {:allowed-types ["image/jpeg" "image/png" "image/gif"]})
@@ -296,7 +297,7 @@ Response: 200 OK
 ### File Extension Validation
 
 ```clojure
-(service/upload-file storage-service
+(ports/upload-file storage-service
   file-data
   metadata
   {:allowed-extensions ["jpg" "jpeg" "png" "gif"]})
@@ -305,7 +306,7 @@ Response: 200 OK
 ### Combined Validation
 
 ```clojure
-(service/upload-file storage-service
+(ports/upload-file storage-service
   file-data
   metadata
   {:max-size (* 10 1024 1024)

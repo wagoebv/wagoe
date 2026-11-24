@@ -19,8 +19,9 @@
 ;; Service Protocol
 ;; ============================================================================
 
-(defprotocol IStorageService
-  "Service for managing file storage operations."
+(defprotocol ^{:deprecated "1.4.0"} IStorageService
+  "Deprecated: use `wagoe.storage.ports/IStorageService`, the same methods,
+  which `StorageService` implements too. Stays until 2.0 (BOU-1107)."
 
   (upload-file [_ file-data metadata options]
     "Upload a file with validation.
@@ -154,6 +155,7 @@
                         (copy-at-most! in out max-size)))
                     content-type metadata)))
 
+#_{:clj-kondo/ignore [:deprecated-var]} ; its own record keeps implementing it until 2.0
 (defrecord StorageService [storage image-processor logger upload-index]
   IStorageService
 

@@ -79,9 +79,9 @@
 
 (defprotocol IStorageService
   "The storage service, `:service` of `:wagoe/storage`: validation, the upload
-  index and the tenant directory around the adapter. The same methods as
-  `wagoe.storage.shell.service/IStorageService`, here so another module needs
-  no storage shell namespace (BOU-1077)."
+  index and the tenant directory around the adapter. Here so another module
+  needs no storage shell namespace (BOU-1077); the shell protocol of the same
+  methods is deprecated (BOU-1107)."
 
   (upload-file [this file-data metadata options]
     "Upload `file-data`: {:bytes}, or {:file} (a File or path) or

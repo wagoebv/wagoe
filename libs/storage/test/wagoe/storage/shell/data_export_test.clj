@@ -29,7 +29,7 @@
             :index   index})))))
 
 (defn- upload! [svc text owner]
-  (-> (service/upload-file svc {:bytes (.getBytes ^String text) :content-type "text/plain"}
+  (-> (ports/upload-file svc {:bytes (.getBytes ^String text) :content-type "text/plain"}
                            {:filename "note.txt" :owner owner} {})
       :data :key))
 
@@ -61,7 +61,7 @@
     (fn [{:keys [service index]}]
       (let [user-id (random-uuid)
             k       (upload! service "x" {:user-id user-id})]
-        (is (true? (service/remove-file service k)))
+        (is (true? (ports/remove-file service k)))
         (is (empty? (ports/find-uploads index {:user-id user-id} {})))))))
 
 (deftest ^:integration upload-retention-deletes-old-files-and-their-records
