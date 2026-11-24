@@ -49,6 +49,13 @@
   "Its own protocol, as ITenantMembershipRepository is stable."
   (delete-membership [this membership-id]))
 
+(defprotocol ITenantMembershipsByKeyset
+  "Its own protocol, as ITenantMembershipRepository is stable."
+  (find-memberships-after [this tenant-id options]
+    "A tenant's memberships ordered by id, after `:after-id` when given, at most
+     `:limit` when given, only `:status` when given. Joins and leaves do not
+     shift a page (BOU-1090)."))
+
 (defprotocol ITenantMembershipService
   (invite-user           [this tenant-id user-id role])
   (bootstrap-open?       [this tenant-id])
@@ -66,6 +73,12 @@
   (memberships-of-user [this user-id]
     "The user's memberships in every tenant but those revoked: an invited one
      is theirs once they accept it (BOU-1008)."))
+
+(defprotocol ITenantMembers
+  "Its own protocol, as ITenantMembershipService is stable."
+  (tenant-members [this tenant-id options]
+    "Every member of the tenant, ordered by id; `{:after-id :limit :status}`
+     pages by keyset, so a page is stable while members join and leave (BOU-1090)."))
 
 (defprotocol ITenantInviteRepository
   (find-invite-by-id [this invite-id])

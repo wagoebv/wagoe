@@ -150,6 +150,25 @@
          (boolean (db/execute-one! ctx query))))
      ctx))
 
+  ports/ITenantMembershipsByKeyset
+  (find-memberships-after [_this tenant-id {:keys [after-id limit status]}]
+    (persistence-interceptors/execute-persistence-operation
+     :find-memberships-after
+     {:tenant-id tenant-id :after-id after-id :limit limit :status status}
+     (fn [{:keys [params]}]
+       (let [{:keys [tenant-id after-id limit status]} params
+             query (cond-> {:select   [:*]
+                            :from     [:public.tenant_memberships]
+                            :where    (cond-> [:and [:= :tenant_id (type-conversion/uuid->string tenant-id)]]
+                                        status   (conj [:= :status (type-conversion/keyword->string status)])
+                                        after-id (conj [:> :id (type-conversion/uuid->string after-id)]))
+                            ;; idx_tenant_memberships_tenant_status serves this order with a
+                            ;; :status; without one the tenant's rows are sorted
+                            :order-by [[:id :asc]]}
+                     limit (assoc :limit limit))]
+         (mapv db->membership-entity (db/execute-query! ctx query))))
+     ctx))
+
   ports/ITenantMembershipDeletion
   (delete-membership [_this membership-id]
     (persistence-interceptors/execute-persistence-operation

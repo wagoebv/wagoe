@@ -299,6 +299,30 @@
       (let [results (ports/list-tenant-members service tenant-a {})]
         (is (= 1 (count results)))))))
 
+(deftest ^:unit tenant-members-asks-the-repository-by-keyset
+  (let [asked   (atom nil)
+        repo    (reify ports/ITenantMembershipsByKeyset
+                  (find-memberships-after [_ tenant-id options] (reset! asked [tenant-id options]) [:a-member]))
+        service (sut/create-membership-service repo mock-logger mock-metrics-emitter mock-error-reporter)
+        tid     (UUID/randomUUID)]
+    (is (= [:a-member] (ports/tenant-members service tid {:after-id tid :limit 2})))
+    (is (= [tid {:after-id tid :limit 2}] @asked))))
+
+(deftest ^:unit a-repository-on-the-stable-port-is-read-by-offset-pages
+  (let [repo   (->MockMembershipRepository (atom {}))
+        tid    (UUID/randomUUID)
+        add!   (fn [status] (let [m {:id (UUID/randomUUID) :tenant-id tid :user-id (UUID/randomUUID)
+                                     :role :member :status status}]
+                              (ports/create-membership repo m)
+                              m))
+        all    (mapv add! [:active :active :revoked :active :active])
+        sorted (sort-by str (map :id all))]
+    (with-redefs-fn {#'sut/page-size 2}
+      #(do (is (= sorted (map :id (sut/read-memberships repo tid {}))) "every one, past a page, by id")
+           (is (= (take 2 (drop 2 sorted))
+                  (map :id (sut/read-memberships repo tid {:after-id (second sorted) :limit 2}))))
+           (is (= 4 (count (sut/read-memberships repo tid {:status :active}))))))))
+
 (deftest ^:unit memberships-of-user-are-every-tenants-ones
   ;; BOU-1008: whom an OIDC link by email, and a tenant admin's email change, must spare
   (let [repo    (->MockMembershipRepository (atom {}))

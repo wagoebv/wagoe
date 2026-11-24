@@ -4,21 +4,8 @@
   (:require [wagoe.core.utils.type-conversion :as type-conversion]
             [wagoe.platform.ports.privacy :as privacy]
             [wagoe.tenant.core.data-export :as core]
-            [wagoe.tenant.ports :as ports]))
-
-(def ^:private page-size 500)
-
-(defn- all-pages
-  "Every row `(read {:limit :offset})` returns, a page at a time, each once: a
-   row inserted mid-read shifts the offsets and repeats one already read."
-  [read]
-  (loop [offset 0 seen #{} acc []]
-    (let [page (read {:limit page-size :offset offset})
-          acc  (into acc (remove (comp seen :id)) page)
-          seen (into seen (map :id) page)]
-      (if (< (count page) page-size)
-        acc
-        (recur (+ offset page-size) seen acc)))))
+            [wagoe.tenant.ports :as ports]
+            [wagoe.tenant.shell.membership-service :as membership-service]))
 
 (defrecord TenantDataExporter [tenant-repository membership-repository invite-repository]
   privacy/IDataExporter
@@ -28,7 +15,7 @@
         :tenant (when-let [tenant (ports/find-tenant-by-id tenant-repository id)]
                   (core/tenant-export
                    {:tenant      tenant
-                    :memberships (all-pages #(ports/find-memberships-by-tenant membership-repository id %))
-                    :invites     (all-pages #(ports/find-invites-by-tenant invite-repository id %))}))
+                    :memberships (membership-service/read-memberships membership-repository id {})
+                    :invites     (membership-service/all-pages #(ports/find-invites-by-tenant invite-repository id %))}))
         :user   (core/user-export (ports/find-memberships-by-user membership-repository id))
         nil))))

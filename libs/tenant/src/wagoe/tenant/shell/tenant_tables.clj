@@ -21,6 +21,8 @@
   [["uk_tenants_slug" "tenants" ["slug"] true]
    ["uk_tenants_schema_name" "tenants" ["schema_name"] true]
    ["uk_tenant_memberships_tenant_user" "tenant_memberships" ["tenant_id" "user_id"] true]
+   ;; tenant-members' keyset order (BOU-1090)
+   ["idx_tenant_memberships_tenant_status" "tenant_memberships" ["tenant_id" "status" "id"] false]
    ["uk_tenant_member_invites_token_hash" "tenant_member_invites" ["token_hash"] true]
    ["idx_tenant_member_invites_email" "tenant_member_invites" ["email"] false]
    ["idx_tenant_audit_log_tenant" "tenant_audit_log" ["tenant_id" "created_at"] false]])
