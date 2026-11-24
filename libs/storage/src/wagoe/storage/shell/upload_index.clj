@@ -80,11 +80,18 @@
                                     :limit    (or limit 500)}))
       []))
 
-  (uploads-stored-before [_ cutoff limit]
+  (uploads-stored-before [this cutoff limit]
+    (ports/uploads-stored-after this cutoff nil limit))
+
+  ports/IUploadPages
+  (uploads-stored-after [_ cutoff after limit]
     (mapv row->upload
           (db/execute-query! ctx {:select   [:*]
                                   :from     [:storage_uploads]
-                                  :where    [:< :stored_at (->ts cutoff)]
+                                  :where    (cond-> [:and [:< :stored_at (->ts cutoff)]]
+                                              after (conj (let [at (->ts (:stored-at after))]
+                                                            [:or [:> :stored_at at]
+                                                             [:and [:= :stored_at at] [:> :file_key (:key after)]]])))
                                   :order-by [[:stored_at :asc] [:file_key :asc]]
                                   :limit    limit}))))
 

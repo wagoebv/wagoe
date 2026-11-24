@@ -155,6 +155,20 @@ The index feeds two privacy contributions:
 :wagoe/privacy {:retention {:storage/uploads {:retain "P1Y"}}}
 ----
 
+A file the app still refers to, a document shared in a conversation say, is
+kept however old when the app answers for it:
+
+[source,clojure]
+----
+:wagoe/storage {:provider :local :root "uploads"
+                :in-use? myapp.files/in-use?} ; (fn [upload]) => truthy to keep it
+----
+
+`upload` is the index's record, `{:key :user-id :tenant-id :size :content-type
+:stored-at}`. Retention runs outside any tenant: with a schema per tenant, look
+in the upload's `:tenant-id` yourself. One `in-use?` throws for is kept, and
+the run reports it.
+
 == HTTP routes
 
 With `:expose-http? true` the module mounts upload, download, delete and URL

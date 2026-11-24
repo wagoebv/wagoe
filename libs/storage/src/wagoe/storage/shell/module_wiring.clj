@@ -61,14 +61,15 @@
     (throw (ex-info "Unknown storage provider"
                     {:type :unknown-provider :provider provider}))))
 
-(defn- resolve-access-check
-  "`:may-access?` as config names it: a function or a qualified symbol naming one."
-  [x]
+(defn- resolve-app-fn
+  "The app function config names under `k`, `:may-access?` or `:in-use?`: a
+   function or a qualified symbol naming one."
+  [x k]
   (let [f (if (qualified-symbol? x) (wagoe-config/resolve-symbol x) x)]
     ;; fn?, not ifn?: a keyword or map called with two arguments returns the second, a yes
     (if (or (fn? f) (instance? clojure.lang.MultiFn f))
       f
-      (throw (ex-info ":wagoe/storage :may-access? must be a function or a qualified symbol naming one"
+      (throw (ex-info (str ":wagoe/storage " k " must be a function or a qualified symbol naming one")
                       {:type :configuration-error :value x})))))
 
 (defmethod ig/init-key :wagoe/storage
@@ -90,9 +91,11 @@
      ;; this route's public URL (BOU-421).
      :http-base-path (:http-base-path config)
      ;; The app's own rule on a key, beside the tenant one (BOU-1075)
-     :may-access?    (some-> (:may-access? config) resolve-access-check)
+     :may-access?    (some-> (:may-access? config) (resolve-app-fn :may-access?))
      ;; What any upload through the routes may be; a request only narrows it (BOU-1076)
-     :upload-limits  (:upload-limits config)}))
+     :upload-limits  (:upload-limits config)
+     ;; The app's answer to "still referred to?", which upload retention asks (BOU-1081)
+     :in-use?        (some-> (:in-use? config) (resolve-app-fn :in-use?))}))
 
 (defmethod ig/halt-key! :wagoe/storage
   [_ {:keys [provider storage]}]
@@ -120,7 +123,8 @@
   (data-export/->UploadDataExporter upload-index (:storage storage)))
 
 (defmethod ig/init-key :wagoe.storage/upload-retention [_ {:keys [upload-index storage]}]
-  (data-export/->UploadRetention upload-index (:storage storage)))
+  (data-export/map->UploadRetention {:upload-index upload-index :storage (:storage storage)
+                                     :in-use?      (:in-use? storage)}))
 
 ;; =============================================================================
 ;; Data export as a background job (with the jobs module)

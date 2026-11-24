@@ -191,6 +191,16 @@
                                 (catch clojure.lang.ExceptionInfo e e)))))
         (pr-str bad))))
 
+(defn in-use-always [_upload] true)
+
+(deftest ^:unit upload-retention-asks-the-apps-in-use
+  ;; BOU-1081
+  (let [component (ig/init-key :wagoe/storage {:provider :local :root test-root :in-use? `in-use-always})]
+    (is (= in-use-always (:in-use? (ig/init-key :wagoe.storage/upload-retention {:storage component})))))
+  (is (re-find #":in-use\?"
+               (ex-message (try (ig/init-key :wagoe/storage {:provider :local :root test-root :in-use? 42})
+                                (catch clojure.lang.ExceptionInfo e e))))))
+
 (deftest ^:unit ^:security the-routes-carry-the-apps-check
   (let [component (ig/init-key :wagoe/storage {:provider :local :root test-root :upload-index lookup
                                                :may-access? `refuse-all})

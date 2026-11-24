@@ -14,7 +14,7 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 
 | Namespace | Purpose |
 |-----------|---------|
-| `wagoe.storage.ports` | Protocols: `IFileStorage`, `IStreamingFileStorage`, `IStorageService`, `ISignedFiles`, `IUploadIndex`, `IExportJobStore`, `IImageProcessor` |
+| `wagoe.storage.ports` | Protocols: `IFileStorage`, `IStreamingFileStorage`, `IStorageService`, `ISignedFiles`, `IUploadIndex`, `IUploadPages`, `IExportJobStore`, `IImageProcessor` |
 | `wagoe.storage.core.validation` | Pure: size/type/extension validation, filename sanitization, MIME lookup |
 | `wagoe.storage.core.uploads` | Pure: the upload index record and the data-export section |
 | `wagoe.storage.shell.upload-index` | `JdbcUploadIndex` on `storage_uploads`, and its boot-time table creation |
@@ -81,8 +81,11 @@ Pass the owner as `:owner {:user-id :tenant-id}` in the upload metadata; the
 upload routes take it from the request. When recording fails the file is
 deleted and the upload fails. `remove-file` forgets the record. Data export
 (`:storage` section, files in a zip export) and the `:storage/uploads`
-retention policy read the index. A store straight through `IFileStorage` is
-not recorded. Keys are compared case-sensitively on every engine
+retention policy read the index; retention keeps an upload `:wagoe/storage
+:in-use?` says the app still refers to. It pages by `IUploadPages`, a cursor on
+(stored-at, key), so a kept upload is read once a run; an index without it
+falls back to `uploads-stored-before`, which a full page of kept ones ends (BOU-1081).
+A store straight through `IFileStorage` is not recorded. Keys are compared case-sensitively on every engine
 (`db/ensure-binary-collation!` on MySQL), and a re-store of one key is a
 `db/upsert!`, which retries a racing insert and a MySQL deadlock.
 `IUploadLookup/find-upload`, beside it, tells the mounted routes who owns a key;

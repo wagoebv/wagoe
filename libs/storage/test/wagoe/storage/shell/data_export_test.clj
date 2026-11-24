@@ -131,3 +131,102 @@
       (is (= (if lost? [1 2] [1 2 3]) @tried) what)
       (is (= {:keys (if lost? [] [2]) :deleted (if lost? 1 2)} (select-keys (ex-data e) [:keys :deleted])) what)
       (is (= lost? (db/connection-lost? e)) what))))
+
+(deftest ^:integration ^:security upload-retention-keeps-what-the-app-still-uses
+  ;; BOU-1081
+  (with-storage
+    (fn [{:keys [service storage index]}]
+      (let [owner  {:user-id (random-uuid)}
+            shared (upload! service "shared in a conversation" owner)
+            stale  (upload! service "nobody refers to it" owner)
+            asked  (atom [])
+            policy (data-export/map->UploadRetention
+                    {:upload-index index :storage storage
+                     :in-use? (fn [{:keys [key]}] (swap! asked conj key) (= key shared))})]
+        (is (= 1 (privacy/purge-before! policy (.plusSeconds (Instant/now) 60))))
+        (is (true? (ports/file-exists? storage shared)) "kept, however old")
+        (is (false? (ports/file-exists? storage stale)))
+        (is (= [shared] (map :key (ports/find-uploads index owner {}))))
+        (is (= #{shared stale} (set @asked)))
+        (testing "a file the app cannot answer for is kept, and the run says so"
+          (let [e (try (privacy/purge-before! (data-export/map->UploadRetention
+                                               {:upload-index index :storage storage
+                                                :in-use? (fn [_] (throw (ex-info "app down" {})))})
+                                              (.plusSeconds (Instant/now) 60))
+                       nil
+                       (catch clojure.lang.ExceptionInfo e e))]
+            (is (= [shared] (:keys (ex-data e))))
+            (is (true? (ports/file-exists? storage shared)))))))))
+
+(deftest ^:unit kept-items-do-not-hold-back-newer-ones
+  ;; BOU-1081: a full page of kept items used to end the run before anything newer
+  (let [rows   (atom (vec (range 1200)))
+        reads  (atom 0)
+        fetch  (fn [after limit]
+                 (let [page (vec (take limit (cond->> @rows after (drop-while #(<= % after)))))]
+                   (swap! reads + (count page))
+                   page))
+        result (data-export/purge-after! fetch identity
+                                         (fn [id] (if (< id 1000)
+                                                    data-export/kept
+                                                    (swap! rows (fn [r] (vec (remove #{id} r))))))
+                                         "uploads")]
+    (is (= {:deleted 200 :kept 1000} result))
+    (is (= (range 1000) @rows))
+    (is (= 1200 @reads) "a kept row is read once, not again with every page")))
+
+(deftest ^:unit an-outage-ends-the-run-after-one-page
+  ;; Every delete failing, a storage outage say: one page of attempts, not all of them
+  (let [tried (atom 0)
+        e     (try (data-export/purge-after! (fn [_ limit] (vec (range limit))) identity
+                                             (fn [_] (swap! tried inc) (throw (ex-info "S3 down" {})))
+                                             "uploads")
+                   nil
+                   (catch clojure.lang.ExceptionInfo e e))]
+    (is (= 500 @tried))
+    (is (= "S3 down" (ex-message (ex-cause e))) "the first failure's reason travels with it")))
+
+(deftest ^:integration old-uploads-page-by-time-then-key
+  ;; BOU-1081: the cursor retention pages with, ties on stored-at broken by key
+  (with-storage
+    (fn [{:keys [index]}]
+      (let [t   (.minus (Instant/now) 2 ChronoUnit/DAYS)
+            ups (for [k ["c" "a" "b" "d"]]
+                  {:key k :user-id nil :tenant-id nil :size 1 :content-type "text/plain"
+                   :stored-at (if (= k "d") (.plusSeconds t 1) t)})]
+        (doseq [u ups] (ports/record-upload! index u))
+        (let [cutoff (Instant/now)
+              page1  (ports/uploads-stored-after index cutoff nil 2)
+              page2  (ports/uploads-stored-after index cutoff (last page1) 2)]
+          (is (= ["a" "b"] (map :key page1)))
+          (is (= ["c" "d"] (map :key page2)))
+          (is (empty? (ports/uploads-stored-after index cutoff (last page2) 2))))))))
+
+(deftest ^:unit a-lost-connection-names-what-failed-before-it
+  (let [e (try (data-export/purge-after! (fn [after _] (if after [] [1 2 3])) identity
+                                         (fn [id] (case id
+                                                    1 (throw (ex-info "S3 down" {}))
+                                                    2 (throw (java.sql.SQLTransientConnectionException. "gone"))
+                                                    nil))
+                                         "uploads")
+               nil
+               (catch clojure.lang.ExceptionInfo e e))]
+    (is (= [1] (:keys (ex-data e))))))
+
+(deftest ^:unit an-index-without-pages-still-keeps-what-is-in-use
+  ;; BOU-1081: the fallback, over an index on the stable port only
+  (let [rows   (atom [{:key "kept"} {:key "gone"}])
+        index  (reify ports/IUploadIndex
+                 (uploads-stored-before [_ _ limit] (vec (take limit @rows)))
+                 (remove-upload! [_ k] (swap! rows (fn [r] (vec (remove #(= k (:key %)) r)))) true)
+                 (record-upload! [_ u] u)
+                 (find-uploads [_ _ _] []))
+        files  (atom #{"kept" "gone"})
+        store  (reify ports/IFileStorage
+                 (delete-file [_ k] (swap! files disj k) true)
+                 (file-exists? [_ k] (contains? @files k))
+                 (store-file [_ _ _] nil) (retrieve-file [_ _] nil) (generate-signed-url [_ _ _] nil))
+        policy (data-export/map->UploadRetention {:upload-index index :storage store
+                                                  :in-use? #(= "kept" (:key %))})]
+    (is (= 1 (privacy/purge-before! policy (Instant/now))))
+    (is (= #{"kept"} @files))))

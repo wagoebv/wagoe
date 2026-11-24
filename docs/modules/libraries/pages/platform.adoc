@@ -410,7 +410,7 @@ positive, fails the boot.
 | `:user/audit-log` | audit entries older than the period
 | `:jobs/dead-letter` | dead-lettered jobs that finally failed before the period
 | `:jobs/completed` | completed and cancelled jobs that finished before the period
-| `:storage/uploads` | uploads stored before the period, file and record
+| `:storage/uploads` | uploads stored before the period, file and record, but those `:wagoe/storage :in-use?` keeps
 |===
 
 `wagoe.platform.database/delete-in-batches!` deletes in batches of 1000, so a
