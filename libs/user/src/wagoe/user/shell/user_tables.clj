@@ -10,6 +10,11 @@
   [config]
   (persistence/initialize-user-schema! (db/context-of (db/migration-connectable config))))
 
+(defn unaccent-up
+  "Migratus entry point for unaccent, run outside a transaction (BOU-1099)."
+  [config]
+  (persistence/create-unaccent! (db/context-of (db/migration-connectable config))))
+
 (defn down
   "Nothing. The tables may predate this migration, created at boot and holding
    data, and the runner calls down to back out a failed up on MySQL and H2."

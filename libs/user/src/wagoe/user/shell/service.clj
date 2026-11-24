@@ -677,8 +677,9 @@
              users (:users result)
              total-count (:total-count result)
              cleaned-users (map user-core/without-credentials users)]
-         {:users cleaned-users
-          :total-count total-count}))
+         ;; No :total-count under :skip-total? (BOU-1099).
+         (cond-> {:users cleaned-users}
+           (some? total-count) (assoc :total-count total-count))))
      (observability this)))
 
   (update-user-profile [this user-entity]
