@@ -583,3 +583,22 @@
         (is (<= 590 age 600)))
       (is (= "private, no-cache"
              (cc-of (#'sut/download-headers "photo.png" {:content-type "image/png" :size 7} {} false)))))))
+
+(deftest ^:unit an-uploaded-temp-file-is-streamed-into-storage
+  ;; BOU-1080: the route passes Ring's temp file on, not its bytes
+  (let [received (atom nil)
+        spy      (reify service/IStorageService
+                   (upload-file [_ file-data _ _]
+                     (reset! received file-data)
+                     {:success true :data {:key "a.txt"}})
+                   (upload-image [_ _ _ _] nil)
+                   (download-file [_ _] nil)
+                   (remove-file [_ _] nil)
+                   (get-file-url [_ _ _] nil))
+        handler  (sut/upload-file-handler spy)
+        tmp      (doto (java.io.File/createTempFile "ring-multipart" ".tmp") (spit "hello") (.deleteOnExit))
+        resp     (handler {:multipart-params {"file" {:filename "a.txt" :content-type "text/plain"
+                                                      :tempfile tmp :size 5}}})]
+    (is (= 201 (:status resp)))
+    (is (= tmp (:file @received)))
+    (is (nil? (:bytes @received)) "never read into memory")))

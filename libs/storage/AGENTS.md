@@ -121,6 +121,13 @@ they refuse to boot without it (WGE-107).
   `{sanitized-path}/{sanitized-filename}`, below `.tenants/{tenant-id}/` for an
   upload in a tenant, so tenants' names never collide; no caller may name
   `.tenants` itself (BOU-991).
+- A file's version, which a signed URL carries as `v`, is recorded at
+  `.versions/{key}` with the file's size and modification time when the
+  adapter writes it (each writer the stamp of its own spooled file), and
+  removed with it, so a signed URL does not hash the file again. A file whose
+  size or time no longer match, written another way, and one with no record
+  are hashed and recorded. `retrieve-file` hashes the bytes it returns, so its
+  `:version` is always theirs (BOU-1080).
 
 ### S3 (`create-s3-storage` / `close-s3-storage`)
 

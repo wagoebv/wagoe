@@ -404,3 +404,37 @@
     (sut/create-local-storage {:base-path test-dir})
     (is (not (.exists stale)))
     (is (.exists writing) "one still being written is spared")))
+
+(deftest ^:integration a-files-version-is-recorded-when-it-is-written
+  ;; BOU-1080: a signed URL or a read does not hash the file again
+  (let [storage (sut/create-local-storage {:base-path test-dir :url-base "http://x" :signing-secret "s3cr3t"})
+        key     (:key (ports/store-file storage {:bytes (.getBytes "one")} {:filename "a.txt" :path "docs"}))
+        sidecar (io/file test-dir sut/versions-dir key)
+        _       (is (.exists sidecar) "recorded by the write, before any read")
+        version (:version (ports/retrieve-file storage key))]
+    (is (str/starts-with? (slurp sidecar) (str version " ")))
+    (testing "a signed URL uses the record, not the bytes"
+      (spit sidecar (str/replace (slurp sidecar) version "recorded"))
+      (is (str/includes? (ports/generate-signed-url storage key 60) "v=recorded"))
+      (ports/store-file storage {:bytes (.getBytes "one")} {:filename "a.txt" :path "docs"}))
+    (testing "a file written another way, by an older release say, is hashed again"
+      (spit (io/file test-dir key) "changed behind the adapter's back")
+      (is (str/includes? (ports/generate-signed-url storage key 60)
+                         (str "v=" (:version (ports/retrieve-file storage key))))))
+    (testing "a write through the adapter records the new version"
+      (ports/store-file storage {:bytes (.getBytes "two")} {:filename "a.txt" :path "docs"})
+      (is (not= version (:version (ports/retrieve-file storage key)))))
+    (testing "a file from before is hashed once and recorded"
+      (.delete sidecar)
+      (let [url (ports/generate-signed-url storage key 60)]
+        (is (str/includes? url (str "v=" (first (str/split (slurp sidecar) #" ")))))))
+    (testing "a streamed file records its version too"
+      (let [k (:key (ports/store-stream storage {:write! #(.write ^java.io.OutputStream % (.getBytes "three"))}
+                                        {:filename "b.txt"}))]
+        (is (.exists (io/file test-dir sut/versions-dir k)))
+        (is (= (:version (ports/retrieve-file storage k))
+               (first (str/split (slurp (io/file test-dir sut/versions-dir k)) #" ")))
+            "hashed while written as a read hashes it")))
+    (testing "deleting the file deletes its record"
+      (ports/delete-file storage key)
+      (is (not (.exists sidecar))))))

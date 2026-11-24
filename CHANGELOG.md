@@ -48,6 +48,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **A storage upload streams from a file or a stream, and a local signed URL no longer rehashes the file** (BOU-1080):
+  `upload-file` takes `{:file}` or `{:input-stream}`. The local adapter records versions under `.versions/` in its root.
 - **A storage download can be shown in place, named, and cached while its signed URL lasts** (BOU-1079):
   `?disposition=inline` for raster images and PDF, `?name=`, and a `Cache-Control` on every download.
 - **The storage service and signed-URL checks are on `wagoe.storage.ports`** (BOU-1077): `IStorageService` and

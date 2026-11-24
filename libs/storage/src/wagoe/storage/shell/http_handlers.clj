@@ -112,6 +112,14 @@
      :size (alength bytes)
      :filename filename}))
 
+(defn- streamed-file-data
+  "`extract-file-data` for a file upload: Ring's temp file, streamed into
+   storage rather than read into memory (BOU-1080)."
+  [multipart-file]
+  (if-let [^java.io.File f (let [t (:tempfile multipart-file)] (when (instance? java.io.File t) t))]
+    {:file f :filename (:filename multipart-file)}
+    (extract-file-data multipart-file)))
+
 ;; ============================================================================
 ;; HTTP Handlers
 ;; ============================================================================
@@ -178,7 +186,7 @@
              "Missing required field: file")
            {:missing-field "file"})
 
-          (let [file-data (extract-file-data file)
+          (let [file-data (streamed-file-data file)
                 metadata {:filename (:filename file-data)
                           :path path
                           :visibility visibility

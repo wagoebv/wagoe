@@ -84,7 +84,9 @@
   no storage shell namespace (BOU-1077)."
 
   (upload-file [this file-data metadata options]
-    "Upload `file-data` {:bytes}; the filename's extension decides its type.
+    "Upload `file-data`: {:bytes}, or {:file} (a File or path) or
+    {:input-stream}, streamed so it is never all in memory; the service closes
+    the stream. The filename's extension decides its type.
     `metadata` {:filename :path :visibility :owner {:user-id :tenant-id}},
     `options` {:max-size :allowed-types :allowed-extensions}. Returns
     `{:success true :data {:key :url :size :content-type}}`, or

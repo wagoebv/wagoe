@@ -234,7 +234,6 @@
 (defn- file-version
   "`content-version` of the file `file-key` names, read as a stream, or nil
    when there is none."
-  ;; ponytail: hashes the file per signed URL; store the version beside it if large files make that slow.
   [base-path file-key]
   (let [path (some-> (resolve-within-root base-path file-key) (Paths/get (into-array String [])))]
     (when (and path (Files/exists path (make-array java.nio.file.LinkOption 0)))
@@ -243,6 +242,70 @@
                         (Files/newInputStream path (make-array java.nio.file.OpenOption 0)) digest)]
           (.transferTo in (java.io.OutputStream/nullOutputStream)))
         (subs (bytes->hex (.digest digest)) 0 16)))))
+
+(def versions-dir
+  "Where a file's version is recorded when it is written, `<dir>/<key>`, so a
+   signed URL or a download does not hash the file again (BOU-1080)."
+  ".versions")
+
+(defn- version-key [file-key]
+  (str versions-dir "/" (canonical-key file-key)))
+
+(defn- version-path
+  "Where `file-key`'s version is recorded, or nil outside the root."
+  ^Path [base-path file-key]
+  (some-> (resolve-within-root base-path (version-key file-key)) (Paths/get (into-array String []))))
+
+(defn- file-stamp
+  "What changes when a file is rewritten, without reading it: its size and
+   modification time. Nil when there is no file."
+  [^Path path]
+  (when (Files/exists path (make-array java.nio.file.LinkOption 0))
+    (str (Files/size path) "@" (Files/getLastModifiedTime path (make-array java.nio.file.LinkOption 0)))))
+
+(defn- record-version!
+  "Record `version` for `file-key` with the `stamp` of the file this writer
+   put there: another writer's file then fails to match it. Returns the version."
+  [base-path file-key version stamp]
+  (Files/writeString (target-path base-path (version-key file-key)) (str version " " stamp)
+                     (make-array java.nio.file.OpenOption 0))
+  version)
+
+(defn- stored-version
+  "`file-key`'s recorded version while its file still has the recorded stamp;
+   otherwise the file was written another way, by an older release say, and
+   is hashed and recorded again. Nil when there is no file."
+  ;; ponytail: a rewrite with the same size inside the clock's resolution keeps
+  ;; the old record; hash per read if that ever matters.
+  [base-path file-key]
+  (let [file   (some-> (resolve-within-root base-path file-key) (Paths/get (into-array String [])))
+        stamp  (some-> file file-stamp)
+        record (some-> (version-path base-path file-key)
+                       (as-> p (when (Files/exists p (make-array java.nio.file.LinkOption 0)) (Files/readString p)))
+                       (str/split #" " 2))]
+    (when stamp
+      (if (= stamp (second record))
+        (first record)
+        (let [v (file-version base-path file-key)]
+          ;; A record that cannot be written costs the next read a hash, not this one
+          (try (Files/writeString (target-path base-path (version-key file-key)) (str v " " stamp)
+                                  (make-array java.nio.file.OpenOption 0))
+               (catch Exception _ nil))
+          v)))))
+
+(declare spool-dir)
+
+(defn- spool-into-place!
+  "Write what `write!` writes under the root and move it to `file-path`, so a
+   reader never sees half a file and a failed writer leaves none. Returns the
+   file's stamp, taken before the move, which keeps it."
+  [base-path ^Path file-path write!]
+  (spool/with-spooled write! (doto (spool-dir base-path) ensure-directory-exists)
+    (fn [^Path spooled]
+      (let [stamp (file-stamp spooled)]
+        (Files/move spooled file-path (into-array CopyOption [StandardCopyOption/REPLACE_EXISTING
+                                                              StandardCopyOption/ATOMIC_MOVE]))
+        stamp))))
 
 (defn- spool-dir
   "Where a streamed file is written before it is moved to its key: inside the
@@ -286,9 +349,10 @@
       (let [{:keys [bytes content-type]} file-data
             storage-key (or (named-storage-key metadata)
                             (generate-storage-key bytes (:filename metadata)))
-            file-path   (target-path base-path storage-key)]
-        (Files/write file-path ^bytes bytes (make-array java.nio.file.OpenOption 0))
-        (stored logger url-base signing-secret storage-key (alength ^bytes bytes) content-type (content-version bytes)))
+            file-path   (target-path base-path storage-key)
+            stamp       (spool-into-place! base-path file-path #(.write ^java.io.OutputStream % ^bytes bytes))]
+        (stored logger url-base signing-secret storage-key (alength ^bytes bytes) content-type
+                (record-version! base-path storage-key (content-version bytes) stamp)))
 
       (catch Exception e
         (when logger
@@ -322,7 +386,8 @@
             {:bytes bytes
              :content-type content-type
              :size size
-             ;; What a signed URL for it carries as `v` (BOU-991)
+             ;; What a signed URL for it carries as `v` (BOU-991): of these
+             ;; bytes, which a write since may no longer match
              :version (content-version bytes)})))
 
       (catch Exception e
@@ -342,6 +407,7 @@
                  (Files/exists file-path (make-array java.nio.file.LinkOption 0)))
           (do
             (Files/delete file-path)
+            (some-> (version-path base-path file-key) Files/deleteIfExists)
 
             (when logger
               (logging/info logger "File deleted"
@@ -384,21 +450,19 @@
     (when url-base
       (let [base (str url-base "/" (canonical-key file-key))]
         (if signing-secret
-          (sign-url signing-secret file-key base expiration-seconds (file-version base-path file-key))
+          (sign-url signing-secret file-key base expiration-seconds (stored-version base-path file-key))
           base))))
 
   ports/IStreamingFileStorage
 
   (store-stream [_ {:keys [write! content-type]} metadata]
-    ;; Written under the root and moved into place, so a reader never sees
-    ;; half a file and a failed writer leaves none.
     (let [storage-key (or (named-storage-key metadata) (streamed-storage-key (:filename metadata)))
-          file-path   (target-path base-path storage-key)]
-      (spool/with-spooled write! (doto (spool-dir base-path) ensure-directory-exists)
-        #(Files/move ^Path % file-path (into-array CopyOption [StandardCopyOption/REPLACE_EXISTING
-                                                               StandardCopyOption/ATOMIC_MOVE])))
+          file-path   (target-path base-path storage-key)
+          ;; Hashed as it is written, not read again after (BOU-1080)
+          digest      (MessageDigest/getInstance "SHA-256")
+          stamp       (spool-into-place! base-path file-path #(write! (java.security.DigestOutputStream. % digest)))]
       (stored logger url-base signing-secret storage-key (Files/size file-path) content-type
-              (file-version base-path storage-key)))))
+              (record-version! base-path storage-key (subs (bytes->hex (.digest digest)) 0 16) stamp)))))
 
 ;; ============================================================================
 ;; Factory

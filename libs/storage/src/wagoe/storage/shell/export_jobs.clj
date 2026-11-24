@@ -10,9 +10,9 @@
             [wagoe.platform.ports.privacy :as privacy]
             [wagoe.storage.core.export-jobs :as core]
             [wagoe.storage.ports :as ports]
-            [wagoe.storage.shell.data-export :as data-export])
-  (:import [java.io ByteArrayOutputStream]
-           [java.time Duration Instant]))
+            [wagoe.storage.shell.data-export :as data-export]
+            [wagoe.storage.shell.service :as service])
+  (:import [java.time Duration Instant]))
 
 (def job-type :storage/data-export)
 
@@ -75,13 +75,8 @@
   "The archive of `subject` in file storage, streamed where the adapter can;
    another adapter gets it built in memory."
   [file-storage data-export subject metadata]
-  (let [doc    (privacy/export-subject data-export subject)
-        write! #(privacy/write-archive! data-export doc %)]
-    (if (satisfies? ports/IStreamingFileStorage file-storage)
-      (ports/store-stream file-storage {:write! write! :content-type "application/zip"} metadata)
-      (let [out (ByteArrayOutputStream.)]
-        (write! out)
-        (ports/store-file file-storage {:bytes (.toByteArray out) :content-type "application/zip"} metadata)))))
+  (let [doc (privacy/export-subject data-export subject)]
+    (service/store-written! file-storage #(privacy/write-archive! data-export doc %) "application/zip" metadata)))
 
 (defn run-export-job
   "The handler of `job-type`. The archive is private and kept out of the

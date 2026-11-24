@@ -273,3 +273,37 @@
     (testing "an adapter without a signing secret serves nothing"
       (let [plain (sut/create-storage-service {:storage (local/create-local-storage {:base-path test-dir})})]
         (is (nil? (ports/signed-file plain key params)))))))
+
+(deftest ^:integration an-upload-streams-from-a-file-or-a-stream
+  ;; BOU-1080: never all of it in memory
+  (let [service (create-test-service)
+        f       (doto (java.io.File/createTempFile "upload" ".txt") (spit "from a file") (.deleteOnExit))]
+    (testing "from a file"
+      (let [r (ports/upload-file service {:file f} {:filename "a.txt"} {})]
+        (is (:success r))
+        (is (= "from a file" (String. ^bytes (:bytes (ports/download-file service (get-in r [:data :key]))))))))
+    (testing "from a stream"
+      (let [r (ports/upload-file service {:input-stream (io/input-stream (.getBytes "streamed"))} {:filename "b.txt"} {})]
+        (is (= "streamed" (String. ^bytes (:bytes (ports/download-file service (get-in r [:data :key]))))))))
+    (testing "a file over the limit is refused before it is stored"
+      (is (= :file-too-large (-> (ports/upload-file service {:file f} {:filename "c.txt"} {:max-size 5}) :errors first :code))))
+    (testing "a stream over the limit is refused while it is copied, and nothing is kept"
+      (let [files  #(count (filter (fn [^java.io.File x] (.isFile x)) (file-seq (io/file test-dir))))
+            before (files)
+            r      (ports/upload-file service {:input-stream (io/input-stream (.getBytes "far too long"))}
+                                      {:filename "d.txt"} {:max-size 5})]
+        (is (= :file-too-large (-> r :errors first :code)))
+        (is (= before (files)))))
+    (testing "a refused upload's stream is closed all the same"
+      (let [closed? (atom false)
+            in      (proxy [java.io.ByteArrayInputStream] [(.getBytes "x")]
+                      (close [] (reset! closed? true)))]
+        (ports/upload-file service {:input-stream in} {:filename "x.txt"} {:allowed-extensions ["pdf"]})
+        (is @closed?)))))
+
+(deftest ^:integration ^:security the-versions-directory-is-no-path-a-caller-may-name
+  (let [service (create-test-service)]
+    (doseq [path [".versions" ".Versions/x"]]
+      (is (= :invalid-path (-> (ports/upload-file service {:bytes (.getBytes "x")} {:filename "x.txt" :path path} {})
+                               :errors first :code))
+          path))))

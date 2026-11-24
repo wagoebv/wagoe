@@ -5,11 +5,13 @@
   Follows the Functional Core / Imperative Shell pattern where this service
   represents the imperative shell that coordinates pure validation logic
   with side-effectful storage operations."
-  (:require [wagoe.storage.ports :as ports]
+  (:require [wagoe.core.utils.text :as text]
+            [wagoe.storage.ports :as ports]
             [wagoe.storage.shell.adapters.local :as local]
             [wagoe.storage.core.uploads :as uploads]
             [wagoe.storage.core.validation :as validation]
             [wagoe.observability.logging.ports :as logging]
+            [clojure.java.io :as io]
             [clojure.string :as str])
   (:import [java.time Instant]))
 
@@ -24,7 +26,8 @@
     "Upload a file with validation.
 
     Parameters:
-    - file-data: Map with :bytes; a :content-type is ignored, the filename's
+    - file-data: Map with :bytes, or :file or :input-stream, which are streamed
+      into storage (BOU-1080); a :content-type is ignored, the filename's
       extension decides it (BOU-1078)
     - metadata: Map with :filename and optional :path, :visibility, and
       :owner {:user-id :tenant-id}, which the upload index records
@@ -93,9 +96,11 @@
   (instance? wagoe.storage.shell.adapters.local.LocalFileStorage storage))
 
 (defn- reserved-path?
-  "Whether a normalized `path` names the tenants' directory (BOU-991)."
+  "Whether a normalized `path` names the tenants' directory (BOU-991) or the
+   local adapter's versions (BOU-1080)."
   [path]
-  (= tenants-dir (first (some-> path (str/split #"/")))))
+  ;; Lower case: on a case-insensitive filesystem `.Versions` is `.versions`
+  (contains? #{tenants-dir local/versions-dir} (some-> path (str/split #"/") first text/lower-case)))
 
 (defn- in-tenant-dir
   "A tenant's named `path` below `.tenants/<tenant-id>/`, under the local
@@ -115,6 +120,40 @@
     ;; ponytail: checked before the write, not with it; two uploads racing for one path can both pass.
     (and (ports/file-exists? storage k) (not (may-replace? k)))))
 
+(defn- copy-at-most!
+  "Copy `in` to `out`, throwing ::too-large past `limit` bytes."
+  [^java.io.InputStream in ^java.io.OutputStream out limit]
+  (let [buf (byte-array 8192)]
+    (loop [total 0]
+      (let [n (.read in buf)]
+        (when (pos? n)
+          (when (> (+ total n) limit)
+            (throw (ex-info "File too large" {:type ::too-large :size (+ total n) :max-size limit})))
+          (.write out buf 0 n)
+          (recur (+ total n)))))))
+
+(defn store-written!
+  "Store what `(write! out)` writes: streamed where `storage` can, built in
+   memory for an adapter that cannot."
+  [storage write! content-type metadata]
+  (if (satisfies? ports/IStreamingFileStorage storage)
+    (ports/store-stream storage {:write! write! :content-type content-type} metadata)
+    (let [out (java.io.ByteArrayOutputStream.)]
+      (write! out)
+      (ports/store-file storage {:bytes (.toByteArray out) :content-type content-type} metadata))))
+
+(defn- store!
+  "Store `file-data`: its `:bytes`, or streamed from its `:file` or
+   `:input-stream`, so a large upload never sits in memory (BOU-1080)."
+  [storage {:keys [bytes file input-stream content-type] :as file-data} metadata max-size]
+  (if bytes
+    (ports/store-file storage file-data metadata)
+    (store-written! storage
+                    (fn [out]
+                      (with-open [^java.io.InputStream in (if file (io/input-stream (io/file file)) input-stream)]
+                        (copy-at-most! in out max-size)))
+                    content-type metadata)))
+
 (defrecord StorageService [storage image-processor logger upload-index]
   IStorageService
 
@@ -132,7 +171,10 @@
                                    (update :filename validation/sanitize-filename)
                                    (assoc :path (cond-> path on-local? (in-tenant-dir (:tenant-id (:owner metadata))))))
             ;; Validated as it is served: by the name's extension (BOU-1078)
-            file-data          (assoc file-data :content-type (validation/content-type-of (:filename sanitized-metadata)))
+            file-data          (cond-> (assoc file-data :content-type (validation/content-type-of (:filename sanitized-metadata)))
+                                 (:file file-data)         (assoc :size (.length (io/file (:file file-data))))
+                                 ;; Its size is checked while it is copied
+                                 (:input-stream file-data) (assoc :size 0))
 
             ;; Validate file
             validation-result (validation/validate-file file-data sanitized-metadata options)]
@@ -157,7 +199,8 @@
            :errors [{:code :forbidden :message "That path holds a file you may not replace"}]}
 
           :else
-          (let [result (ports/store-file storage file-data (dissoc sanitized-metadata :owner))]
+          (let [result (store! storage file-data (dissoc sanitized-metadata :owner)
+                               (or (:max-size options) validation/default-max-file-size))]
             (index-upload! storage upload-index logger result (:owner metadata))
             (when logger
               (logging/info logger "Upload file completed"
@@ -168,14 +211,20 @@
              :data result})))
 
       (catch Exception e
-        (when logger
-          (logging/error logger "Upload file error"
-                         {:event ::upload-file-error
-                          :filename (:filename metadata)
-                          :error (.getMessage e)}))
-        {:success false
-         :errors [{:code :storage-error
-                   :message "Storage operation failed"}]})))
+        (if-let [{:keys [size max-size]} (when (= ::too-large (:type (ex-data e))) (ex-data e))]
+          ;; The size when the copy stopped: past the limit, not the whole
+          {:success false
+           :errors (:errors (validation/validate-file-size size max-size))}
+          (do (when logger
+                (logging/error logger "Upload file error"
+                               {:event ::upload-file-error
+                                :filename (:filename metadata)
+                                :error (.getMessage e)}))
+              {:success false
+               :errors [{:code :storage-error
+                         :message "Storage operation failed"}]})))
+      ;; Closed when refused before it was read, too
+      (finally (some-> ^java.io.Closeable (:input-stream file-data) .close))))
 
   (upload-image [this image-bytes metadata options]
     (when logger
