@@ -1349,6 +1349,39 @@
       (is (= {:max-file-size nil :max-file-count 1}
              (:details (error-body (post {:max-file-size nil :max-file-count 1}))))))))
 
+(deftest ^:unit ^:security an-uploads-temp-files-go-when-the-request-ends
+  ;; BOU-1087: Ring's store kept them an hour, refused upload or not.
+  (let [file    (atom nil)
+        handler (reitit/compile-routes
+                 [["/upload" {:post {:handler (fn [req]
+                                                (reset! file (get-in req [:multipart-params "file" :tempfile]))
+                                                (is (.exists ^java.io.File @file) "the handler can read it")
+                                                {:status 200 :body {:ok true}})}}]
+                  ["/refuse" {:post {:handler (fn [req]
+                                                (reset! file (get-in req [:multipart-params "file" :tempfile]))
+                                                (throw (ex-info "no" {:type :forbidden})))}}]
+                  ["/one-part" {:post {:handler          (fn [_] {:status 200 :body {:ok true}})
+                                       :multipart-limits {:max-file-count 1}}}]]
+                 {:system {}})]
+    (testing "after a handled upload"
+      (is (= 200 (:status (handler (multipart-request "/upload")))))
+      (is (not (.exists ^java.io.File @file))))
+    (testing "after a handler that throws"
+      (handler (multipart-request "/refuse"))
+      (is (not (.exists ^java.io.File @file))))
+    (testing "after a part over :max-file-size, refused mid-copy"
+      (let [tmp    (java.io.File. (System/getProperty "java.io.tmpdir"))
+            before (set (.list tmp))]
+        (is (= 413 (:status ((reitit/compile-routes
+                              [["/small" {:post {:handler          (fn [_] {:status 200 :body {}})
+                                                 :multipart-limits {:max-file-size 2}}}]]
+                              {:system {}})
+                             (multipart-request "/small")))))
+        (is (empty? (filter #(str/starts-with? % "ring-multipart-") (remove before (.list tmp)))))))
+    (testing "a route's own :multipart-limits narrow the router's"
+      (is (= 413 (:status (handler (multipart-request "/one-part")))))
+      (is (= 200 (:status (handler (multipart-request "/upload"))))))))
+
 (deftest ^:unit interceptors-on-a-path-or-parent-apply-to-its-methods
   ;; Inherited like :public (BOU-568), rather than ignored (BOU-642).
   (let [tag     (fn [t] {:name  (keyword t)

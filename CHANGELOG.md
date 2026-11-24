@@ -31,6 +31,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Security
 
+- **An upload's temp files stayed on disk for an hour, even when the app refused it** (BOU-1087). They are deleted when
+  the request ends, and a route can set `:multipart-limits`. Read the file in the handler, not in a later future.
 - **A finished job stayed in the `:db` job store for good, args included, such as a mail's links** (BOU-1101). A new
   `:jobs/completed` retention policy deletes them; name it under `:wagoe/privacy :retention`, e.g. `{:retain "P7D"}`.
 - **An email queued through the jobs module stored the SMTP username and password in the job** (BOU-1100). Pass the

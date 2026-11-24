@@ -482,10 +482,16 @@ The router refuses uploads over 10 MB per file or 100 parts per form with a
 :wagoe/http   {:max-request-body (* 110 1024 1024)}            ; the whole body
 ```
 
+A route narrows or lifts them with its own `:multipart-limits`, for example
+`{:max-file-count 2}` for one file and one field. Temp files last as long as
+the request: read the upload in the handler, not from a future it leaves
+behind.
+
 Storage's own check, an upload's `:max-size` (default 10 MB), runs after this
 one, so the router's limit must be at least as large. A route declaring
 `:parameters :multipart` is decoded by Reitit's middleware instead; pass the
-limits to `(reitit.ring.middleware.multipart/create-multipart-middleware {...})`.
+limits to `(reitit.ring.middleware.multipart/create-multipart-middleware {...})`. Its
+temp files are Ring's, kept up to an hour, not deleted when the request ends.
 
 ### S3 Access Denied
 
