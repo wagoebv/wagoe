@@ -1,0 +1,242 @@
+{:date "2026-11-25",
+ :git-sha "2e65b76d9859d2d8701ee4b042610b082b2f980e",
+ :provider "ollama",
+ :model "qwen2.5-coder:7b",
+ :label "Ollama",
+ :status :ran,
+ :prompts
+ [{:generated? true,
+   :steps
+   {:generate {:status :pass, :ms 78365},
+    :integrate {:status :pass, :ms 221},
+    :compiles {:status :pass, :ms 7828},
+    :tests {:status :pass, :ms 17292},
+    :check-fcis {:status :pass, :ms 198},
+    :check-deps
+    {:status :skipped,
+     :reason
+     "check:deps is monorepo-only; a generated project has no libs/"},
+    :migrate {:status :pass, :ms 8120},
+    :boot {:status :pass, :ms 15450}},
+   :duration-ms 128765,
+   :module "product",
+   :prompt "product module with name, price, stock",
+   :id :product,
+   :expectations
+   [{:id :no-protocol-interop, :pass? true, :hits []}
+    {:id :no-request-identity, :pass? true, :hits []}
+    {:id :fields, :pass? true, :missing []}],
+   :files
+   ["migrations/20261125145522-create-products.down.sql"
+    "migrations/20261125145522-create-products.up.sql"
+    "resources/conf/dev/admin/products.edn"
+    "resources/conf/dev/config.edn"
+    "resources/conf/test/admin/products.edn"
+    "resources/conf/test/config.edn"
+    "resources/seeds/dev.edn"
+    "src/eval_app/product/core/product.clj"
+    "src/eval_app/product/core/ui.clj"
+    "src/eval_app/product/ports.clj"
+    "src/eval_app/product/schema.clj"
+    "src/eval_app/product/shell/http.clj"
+    "src/eval_app/product/shell/module_wiring.clj"
+    "src/eval_app/product/shell/persistence.clj"
+    "src/eval_app/product/shell/service.clj"
+    "src/eval_app/product/shell/web_handlers.clj"
+    "test/eval_app/product/core/product_test.clj"
+    "test/eval_app/product/shell/product_repository_test.clj"
+    "test/eval_app/product/shell/service_test.clj"],
+   :edits 0,
+   :mergeable? true,
+   :tokens nil}
+  {:failure
+   {:step :generate,
+    :log
+    "\n[1m❆ Wagoe AI Scaffolder — Natural Language Module Generation[0m\n\n[2mParsing: invoice module: number, customer, line items, total in cents, due date, status draft→sent→paid[0m\n\n14:56:18.251 INFO  [main] wagoe.config - Loading configuration {:profile :dev, :path conf/dev/config.edn}\n14:56:18.279 INFO  [main] wagoe.ai.shell.service - ai scaffold-from-description {:description invoice module: number, customer, line items, total in cents, due date, status draft→sent→paid}\n[31mOllama response was not valid JSON\n  [ollama, qwen2.5-coder:7b][0m\n[31mAI scaffolder could not parse the description.[0m"},
+   :generated? false,
+   :steps
+   {:generate
+    {:status :fail,
+     :ms 69275,
+     :exit 1,
+     :log
+     "\n[1m❆ Wagoe AI Scaffolder — Natural Language Module Generation[0m\n\n[2mParsing: invoice module: number, customer, line items, total in cents, due date, status draft→sent→paid[0m\n\n14:56:18.251 INFO  [main] wagoe.config - Loading configuration {:profile :dev, :path conf/dev/config.edn}\n14:56:18.279 INFO  [main] wagoe.ai.shell.service - ai scaffold-from-description {:description invoice module: number, customer, line items, total in cents, due date, status draft→sent→paid}\n[31mOllama response was not valid JSON\n  [ollama, qwen2.5-coder:7b][0m\n[31mAI scaffolder could not parse the description.[0m"},
+    :integrate
+    {:status :fail, :log "scaffold ai wrote no module under src/"}},
+   :duration-ms 69418,
+   :module nil,
+   :prompt
+   "invoice module: number, customer, line items, total in cents, due date, status draft→sent→paid",
+   :id :invoice,
+   :edits nil,
+   :mergeable? false,
+   :tokens nil}
+  {:generated? true,
+   :steps
+   {:generate {:status :pass, :ms 58366},
+    :integrate {:status :pass, :ms 225},
+    :compiles {:status :pass, :ms 8047},
+    :tests {:status :pass, :ms 17585},
+    :check-fcis {:status :pass, :ms 215},
+    :check-deps
+    {:status :skipped,
+     :reason
+     "check:deps is monorepo-only; a generated project has no libs/"},
+    :migrate {:status :pass, :ms 7958},
+    :boot {:status :pass, :ms 15212}},
+   :duration-ms 107765,
+   :module "order",
+   :prompt
+   "order module: an order has a reference and a placed-at time, and has many order lines, at least one; each line has a product name and a quantity",
+   :id :order,
+   :expectations
+   [{:id :no-protocol-interop, :pass? true, :hits []}
+    {:id :no-request-identity, :pass? true, :hits []}
+    {:id :has-many, :pass? true}
+    {:id :min-one, :pass? true}],
+   :files
+   ["migrations/20261125145814-create-orders.down.sql"
+    "migrations/20261125145814-create-orders.up.sql"
+    "migrations/20261125145818-create-order-lines.down.sql"
+    "migrations/20261125145818-create-order-lines.up.sql"
+    "resources/conf/dev/admin/order-lines.edn"
+    "resources/conf/dev/admin/orders.edn"
+    "resources/conf/dev/config.edn"
+    "resources/conf/test/admin/order-lines.edn"
+    "resources/conf/test/admin/orders.edn"
+    "resources/conf/test/config.edn"
+    "resources/seeds/dev.edn"
+    "src/eval_app/order/core/order.clj"
+    "src/eval_app/order/core/order_line.clj"
+    "src/eval_app/order/core/order_line_ui.clj"
+    "src/eval_app/order/core/ui.clj"
+    "src/eval_app/order/ports.clj"
+    "src/eval_app/order/schema.clj"
+    "src/eval_app/order/shell/http.clj"
+    "src/eval_app/order/shell/module_wiring.clj"
+    "src/eval_app/order/shell/order_line_http.clj"
+    "src/eval_app/order/shell/order_line_persistence.clj"
+    "src/eval_app/order/shell/order_line_service.clj"
+    "src/eval_app/order/shell/order_line_web_handlers.clj"
+    "src/eval_app/order/shell/persistence.clj"
+    "src/eval_app/order/shell/service.clj"
+    "src/eval_app/order/shell/web_handlers.clj"
+    "test/eval_app/order/core/order_line_test.clj"
+    "test/eval_app/order/core/order_test.clj"
+    "test/eval_app/order/shell/order_line_repository_test.clj"
+    "test/eval_app/order/shell/order_line_service_test.clj"
+    "test/eval_app/order/shell/order_repository_test.clj"
+    "test/eval_app/order/shell/service_test.clj"],
+   :edits 0,
+   :mergeable? true,
+   :tokens nil}
+  {:failure {:expectation :storage-port, :repair-diff ""},
+   :generated? true,
+   :steps
+   {:generate {:status :pass, :ms 40669},
+    :integrate {:status :pass, :ms 226},
+    :compiles {:status :pass, :ms 7768},
+    :tests {:status :pass, :ms 17631},
+    :check-fcis {:status :pass, :ms 206},
+    :check-deps
+    {:status :skipped,
+     :reason
+     "check:deps is monorepo-only; a generated project has no libs/"},
+    :migrate {:status :pass, :ms 8161},
+    :boot {:status :pass, :ms 15948}},
+   :duration-ms 95741,
+   :module "document",
+   :before-repair
+   {:steps
+    {:compiles {:status :pass, :ms 7768},
+     :tests {:status :pass, :ms 17631},
+     :check-fcis {:status :pass, :ms 206},
+     :check-deps
+     {:status :skipped,
+      :reason
+      "check:deps is monorepo-only; a generated project has no libs/"},
+     :migrate {:status :pass, :ms 8161},
+     :boot {:status :pass, :ms 15948}},
+    :expectations
+    [{:id :no-protocol-interop, :pass? true, :hits []}
+     {:id :no-request-identity, :pass? true, :hits []}
+     {:id :fields, :pass? true, :missing []}
+     {:id :storage-port, :pass? false}]},
+   :prompt
+   "document module with a title, a description and an uploaded attachment file stored with wagoe-storage",
+   :id :document,
+   :expectations
+   [{:id :no-protocol-interop, :pass? true, :hits []}
+    {:id :no-request-identity, :pass? true, :hits []}
+    {:id :fields, :pass? true, :missing []}
+    {:id :storage-port, :pass? false}],
+   :files
+   ["migrations/20261125145950-create-documents.down.sql"
+    "migrations/20261125145950-create-documents.up.sql"
+    "resources/conf/dev/admin/documents.edn"
+    "resources/conf/dev/config.edn"
+    "resources/conf/test/admin/documents.edn"
+    "resources/conf/test/config.edn"
+    "resources/seeds/dev.edn"
+    "src/eval_app/document/core/document.clj"
+    "src/eval_app/document/core/ui.clj"
+    "src/eval_app/document/ports.clj"
+    "src/eval_app/document/schema.clj"
+    "src/eval_app/document/shell/http.clj"
+    "src/eval_app/document/shell/module_wiring.clj"
+    "src/eval_app/document/shell/persistence.clj"
+    "src/eval_app/document/shell/service.clj"
+    "src/eval_app/document/shell/web_handlers.clj"
+    "test/eval_app/document/core/document_test.clj"
+    "test/eval_app/document/shell/document_repository_test.clj"
+    "test/eval_app/document/shell/service_test.clj"],
+   :edits nil,
+   :mergeable? false,
+   :tokens nil}
+  {:generated? true,
+   :steps
+   {:generate {:status :pass, :ms 46996},
+    :integrate {:status :pass, :ms 216},
+    :compiles {:status :pass, :ms 7546},
+    :tests {:status :pass, :ms 16675},
+    :check-fcis {:status :pass, :ms 187},
+    :check-deps
+    {:status :skipped,
+     :reason
+     "check:deps is monorepo-only; a generated project has no libs/"},
+    :migrate {:status :pass, :ms 7718},
+    :boot {:status :pass, :ms 15008}},
+   :duration-ms 94505,
+   :module "customer",
+   :prompt
+   "klantmodule met naam, e-mailadres, telefoonnummer en een vlag of de klant actief is",
+   :id :klant,
+   :expectations
+   [{:id :no-protocol-interop, :pass? true, :hits []}
+    {:id :no-request-identity, :pass? true, :hits []}
+    {:id :email, :pass? true}
+    {:id :phone, :pass? true}],
+   :files
+   ["migrations/20261125150132-create-customers.down.sql"
+    "migrations/20261125150132-create-customers.up.sql"
+    "resources/conf/dev/admin/customers.edn"
+    "resources/conf/dev/config.edn"
+    "resources/conf/test/admin/customers.edn"
+    "resources/conf/test/config.edn"
+    "resources/seeds/dev.edn"
+    "src/eval_app/customer/core/customer.clj"
+    "src/eval_app/customer/core/ui.clj"
+    "src/eval_app/customer/ports.clj"
+    "src/eval_app/customer/schema.clj"
+    "src/eval_app/customer/shell/http.clj"
+    "src/eval_app/customer/shell/module_wiring.clj"
+    "src/eval_app/customer/shell/persistence.clj"
+    "src/eval_app/customer/shell/service.clj"
+    "src/eval_app/customer/shell/web_handlers.clj"
+    "test/eval_app/customer/core/customer_test.clj"
+    "test/eval_app/customer/shell/customer_repository_test.clj"
+    "test/eval_app/customer/shell/service_test.clj"],
+   :edits 0,
+   :mergeable? true,
+   :tokens nil}],
+ :summary {:mergeable 3, :of 5, :median-edits 0}}
