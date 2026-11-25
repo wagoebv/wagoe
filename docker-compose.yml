@@ -6,7 +6,7 @@
 services:
   # PostgreSQL Database
   db:
-    image: postgres:18
+    image: postgres:19
     container_name: wagoe-db
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-wagoe_dev}
@@ -17,8 +17,8 @@ services:
       # PostgreSQL port - can be overridden via POSTGRES_PORT env var
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
-      # For PostgreSQL 18+, store data in pg_ctlcluster-compatible directory
-      - wagoe_pgdata:/var/lib/postgresql/data/pgdata
+      # Since PostgreSQL 18 the image keeps data under /var/lib/postgresql/<major>
+      - wagoe_pgdata:/var/lib/postgresql
       # Optional: Custom init scripts
       - ./resources/db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:

@@ -10,6 +10,35 @@ mode you'd see without it, and the fix.
 > says where it went. Before deploying, `bb doctor --env prod` also catches
 > rate limiting with no active cache (BOU-456).
 
+## 1.3.x → 1.4.0
+
+### 1. Dev and CI run PostgreSQL 19 (BOU-1053)
+
+The compose files, the deploy examples and the embedded test binaries move to
+PostgreSQL 19; 15 or newer is supported. A database does not move across a
+major version by itself, and the root compose file now mounts its volume at
+`/var/lib/postgresql`, where the image keeps its data since 18; the old mount
+missed it. So dump your dev database before you pull this change, then
+restore (with your own `POSTGRES_USER` and `POSTGRES_DB`, if you set them):
+
+```bash
+docker compose exec -T db pg_dump -U postgres -Fc wagoe_dev > wagoe_dev.dump  # before the pull
+docker compose down -v && git pull && docker compose up -d --wait db
+docker compose exec -T db pg_restore -U postgres -d wagoe_dev < wagoe_dev.dump
+```
+
+`deploy/compose/multi-instance.yml` moves from 17, and its volume mount too; on
+an old volume PostgreSQL 19 refuses to start. Dump and restore it the same way,
+removing only its database volume:
+
+```bash
+f=deploy/compose/multi-instance.yml
+docker compose -f $f exec -T postgres pg_dump -U wagoe -Fc wagoe > wagoe.dump  # before the pull
+docker compose -f $f down && docker volume rm wagoe-multi-instance_pgdata
+git pull && docker compose -f $f up -d --wait postgres
+docker compose -f $f exec -T postgres pg_restore -U wagoe -d wagoe < wagoe.dump
+```
+
 ## 1.2.x → 1.3.0
 
 ### 1. `/metrics` moved off the app port (BOU-1094)

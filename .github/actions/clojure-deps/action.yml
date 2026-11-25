@@ -77,6 +77,7 @@ runs:
     #
     # v4: warm-deps also resolves the coverage aliases for coverage.yml (BOU-451).
     # v5: those now include kaocha-cloverage (BOU-620).
+    # v7: PostgreSQL 19 binaries (BOU-1053); a restore of v6 kept 18's ~120 MB too.
     - name: Cache dependencies
       id: cache
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -84,8 +85,8 @@ runs:
         path: |
           ~/.m2/repository
           ~/.gitlibs
-        key: ${{ runner.os }}-clojure-v6-${{ hashFiles('**/deps.edn') }}
-        restore-keys: ${{ runner.os }}-clojure-v6-
+        key: ${{ runner.os }}-clojure-v7-${{ hashFiles('**/deps.edn') }}
+        restore-keys: ${{ runner.os }}-clojure-v7-
 
     # Resolve deps single-threaded BEFORE any concurrent resolution. On a cold
     # ~/.m2, tools.deps parses many JDBC-driver POMs in parallel and intermittently

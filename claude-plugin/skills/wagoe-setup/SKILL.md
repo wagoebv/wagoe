@@ -82,7 +82,7 @@ a letter. Reject `My-App`, `123app`, `my.app`, `my_app`, `my-`, `my--app` — an
 | Option | When |
 | --- | --- |
 | **SQLite** (default) | Zero setup, file-backed, survives restarts. Recommend this. |
-| **PostgreSQL** | Only if they already have a server running. |
+| **PostgreSQL** | Only if they already have a server running, version 15 or newer. |
 
 Do not offer H2 or MySQL. Both work, but H2 is a second file-backed embedded
 database beside SQLite and a newcomer has no basis for choosing between them.
@@ -100,7 +100,7 @@ Before anything writes config:
 If unreachable: say so, and offer either SQLite instead or
 
 ```
-docker run --name wagoe-pg -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:5432:5432 -d postgres:16
+docker run --name wagoe-pg -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:5432:5432 -d postgres:19
 ```
 
 Stop until they choose. Do not write config and let the migration fail later —

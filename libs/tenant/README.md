@@ -382,7 +382,7 @@ clojure -M:test:test/pg :tenant --focus wagoe.tenant.shell.provisioning-test  # 
 ## Production Checklist
 
 ✅ **Database**
-- Use PostgreSQL 12+ for schema-per-tenant
+- Use PostgreSQL 15+ for schema-per-tenant
 - `tenants.slug` and `tenants.schema_name` are unique-indexed by the library
 - Set connection pool size >= concurrent requests
 
@@ -497,7 +497,7 @@ The tenant module follows **Functional Core / Imperative Shell**:
 
 ### PostgreSQL Only (See ADR-020)
 
-The tenant module requires **PostgreSQL 12+** for the schema-per-tenant isolation model.
+The tenant module requires **PostgreSQL 15+** for the schema-per-tenant isolation model.
 
 **Why PostgreSQL?**
 - Uses PostgreSQL schemas (namespaces) for logical isolation

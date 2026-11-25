@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:18
+    image: postgres:19
     container_name: my-app-db
     environment:
       POSTGRES_DB: wagoe_dev

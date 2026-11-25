@@ -1397,7 +1397,7 @@ validation {plus} testing)
 [cols=",,,,,",options="header",]
 |===
 |Database |Current (v1.0) |Future Support |Strategy |Priority |ETA
-|*PostgreSQL 12{plus}* |✅ Supported |✅ Continue |Schema-per-tenant |P0
+|*PostgreSQL 15{plus}* |✅ Supported |✅ Continue |Schema-per-tenant |P0
 |Now
 
 |*MySQL 8.0{plus}* |❌ Not supported |🟡 Planned |Database-per-tenant

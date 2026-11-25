@@ -275,12 +275,12 @@
            :test/pg   {:extra-deps {io.zonky.test/embedded-postgres {:mvn/version "2.2.2"
                                                                      ;; Its driver is 42.7.10 (CVE-2026-42198, -54291); :test brings 42.7.13 (BOU-618).
                                                                      :exclusions [org.postgresql/postgresql]}
-                                    io.zonky.test.postgres/embedded-postgres-binaries-linux-amd64 {:mvn/version "18.6.0"}}}
+                                    io.zonky.test.postgres/embedded-postgres-binaries-linux-amd64 {:mvn/version "19.0.0"}}}
 
            ;; The macOS binary, for local runs on Apple Silicon. Deliberately
            ;; not in :test/pg: every CI job is ubuntu-latest, so all 52 of them
            ;; were downloading 61.8 MB for a platform CI never runs on.
-           :test/pg-mac {:extra-deps {io.zonky.test.postgres/embedded-postgres-binaries-darwin-arm64v8 {:mvn/version "18.6.0"}}}
+           :test/pg-mac {:extra-deps {io.zonky.test.postgres/embedded-postgres-binaries-darwin-arm64v8 {:mvn/version "19.0.0"}}}
 
            ;; OpenTelemetry in-memory exporters — observability's OTLP suites only.
            :test/otel {:extra-deps {io.opentelemetry/opentelemetry-sdk-testing {:mvn/version "1.68.0"}}}
@@ -313,8 +313,8 @@
            :test/all  {:extra-deps {io.zonky.test/embedded-postgres {:mvn/version "2.2.2"
                                                                      ;; Its driver is 42.7.10 (CVE-2026-42198, -54291); :test brings 42.7.13 (BOU-618).
                                                                      :exclusions [org.postgresql/postgresql]}
-                                    io.zonky.test.postgres/embedded-postgres-binaries-linux-amd64 {:mvn/version "18.6.0"}
-                                    io.zonky.test.postgres/embedded-postgres-binaries-darwin-arm64v8 {:mvn/version "18.6.0"}
+                                    io.zonky.test.postgres/embedded-postgres-binaries-linux-amd64 {:mvn/version "19.0.0"}
+                                    io.zonky.test.postgres/embedded-postgres-binaries-darwin-arm64v8 {:mvn/version "19.0.0"}
                                     io.opentelemetry/opentelemetry-sdk-testing {:mvn/version "1.68.0"}
                                     org.clj-commons/clj-http-lite {:mvn/version "1.0.13"}
                                     com.icegreen/greenmail {:mvn/version "2.1.15"

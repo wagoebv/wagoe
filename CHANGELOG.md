@@ -67,6 +67,11 @@ for what is public API, what is internal, and how deprecations are announced.
 - **`:prometheus` scrapes carry the JVM: heap and pools, GC, threads, process CPU and file descriptors** (BOU-1097),
   under Prometheus' client_java 1.x names. `:enable-default-metrics false` turns them off.
 
+### Changed
+
+- **Dev compose, CI, the deploy examples and the embedded test binaries run PostgreSQL 19** (BOU-1053); 15+ is
+  supported. An existing dev database needs a dump and restore: see UPGRADING.
+
 ### Deprecated
 
 - **`wagoe.storage.shell.service/IStorageService`** (BOU-1107): use `wagoe.storage.ports/IStorageService`, the same

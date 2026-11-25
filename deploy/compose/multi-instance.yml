@@ -51,13 +51,13 @@ x-app-env: &app-env
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:19-alpine
     environment:
       POSTGRES_DB: wagoe
       POSTGRES_USER: wagoe
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U wagoe -d wagoe"]
       interval: 5s
