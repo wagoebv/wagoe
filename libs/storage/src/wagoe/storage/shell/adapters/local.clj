@@ -271,6 +271,22 @@
                      (make-array java.nio.file.OpenOption 0))
   version)
 
+(defn- version-at
+  "The version of `file-key` while its file has `stamp`: the record's, or
+   hashed now and recorded. Nil when the file no longer has that stamp."
+  [base-path file-key stamp]
+  (let [record (some-> (version-path base-path file-key)
+                       (as-> p (when (Files/exists p (make-array java.nio.file.LinkOption 0)) (Files/readString p)))
+                       (str/split #" " 2))]
+    (if (= stamp (second record))
+      (first record)
+      (let [v (file-version base-path file-key)
+            p (some-> (resolve-within-root base-path file-key) (Paths/get (into-array String [])))]
+        ;; Hashed what had that stamp only if it still has it
+        (when (and v (= stamp (some-> p file-stamp)))
+          ;; A record that cannot be written costs the next read a hash, not this one
+          (try (record-version! base-path file-key v stamp) (catch Exception _ v)))))))
+
 (defn- stored-version
   "`file-key`'s recorded version while its file still has the recorded stamp;
    otherwise the file was written another way, by an older release say, and
@@ -278,20 +294,15 @@
   ;; ponytail: a rewrite with the same size inside the clock's resolution keeps
   ;; the old record; hash per read if that ever matters.
   [base-path file-key]
-  (let [file   (some-> (resolve-within-root base-path file-key) (Paths/get (into-array String [])))
-        stamp  (some-> file file-stamp)
-        record (some-> (version-path base-path file-key)
-                       (as-> p (when (Files/exists p (make-array java.nio.file.LinkOption 0)) (Files/readString p)))
-                       (str/split #" " 2))]
-    (when stamp
-      (if (= stamp (second record))
-        (first record)
-        (let [v (file-version base-path file-key)]
-          ;; A record that cannot be written costs the next read a hash, not this one
-          (try (Files/writeString (target-path base-path (version-key file-key)) (str v " " stamp)
-                                  (make-array java.nio.file.OpenOption 0))
-               (catch Exception _ nil))
-          v)))))
+  (when-let [stamp (some-> (resolve-within-root base-path file-key) (Paths/get (into-array String [])) file-stamp)]
+    ;; Changed while it was hashed: this answer is the file's as it is now
+    (or (version-at base-path file-key stamp) (file-version base-path file-key))))
+
+(defn bytes->stream
+  "`retrieve-file`'s result with its `:bytes` as an `:input-stream`, as
+   `open-file` answers."
+  [file]
+  (some-> file (assoc :input-stream (java.io.ByteArrayInputStream. ^bytes (:bytes file))) (dissoc :bytes)))
 
 (declare spool-dir)
 
@@ -450,6 +461,26 @@
         (if signing-secret
           (sign-url signing-secret file-key base expiration-seconds (stored-version base-path file-key))
           base))))
+
+  ports/IFileStreams
+  (open-file [this file-key]
+    ;; The stamp before and after opening agree: the stream reads the file
+    ;; that has it, and so the version recorded for it (BOU-1106)
+    (when-let [p (some-> (resolve-within-root base-path file-key) (Paths/get (into-array String [])))]
+      (when-let [before (file-stamp p)]
+        (let [in      (Files/newInputStream p (make-array java.nio.file.OpenOption 0))
+              version (try (when (= before (file-stamp p)) (version-at base-path file-key before))
+                           ;; Deleted from under it, say: the stream must not outlive this
+                           (catch Throwable t (.close in) (throw t)))]
+          (if version
+            {:input-stream in
+             ;; The opened file's, from its stamp: a size read now could be another file's
+             :size         (parse-long (first (str/split before #"@" 2)))
+             :content-type (validation/content-type-of file-key)
+             :version      version}
+            ;; Replaced while it was opened: the bytes, read and hashed together
+            (do (.close in)
+                (bytes->stream (ports/retrieve-file this file-key))))))))
 
   ports/IStreamingFileStorage
 

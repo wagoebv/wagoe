@@ -397,6 +397,23 @@
    :remove-file  remove-file
    :get-file-url get-file-url})
 
+(defn open-download
+  "`file-key` to send: {:input-stream :size :content-type :version}, streamed
+   from an adapter that can, its bytes otherwise; nil when there is none. The
+   caller closes the stream (BOU-1106)."
+  [service file-key]
+  (let [storage (:storage service)]
+    (if (satisfies? ports/IFileStreams storage)
+      (try (ports/open-file storage file-key)
+           (catch Exception e
+             ;; The class, not the message: a file system's message names the path
+             (some-> (:logger service)
+                     (logging/error "Open file error" {:event ::open-file-error
+                                                       :key (validation/key-for-log file-key)
+                                                       :error (.getName (class e))}))
+             nil))
+      (local/bytes->stream (ports/download-file service file-key)))))
+
 (defn file-at?
   "Whether the storage backend holds a file at `file-key`."
   [service file-key]

@@ -335,13 +335,15 @@
 
          :else
 
-         (if-let [file-data (ports/download-file storage-service file-key)]
+         ;; Streamed, not held in memory (BOU-1106)
+         (if-let [file-data (service/open-download storage-service file-key)]
            ;; A URL serves the file it was signed for, not one written there since (BOU-991)
            (if (and signing-secret (not= version (:version file-data)))
-             (forbidden "Missing, invalid or expired signature")
+             (do (.close ^java.io.InputStream (:input-stream file-data))
+                 (forbidden "Missing, invalid or expired signature"))
              {:status 200
               :headers (download-headers file-key file-data query-params (some? signing-secret))
-              :body (io/input-stream (:bytes file-data))})
+              :body (:input-stream file-data)})
 
            (not-found
             "File not found"

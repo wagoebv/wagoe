@@ -602,3 +602,40 @@
     (is (= 201 (:status resp)))
     (is (= tmp (:file @received)))
     (is (nil? (:bytes @received)) "never read into memory")))
+
+(deftest ^:unit ^:security a-download-is-streamed-and-still-only-its-signed-version
+  ;; BOU-1106: retrieve-file read every download into memory
+  (.mkdirs (io/file test-dir))
+  (let [secret  "s3cr3t"
+        local   (local/create-local-storage {:base-path test-dir :url-base "http://x/files" :signing-secret secret})
+        key     (:key (wagoe.storage.ports/store-file local {:bytes (.getBytes "streamed")} {:filename "s.txt" :path "d"}))
+        streams (reify
+                  wagoe.storage.ports/IFileStorage
+                  (retrieve-file [_ _] (throw (ex-info "read into memory" {})))
+                  (file-exists? [_ k] (wagoe.storage.ports/file-exists? local k))
+                  (store-file [_ d m] (wagoe.storage.ports/store-file local d m))
+                  (delete-file [_ k] (wagoe.storage.ports/delete-file local k))
+                  (generate-signed-url [_ k s] (wagoe.storage.ports/generate-signed-url local k s))
+                  wagoe.storage.ports/IFileStreams
+                  (open-file [_ k] (wagoe.storage.ports/open-file local k)))
+        handler (sut/download-file-handler (service/create-storage-service {:storage streams}) secret)
+        fetch   (fn [params] (handler {:path-params {:file-key key} :query-params params}))
+        params  (query-of (wagoe.storage.ports/generate-signed-url local key 60))
+        resp    (fetch params)]
+    (is (= 200 (:status resp)))
+    (is (= "streamed" (slurp (:body resp))) "streamed, never retrieve-file")
+    (is (= "8" (get-in resp [:headers "Content-Length"])))
+    (testing "a URL signed before the file was replaced is refused"
+      (wagoe.storage.ports/store-file local {:bytes (.getBytes "replaced!")} {:filename "s.txt" :path "d"})
+      (is (= 403 (:status (fetch params)))))
+    (testing "an adapter that cannot stream still serves its bytes"
+      (let [bytes-only (reify wagoe.storage.ports/IFileStorage
+                         (retrieve-file [_ k] (wagoe.storage.ports/retrieve-file local k))
+                         (file-exists? [_ k] (wagoe.storage.ports/file-exists? local k))
+                         (store-file [_ d m] (wagoe.storage.ports/store-file local d m))
+                         (delete-file [_ k] (wagoe.storage.ports/delete-file local k))
+                         (generate-signed-url [_ k s] (wagoe.storage.ports/generate-signed-url local k s)))
+            h (sut/download-file-handler (service/create-storage-service {:storage bytes-only}) secret)
+            r (h {:path-params {:file-key key}
+                  :query-params (query-of (wagoe.storage.ports/generate-signed-url local key 60))})]
+        (is (= "replaced!" (slurp (:body r))))))))

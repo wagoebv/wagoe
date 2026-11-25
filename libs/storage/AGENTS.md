@@ -14,7 +14,7 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 
 | Namespace | Purpose |
 |-----------|---------|
-| `wagoe.storage.ports` | Protocols: `IFileStorage`, `IStreamingFileStorage`, `IStorageService`, `ISignedFiles`, `IUploadIndex`, `IUploadPages`, `IExportJobStore`, `IImageProcessor` |
+| `wagoe.storage.ports` | Protocols: `IFileStorage`, `IFileStreams`, `IStreamingFileStorage`, `IStorageService`, `ISignedFiles`, `IUploadIndex`, `IUploadPages`, `IExportJobStore`, `IImageProcessor` |
 | `wagoe.storage.core.validation` | Pure: size/type/extension validation, filename sanitization, MIME lookup |
 | `wagoe.storage.core.uploads` | Pure: the upload index record and the data-export section |
 | `wagoe.storage.shell.upload-index` | `JdbcUploadIndex` on `storage_uploads`, and its boot-time table creation |
@@ -131,6 +131,10 @@ they refuse to boot without it (WGE-107).
   size or time no longer match, written another way, and one with no record
   are hashed and recorded. `retrieve-file` hashes the bytes it returns, so its
   `:version` is always theirs (BOU-1080).
+- The download route streams: `IFileStreams/open-file` opens the file and
+  checks its size and time before and after, so the version it reports is the
+  streamed bytes' (BOU-1106). Replaced while it opened, it falls back to
+  `retrieve-file`. An adapter without `IFileStreams` is read whole, as before.
 
 ### S3 (`create-s3-storage` / `close-s3-storage`)
 
