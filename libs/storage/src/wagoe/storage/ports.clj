@@ -124,6 +124,13 @@
     signature for the file as it is now; nil otherwise. Nil too on an adapter
     whose URLs its own store checks, such as S3."))
 
+(defprotocol ISignedFileStreams
+  "`ISignedFiles`, streamed rather than held in memory (BOU-1110)."
+
+  (open-signed-file [this file-key query-params]
+    "As `signed-file`, but {:input-stream :size :content-type :version}; the
+    caller closes the stream."))
+
 ;; ============================================================================
 ;; Upload Index Port
 ;; ============================================================================

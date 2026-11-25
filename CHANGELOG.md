@@ -48,6 +48,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Added
 
+- **`ISignedFileStreams/open-signed-file` serves a signed URL from an app's route without reading the file into
+  memory** (BOU-1110). It is `signed-file` with an `:input-stream`, which the caller closes.
 - **`GET /tenants/:tenant-id/memberships` pages by keyset with `?after=`** (BOU-1108), stable while members join and
   leave; a full page names the next in `X-Next-After`. `limit`/`offset` callers are unchanged.
 - **A storage upload streams from a file or a stream, and a local signed URL no longer rehashes the file** (BOU-1080):
@@ -72,6 +74,7 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A local data-export archive download held the whole archive in memory** (BOU-1110). It streams now. Nothing to do.
 - **A local storage download held the whole file in memory** (BOU-1106). The download route streams it; a new
   `IFileStreams` lets an adapter offer that. Nothing to do.
 - **`GET /tenants` and `/tenants/:tenant-id/memberships` ignored `limit`, `offset`, `status` and `search`** (BOU-1108):

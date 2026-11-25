@@ -14,7 +14,7 @@ S3 / S3-compatible, and Google Cloud Storage adapters behind a single
 
 | Namespace | Purpose |
 |-----------|---------|
-| `wagoe.storage.ports` | Protocols: `IFileStorage`, `IFileStreams`, `IStreamingFileStorage`, `IStorageService`, `ISignedFiles`, `IUploadIndex`, `IUploadPages`, `IExportJobStore`, `IImageProcessor` |
+| `wagoe.storage.ports` | Protocols: `IFileStorage`, `IFileStreams`, `IStreamingFileStorage`, `IStorageService`, `ISignedFiles`, `ISignedFileStreams`, `IUploadIndex`, `IUploadPages`, `IExportJobStore`, `IImageProcessor` |
 | `wagoe.storage.core.validation` | Pure: size/type/extension validation, filename sanitization, MIME lookup |
 | `wagoe.storage.core.uploads` | Pure: the upload index record and the data-export section |
 | `wagoe.storage.shell.upload-index` | `JdbcUploadIndex` on `storage_uploads`, and its boot-time table creation |
@@ -250,6 +250,8 @@ deprecated and stays until 2.0 (BOU-1107). `StorageService` gets the port one by
 `(ports/signed-file svc file-key (:query-params request))` is the file when the
 signature is valid, unexpired and for the file as it is now, else nil. On S3
 and GCS it is nil: their own store checks their URLs.
+`ports/open-signed-file` is the same, streamed: `{:input-stream :size
+:content-type :version}`, which the caller closes. Use it for large files.
 
 To bypass the service, call the `wagoe.storage.ports` fns directly on an
 adapter (`store-file`, `retrieve-file`, `file-exists?`, `delete-file`,

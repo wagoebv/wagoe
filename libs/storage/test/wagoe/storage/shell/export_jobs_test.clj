@@ -291,3 +291,35 @@
     (is (= 302 (:status r)))
     (is (= "https://bucket/data-exports/x.zip?sig" (get-in r [:headers "Location"])))
     (is (= ["data-exports/x.zip" 300] @signed))))
+
+(deftest ^:unit a-local-archive-is-streamed
+  ;; BOU-1110: an archive may be large
+  (let [in      (ByteArrayInputStream. (.getBytes "zip"))
+        storage (reify
+                  ports/IFileStorage
+                  (retrieve-file [_ _] (throw (AssertionError. "streamed instead")))
+                  (store-file [_ _ _] nil)
+                  (delete-file [_ _] false)
+                  (file-exists? [_ _] false)
+                  (generate-signed-url [_ _ _] nil)
+                  ports/IFileStreams
+                  (open-file [_ _] {:input-stream in :size 3 :content-type "application/zip" :version "v"}))
+        r       (sut/download-response {:file-storage storage :provider :local} {:id "x" :file-key "data-exports/x.zip"})]
+    (is (= 200 (:status r)))
+    (is (identical? in (:body r)))
+    (is (= "3" (get-in r [:headers "Content-Length"])))))
+
+(deftest ^:unit an-archive-an-adapter-cannot-stream-is-sent-from-its-bytes
+  (let [file    (atom {:bytes (.getBytes "zip") :size 3 :content-type "application/zip"})
+        storage (reify ports/IFileStorage
+                  (retrieve-file [_ _] (if (instance? Throwable @file) (throw @file) @file))
+                  (store-file [_ _ _] nil)
+                  (delete-file [_ _] false)
+                  (file-exists? [_ _] false)
+                  (generate-signed-url [_ _ _] nil))
+        fetch   #(sut/download-response {:file-storage storage :provider :local} {:id "x" :file-key "data-exports/x.zip"})]
+    (is (= "zip" (slurp (:body (fetch)))))
+    (testing "gone, or not readable, is not found"
+      (doseq [v [nil (java.nio.file.AccessDeniedException. "/secret/path")]]
+        (reset! file v)
+        (is (= :not-found (:type (ex-data (is (thrown? clojure.lang.ExceptionInfo (fetch)))))))))))

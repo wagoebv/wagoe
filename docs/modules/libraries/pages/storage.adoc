@@ -14,7 +14,7 @@ Includes file validation, image processing, and signed URL generation.
 | Pure: file validation (size, type, extension), filename sanitization
 
 | `wagoe.storage.ports`
-| Protocols: `IFileStorage`, `IStreamingFileStorage`, `IStorageService`, `ISignedFiles`, `IUploadIndex`, `IUploadPages`, `IExportJobStore`, `IImageProcessor`
+| Protocols: `IFileStorage`, `IStreamingFileStorage`, `IStorageService`, `ISignedFiles`, `ISignedFileStreams`, `IUploadIndex`, `IUploadPages`, `IExportJobStore`, `IImageProcessor`
 
 | `wagoe.storage.schema`
 | Malli schemas: `FileData`, `FileMetadata`, `StorageResult`
@@ -83,6 +83,8 @@ needs no storage shell namespace.
 
 `signed-file` is nil for a bad, expired or stale signature, and on S3 and GCS,
 whose URLs their own store checks.
+`open-signed-file` takes the same arguments and streams the file: use
+`(:input-stream file)` as the body rather than `(:bytes file)`.
 
 `upload-file` also takes `{:file f}` or `{:input-stream in}` in place of
 `{:bytes …}`: the file is streamed into storage, never all in memory, and the

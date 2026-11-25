@@ -11,6 +11,7 @@
             [wagoe.storage.core.uploads :as uploads]
             [wagoe.storage.core.validation :as validation]
             [wagoe.observability.logging.ports :as logging]
+            [clojure.tools.logging :as log]
             [clojure.java.io :as io]
             [clojure.string :as str])
   (:import [java.time Instant]))
@@ -154,6 +155,15 @@
                       (with-open [^java.io.InputStream in (if file (io/input-stream (io/file file)) input-stream)]
                         (copy-at-most! in out max-size)))
                     content-type metadata)))
+
+(defn- signed-version
+  "The version a signed URL names, when its `query-params` carry a valid,
+   unexpired signature for `file-key`; nil otherwise. The local adapter signs
+   with its secret; a cloud store checks its own URLs."
+  [storage file-key {:strs [expires v signature]}]
+  (when-let [secret (:signing-secret storage)]
+    (when (local/verify-signed-url secret file-key {:expires expires :version v :signature signature})
+      v)))
 
 #_{:clj-kondo/ignore [:deprecated-var]} ; its own record keeps implementing it until 2.0
 (defrecord StorageService [storage image-processor logger upload-index]
@@ -379,13 +389,11 @@
         nil)))
 
   ports/ISignedFiles
-  (signed-file [this file-key {:strs [expires v signature]}]
-    ;; The local adapter signs with its secret; a cloud store checks its own URLs
-    (when-let [secret (:signing-secret storage)]
-      (when (local/verify-signed-url secret file-key {:expires expires :version v :signature signature})
-        ;; A URL serves the file it was signed for, not one written there since (BOU-991)
-        (when-let [file (download-file this file-key)]
-          (when (= v (:version file)) file))))))
+  (signed-file [this file-key query-params]
+    (when-let [v (signed-version storage file-key query-params)]
+      ;; A URL serves the file it was signed for, not one written there since (BOU-991)
+      (when-let [file (download-file this file-key)]
+        (when (= v (:version file)) file)))))
 
 ;; The port's, so an app requires no shell namespace (BOU-1077). By `extend`:
 ;; inline, its methods would clash with this namespace's same-named ones.
@@ -397,6 +405,21 @@
    :remove-file  remove-file
    :get-file-url get-file-url})
 
+(defn open-stored
+  "`file-key` on the adapter `storage` to send: {:input-stream :size
+   :content-type :version}, streamed where it can, its bytes otherwise; nil
+   when there is none or it cannot be opened. The caller closes the stream."
+  [storage logger file-key]
+  (try
+    (if (satisfies? ports/IFileStreams storage)
+      (ports/open-file storage file-key)
+      (local/bytes->stream (ports/retrieve-file storage file-key)))
+    (catch Exception e
+      ;; The class, not the message: a file system's message names the path
+      (let [data {:event ::open-file-error :key (validation/key-for-log file-key) :error (.getName (class e))}]
+        (if logger (logging/error logger "Open file error" data) (log/error "Open file error" data)))
+      nil)))
+
 (defn open-download
   "`file-key` to send: {:input-stream :size :content-type :version}, streamed
    from an adapter that can, its bytes otherwise; nil when there is none. The
@@ -404,15 +427,19 @@
   [service file-key]
   (let [storage (:storage service)]
     (if (satisfies? ports/IFileStreams storage)
-      (try (ports/open-file storage file-key)
-           (catch Exception e
-             ;; The class, not the message: a file system's message names the path
-             (some-> (:logger service)
-                     (logging/error "Open file error" {:event ::open-file-error
-                                                       :key (validation/key-for-log file-key)
-                                                       :error (.getName (class e))}))
-             nil))
+      (open-stored storage (:logger service) file-key)
       (local/bytes->stream (ports/download-file service file-key)))))
+
+(extend StorageService
+  ports/ISignedFileStreams
+  {:open-signed-file
+   (fn [service file-key query-params]
+     (when-let [v (signed-version (:storage service) file-key query-params)]
+       (when-let [file (open-download service file-key)]
+         ;; As signed-file: only the version it was signed for (BOU-991)
+         (if (= v (:version file))
+           file
+           (.close ^java.io.InputStream (:input-stream file))))))})
 
 (defn file-at?
   "Whether the storage backend holds a file at `file-key`."
