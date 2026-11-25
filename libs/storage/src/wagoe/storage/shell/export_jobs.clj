@@ -116,18 +116,20 @@
 
 (defn download-response
   "The archive of `job`: a redirect to a short-lived signed URL where the
-   storage serves one itself, else the bytes."
+   storage serves one itself, else the file."
   [{:keys [file-storage provider]} {:keys [id file-key]}]
   (let [headers {"Cache-Control" "no-store"}]
     (if-let [url (when (#{:s3 :gcs} provider)
                    (ports/generate-signed-url file-storage file-key signed-url-seconds))]
       {:status 302 :headers (assoc headers "Location" url) :body ""}
-      (if-let [file (ports/retrieve-file file-storage file-key)]
+      ;; Streamed where the adapter can: an archive may be large (BOU-1110)
+      (if-let [file (service/open-stored file-storage nil file-key)]
         {:status  200
          :headers (assoc headers
                          "Content-Type"        "application/zip"
-                         "Content-Disposition" (str "attachment; filename=\"data-export-" id ".zip\""))
-         :body    (java.io.ByteArrayInputStream. ^bytes (:bytes file))}
+                         "Content-Disposition" (str "attachment; filename=\"data-export-" id ".zip\"")
+                         "Content-Length"      (str (:size file)))
+         :body    (:input-stream file)}
         (throw (ex-info "The export archive is gone" {:type :not-found :export-id id}))))))
 
 (defrecord ExportArchiveRetention [store file-storage]

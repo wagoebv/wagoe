@@ -266,6 +266,21 @@
       (is (nil? (ports/signed-file service key {})))
       (is (nil? (ports/signed-file service (str key "x") params)))
       (is (nil? (ports/signed-file service key (assoc params "v" "other")))))
+    (testing "streamed, with the same checks (BOU-1110)"
+      (with-open [in ^java.io.InputStream (:input-stream (ports/open-signed-file service key params))]
+        (is (= "hello" (slurp in))))
+      (is (nil? (ports/open-signed-file service key (assoc params "signature" (apply str (repeat 64 "0"))))))
+      (is (nil? (ports/open-signed-file service key (assoc params "v" "other"))))
+      (let [named  (:key (ports/store-file storage {:bytes (.getBytes "first")} {:filename "s.txt" :path "d"}))
+            signed (query-params (ports/generate-signed-url storage named 60))]
+        (ports/store-file storage {:bytes (.getBytes "second")} {:filename "s.txt" :path "d"})
+        (is (nil? (ports/open-signed-file service named signed)) "not the file written there since")
+        (let [closed? (atom false)
+              in      (proxy [java.io.ByteArrayInputStream] [(.getBytes "second")]
+                        (close [] (reset! closed? true)))]
+          (with-redefs [sut/open-download (fn [_ _] {:input-stream in :version "other"})]
+            (is (nil? (ports/open-signed-file service named signed))))
+          (is @closed? "the refused stream is closed"))))
     (testing "every port method reaches the service"
       (is (= "hello" (String. ^bytes (:bytes (ports/download-file service key)))))
       (is (contains? (ports/upload-image service (.getBytes "png") {:filename "x.png"} {}) :success)
@@ -274,7 +289,8 @@
       (is (nil? (ports/download-file service key))))
     (testing "an adapter without a signing secret serves nothing"
       (let [plain (sut/create-storage-service {:storage (local/create-local-storage {:base-path test-dir})})]
-        (is (nil? (ports/signed-file plain key params)))))))
+        (is (nil? (ports/signed-file plain key params)))
+        (is (nil? (ports/open-signed-file plain key params)))))))
 
 (deftest ^:integration an-upload-streams-from-a-file-or-a-stream
   ;; BOU-1080: never all of it in memory
