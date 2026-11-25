@@ -72,6 +72,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 ### Fixed
 
+- **A local storage download held the whole file in memory** (BOU-1106). The download route streams it; a new
+  `IFileStreams` lets an adapter offer that. Nothing to do.
 - **`GET /tenants` and `/tenants/:tenant-id/memberships` ignored `limit`, `offset`, `status` and `search`** (BOU-1108):
   they read keys the router never sets. They apply now; a limit is 1 to 100.
 - **Storage leftovers** (BOU-1082): `wagoe add storage` writes the config when deps.edn has a newer version, uploads

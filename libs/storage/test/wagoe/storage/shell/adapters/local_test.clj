@@ -438,3 +438,32 @@
     (testing "deleting the file deletes its record"
       (ports/delete-file storage key)
       (is (not (.exists sidecar))))))
+
+(deftest ^:integration a-file-opens-as-a-stream-with-the-version-of-what-it-reads
+  ;; BOU-1106
+  (let [storage (sut/create-local-storage {:base-path test-dir})
+        key     (:key (ports/store-file storage {:bytes (.getBytes "one")} {:filename "a.txt" :path "docs"}))
+        opened  (ports/open-file storage key)]
+    (is (= "one" (with-open [in ^java.io.InputStream (:input-stream opened)] (slurp in))))
+    (is (= 3 (:size opened)))
+    (is (= "text/plain" (:content-type opened)))
+    (is (= (:version (ports/retrieve-file storage key)) (:version opened)))
+    (testing "a file changed behind the adapter's back opens with its own version"
+      (spit (io/file test-dir key) "changed")
+      (let [o (ports/open-file storage key)]
+        (.close ^java.io.InputStream (:input-stream o))
+        (is (= (:version (ports/retrieve-file storage key)) (:version o)))
+        (is (= 7 (:size o)))))
+    (is (nil? (ports/open-file storage "docs/none.txt")))))
+
+(deftest ^:integration a-file-replaced-while-it-opens-falls-back-to-its-bytes
+  ;; BOU-1106: the two stamps disagree, so the stream may be either file
+  (let [storage (sut/create-local-storage {:base-path test-dir})
+        key     (:key (ports/store-file storage {:bytes (.getBytes "both")} {:filename "b.txt" :path "docs"}))
+        real    @#'sut/file-stamp
+        calls   (atom 0)
+        opened  (with-redefs-fn {#'sut/file-stamp (fn [p] (if (= 2 (swap! calls inc)) "other" (real p)))}
+                  #(ports/open-file storage key))]
+    (is (instance? java.io.ByteArrayInputStream (:input-stream opened)) "the bytes, read whole")
+    (is (= (:version (ports/retrieve-file storage key)) (:version opened)))
+    (is (= "both" (slurp (:input-stream opened))))))

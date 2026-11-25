@@ -64,6 +64,16 @@
     Returns:
     String containing the signed URL, or nil if not supported"))
 
+(defprotocol IFileStreams
+  "Optional, beside `IFileStorage`, which is stable: a file to stream rather
+  than hold in memory (BOU-1106)."
+
+  (open-file [this file-key]
+    "{:input-stream :size :content-type :version} for the file as it was
+    opened, or nil when there is none; the caller closes the stream.
+    `:version`, what a signed URL carries as `v`, is that of the bytes the
+    stream reads."))
+
 (defprotocol IStreamingFileStorage
   "Optional, beside `IFileStorage`, for an adapter that can store a file
   without holding all of it in memory."

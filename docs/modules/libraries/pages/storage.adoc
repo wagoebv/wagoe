@@ -88,7 +88,8 @@ whose URLs their own store checks.
 `{:bytes …}`: the file is streamed into storage, never all in memory, and the
 upload route does that with Ring's temp file. A stream's size is checked while
 it is copied. The local adapter records a file's version beside it, under
-`.versions/`, so a signed URL does not read the file again.
+`.versions/`, so a signed URL does not read the file again. The download route
+streams a local file to the client rather than reading it into memory.
 
 == File validation
 
