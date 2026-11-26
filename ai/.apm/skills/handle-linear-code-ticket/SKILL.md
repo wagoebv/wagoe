@@ -9,6 +9,22 @@ allowed-tools: Bash, Read, Edit, Write, Grep, Glob, Agent, Skill
 
 Run one ticket to a pull request with auto-merge on, then take the next one. Every change goes through a PR (ADR-045); the merge queue runs the full suite and merges, and `approval-gate` waits for a core member's `approved` label unless the PR touches only docs and tests. See AGENTS.md "Pull request flow" and CONTRIBUTING.md.
 
+## 0. Clean up merged work
+
+From the main checkout, remove every worktree whose PR is merged, with its local branch. GitHub already deleted the remote branch.
+
+```bash
+git switch main && git pull --ff-only --prune
+git worktree list --porcelain | awk '/^worktree /{w=$2} /^branch /{sub("refs/heads/","",$2); print w, $2}' |
+  while read -r wt br; do
+    [ "$br" = main ] && continue
+    [ "$(gh pr view "$br" --json state -q .state 2>/dev/null)" = MERGED ] || continue
+    git worktree remove "$wt" && git branch -D "$br"
+  done
+```
+
+A worktree with uncommitted changes is refused: report it, never `--force`. A closed PR that did not merge stays; ask the user.
+
 ## 1. Pick and claim
 
 1. With an id in `$ARGUMENTS`, take that ticket. Without one, pick the next: `list_issues` for team Wagoe Framework in state Todo, highest priority first, then oldest. Skip a ticket assigned to someone else, and one that changes a stable port another open PR changes; say which you skipped.
@@ -58,7 +74,7 @@ Never push to `main`, tag, run `bb release`, pass `--no-verify` or add the `appr
 - Linear follows GitHub: the PR moves the ticket to In Review, the merge to Done. Until the integration is connected (BOU-1119), and whenever it did not, set the status by hand.
 - A red PR: fix it on the branch and push; auto-merge stays on. A PR the queue removed: fix or rerun, then queue it again with `gh pr merge --auto --merge`.
 - Review comments: answer or fix them on the branch.
-- After the merge, from the main checkout: `git worktree remove ../wagoe-<ticket> && git branch -d <gitBranchName>`. GitHub deletes the remote branch once BOU-1119 turns that on; until then `git push origin --delete <gitBranchName>`.
+- After the merge, step 0 of the next round removes the worktree and its branch.
 
 ## 7. Next
 
