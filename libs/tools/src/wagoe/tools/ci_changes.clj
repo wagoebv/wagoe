@@ -1,9 +1,9 @@
 (ns wagoe.tools.ci-changes
   "Which CI jobs a pull request needs. `bb ci:changes <base-ref>` writes to
    $GITHUB_OUTPUT: `code`, false when only docs no code test reads changed
-   (BOU-615); `libs`, the libraries whose tests run; `full`, whether the
-   jobs a pull request skips run (the merge queue and main, BOU-1026,
-   BOU-1117); `skip-jobs`, the jobs that therefore do not."
+   (BOU-615); `libs`, the libraries whose tests run; `full`: true for a
+   merge-queue group or a push to main the queue did not already test
+   (BOU-1026, BOU-1117); `skip-jobs`, the jobs that therefore do not run."
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
             [clj-yaml.core :as yaml]
