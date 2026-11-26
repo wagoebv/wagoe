@@ -30,18 +30,20 @@
     (is (= 1 (count (release/preflight (merge fresh facts)))) why)))
 
 (deftest ^:unit a-started-release-resumes
-  (testing "the release commit on main: wait and tag, though the changelog has its section"
-    (is (empty? (release/preflight (merge fresh {:released? true :in-changelog? true})))))
-  (testing "main moved on after the release PR merged: the tag goes on its merge commit"
-    (is (empty? (release/preflight (merge fresh {:released? true :behind 3}))))))
+  (testing "the release PR merged: wait and tag, though the changelog has its section"
+    (is (empty? (release/preflight (merge fresh {:pr-state "MERGED" :in-changelog? true})))))
+  (testing "main moved on while the release PR waits or after it merged: no git pull needed"
+    (is (empty? (release/preflight (merge fresh {:pr-state "OPEN" :behind 3}))))
+    (is (empty? (release/preflight (merge fresh {:pr-state "MERGED" :behind 3})))))
+  (testing "a closed release PR starts over from an up-to-date main"
+    (is (= 1 (count (release/preflight (merge fresh {:pr-state "CLOSED" :behind 1})))))))
 
 (deftest ^:unit the-release-commit-reaches-main-through-a-pr
   ;; BOU-1120: main has no bypass, so bb release opens a PR and tags after it merged.
-  (is (= :prepare (release/next-step {})) "no release PR yet")
-  (is (= :prepare (release/next-step {:pr-state "CLOSED"})) "a PR closed unmerged is opened again")
-  (is (= :merge (release/next-step {:pr-state "OPEN"})) "an open PR is waited for")
-  (is (= :merge (release/next-step {:pr-state "MERGED"})) "merged after the fetch: pull it in, then tag")
-  (is (= :tag (release/next-step {:released? true})) "the release commit on main: tag after green CI"))
+  (is (= :prepare (release/next-step nil)) "no release PR yet")
+  (is (= :prepare (release/next-step "CLOSED")) "a PR closed unmerged is opened again")
+  (is (= :merge (release/next-step "OPEN")) "an open PR is waited for")
+  (is (= :tag (release/next-step "MERGED")) "a merged PR: tag its merge commit after green CI"))
 
 (defn- runs [& pairs] (map (fn [[s c]] {:status s :conclusion c}) (partition 2 pairs)))
 
@@ -55,6 +57,16 @@
     (is (= :pending (release/verdict (runs "in_progress" nil))))
     (is (= :pending (release/verdict (runs "completed" "cancelled" "queued" nil))))
     (is (= :pending (release/verdict [])))))
+
+(deftest ^:unit a-passed-merge-queue-run-counts-as-green
+  ;; A queue push runs CI only on its last commit; a release merged mid-group has its queue run only.
+  (let [queue (fn [c] {:event "merge_group" :status "completed" :conclusion c})]
+    (is (= :green (release/verdict [(queue "success")])))
+    (is (= :green (release/verdict [(queue "success") {:event "push" :status "in_progress"}])))
+    (testing "a failed or cancelled queue run decides nothing"
+      (is (= :pending (release/verdict [(queue "failure")])))
+      (is (= :pending (release/verdict [(queue "cancelled")])))
+      (is (= :green (release/verdict [(queue "failure") {:event "push" :status "completed" :conclusion "success"}]))))))
 
 (deftest ^:unit a-snapshot-is-never-released-by-tag
   ;; BOU-1057: a snapshot is published by dispatch, and tags are immutable.

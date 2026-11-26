@@ -33,35 +33,40 @@
   (str/replace text #"(:since\s+)\"Unreleased\"" (str "$1\"" version "\"")))
 
 (defn preflight
-  "Reasons not to start a release, from facts about the checkout. `released?`:
-   the release commit is on origin/main already, so only waiting and tagging
-   remain."
-  [{:keys [version branch dirty? behind ahead released? tagged? in-changelog?]}]
+  "Reasons not to start a release, from facts about the checkout. `pr-state`:
+   GitHub's state of the newest PR from `release/<version>`; once one is open
+   or merged, only waiting and tagging remain."
+  [{:keys [version branch dirty? behind ahead pr-state tagged? in-changelog?]}]
   (cond-> []
     (not (bump/valid-version? version)) (conj (str "not a suite version: " (pr-str version) " (no leading v)"))
     (check-versions/snapshot? version)  (conj (str version " is not tagged: bb bump it on main and publish with "
                                                    "gh workflow run publish.yml --ref main"))
     (not= "main" branch)                (conj (str "on " branch ", not main"))
     dirty?                              (conj "the working tree has changes; commit or stash them")
-    (and (pos? behind) (not released?)) (conj "behind origin/main; git pull --rebase first")
+    (and (pos? behind) (not (#{"OPEN" "MERGED"} pr-state)))
+    (conj "behind origin/main; git pull --rebase first")
     (pos? ahead)                        (conj "ahead of origin/main; open a PR for those commits first")
     tagged?                             (conj (str version " is already tagged on origin"))
-    (and in-changelog? (not released?)) (conj (str "CHANGELOG.md already has a " version " section"))))
+    (and in-changelog? (not= "MERGED" pr-state))
+    (conj (str "CHANGELOG.md already has a " version " section"))))
 
 (defn next-step
-  "What a run does before it tags: :prepare a release PR, :merge to wait for
-   the open or just-merged one, or :tag when the release commit is on main.
-   `pr-state` is GitHub's state of the newest PR from `release/<version>`."
-  [{:keys [released? pr-state]}]
-  (cond released?                    :tag
-        (#{"OPEN" "MERGED"} pr-state) :merge
-        :else                        :prepare))
+  "What a run does before it tags, from `pr-state` as in `preflight`: :merge
+   waits for an open release PR, :tag a merged one, :prepare opens one."
+  [pr-state]
+  (case pr-state
+    "MERGED" :tag
+    "OPEN"   :merge
+    :prepare))
 
 (defn verdict
   "What CI on main says about a commit, from its workflow runs: :green, :red,
-   :superseded when every run was cancelled by a newer push, or :pending."
+   :superseded when every run was cancelled by a newer push, or :pending. A
+   merge-queue run counts only when it passed: a queue push runs CI only on its
+   last commit, and ci.yml trusts that run as fully tested."
   [runs]
-  (let [done      (keep #(when (= "completed" (:status %)) (:conclusion %)) runs)
+  (let [runs      (remove #(and (= "merge_group" (:event %)) (not= "success" (:conclusion %))) runs)
+        done      (keep #(when (= "completed" (:status %)) (:conclusion %)) runs)
         running?  (some #(not= "completed" (:status %)) runs)
         decided   (remove #{"cancelled"} done)]
     (cond (some #{"success"} decided) :green
@@ -76,11 +81,12 @@
   (zero? (:exit (apply process/shell {:out :string :err :string :continue true} args))))
 
 (defn- ci-runs [sha]
-  (:workflow_runs
-   (json/parse-string
-    (out "gh" "api" "--method" "GET" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs"
-         "-f" (str "head_sha=" sha) "-f" "event=push" "-f" "branch=main")
-    true)))
+  (mapcat #(:workflow_runs
+            (json/parse-string
+             (apply out "gh" "api" "--method" "GET" "repos/{owner}/{repo}/actions/workflows/ci.yml/runs"
+                    "-f" (str "head_sha=" sha) %)
+             true))
+          [["-f" "event=push" "-f" "branch=main"] ["-f" "event=merge_group"]]))
 
 (defn- fail! [& lines]
   (throw (ex-info (str/join "\n" lines) {:type :release-refused})))
@@ -134,11 +140,10 @@
       (fail! (str "found no merged release PR from " branch "; no tag."))))
 
 (defn- version-at
-  "The suite version a commit's files name, read from git, not the working tree."
+  "The suite version a commit names, read from git, not the working tree."
   [sha]
-  (let [file (:file (first (check-versions/version-sources)))]
-    (:version (first (check-versions/matches-in (out "git" "show" (str sha ":" file))
-                                                #"\(def version \"[^\"]+\"")))))
+  (:version (first (check-versions/matches-in (out "git" "show" (str sha ":libs/core/build.clj"))
+                                              #"\(def version \"[^\"]+\""))))
 
 (defn- open-pr! [version branch]
   (process/shell "git" "switch" "--quiet" "-C" branch)
@@ -161,13 +166,13 @@
     (process/shell "gh" "pr" "merge" branch "--auto" "--merge"))
   (println (str "Waiting for the release PR from " branch " to merge (up to " wait-minutes " min)..."))
   (poll #(case (pr-state branch)
-           "MERGED" (do (println (ansi/green "The release PR merged."))
-                        (process/shell "git" "fetch" "--quiet" "origin" "main"))
+           "MERGED" (do (println (ansi/green "The release PR merged.")) :merged)
            "CLOSED" (fail! (str "the release PR from " branch " closed without merging; no tag.")
                            "Reopen it, or run bb release again to open a new one.")
            nil)
         "The release PR has not merged yet; no tag."
-        "It merges by itself once it has the `approved` label and green CI; run bb release again then."))
+        "It merges by itself once it has the `approved` label and green CI; run bb release again then."
+        "If it failed in the merge queue or conflicts: close it, git pull, and run bb release again."))
 
 (defn- release! [version]
   ;; --force: CI moves the `green` tag, and a stale local one refused the fetch.
@@ -175,25 +180,26 @@
   (let [subject  (str "Release " version)
         branch   (str "release/" version)
         [ahead behind] (map parse-long (str/split (out "git" "rev-list" "--left-right" "--count" "HEAD...origin/main") #"\s+"))
-        released? (seq (out "git" "log" "origin/main" "--format=%H" "-1" "--fixed-strings" (str "--grep=" subject)))
+        state    (pr-state branch)
         problems  (preflight {:version       version
                               :branch        (out "git" "rev-parse" "--abbrev-ref" "HEAD")
                               :dirty?        (seq (out "git" "status" "--porcelain"))
                               :behind        behind
                               :ahead         ahead
-                              :released?     released?
+                              :pr-state      state
                               :tagged?       (seq (out "git" "ls-remote" "--tags" "origin" (str "refs/tags/" version)))
                               :in-changelog? (some? (release-check/changelog-section (slurp "CHANGELOG.md") version))})]
     (when (seq problems)
       (apply fail! "refusing to release:" (map #(str "  - " %) problems)))
     ;; main has no bypass: the release commit reaches it through a PR (ADR-045).
-    (case (next-step {:released? released? :pr-state (when-not released? (pr-state branch))})
+    (case (next-step state)
       :prepare (do (open-pr! version branch) (wait-for-merge branch))
       :merge   (wait-for-merge branch)
       :tag     nil)
     ;; The release PR's own merge commit: later merges are not in its changelog.
     ;; A green run there means check:versions passed on the code the tag names.
     (let [sha (merge-commit branch)]
+      (process/shell "git" "fetch" "--quiet" "origin" "main")
       (when-not (= version (version-at sha))
         (fail! (str "the merge commit " sha " does not hold version " version "; no tag.")))
       (wait-for-green sha)
@@ -205,7 +211,7 @@
       (println (ansi/green (str "Tagged " version " on " sha "; publish.yml takes it from here.")))
       (let [[major minor] (map parse-long (str/split version #"\."))]
         (when-not (str/includes? version "-")
-          (println (str "Next: bb bump " major "." (inc minor) ".0-SNAPSHOT on main.")))))))
+          (println (str "Next: bb bump " major "." (inc minor) ".0-SNAPSHOT in a PR.")))))))
 
 (defn -main [& [version]]
   (try

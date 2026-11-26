@@ -139,8 +139,16 @@ jobs:
               -f "head_sha=${sha}" -f event=push -f branch=main \
               -f per_page=100 \
               --jq '.workflow_runs[] | "\(.status):\(.conclusion // "no-conclusion")"')"
+            # So does a passed merge-queue run of this exact commit: a queue push
+            # runs CI only on its last commit, and ci.yml trusts this run as the
+            # full suite (BOU-1120). A failed one decides nothing.
+            queued="$(gh api \
+              --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+              -f "head_sha=${sha}" -f event=merge_group -f status=success \
+              --jq .total_count)"
 
-            if printf '%s\n' "$statuses" | grep -qx 'completed:success'; then
+            if [ "$queued" -gt 0 ] || printf '%s\n' "$statuses" | grep -qx 'completed:success'; then
               echo "\"$SUMMARY_CHECK\" passed on $sha — proceeding."
               break
             fi
