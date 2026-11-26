@@ -23,7 +23,7 @@ Parse the input argument (`$ARGUMENTS`) to determine the PR:
 - **PR URL** (e.g., `https://github.com/org/repo/pull/123`): extract number, use `gh pr view`
 - **Branch name**: use `git diff origin/main...origin/<branch>`
 - **Empty**: detect current branch, use `gh pr view` for current branch or fall back to `git diff origin/main...HEAD`
-- **`local`**, the review before a push to main (BOU-1041): `git diff origin/main...HEAD` plus uncommitted work
+- **`local`**, the review before a PR opens (BOU-1041): `git diff origin/main...HEAD` plus uncommitted work
   (`git diff HEAD`). There is no PR; take the ticket ids for the story contract from the commit subjects.
 
 ## Step 2: Gather context
@@ -120,9 +120,9 @@ Launch applicable agents in parallel using the Agent tool. With a contract prese
 ## Step 4: Aggregate and format report
 
 Mark every verified issue **blocking** or **non-blocking**. CRITICAL and IMPORTANT findings and a failing gate are
-blocking: fix them before the push. SUGGESTION and NIT are non-blocking: fix them, file a Linear ticket, or reject
+blocking: fix them before the PR opens. SUGGESTION and NIT are non-blocking: fix them, file a Linear ticket, or reject
 them with a reason. A fix that changes logic or structure gets `review-pr` again on the changes since this review;
-the `Reviewed-by: review-pr` trailer goes on a commit only once its final code was reviewed.
+open the PR only once its final code was reviewed.
 
 Collect results from all agents. Produce the final report:
 

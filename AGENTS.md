@@ -5,30 +5,20 @@
 - Don't assume or hide confusion; surface tradeoffs.
 - Write the minimum code that solves the problem. Touch only what you must and clean up your own changes.
 - Define success criteria and verify them before declaring work complete.
-- Commit locally as the trunk-based flow below says; never push or tag. The developer pushes.
+- Ship through a pull request as the flow below says.
 - Before changing a library, read its `libs/<library>/AGENTS.md` if present.
 
-## Trunk-based flow
+## Pull request flow
 
-Since 20 November 2026 the core team commits straight to `main` (ADR-044).
-Agents work like this:
+Since 26 November 2026 every change goes through a pull request (ADR-045), as
+CONTRIBUTING.md "Core team: a pull request per ticket" describes; the
+`handle-linear-code-ticket` skill runs it. Agents in particular:
 
-- Work on one Linear ticket, in small steps, on a branch rebased on
-  `origin/main`. Unfinished work follows "Unfinished work on main" in
-  [CONTRIBUTING.md](CONTRIBUTING.md); shipped code gets its CHANGELOG line
-  ("Commits and the changelog").
-- Before committing, run the `simplify` skill, then the `review-pr` skill in
-  `local` mode. Fix the blocking findings; fix, ticket or reject the others.
-  Then make the Verification commands below green. A trivial commit carries
-  `Review-skipped: <reason>` instead of the review.
-- Commit locally without asking: the ticket ends the subject, and the review
-  trailers from "Review before main" follow (they are not attribution). Report
-  the commit and stop.
-- Never push, tag, run `bb release` or pass `--no-verify`. The developer reads
-  the diff and pushes with their own rights.
-- A change CONTRIBUTING.md lists under "Still a pull request" (breaking, stable
-  port, security, new library or migration) goes to a branch for a pull
-  request instead; say so before starting.
+- Claim the Linear ticket before writing code and never take one someone else
+  holds. Work in its own worktree, one small PR per ticket.
+- Run `simplify` and `review-pr local` before opening the PR.
+- Never push to `main`, tag, run `bb release`, pass `--no-verify` or add the
+  `approved` label: that label is a human's approval.
 
 ## Read before the relevant task
 
@@ -133,14 +123,14 @@ Incubating ports may change in a minor release; document under `### Changed`.
 ```bash
 bb test:services up       # Redis + MySQL; PostgreSQL suites use embedded PG
 bb test:all               # main, tools, agents, wagoe-cli and wagoe-mcp
-bb check                 # pre-push gate: quality gates, CSS build, tests of what changed
-bb check-full            # gates + bb test:all + bb e2e, what CI on main runs
+bb check                 # before a PR: quality gates, CSS build, tests of what changed
+bb check-full            # gates + bb test:all + bb e2e, what the merge queue runs
 clojure -M:clj-kondo --lint src test libs/*/src libs/*/test
 ```
 
-Run `bb test:all` and the kondo lint before committing or claiming the codebase is green.
+Run `bb check` before a PR, and `bb test:all` before claiming the whole codebase is green.
 `clojure -M:test` alone misses standalone surfaces. `bb test:all --list` explains
-coverage; e2e is separate (`bb e2e`, requires Chromium) and runs in CI on main only.
+coverage; e2e is separate (`bb e2e`, requires Chromium) and runs in the merge queue only.
 Adapter sweeps fail if backing services are missing.
 
 For targeted runs use `clojure -M:test:test/all :<suite>`; on Apple Silicon add
@@ -168,8 +158,7 @@ REPL restart instructions are in the development reference.
 Comments, docstrings, commits, PRs, reviews and issues must be short and human.
 Explain non-obvious reasons; avoid filler, diff narration, tool signatures,
 "Generated with" footers and `Co-Authored-By` trailers. Reference the ticket; a commit
-subject ends with it, `<what changed> (BOU-123)`. Before a push to main, follow "Review before main" in
-CONTRIBUTING.md: simplify, `review-pr local`, fix, and the trailers it names.
+subject ends with it, `<what changed> (BOU-123)`.
 Comments/docstrings usually need only one or two sentences.
 
 Changelog entries have a hard limit of two lines: what changed and what the user
@@ -196,4 +185,4 @@ bb check-links
 
 Regenerate before publishing wagoe-cli. The maintenance guide describes source
 ownership, adding libraries and the separate per-module AI documentation tool.
-Install the git hooks once per clone with `bb install-hooks`; a push to main then runs `bb check`.
+Install the git hooks once per clone with `bb install-hooks`.

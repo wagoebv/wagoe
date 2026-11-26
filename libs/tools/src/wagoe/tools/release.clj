@@ -1,6 +1,6 @@
 (ns wagoe.tools.release
-  "`bb release <version>`: gate 2 of trunk-based development (BOU-1029). A
-   release tag lands only on a commit CI passed on main.
+  "`bb release <version>` (BOU-1029). A release tag lands only on a commit CI
+   passed on main.
 
    From a clean, up-to-date main it moves `[Unreleased]` to the version, bumps,
    and pushes `Release <version>`. It then tags the tip of main once CI passed
@@ -104,8 +104,7 @@
       (process/shell "bb" "check:versions")
       (process/shell "bb" "check:changelog")
       (process/shell "bb" "release:check" version)
-      (process/shell "git" "commit" "--quiet" "-am" (str "Release " version)
-                     "-m" "Review-skipped: version bump and changelog move by bb release")
+      (process/shell "git" "commit" "--quiet" "-am" (str "Release " version))
       (catch Exception e
         (fail! (str "release aborted before its commit: " (ex-message e))
                "Undo the bump with: git restore .")))))
@@ -131,9 +130,8 @@
     (when-not (or released? pending?)
       (prepare! version))
     (when-not released?
-      ;; CI on main tests this commit fully before it is tagged; the pre-push
-      ;; run would test every library a bump touches, for 25 minutes.
-      (process/shell "git" "push" "--no-verify" "origin" "HEAD:main"))
+      ;; CI on main tests this commit fully before it is tagged.
+      (process/shell "git" "push" "origin" "HEAD:main"))
     ;; The tip of main, with the version still in place: a green run there
     ;; means check:versions passed on the code the tag names.
     (when-not (= version (:version (first (bump/current-sources))))

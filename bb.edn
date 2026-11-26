@@ -69,7 +69,7 @@
                  :task (apply doctor/-main *command-line-args*)}
   doctor:env    {:doc "Check development environment prerequisites (Java, Clojure CLI, ports, AI providers)"
                  :task (apply doctor-env/-main *command-line-args*)}
-  check         {:doc "Pre-push gate: every quality gate, the CSS build and the tests of what changed (bb check [--gates] [--quick] [--fix])"
+  check         {:doc "Gate before a PR: every quality gate, the CSS build and the tests of what changed (bb check [--gates] [--quick] [--fix])"
                  :task (apply check/-main *command-line-args*)}
   check-full    {:doc "The gates, the CSS build, `bb test:all` and `bb e2e`, stopping at the first failure; smokes stay CI-only (bb check-full)"
                  :task (run! shell ["bb check --gates" "bb check:css" "bb test:all" "bb e2e"])}

@@ -14,19 +14,19 @@ brew install openjdk clojure/tools/clojure borkdude/brew/babashka  # macOS
 
 git clone https://github.com/wagoebv/wagoe.git
 cd wagoe
-bb install-hooks            # pre-commit: FC/IS and ports; commit-msg: ticket id; pre-push to main: bb check
+bb install-hooks            # pre-commit: FC/IS and ports; commit-msg: ticket id
 apm install                 # agent skills, reviewers and hooks from ai/.apm/
 
 bb test:services up         # Redis + MySQL for the adapter sweeps (docker compose)
 bb test:all                 # every test surface; PostgreSQL runs embedded
-bb check                    # pre-push gate: quality gates + tests of what changed
-bb check-full               # gates, CSS, bb test:all and bb e2e; CI on main adds the smokes
+bb check                    # before a PR: quality gates + tests of what changed
+bb check-full               # gates, CSS, bb test:all and bb e2e; the merge queue adds the smokes
 clojure -M:repl-clj         # development REPL (nREPL on 7888)
 ```
 
 `bb check-full` takes much longer: run it when a change reaches far, or leave
-it to CI on main. External contributors can skip `bb install-hooks`: its hooks
-enforce the core team's flow, and CI runs the same gates on a pull request.
+it to the merge queue. External contributors can skip `bb install-hooks`: CI
+runs the same gates on a pull request.
 
 `apm install` needs [APM](https://github.com/microsoft/apm) 0.33 or later. It writes
 `.claude/`, `.cursor/`, `.codex/` and `.agents/`, which are generated and ignored:
@@ -110,37 +110,40 @@ When adding new functionality:
 - **Core Functions**: Pure unit tests, no mocks required
 - **Shell Services**: Integration tests with mock adapters
 - **Adapters**: Contract tests against actual external systems
-- `bb check` must pass; CI on main runs everything else
+- `bb check` must pass; the merge queue runs everything else
 
 ## Development Workflow
 
-### 👥 **Core team: straight to main**
+### 👥 **Core team: a pull request per ticket**
 
-Since 20 November 2026 (ADR-044):
+Since 26 November 2026 (ADR-045):
 
-1. Take a Linear ticket and work in small steps, each leaving `main`
-   releasable ("Unfinished work on main").
-2. Review each step before it goes to main ("Review before main" below).
-3. `git pull --rebase`, then push at once. The pre-push hook checks the review
-   trailers and runs `bb check`, about 5 minutes per changed library. If main
-   moved meanwhile, pull and push again.
-4. CI on main then runs everything.
+1. Claim a Linear ticket (In Progress, assigned to you) before writing code;
+   don't start one someone else claimed. Work in its own worktree, so tickets
+   run side by side:
+   `git worktree add ../wagoe-<ticket> -b <branch> origin/main`, then `npm ci` in it.
+2. Keep it small: one ticket, one PR. Two tickets that change the same stable
+   port run one after the other, or as a stacked PR.
+3. Review it before the PR opens ("Review before the pull request" below).
+4. Push the branch, open the PR with `Fixes BOU-123` in the description, and
+   enable auto-merge: `gh pr merge --auto --merge`.
+5. The PR runs CI's fast layer. The merge queue then tests it on top of the PRs
+   ahead of it with the full suite, and merges it. Nobody rebases a green PR by
+   hand.
 
-**Stop the line.** When main goes red, CI opens a "main is red" issue that
-mentions the pusher. Revert first, debug afterwards. `git revert <sha>` needs no
-ticket or review trailers as long as its subject stays `Revert "..."`; if
-waiting for `bb check` is too slow, `git push --no-verify`, since CI on main tests
-it anyway. Nobody pushes on top of a red main but that revert.
+**Approval.** The required `approval-gate` check passes when the PR changes
+only docs and tests (`scripts/approval-gate.sh` lists the paths), or when a
+core member with write access put the `approved` label on it. Agents open PRs
+under a developer's account, which GitHub won't let approve its own PR, hence
+the label; a new push removes it. Breaking changes, stable ports, security and
+migrations say so in the description.
 
-**Review afterwards.** Each working day one core member reads the commits that
-reached main on the previous working day (on a Monday, Friday's), for example
-`git fetch && git log --since='yesterday 00:00' --until='today 00:00' origin/main`,
-and files a Linear ticket per finding. The team agrees the rotation each week.
+**Linear** follows GitHub through its integration: the branch moves the ticket
+to In Progress, the PR to In Review, the merge to Done. Until it is connected
+(BOU-1119), set the status by hand.
 
-**Still a pull request**, reviewed by another core member, when the change is
-breaking or touches a stable port, is security-sensitive (auth, tenancy,
-secrets, crypto), adds a library or a framework migration, or whenever the
-author wants a second pair of eyes.
+**A red main** can still happen in what the queue does not run. CI opens a
+"main is red" issue: revert first in a PR, debug afterwards.
 
 ### 🌍 **External contributors: fork and pull request**
 
@@ -148,10 +151,10 @@ author wants a second pair of eyes.
 2. CI runs the fast layer on it: the quality gates and lint, the CSS build, the
    tools tests, the app and security suites, and the suites of the libraries
    your change reaches. A docs-only change skips the code jobs. e2e, the MySQL
-   suites, the smokes, the isolation matrix and the uberjar run on main after
-   the merge.
-3. A core team member reviews and merges. Name the Linear ticket if there is
-   one; otherwise describe the problem and the fix.
+   suites, the smokes, the isolation matrix and the uberjar run in the merge
+   queue.
+3. A core team member reviews and approves; the merge queue merges. Name the
+   Linear ticket if there is one; otherwise describe the problem and the fix.
 
 ### ✍️ **Commits and the changelog**
 
@@ -160,11 +163,9 @@ author wants a second pair of eyes.
   hook refuses a subject without one; merges, reverts and fixups are exempt.
 - A change to shipped code adds a line under `## [Unreleased]` in
   `CHANGELOG.md`, with the ticket id: what changed and what a user must do.
+  Once BOU-1118 lands this becomes one fragment file per change.
   `bb check` fails a branch that changes `src/` without one. A release turns
   `[Unreleased]` into its version.
-- The commit that finishes a ticket says `Fixes BOU-123` in its body. Once the
-  Linear GitHub integration is connected (BOU-1032), that closes the ticket when
-  the commit reaches main; until then, close it by hand.
 
 ### 🚧 **Unfinished work on main**
 
@@ -189,31 +190,17 @@ becoming public API (BOU-1033):
 
 Only `check:ports-diff` is automated; `^:no-doc` and the tiers rely on review.
 
-### 🔍 **Review before main**
+### 🔍 **Review before the pull request**
 
-For the core team: without a pull request there is no review before `main`, so it happens
-locally, per ticket, before the push (BOU-1041):
+Per ticket, before the PR opens:
 
 1. Finish the work and run `simplify` on the diff against `origin/main`.
 2. Run `review-pr local` on the same diff, after simplify, so it sees the final code.
 3. Fix the blocking findings (CRITICAL, IMPORTANT, a failing gate). Fix each non-blocking one, file a Linear
-   ticket for it, or reject it with a reason. A fix that changes logic or structure gets `review-pr` again on the
-   changes since; a small fix needs only `bb check`.
-4. Commit with the ticket id and the trailers that record it:
-
-   ```
-   Keep the tenant through after-commit (BOU-987)
-
-   Simplified-by: simplify
-   Reviewed-by: review-pr
-   ```
-
-   A trivial commit (a typo, a docs line) carries `Review-skipped: <reason>` instead, so the history shows it.
-   A `git revert` needs neither: it is the way out of a red main.
-5. Push. The pre-push hook refuses a commit to main without either, then runs `bb check`. A red main afterwards:
-   see "Stop the line".
-
-The trailer proves the review ran, not that it was good; review on `main` afterwards still counts.
+   ticket for it, or reject it with a reason. A fix that changes logic or structure gets `review-pr` again on
+   the changes since.
+4. Run `bb check` once, after the last fix, and open the PR. Post the review report as a PR comment, so the
+   approver reads it beside the diff. A trivial PR (a typo, a docs line) may skip the review and says so.
 
 ### 🚀 **Releases**
 
@@ -302,13 +289,13 @@ When adding new external integrations:
 All contributions must meet these standards:
 
 - [ ] **Architecture Compliance**: Follows FC/IS principles
-- [ ] **Tests Pass**: `bb check` passes; CI on main runs the rest
+- [ ] **Tests Pass**: `bb check` passes; the merge queue runs the rest
 - [ ] **Code Quality**: Passes linting with no errors
 - [ ] **Documentation**: Updates AGENTS.md if needed
 - [ ] **Schema Validation**: All inputs validated with Malli schemas
 - [ ] **Error Handling**: Proper error handling and logging
 - [ ] **Commit**: names its Linear ticket; shipped code has a CHANGELOG line
-- [ ] **Review**: simplified and reviewed before main ("Review before main"), or reviewed on its pull request
+- [ ] **Review**: simplified and reviewed before the PR opens, and approved unless `approval-gate` passes without
 
 ### 🧪 **Testing Standards**
 
@@ -340,7 +327,7 @@ Reviewers will check for:
 ### 💬 **Communication**
 
 - **GitHub Issues**: Bug reports and feature requests
-- **Pull Requests**: external contributions, and the core team's changes that still need one
+- **Pull Requests**: every change, core team and external
 - **Architecture Questions**: Reference architecture documentation first
 
 ### 🔍 **Common Issues**

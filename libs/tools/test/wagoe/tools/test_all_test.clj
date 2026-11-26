@@ -105,4 +105,4 @@
     (is (= #{"user"} (test-all/local-libs ["libs/user/src/wagoe/user/x.clj"])))
     (is (= #{"user"} (test-all/local-libs ["bb.edn" "libs/user/src/x.clj" "CHANGELOG.md"]))))
   (testing "a hook change runs the tools tests, which test the hooks"
-    (is (= #{"tools"} (test-all/local-libs [".githooks/pre-push"])))))
+    (is (= #{"tools"} (test-all/local-libs [".githooks/pre-commit"])))))

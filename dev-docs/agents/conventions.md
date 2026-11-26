@@ -56,8 +56,7 @@ all of it.
   the code probably needs a rethink, or the reasoning belongs in an ADR.
 - **Commit messages** — a subject line that says what changed, and a body only
   when the reason is not evident from the diff. End the subject with the
-  ticket, `<what changed> (BOU-123)`; the commit-msg hook refuses one without. For the review trailers a
-  push to main needs, see "Review before main" in CONTRIBUTING.md.
+  ticket, `<what changed> (BOU-123)`; the commit-msg hook refuses one without.
 - **PR descriptions** — what changed and why, in a few lines. Reviewers read
   the diff; do not narrate it back to them. Include verification output only
   when a reviewer would otherwise have to re-run it.
