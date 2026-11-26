@@ -1,6 +1,9 @@
 (ns wagoe.tools.release-test
   "`bb release` tags only a commit CI passed on main (BOU-1029)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [babashka.fs :as fs]
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [wagoe.tools.changes :as changes]
             [wagoe.tools.release :as release]))
 
 (deftest ^:unit the-changelog-releases-what-is-unreleased
@@ -74,3 +77,62 @@
 (deftest ^:unit a-snapshot-is-never-released-by-tag
   ;; BOU-1057: a snapshot is published by dispatch, and tags are immutable.
   (is (= 1 (count (release/preflight (assoc fresh :version "1.3.0-SNAPSHOT"))))))
+
+(def ^:private fragments
+  [["changes/BOU-2.md" "### Added\n\n- B (BOU-2).\n\n### Fixed\n\n- C (BOU-2).\n\n## Upgrading\n\n### Do b (BOU-2)\n\nRun b.\n"]
+   ["changes/BOU-3.md" "### Fixed\n\n- D (BOU-3).\n\n## Upgrading\n\n### 1. Do d (BOU-3)\n\nRun d.\n"]])
+
+(deftest ^:unit fragments-join-their-sections-of-unreleased
+  (is (= (str "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- B (BOU-2).\n\n"
+              "### Fixed\n\n- A (BOU-1).\n- C (BOU-2).\n- D (BOU-3).\n\n## [1.2.0] — x\n\n- Old.\n")
+         (changes/with-fragments
+           "# Changelog\n\n## [Unreleased]\n\n### Fixed\n\n- A (BOU-1).\n\n## [1.2.0] — x\n\n- Old.\n" fragments)))
+  (testing "new sections go in Keep a Changelog order, Breaking first"
+    (is (= "## [Unreleased]\n\n### Breaking\n\n- X.\n\n### Fixed\n\n- Y.\n\n"
+           (changes/with-fragments "## [Unreleased]\n"
+             [["changes/A.md" "### Fixed\n\n- Y.\n"] ["changes/B.md" "### Breaking\n\n- X.\n"]])))
+    (is (= "## [Unreleased]\n\n### Security\n\n- S.\n\n### Fixed\n\n- Y.\n\n### Tests\n\n- T.\n\n"
+           (changes/with-fragments "## [Unreleased]\n\n### Tests\n\n- T.\n\n### Fixed\n\n- Y.\n"
+             [["changes/A.md" "### Security\n\n- S.\n"]]))
+        "an existing section moves into order too, a legacy heading last"))
+  (testing "no fragments leave the changelog as it is"
+    (let [text (slurp "CHANGELOG.md")]
+      (is (= text (changes/with-fragments text []))))))
+
+(def ^:private upgrading
+  "# Upgrading\n\nIntro.\n\n## 1.2.x → 1.3.0\n\n### 1. Old (BOU-1)\n\nDo it.\n\n## 1.1.x → 1.2.0\n\n### 1. Older\n")
+
+(deftest ^:unit upgrade-notes-land-in-the-releases-section
+  (is (= (str "# Upgrading\n\nIntro.\n\n## 1.2.x → 1.3.0\n\n### 1. Old (BOU-1)\n\nDo it.\n\n"
+              "### 2. Do b (BOU-2)\n\nRun b.\n\n### 3. Do d (BOU-3)\n\nRun d.\n\n## 1.1.x → 1.2.0\n\n### 1. Older\n")
+         (changes/with-upgrades upgrading "1.3.0-rc-1" fragments)))
+  (testing "a release with no section yet gets one above the newest"
+    (is (= (str "# Upgrading\n\nIntro.\n\n## 1.3.x → 1.4.0\n\n### 1. Do b (BOU-2)\n\nRun b.\n\n"
+                "### 2. Do d (BOU-3)\n\nRun d.\n\n## 1.2.x → 1.3.0" (second (str/split upgrading #"## 1.2.x → 1.3.0")))
+           (changes/with-upgrades upgrading "1.4.0" fragments))))
+  (testing "a beta lands in its release's section"
+    (is (= (changes/with-upgrades upgrading "1.3.0" fragments)
+           (changes/with-upgrades upgrading "1.3.0-beta-2" fragments))))
+  (testing "no notes leave it as it is"
+    (is (= upgrading (changes/with-upgrades upgrading "1.4.0" (take 0 fragments))))))
+
+(deftest ^:unit a-release-merges-the-fragments-and-deletes-them
+  (let [root (str (fs/create-temp-dir))]
+    (try
+      (fs/create-dirs (fs/path root "changes"))
+      (spit (str (fs/path root "CHANGELOG.md")) "# C\n\n## [Unreleased]\n\n## [1.2.0] — x\n")
+      (spit (str (fs/path root "UPGRADING.md")) upgrading)
+      (doseq [[path text] fragments] (spit (str (fs/path root path)) text))
+      (changes/merge! root "1.3.0")
+      (is (= "# C\n\n## [Unreleased]\n\n### Added\n\n- B (BOU-2).\n\n### Fixed\n\n- C (BOU-2).\n- D (BOU-3).\n\n## [1.2.0] — x\n"
+             (slurp (str (fs/path root "CHANGELOG.md")))))
+      (is (= (changes/with-upgrades upgrading "1.3.0" fragments) (slurp (str (fs/path root "UPGRADING.md")))))
+      (is (empty? (changes/read-fragments root)))
+      (testing "and refuses one it would misfile, touching nothing"
+        (let [before (map #(slurp (str (fs/path root %))) ["CHANGELOG.md" "UPGRADING.md"])]
+          (spit (str (fs/path root "changes/BOU-4.md")) "- loose\n")
+          (is (= :release-refused (try (changes/merge! root "1.3.0")
+                                       (catch clojure.lang.ExceptionInfo e (:type (ex-data e))))))
+          (is (= before (map #(slurp (str (fs/path root %))) ["CHANGELOG.md" "UPGRADING.md"])))
+          (is (= 1 (count (changes/read-fragments root))))))
+      (finally (fs/delete-tree root)))))

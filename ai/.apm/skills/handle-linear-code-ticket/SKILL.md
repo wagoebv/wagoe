@@ -42,7 +42,7 @@ A `cd` may not carry over between shell calls: start every later command with `c
 
 ## 2. Implement
 
-Follow `AGENTS.md` and the guides it names for the task (scaffold first, FC/IS, i18n, migrations). Write the minimum change plus tests, and the changelog entry for shipped code (CONTRIBUTING.md "Commits and the changelog"). Unfinished work follows "Unfinished work on main". One ticket, one PR: split a ticket that grows.
+Follow `AGENTS.md` and the guides it names for the task (scaffold first, FC/IS, i18n, migrations). Write the minimum change plus tests, and the `changes/<TICKET>.md` fragment for shipped code (CONTRIBUTING.md "Commits and the changelog"). Unfinished work follows "Unfinished work on main". One ticket, one PR: split a ticket that grows.
 
 ## 3. Simplify, then review
 

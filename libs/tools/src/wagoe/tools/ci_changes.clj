@@ -18,7 +18,8 @@
    docs/modules/** (the app suite lists its pages), AGENTS.md or a library's
    README (workflow pins its own), which code tests do read."
   [#"^dev-docs/.*\.(md|adoc)$"
-   #"^(CHANGELOG|README|UPGRADING|CONTRIBUTING|BUILD|CLAUDE)\.md$"])
+   #"^(CHANGELOG|README|UPGRADING|CONTRIBUTING|BUILD|CLAUDE)\.md$"
+   #"^changes/[^/]+\.md$"])
 
 (defn- docs-only-path? [p]
   (some #(re-find % p) docs-only-paths))

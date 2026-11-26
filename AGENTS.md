@@ -113,7 +113,7 @@ Use `wagoe list modules` to check stability. In stable 1.x libraries:
 - Add a new protocol for a new capability; never add methods or arities to an existing protocol.
 - Check capabilities once at component startup with `satisfies?`. Keep the old path when safe; otherwise refuse boot with a `WGE-` configuration error naming the missing capability, and register it in `libs/devtools/resources/wagoe/devtools/error_catalog.edn`.
 - Never remove, rename or move protocols, methods or arities. Deprecate with `^:deprecated` and `### Deprecated`; keep until 2.0.
-- Ask before introducing an urgent security break. Name each affected method in backticks under `[Unreleased]` `### Breaking`, and add an item for it, with the release's version, under "Security breaks in 1.x" on the stability page; `bb check:changelog` refuses a break without one.
+- Ask before introducing an urgent security break. Name each affected method in backticks under `### Breaking` in the change's `changes/<TICKET>.md`, and add an item for it, with the release's version, under "Security breaks in 1.x" on the stability page; `bb check:changelog` refuses a break without one.
 
 Incubating ports may change in a minor release; document under `### Changed`.
 `bb check:ports-diff` compares with the last final release tag.
@@ -161,7 +161,7 @@ Explain non-obvious reasons; avoid filler, diff narration, tool signatures,
 subject ends with it, `<what changed> (BOU-123)`.
 Comments/docstrings usually need only one or two sentences.
 
-Changelog entries have a hard limit of two lines: what changed and what the user
+Changelog entries (`changes/<TICKET>.md`) have a hard limit of two lines: what changed and what the user
 must do. Trim existing overlong entries when encountered; leave unrelated long
 comments alone. Commit bodies are only needed when the reason is not evident.
 PRs explain what changed and why; include verification output only when useful.

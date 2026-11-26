@@ -108,7 +108,7 @@ In a 1.x release, in a stable library:
 - **Nothing is removed, renamed or moved.** Not a protocol, a method or an
   arity. Deprecate it (`^:deprecated` and `### Deprecated`) and keep it until 2.0.
 - **A break that cannot wait** (a security fix) is named in backticks under
-  `[Unreleased]` `### Breaking`, method by method, and recorded as an exception
+  `### Breaking` in its `changes/` fragment, method by method, and recorded as an exception
   on the stability page. That is a decision for the release, not for the PR:
   ask before writing one.
 

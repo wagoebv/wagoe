@@ -26,6 +26,7 @@
             [clojure.string :as str]
             [babashka.process :as process]
             [check-no-boundary]
+            [wagoe.tools.changes :as changes]
             [wagoe.tools.check :as check]
             [wagoe.tools.check-deps :as check-deps]
             [wagoe.tools.check-fcis :as check-fcis]
@@ -1342,7 +1343,7 @@
     (let [files (check-changelog/tracked-source)]
       (is (< 500 (count files)) "git ls-files returned almost nothing")
       (is (empty? (check-changelog/undocumented-deprecations
-                   files slurp (slurp check-changelog/changelog-path)))))))
+                   files slurp (changes/changelog)))))))
 
 (deftest ^:unit versions-gate-fires-test
   ;; The shape the ticket names: a bump covers deps.edn and misses bb.edn, so

@@ -161,11 +161,29 @@ to In Progress, the PR to In Review, the merge to Done. Until it is connected
 - Every core team commit names its Linear ticket at the end of the subject:
   `Move the green tag to the newest green commit (BOU-1028)`. The commit-msg
   hook refuses a subject without one; merges, reverts and fixups are exempt.
-- A change to shipped code adds a line under `## [Unreleased]` in
-  `CHANGELOG.md`, with the ticket id: what changed and what a user must do.
-  Once BOU-1118 lands this becomes one fragment file per change.
-  `bb check` fails a branch that changes `src/` without one. A release turns
-  `[Unreleased]` into its version.
+- A change to shipped code adds `changes/<TICKET>.md` instead of editing
+  `CHANGELOG.md`, so parallel pull requests do not conflict there. It holds
+  `### Added`, `### Changed`, `### Fixed`, `### Deprecated`, `### Breaking`,
+  `### Security` or `### Removed` sections with an entry each: what changed and
+  what a user must do, with the ticket id. Upgrade steps go under an optional
+  `## Upgrading`, as `### Title (BOU-123)`:
+
+  ```markdown
+  ### Fixed
+
+  - **Uploads leaked temp files** (BOU-123). Nothing to do.
+
+  ## Upgrading
+
+  ### Set `:max-uploads` (BOU-123)
+
+  Without it, ...
+  ```
+
+  `bb check` fails a branch that changes `src/` without a fragment, and reads
+  fragments as part of `[Unreleased]`. `bb release` merges them into
+  `CHANGELOG.md` and the release's section of `UPGRADING.md`, then deletes
+  them. Entries already under `[Unreleased]` stay.
 
 ### 🚧 **Unfinished work on main**
 
@@ -186,7 +204,7 @@ becoming public API (BOU-1033):
   Never add a method to an existing protocol of a stable library: add a new
   protocol. `bb check:ports-diff` fails CI on a gained method.
 - **The commit that finishes the ticket** removes `^:no-doc` (or promotes the
-  library) and adds its CHANGELOG line.
+  library) and adds its changelog fragment.
 
 Only `check:ports-diff` is automated; `^:no-doc` and the tiers rely on review.
 
@@ -294,7 +312,7 @@ All contributions must meet these standards:
 - [ ] **Documentation**: Updates AGENTS.md if needed
 - [ ] **Schema Validation**: All inputs validated with Malli schemas
 - [ ] **Error Handling**: Proper error handling and logging
-- [ ] **Commit**: names its Linear ticket; shipped code has a CHANGELOG line
+- [ ] **Commit**: names its Linear ticket; shipped code has a `changes/` fragment
 - [ ] **Review**: simplified and reviewed before the PR opens, and approved unless `approval-gate` passes without
 
 ### 🧪 **Testing Standards**

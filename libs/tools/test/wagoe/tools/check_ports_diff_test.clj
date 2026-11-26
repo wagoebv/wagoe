@@ -5,6 +5,7 @@
    `claim-login-attempts` between 1.0.1 and the 1.1 branch with no breaking
    entry, and `IWorkflowEngine` gained a `tx` arity on `transition!`."
   (:require [clojure.test :refer [deftest is testing]]
+            [wagoe.tools.changes :as changes]
             [wagoe.tools.check-ports-diff :as sut]))
 
 (def user-ports-1-0-1
@@ -142,4 +143,8 @@
     (testing "only [Unreleased] ### Breaking counts"
       (is (sut/named? breaking "claim-login-attempts"))
       (is (not (sut/named? breaking "engine")))
-      (is (not (sut/named? breaking "old-thing"))))))
+      (is (not (sut/named? breaking "old-thing"))))
+    (testing "a fragment's ### Breaking counts too (BOU-1118)"
+      (is (sut/named? (sut/unreleased-breaking
+                       (changes/with-fragments changelog [["changes/X.md" "### Breaking\n\n- `DBAdapter/like`\n"]]))
+                      "like")))))
