@@ -95,7 +95,7 @@
 
 (def indexed-across-tenants
   "What `index-across-tenants` returns when every try at tenant-1's row by
-   another tenant, or by none it can check, is refused."
+   another tenant, by none it can check or by none at all (BOU-1124) is refused."
   {:first :indexed :as-another :conflict :tenant-1-finds? true
    :in-two-spellings :conflict :blank-tenant :validation-error :as-its-own :indexed
-   :with-no-tenant :indexed :claim-no-filters :indexed :claim-no-tenant :indexed :rows 3})
+   :with-no-tenant :conflict :claim-no-filters :indexed :claim-no-tenant :indexed :rows 3})

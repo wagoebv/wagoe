@@ -301,23 +301,24 @@
   (delete-sql full-text? index-id entity-id (tenant-filter-sql full-text? tenant-id)))
 
 (defn build-tenant-owner-sql
-  "Condition [sql & params]: the row is `tenant-id`'s document or names no
-   tenant, the rows an upsert of tenant-id's document may replace (BOU-1121).
-   A row written before its index had a tenant filter is claimed, not refused,
-   so a reindex can move it into a tenant. PostgreSQL's names the row `d`."
+  "Condition [sql & params]: the rows an upsert of `tenant-id`'s document may
+   replace, its own and those naming no tenant (BOU-1121); with no `tenant-id`,
+   only those naming none (BOU-1124). A row written before its index had a
+   tenant filter is claimed, not refused, so a reindex can move it into a
+   tenant. PostgreSQL's names the row `d`."
   [full-text? tenant-id]
-  (let [[filter-sql & params] (tenant-filter-sql full-text? tenant-id)
-        no-tenant (if full-text?
+  (let [no-tenant (if full-text?
                     "d.filters::jsonb->>'tenant_id' IS NULL"
                     "filters IS NULL OR INSTR(filters, '\"tenant_id\":') = 0")]
-    ;; filter-sql opens with the AND that joins it to a WHERE.
-    (into [(str "(" no-tenant " OR " (str/replace-first filter-sql #"^AND " "") ")")] params)))
+    (if tenant-id
+      (let [[filter-sql & params] (tenant-filter-sql full-text? tenant-id)]
+        ;; filter-sql opens with the AND that joins it to a WHERE.
+        (into [(str "(" no-tenant " OR " (str/replace-first filter-sql #"^AND " "") ")")] params))
+      [(str "(" no-tenant ")")])))
 
 (defn build-upsert-delete-sql
   "The delete of an upsert without ON CONFLICT: the document's row, when
-   `tenant-id` is nil or `build-tenant-owner-sql` lets it be replaced."
+   `build-tenant-owner-sql` lets it be replaced."
   [full-text? index-id entity-id tenant-id]
-  (delete-sql full-text? index-id entity-id
-              (when tenant-id
-                (let [[condition & params] (build-tenant-owner-sql full-text? tenant-id)]
-                  (into [(str "AND " condition)] params)))))
+  (let [[condition & params] (build-tenant-owner-sql full-text? tenant-id)]
+    (delete-sql full-text? index-id entity-id (into [(str "AND " condition)] params))))

@@ -16,8 +16,9 @@
     "Insert or update a search document (upsert on index_id + entity_id).
      A doc whose :filters name a :tenant-id replaces only a row of that tenant
      or of none; over another tenant's it throws a :conflict, and a blank or
-     collection :tenant-id a :validation-error (BOU-1121). A store of an
-     app's own must keep this too.
+     collection :tenant-id a :validation-error (BOU-1121). A doc naming no
+     tenant replaces only a row of none (BOU-1124). Tenant ids compare
+     case-sensitively. A store of an app's own must keep this too.
 
      Args:
        doc - SearchDocument map

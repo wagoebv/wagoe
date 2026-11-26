@@ -146,7 +146,7 @@
           tenant (doc-tenant doc)]
       (if on-conflict?
         ;; Native ON CONFLICT ... DO UPDATE SET ... = EXCLUDED.*, where the
-        ;; row is this tenant's or no tenant's.
+        ;; row is this tenant's or no tenant's; with no tenant, no tenant's.
         (let [[upsert & params] (sql/format
                                  {:insert-into   (if full-text? [:search_documents :d] :search_documents)
                                   :values        [row]
@@ -154,8 +154,8 @@
                                   ;; Every column but the key, so a column added to doc->db is updated too.
                                   :do-update-set (vec (remove #{:id :index_id :entity_id} (keys row)))})
               ;; The guard goes last: DO UPDATE SET ends the statement.
-              [guard & guard-params] (when tenant (query-sql/build-tenant-owner-sql full-text? tenant))
-              sql-vec (into [(str upsert (when guard (str " WHERE " guard)))] (concat params guard-params))]
+              [guard & guard-params] (query-sql/build-tenant-owner-sql full-text? tenant)
+              sql-vec (into [(str upsert " WHERE " guard)] (concat params guard-params))]
           (when (zero? (::jdbc/update-count (jdbc/execute-one! datasource sql-vec)))
             (throw (another-tenants doc))))
         ;; No ON CONFLICT: delete the row this document may replace, then
@@ -164,7 +164,7 @@
           (let [deleted (::jdbc/update-count
                          (jdbc/execute-one! tx (query-sql/build-upsert-delete-sql
                                                 full-text? (:index_id row) (:entity_id row) tenant)))]
-            (when (and tenant (zero? deleted)
+            (when (and (zero? deleted)
                        (jdbc/execute-one! tx (sql/format {:select [1] :from [:search_documents]
                                                           :where  [:and [:= :index_id (:index_id row)]
                                                                    [:= :entity_id (:entity_id row)]]})))
