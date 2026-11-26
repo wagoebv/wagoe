@@ -179,7 +179,7 @@
               :task (apply ci-changes/-main *command-line-args*)}
   check:roadmap {:doc "One roadmap, and it may not plan what scaling.adoc marks shipped (bb check:roadmap)"
                  :task (check-roadmap/-main)}
-  check:changelog {:doc "A branch changing shipped src/ must add a CHANGELOG.md entry, every ^:deprecated var must be announced in one, and the stability page must count the unreleased breaks (bb check:changelog)"
+  check:changelog {:doc "A branch changing shipped src/ must add a CHANGELOG.md entry or changes/<TICKET>.md fragment, every ^:deprecated var must be announced in one, and the stability page must count the unreleased breaks (bb check:changelog)"
                    :task (check-changelog/-main)}
   check:ports-diff {:doc "A stable library's protocols gained, lost or moved no method since the last final release unless [Unreleased] ### Breaking names it (bb check:ports-diff [ref])"
                     :task (apply check-ports-diff/-main *command-line-args*)}

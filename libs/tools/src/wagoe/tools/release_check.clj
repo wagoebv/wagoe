@@ -7,6 +7,7 @@
             [babashka.process :as process]
             [cheshire.core :as json]
             [clojure.string :as str]
+            [wagoe.tools.changes :as changes]
             [wagoe.tools.check-versions :as check-versions]
             [wagoe.tools.deploy :as deploy]))
 
@@ -62,7 +63,7 @@
                     (into (map (fn [{:keys [identifier title]}] (str "Open: " identifier " " title)))
                           (open-issues token))
 
-                    (not (security-section? (slurp "CHANGELOG.md") version))
+                    (not (security-section? (changes/changelog) version))
                     (conj (str "CHANGELOG.md: ## [" version "] has no ### Security section. "
                                "Add one, saying None. if there is nothing to report."))
 

@@ -6,6 +6,7 @@
    CHANGELOG entry between them."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [wagoe.tools.changes :as changes]
             [wagoe.tools.check-changelog :as sut]))
 
 ;; =============================================================================
@@ -192,7 +193,7 @@
                 page))))))
 
 (deftest ^:unit the-shipped-stability-page-agrees-with-the-changelog
-  (is (empty? (sut/stability-findings (slurp "CHANGELOG.md")
+  (is (empty? (sut/stability-findings (changes/changelog)
                                       (slurp "docs/modules/ROOT/pages/stability.adoc")))))
 
 (deftest ^:unit upgrade-since-names-the-deprecating-release
@@ -218,3 +219,46 @@
     (is (= ["**No ticket**."]
            (sut/deprecations-without-upgrade "### Deprecated\n\n- **No ticket**.\n" []))
         "an entry citing no ticket cannot be matched, so it is reported")))
+
+;; =============================================================================
+;; Fragments in changes/ count as [Unreleased] entries (BOU-1118)
+;; =============================================================================
+
+(deftest ^:unit a-fragment-satisfies-the-src-rule
+  (is (nil? (sut/verdict ["libs/jobs/src/wagoe/jobs/x.clj" "changes/BOU-1.md"] false)))
+  (is (some? (sut/verdict ["libs/jobs/src/wagoe/jobs/x.clj" "changes/old/BOU-1.md"] false))
+      "only a file directly in changes/ is a fragment"))
+
+(deftest ^:unit a-deprecation-announced-in-a-fragment-passes
+  (let [source  (constantly "(ns wagoe.x) (defn ^:deprecated old [])")
+        bare    "# C\n\n## [Unreleased]\n\n### Fixed\n\n- **D** (X-4).\n\n## [1.0.0]\n"
+        merged  (changes/with-fragments
+                  bare [["changes/X-7.md" "### Deprecated\n\n- **`wagoe.x/old`** (X-7): use `new`.\n"]])]
+    (is (seq (sut/undocumented-deprecations ["src/wagoe/x.clj"] source bare)))
+    (is (empty? (sut/undocumented-deprecations ["src/wagoe/x.clj"] source merged)))))
+
+(deftest ^:unit a-break-in-a-fragment-counts
+  (let [page (released-stability "Two" ["a" "b"] "Four" "seven")]
+    (is (empty? (sut/stability-findings released-changelog page)))
+    (is (seq (sut/stability-findings
+              (changes/with-fragments released-changelog
+                [["changes/X-5.md" "### Breaking\n\n- **E** (X-5). Do e.\n"]])
+              page))
+        "after 1.0.0 an unreleased break needs a major version, fragment or not")))
+
+(deftest ^:unit a-fragment-a-release-would-misfile-is-caught
+  (is (empty? (changes/problems [["changes/A.md" "### Fixed\n\n- a\n\n## Upgrading\n\n### Step\n\nDo.\n"]])))
+  (is (= ["changes/A.md: text before the first ### heading"]
+         (changes/problems [["changes/A.md" "- a\n### Fixed\n\n- b\n"]])))
+  (is (= 1 (count (changes/problems [["changes/A.md" "### Fix\n\n- a\n"]]))) "an unknown heading")
+  (is (= 1 (count (changes/problems [["changes/A.md" "## Upgrading\n\n### Step\n"]]))) "upgrade notes alone")
+  (is (= 1 (count (changes/problems [["changes/A.md" "### Fixed\n"]]))) "an empty section")
+  (is (= 1 (count (changes/problems [["changes/A.md" "### Fixed\n\n- a\n\n## Upgrading\n\n### Fixed\n\n- b\n"]])))
+      "a changelog section under ## Upgrading")
+  (is (= 1 (count (changes/problems [["changes/A.md" "### Fixed\n\n- a\n\n## Upgrading\n\nRun it.\n"]])))
+      "upgrade text with no ### step")
+  (is (empty? (changes/problems [["changes/A.md" "### Fixed\n\n- a:\n\n```bash\n# first\nrun\n```\n"]]))
+      "a comment in fenced code is no heading")
+  (is (= 1 (count (changes/problems [["changes/A.md" "### Fixed\n\n- a:\n\n```md\n### Example\n```\n"]])))
+      "a ### line in fenced code, which the merge would split on")
+  (is (= 1 (count (changes/problems [["changes/A.md" "### Fixed\n\n- a\n## [1.0.0]\n"]]))) "a release heading"))

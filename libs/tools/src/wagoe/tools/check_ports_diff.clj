@@ -30,9 +30,9 @@
             [babashka.process :as process]
             [edamame.core :as e]
             [wagoe.tools.ansi :as ansi]
-            [wagoe.tools.ci-changes :as ci-changes]))
+            [wagoe.tools.ci-changes :as ci-changes]
+            [wagoe.tools.changes :as fragments]))
 
-(def changelog-path "CHANGELOG.md")
 (def catalogue-path "libs/wagoe-cli/resources/wagoe/cli/modules-catalogue.edn")
 (def version-path "libs/core/build.clj")
 
@@ -261,7 +261,7 @@
           {:keys [failing reported major-bump?]}
           (verdict all
                    (tiers (edn/read-string (slurp catalogue-path)))
-                   (unreleased-breaking (slurp changelog-path))
+                   (unreleased-breaking (fragments/changelog))
                    (version-in (try (git "show" (str base ":" version-path)) (catch Exception _ nil)))
                    (version-in (slurp version-path)))
           unreadable (concat (:unreadable old) (:unreadable new))]

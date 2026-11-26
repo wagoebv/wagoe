@@ -13,7 +13,7 @@ When conflicts arise during rebase, apply these rules **automatically** — do n
 
 | File pattern | Resolution | Regenerate after? |
 |---|---|---|
-| `CHANGELOG.md` | **Merge manually**: keep both sides' entries under `[Unreleased]`, ours below main's | No |
+| `CHANGELOG.md` | **Merge manually**: keep both sides' entries under `[Unreleased]`, ours below main's; new entries belong in `changes/<TICKET>.md` instead | No |
 | `libs/i18n/resources/wagoe/i18n/translations/*.edn` | **Merge manually**: keep both sides' keys, sorted as the file is | No |
 | `libs/tools/resources/wagoe/agents/knowledge.edn`, `modules-catalogue.edn` | **Merge manually**: these are the sources | Yes — `bb agents:gen` |
 | Root `AGENTS.md`, `libs/wagoe-cli/resources/wagoe/cli/templates/AGENTS.md.tmpl` | Pick **main** (`--theirs`) | Yes — `bb agents:gen` |

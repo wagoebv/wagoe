@@ -10,7 +10,8 @@
 (deftest ^:unit docs-only-is-narrow
   (testing "ADRs and the root docs are docs-only"
     (is (sut/docs-only? ["dev-docs/adr/ADR-039-database-adapter-contract.adoc" "CHANGELOG.md"]))
-    (is (sut/docs-only? ["README.md" "UPGRADING.md"])))
+    (is (sut/docs-only? ["README.md" "UPGRADING.md"]))
+    (is (sut/docs-only? ["changes/BOU-1118.md"]) "a changelog fragment"))
   (testing "anything a code test reads, or any code, is not"
     (doseq [p ["AGENTS.md" "libs/workflow/README.md" "docs/modules/libraries/pages/workflow.adoc"
                "libs/core/src/wagoe/core/x.clj" ".github/workflows/ci.yml" "dev-docs/diagram.png"]]

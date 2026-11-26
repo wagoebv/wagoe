@@ -1,7 +1,8 @@
 #!/usr/bin/env bb
 ;; libs/tools/src/wagoe/tools/check_changelog.clj
 ;;
-;; A branch that changes shipped source must say so in CHANGELOG.md.
+;; A branch that changes shipped source must say so in CHANGELOG.md or a
+;; changes/<TICKET>.md fragment (BOU-1118).
 ;;
 ;; Thirty pull requests merged between 2026-08-05 and 2026-08-16 without one
 ;; entry between them — a new library, a new launch mode, a removed config key
@@ -20,7 +21,8 @@
             [babashka.process :as process]
             [clojure.edn :as edn]
             [edamame.core :as e]
-            [wagoe.tools.ansi :as ansi]))
+            [wagoe.tools.ansi :as ansi]
+            [wagoe.tools.changes :as changes]))
 
 (def changelog-path "CHANGELOG.md")
 
@@ -41,7 +43,7 @@
                (re-matches #"libs/[^/]+/src/.*\.clj[cs]?" path))))
 
 (defn verdict
-  "Whether `changed-files` needs a CHANGELOG entry it does not have.
+  "Whether `changed-files` needs a CHANGELOG entry or fragment it does not have.
 
    Returns nil when the branch is fine, or a map describing what is missing.
    Pure, so a test can prove the gate still fires."
@@ -49,7 +51,7 @@
   (let [shipped (filter shipped-source? changed-files)]
     (when (and (seq shipped)
                (not opted-out?)
-               (not (some #{changelog-path} changed-files)))
+               (not (some #(or (= changelog-path %) (changes/fragment? %)) changed-files)))
       {:files (sort shipped)})))
 
 ;; =============================================================================
@@ -319,7 +321,7 @@
   []
   (report-findings (str stability-path " disagrees with " changelog-path ":")
                    (when (.exists (java.io.File. ^String stability-path))
-                     (stability-findings (slurp changelog-path) (slurp stability-path)))))
+                     (stability-findings (changes/changelog) (slurp stability-path)))))
 
 ;; =============================================================================
 ;; Rule 4 — `wagoe upgrade` knows every deprecation
@@ -365,7 +367,7 @@
   "Prints the deprecations `wagoe upgrade` does not know, and entries naming a
    release that does not exist, and returns whether any."
   []
-  (let [changelog (slurp changelog-path)
+  (let [changelog (changes/changelog)
         upgrades  (edn/read-string (slurp upgrades-path))
         unknown?  (report-findings (str "Deprecations with no entry in " upgrades-path ":")
                                    (deprecations-without-upgrade changelog upgrades)
@@ -410,7 +412,7 @@
 (defn- report-deprecations
   "Prints the unannounced deprecations and returns whether there were any."
   []
-  (let [changelog (slurp changelog-path)
+  (let [changelog (changes/changelog)
         findings  (undocumented-deprecations (tracked-source) slurp changelog)]
     (let [{unread :unreadable undoc :undocumented-deprecation} (group-by :rule findings)]
       (when (seq undoc)
@@ -435,24 +437,27 @@
           missing     (verdict changed (opted-out? base))
           undocumented (report-deprecations)
           unstable    (report-stability)
-          unupgraded  (report-upgrades)]
+          unupgraded  (report-upgrades)
+          misfiled    (report-findings "Fragments a release would drop or misfile:"
+                                       (changes/problems (changes/read-fragments))
+                                       "Put every entry under a ### heading from that list.")]
       (when missing
         (let [{:keys [files]} missing]
           (when undocumented (println))
-          (println (ansi/red (str "Shipped source changed with no " changelog-path " entry:")))
+          (println (ansi/red "Shipped source changed with no CHANGELOG.md entry or changes/ fragment:"))
           (println)
           (doseq [f (take 10 files)] (println (str "  " f)))
           (when (> (count files) 10)
             (println (str "  … and " (- (count files) 10) " more")))
           (println)
-          (println "Add an entry under [Unreleased] describing what a user of the")
+          (println "Add changes/<TICKET>.md with an entry describing what a user of the")
           (println (str "framework will notice. If they will notice nothing, say so with "
                         opt-out-marker))
           (println "in a commit message on this branch.")))
-      (if (or missing undocumented unstable unupgraded)
+      (if (or missing undocumented unstable unupgraded misfiled)
         (System/exit 1)
         (do
-          (println (ansi/green (str changelog-path " is up to date with this branch, "
+          (println (ansi/green (str changelog-path " and changes/ are up to date with this branch, "
                                     "announces every deprecation, and agrees with the stability page.")))
           (System/exit 0))))
     (do
