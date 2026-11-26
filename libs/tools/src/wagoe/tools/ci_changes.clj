@@ -2,8 +2,8 @@
   "Which CI jobs a pull request needs. `bb ci:changes <base-ref>` writes to
    $GITHUB_OUTPUT: `code`, false when only docs no code test reads changed
    (BOU-615); `libs`, the libraries whose tests run; `full`, whether the
-   main-only jobs do (a push to main, BOU-1026); `skip-jobs`, the jobs that
-   therefore do not."
+   jobs a pull request skips run (the merge queue and main, BOU-1026,
+   BOU-1117); `skip-jobs`, the jobs that therefore do not."
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
             [clj-yaml.core :as yaml]
@@ -150,7 +150,7 @@
                             {:type :validation-error}))))))
 
 (defn main-only-jobs
-  "Jobs in `jobs` that run only on a push to main."
+  "Jobs in `jobs` a pull request skips: the merge queue and main run them."
   [jobs]
   (map first (jobs-gated-on jobs "full")))
 
@@ -163,7 +163,8 @@
 
 (defn plan
   "{:code :libs :full :skip-jobs} for `paths`, the files a pull request
-   changes, or nil for a push to main, which runs everything."
+   changes, or nil for a push to main or a merge-queue group, which runs
+   everything."
   [graph jobs paths]
   (let [libs  (set (keys graph))
         full? (nil? paths)
