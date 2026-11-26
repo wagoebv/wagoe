@@ -71,6 +71,8 @@ for what is public API, what is internal, and how deprecations are announced.
 
 - **Every change goes through a pull request again** (BOU-1116, ADR-045): the pre-push hook and the review
   trailers are gone. Contributors need do nothing; `bb install-hooks` still installs pre-commit and commit-msg.
+- **`bb release` opens the release commit as a PR with auto-merge** (BOU-1120) and tags once it merged. A core
+  member labels it `approved`; if `bb release` stops waiting, run it again.
 - **Dev compose, CI, the deploy examples and the embedded test binaries run PostgreSQL 19** (BOU-1053); 15+ is
   supported. An existing dev database needs a dump and restore: see UPGRADING.
 

@@ -24,17 +24,22 @@
                        [{:branch "feature"} "another branch"]
                        [{:dirty? true} "uncommitted changes"]
                        [{:behind 1} "behind origin/main"]
-                       [{:ahead 1} "an unpushed commit that is not the release"]
-                       [{:ahead 2 :pending-commit? false} "more than the release commit"]
+                       [{:ahead 1} "an unpushed commit"]
                        [{:tagged? true} "a tag already on origin"]
                        [{:in-changelog? true} "a version section already in the changelog"]]]
     (is (= 1 (count (release/preflight (merge fresh facts)))) why)))
 
 (deftest ^:unit a-started-release-resumes
   (testing "the release commit on main: wait and tag, though the changelog has its section"
-    (is (empty? (release/preflight (merge fresh {:released? true :in-changelog? true})))))
-  (testing "the release commit made but not pushed"
-    (is (empty? (release/preflight (merge fresh {:ahead 1 :pending-commit? true :in-changelog? true}))))))
+    (is (empty? (release/preflight (merge fresh {:released? true :in-changelog? true}))))))
+
+(deftest ^:unit the-release-commit-reaches-main-through-a-pr
+  ;; BOU-1120: main has no bypass, so bb release opens a PR and tags after it merged.
+  (is (= :prepare (release/next-step {})) "no release PR yet")
+  (is (= :prepare (release/next-step {:pr-state "CLOSED"})) "a PR closed unmerged is opened again")
+  (is (= :merge (release/next-step {:pr-state "OPEN"})) "an open PR is waited for")
+  (is (= :merge (release/next-step {:pr-state "MERGED"})) "merged after the fetch: pull it in, then tag")
+  (is (= :tag (release/next-step {:released? true})) "the release commit on main: tag after green CI"))
 
 (defn- runs [& pairs] (map (fn [[s c]] {:status s :conclusion c}) (partition 2 pairs)))
 

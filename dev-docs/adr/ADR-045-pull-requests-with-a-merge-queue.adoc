@@ -45,8 +45,10 @@ Every change goes through a pull request again, built so it does not queue:
 . *Linear follows GitHub* through Linear's GitHub integration: a branch moves its
   issue to In Progress, a PR to In Review, the merge to Done.
 
-`main` has no bypass, release managers included: the release commit goes
-through a PR as well (BOU-1120), and the tag lands only on a commit CI passed.
+`main` has no bypass, release managers included: `bb release` opens the
+release commit as a PR from `release/<version>` with auto-merge, a core member
+labels it `approved`, and once it merged `bb release` tags the tip of main
+after CI passed there (BOU-1120).
 
 == Why the merge queue now
 
