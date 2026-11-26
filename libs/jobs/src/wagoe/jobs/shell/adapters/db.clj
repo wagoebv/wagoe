@@ -387,8 +387,16 @@
             codec/decode-job))
 
   (delete-job! [_ job-id]
-    (pos? (::jdbc/update-count
-           (execute-one! ds ["DELETE FROM job_queue WHERE id = ?" job-id]))))
+    ;; The store row too, unless the job has started: a waiting one stayed
+    ;; pending for good, which retention never purges (BOU-1112).
+    (jdbc/with-transaction [tx ds]
+      (let [deleted? (pos? (::jdbc/update-count
+                            (execute-one! tx ["DELETE FROM job_queue WHERE id = ?" job-id])))]
+        (when deleted?
+          (execute-one! tx ["DELETE FROM job_store WHERE id = ?
+                               AND status NOT IN ('running', 'completed', 'failed', 'cancelled')"
+                            job-id]))
+        deleted?)))
 
   (queue-size [_ queue-name]
     (-> (execute-one!

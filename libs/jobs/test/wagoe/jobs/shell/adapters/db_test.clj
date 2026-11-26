@@ -265,6 +265,26 @@
         (is (every? nil? (map #(ports/find-job store (:id %)) jobs)))
         (is (some? (ports/find-job store (:id kept))))))))
 
+(deftest ^:integration delete-removes-a-waiting-job-from-the-store-on-each-engine
+  ;; BOU-1112: the store row stayed pending for good.
+  (test-db/with-db "jobs_delete"
+    (fn [{:keys [datasource]}]
+      (db/create-jobs-table! datasource)
+      (let [q         (db/create-db-job-queue datasource)
+            store     (db/create-db-job-store datasource)
+            running   (mk-job)
+            ready     (mk-job)
+            scheduled (assoc (mk-job) :execute-at (.plusSeconds (Instant/now) 3600))]
+        (ports/enqueue-job! q :default running)
+        (is (= (:id running) (:id (ports/dequeue-job! q :default "w1"))))
+        (ports/update-job-status! store (:id running) :running nil)
+        (ports/enqueue-job! q :default ready)
+        (ports/enqueue-job! q :default scheduled)
+        (is (every? true? (map #(ports/delete-job! q (:id %)) [running ready scheduled])))
+        (is (every? nil? (map #(ports/find-job store (:id %)) [ready scheduled])))
+        (is (= :running (:status (ports/find-job store (:id running))))
+            "a running job's history was deleted")))))
+
 (deftest ^:integration a-job-queued-as-json-before-the-upgrade-still-runs
   (test-db/with-db "jobs_legacy"
     (fn [{:keys [datasource]}]
@@ -321,7 +341,8 @@
         job   (assoc (mk-job) :retry-count 0 :max-retries 3)]
     (binding [pdb/*tenant-id* "t1"] (ports/enqueue-job! q :default job))
     (is (= "t1" (get-in (ports/find-job store (:id job)) [:metadata :tenant-id])))
-    (ports/delete-job! q (:id job))
+    ;; Off the queue, as a dead letter is; delete-job! would take the store row too
+    (jdbc/execute! (:ds q) ["DELETE FROM job_queue WHERE id = ?" (str (:id job))])
     (binding [pdb/*tenant-id* "t2"] (ports/retry-job! store (:id job)))
     (is (= "t1" (-> (jdbc/execute-one! (:ds q) ["SELECT payload FROM job_queue WHERE id = ?" (str (:id job))])
                     vals first codec/decode-job (get-in [:metadata :tenant-id])))
