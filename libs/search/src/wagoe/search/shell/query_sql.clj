@@ -277,15 +277,47 @@
   [index-id entity-type match limit filters]
   (like-suggest-sql build-filter-sql-postgres index-id entity-type match limit filters))
 
+(defn- tenant-filter-sql
+  "The search's filter SQL for one tenant, [\"AND <condition>\" & params]."
+  [full-text? tenant-id]
+  (if full-text?
+    (build-filter-sql-postgres {:tenant-id tenant-id})
+    (build-filter-sql-fallback {:tenant-id tenant-id})))
+
+(defn- delete-sql
+  "DELETE of one document, when `condition` [\"AND ...\" & params] holds.
+   Only PostgreSQL takes the `d` alias its filter names; SQLite refuses one
+   in a DELETE."
+  [full-text? index-id entity-id [condition & params]]
+  (into [(str "DELETE FROM search_documents" (when full-text? " d")
+              " WHERE index_id = ? AND entity_id = ? " condition)
+         index-id entity-id]
+        params))
+
 (defn build-tenant-delete-sql
   "DELETE of one document only when its tenant_id filter is `tenant-id`, with
-   the filter SQL a search uses (BOU-1114). Only PostgreSQL takes the `d`
-   alias its filter names; SQLite refuses one in a DELETE."
+   the filter SQL a search uses (BOU-1114)."
   [full-text? index-id entity-id tenant-id]
-  (let [[filter-sql & params] (if full-text?
-                                (build-filter-sql-postgres {:tenant-id tenant-id})
-                                (build-filter-sql-fallback {:tenant-id tenant-id}))]
-    (into [(str "DELETE FROM search_documents" (when full-text? " d")
-                " WHERE index_id = ? AND entity_id = ? " filter-sql)
-           index-id entity-id]
-          params)))
+  (delete-sql full-text? index-id entity-id (tenant-filter-sql full-text? tenant-id)))
+
+(defn build-tenant-owner-sql
+  "Condition [sql & params]: the row is `tenant-id`'s document or names no
+   tenant, the rows an upsert of tenant-id's document may replace (BOU-1121).
+   A row written before its index had a tenant filter is claimed, not refused,
+   so a reindex can move it into a tenant. PostgreSQL's names the row `d`."
+  [full-text? tenant-id]
+  (let [[filter-sql & params] (tenant-filter-sql full-text? tenant-id)
+        no-tenant (if full-text?
+                    "d.filters::jsonb->>'tenant_id' IS NULL"
+                    "filters IS NULL OR INSTR(filters, '\"tenant_id\":') = 0")]
+    ;; filter-sql opens with the AND that joins it to a WHERE.
+    (into [(str "(" no-tenant " OR " (str/replace-first filter-sql #"^AND " "") ")")] params)))
+
+(defn build-upsert-delete-sql
+  "The delete of an upsert without ON CONFLICT: the document's row, when
+   `tenant-id` is nil or `build-tenant-owner-sql` lets it be replaced."
+  [full-text? index-id entity-id tenant-id]
+  (delete-sql full-text? index-id entity-id
+              (when tenant-id
+                (let [[condition & params] (build-tenant-owner-sql full-text? tenant-id)]
+                  (into [(str "AND " condition)] params)))))

@@ -77,6 +77,15 @@
   (testing "suggestions are scoped too"
     (is (= #{(str doc-a)} (ids (call :suggest :scoped-items member-of-a {}))))))
 
+(deftest ^:unit ^:security indexing-cannot-move-another-tenants-document
+  ;; One upsert by entity id used to overwrite tenant B's row and move it to A (BOU-1121).
+  (let [index-as-a #(ports/index-document! *engine* :scoped-items doc-b {:title "widget moved"}
+                                           {:filter-values {:tenant-id tenant-a}})]
+    (is (= :conflict (try (index-as-a) nil (catch clojure.lang.ExceptionInfo e (:type (ex-data e))))))
+    (is (= [doc-b] (map :entity-id (:results (ports/search *engine* :scoped-items "beta"
+                                                           {:filters {:tenant-id tenant-b}})))))
+    (is (empty? (:results (ports/search *engine* :scoped-items "moved" {:all-tenants? true}))))))
+
 (deftest ^:unit ^:security a-body-cannot-ask-for-every-tenant
   ;; :all-tenants? is the platform admin's, set by the handler (BOU-1114).
   (let [body {:all-tenants? true :all_tenants true :allTenants true}]
@@ -149,13 +158,15 @@
       (is (= 403 (:status (search :open-items admin-of-a)))))))
 
 (defn- write
-  "POST /search/documents for `user`, through its middleware."
-  [user]
-  (let [data    (some (fn [[p d]] (when (= p "/search/documents") d)) (sut/search-routes *engine*))
-        handler (reduce (fn [h mw] (mw h)) (get-in data [:post :handler]) (reverse (get-in data [:post :middleware])))]
-    (handler {:request-method :post :uri "/api/v1/search/documents" :user user
-              :parameters {:body {:indexId "scoped-items" :entityId doc-b :fields {:title "taken"}
-                                  :filterValues {:tenant-id (str tenant-a)}}}})))
+  "POST /search/documents of tenant-b's doc-b for `user`, through its middleware,
+   as `tenant`'s."
+  ([user] (write user tenant-a))
+  ([user tenant]
+   (let [data    (some (fn [[p d]] (when (= p "/search/documents") d)) (sut/search-routes *engine*))
+         handler (reduce (fn [h mw] (mw h)) (get-in data [:post :handler]) (reverse (get-in data [:post :middleware])))]
+     (handler {:request-method :post :uri "/api/v1/search/documents" :user user
+               :parameters {:body {:indexId "scoped-items" :entityId doc-b :fields {:title "taken"}
+                                   :filterValues {:tenant-id (str tenant)}}}}))))
 
 (deftest ^:unit ^:security only-a-platform-admin-writes-documents
   (testing "a tenant's admin could otherwise overwrite another tenant's document by its id"
@@ -164,8 +175,11 @@
                                                             :tenant {:id tenant-b}
                                                             :tenant-membership {:tenant-id tenant-b :role :member :status :active}}
                                      {})))))
-  (testing "a platform admin may"
-    (is (= 200 (:status (write {:id (UUID/randomUUID) :role :admin}))))))
+  (testing "a platform admin may, within the document's tenant (BOU-1121)"
+    (is (= 200 (:status (write {:id (UUID/randomUUID) :role :admin} tenant-b))))
+    (is (= :conflict (try (write {:id (UUID/randomUUID) :role :admin} tenant-a) nil
+                          (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))
+        "and gets the :conflict HTTP answers with a 409 in another")))
 
 (deftest ^:unit ^:security in-process-a-scoped-index-is-read-within-a-tenant
   ;; BOU-1114: over HTTP the tenant is forced; in process a forgotten filter read every tenant.

@@ -64,3 +64,38 @@
                           (ports/count-documents store :product-search))]
     (ports/upsert-document! store doc)
     {:as-another (after-delete-as "tenant-2") :as-its-own (after-delete-as "tenant-1")}))
+
+(defn index-across-tenants
+  "Index one entity id as tenant-1, as tenant-2, under both tenant spellings,
+   with a blank tenant, as tenant-1 again and with no tenant; and claim, as
+   tenant-2, rows written with no tenant (BOU-1121).
+   Returns what each upsert did, :indexed or its error's :type, whether tenant-1
+   still finds its document after tenant-2's try, and the row count."
+  [store]
+  (let [id      (UUID/randomUUID)
+        upsert! #(try (ports/upsert-document! store (make-doc %)) :indexed
+                      (catch clojure.lang.ExceptionInfo e (:type (ex-data e))))
+        as      #(upsert! {:entity-id id :content-all %2 :filters (when %1 {:tenant-id %1})})
+        claim   (fn [filters]
+                  (let [legacy (UUID/randomUUID)]
+                    (upsert! {:entity-id legacy :filters filters})
+                    (upsert! {:entity-id legacy :filters {:tenant-id "tenant-2"}})))]
+    (array-map
+     :first            (as "tenant-1" "Original")
+     :as-another       (as "tenant-2" "Moved")
+     :tenant-1-finds?  (= [id] (map :entity-id (ports/search-documents store :product-search :product "Original"
+                                                                       {:limit 5 :offset 0 :filters {:tenant-id "tenant-1"}})))
+     :in-two-spellings (upsert! {:entity-id id :filters {:tenant-id "tenant-1" :tenant_id "tenant-2"}})
+     :blank-tenant     (upsert! {:entity-id id :filters {:tenant-id " "}})
+     :as-its-own       (as "tenant-1" "Updated")
+     :with-no-tenant   (as nil "Untenanted")
+     :claim-no-filters (claim nil)
+     :claim-no-tenant  (claim {:status "active"})
+     :rows             (ports/count-documents store :product-search))))
+
+(def indexed-across-tenants
+  "What `index-across-tenants` returns when every try at tenant-1's row by
+   another tenant, or by none it can check, is refused."
+  {:first :indexed :as-another :conflict :tenant-1-finds? true
+   :in-two-spellings :conflict :blank-tenant :validation-error :as-its-own :indexed
+   :with-no-tenant :indexed :claim-no-filters :indexed :claim-no-tenant :indexed :rows 3})

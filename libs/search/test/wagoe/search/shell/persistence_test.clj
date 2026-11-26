@@ -11,7 +11,8 @@
    - suggest-documents (pg_trgm on PostgreSQL, LIKE without it)
    - count-documents"
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
-            [wagoe.search.test.support :refer [find-ID-under-a-turkish-locale delete-within-a-tenant
+            [wagoe.search.test.support :refer [find-ID-under-a-turkish-locale delete-within-a-tenant index-across-tenants
+                                               indexed-across-tenants
                                                create-search-documents-table! make-doc]]
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.persistence :as persistence]
@@ -83,6 +84,9 @@
 
 (deftest ^:integration ^:security delete-tenant-document-test
   (is (= {:as-another 1 :as-its-own 0} (delete-within-a-tenant @test-store))))
+
+(deftest ^:integration ^:security upsert-keeps-another-tenants-document-test
+  (is (= indexed-across-tenants (index-across-tenants @test-store))))
 
 ;; =============================================================================
 ;; search-documents (LIKE fallback)

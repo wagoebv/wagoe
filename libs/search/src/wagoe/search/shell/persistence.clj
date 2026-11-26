@@ -32,6 +32,12 @@
 (defn- kw->str   [k] (when k (name k)))
 (defn- str->kw   [s] (when s (keyword s)))
 
+(defn- stored-filters
+  "A filter map as the filters column holds it: snake_case keys, string values;
+   of two keys with one spelling, the last wins."
+  [filters]
+  (into {} (map (fn [[k v]] [(index/filter-key->json-key k) (str v)])) filters))
+
 (defn- filters->json
   "Serialize a filter map to a JSON string with snake_case keys.
 
@@ -41,8 +47,7 @@
    only a query's filter value may be a set."
   [filters]
   (when (seq filters)
-    (json/generate-string
-     (into {} (map (fn [[k v]] [(index/filter-key->json-key k) (str v)])) filters))))
+    (json/generate-string (stored-filters filters))))
 
 ;; =============================================================================
 ;; Row <-> Entity mapping
@@ -102,6 +107,26 @@
       (reset! state :unusable)
       nil)))
 
+(defn- doc-tenant
+  "The tenant `doc`'s filters store, or nil when they name none. One the guard
+   cannot check, blank or a collection, is a :validation-error (BOU-1121)."
+  [{:keys [filters index-id]}]
+  (when (some (comp index/tenant-key? key) filters)
+    (when-not (index/names-tenant? filters false)
+      (throw (ex-info "A search document's :tenant-id must be one tenant"
+                      {:type :validation-error :field :tenant-id :index-id index-id})))
+    (get (stored-filters filters) "tenant_id")))
+
+(defn- another-tenants
+  "Indexing `doc` would replace another tenant's document under its entity id
+   (BOU-1121). A :conflict, which HTTP answers with a 409."
+  [doc]
+  (ex-info "Search document belongs to another tenant"
+           {:type      :conflict
+            :index-id  (:index-id doc)
+            :entity-id (:entity-id doc)
+            :message   "Another tenant's search document has this entity id"}))
+
 ;; =============================================================================
 ;; ISearchStore implementation
 ;; =============================================================================
@@ -117,31 +142,34 @@
   (upsert-document! [_ doc]
     (log/debug "Upserting search document"
                {:index-id (:index-id doc) :entity-id (:entity-id doc)})
-    (let [row (doc->db doc)]
+    (let [row    (doc->db doc)
+          tenant (doc-tenant doc)]
       (if on-conflict?
-        ;; Native ON CONFLICT ... DO UPDATE SET ... = EXCLUDED.*
-        (jdbc/execute-one!
-         datasource
-         (sql/format
-          {:insert-into   :search_documents
-           :values        [row]
-           :on-conflict   [:index_id :entity_id]
-           ;; Every column but the key, so a column added to doc->db is updated too.
-           :do-update-set (vec (remove #{:id :index_id :entity_id} (keys row)))})
-         {:builder-fn rs/as-unqualified-lower-maps})
-        ;; No ON CONFLICT: delete existing row then insert fresh (atomic transaction)
+        ;; Native ON CONFLICT ... DO UPDATE SET ... = EXCLUDED.*, where the
+        ;; row is this tenant's or no tenant's.
+        (let [[upsert & params] (sql/format
+                                 {:insert-into   (if full-text? [:search_documents :d] :search_documents)
+                                  :values        [row]
+                                  :on-conflict   [:index_id :entity_id]
+                                  ;; Every column but the key, so a column added to doc->db is updated too.
+                                  :do-update-set (vec (remove #{:id :index_id :entity_id} (keys row)))})
+              ;; The guard goes last: DO UPDATE SET ends the statement.
+              [guard & guard-params] (when tenant (query-sql/build-tenant-owner-sql full-text? tenant))
+              sql-vec (into [(str upsert (when guard (str " WHERE " guard)))] (concat params guard-params))]
+          (when (zero? (::jdbc/update-count (jdbc/execute-one! datasource sql-vec)))
+            (throw (another-tenants doc))))
+        ;; No ON CONFLICT: delete the row this document may replace, then
+        ;; insert, in one transaction. A row left is another tenant's.
         (jdbc/with-transaction [tx datasource]
-          (jdbc/execute-one!
-           tx
-           (sql/format {:delete-from :search_documents
-                        :where       [:and
-                                      [:= :index_id (:index_id row)]
-                                      [:= :entity_id (:entity_id row)]]})
-           {:builder-fn rs/as-unqualified-lower-maps})
-          (jdbc/execute-one!
-           tx
-           (sql/format {:insert-into :search_documents :values [row]})
-           {:builder-fn rs/as-unqualified-lower-maps}))))
+          (let [deleted (::jdbc/update-count
+                         (jdbc/execute-one! tx (query-sql/build-upsert-delete-sql
+                                                full-text? (:index_id row) (:entity_id row) tenant)))]
+            (when (and tenant (zero? deleted)
+                       (jdbc/execute-one! tx (sql/format {:select [1] :from [:search_documents]
+                                                          :where  [:and [:= :index_id (:index_id row)]
+                                                                   [:= :entity_id (:entity_id row)]]})))
+              (throw (another-tenants doc))))
+          (jdbc/execute-one! tx (sql/format {:insert-into :search_documents :values [row]})))))
     doc)
 
   (delete-document! [_ index-id entity-id]
