@@ -1,0 +1,5 @@
+;; search_documents.filters compared binary on MySQL, whose default collation
+;; matched tenant ids such as acme and ACME as one (BOU-1124).
+{:ns      wagoe.search.shell.filters-column
+ :up-fn   "binary-up"
+ :down-fn "binary-down"}

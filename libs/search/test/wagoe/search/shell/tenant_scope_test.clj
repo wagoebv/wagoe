@@ -10,7 +10,7 @@
             [wagoe.search.shell.http :as sut]
             [wagoe.search.shell.persistence :as persistence]
             [wagoe.search.shell.service :as service]
-            [wagoe.search.test.support :refer [create-search-documents-table!]])
+            [wagoe.search.test.support :refer [create-search-documents-table! make-doc]])
   (:import [java.util UUID]))
 
 (def ^:private tenant-a #uuid "a0000000-0000-0000-0000-00000000000a")
@@ -20,13 +20,15 @@
 (def ^:private doc-open #uuid "c0000000-0000-0000-0000-0000000000d3")
 
 (def ^:dynamic *engine* nil)
+(def ^:dynamic *store* nil)
 
 (defn- with-engine [f]
   (test-db/with-db "search_scope"
     (fn [{:keys [datasource adapter]}]
       (create-search-documents-table! datasource)
-      (let [engine (service/create-search-service
-                    (persistence/create-search-store datasource adapter)
+      (let [store  (persistence/create-search-store datasource adapter)
+            engine (service/create-search-service
+                    store
                     {:scoped-items {:id :scoped-items :entity-type :item :api? true
                                     :fields [{:name :title :weight :a}]
                                     :filters [:tenant-id]}
@@ -40,7 +42,7 @@
                                {:filter-values {:tenant-id tenant-b}})
         (ports/index-document! engine :open-items doc-open {:title "widget open"} {})
         (ports/index-document! engine :global-items doc-open {:title "widget open"} {})
-        (binding [*engine* engine] (f))))))
+        (binding [*engine* engine *store* store] (f))))))
 
 (use-fixtures :each with-engine)
 
@@ -85,6 +87,32 @@
     (is (= [doc-b] (map :entity-id (:results (ports/search *engine* :scoped-items "beta"
                                                            {:filters {:tenant-id tenant-b}})))))
     (is (empty? (:results (ports/search *engine* :scoped-items "moved" {:all-tenants? true}))))))
+
+(defn- conflict-type [f]
+  (try (f) nil (catch clojure.lang.ExceptionInfo e (:type (ex-data e)))))
+
+(deftest ^:unit ^:security a-write-naming-no-tenant-keeps-a-tenants-document
+  ;; It replaced the row and cleared its tenant, so any tenant could claim it (BOU-1124).
+  (let [upsert #(ports/upsert-document! *store* (make-doc (merge {:index-id :scoped-items :entity-type :item
+                                                                  :entity-id doc-b :content-all "widget taken"}
+                                                                 %)))]
+    (is (= :conflict (conflict-type #(upsert {}))))
+    (is (= [doc-b] (map :entity-id (:results (ports/search *engine* :scoped-items "beta"
+                                                           {:filters {:tenant-id tenant-b}})))))
+    (testing "a document of no tenant is still replaced"
+      (let [open (UUID/randomUUID)]
+        (upsert {:entity-id open})
+        (upsert {:entity-id open :content-all "widget refreshed"})
+        (is (= [open] (map :entity-id (:results (ports/search *engine* :scoped-items "refreshed"
+                                                              {:all-tenants? true})))))))))
+
+(deftest ^:unit ^:security tenant-ids-differing-in-case-are-two-tenants
+  ;; MySQL's default collation matched them as one (BOU-1124).
+  (let [id     (UUID/randomUUID)
+        upsert #(ports/upsert-document! *store* (make-doc {:index-id :scoped-items :entity-type :item
+                                                           :entity-id id :filters {:tenant-id %}}))]
+    (upsert "tenant-1")
+    (is (= :conflict (conflict-type #(upsert "TENANT-1"))))))
 
 (deftest ^:unit ^:security a-body-cannot-ask-for-every-tenant
   ;; :all-tenants? is the platform admin's, set by the handler (BOU-1114).
