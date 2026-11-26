@@ -48,10 +48,15 @@ It refuses on another branch, with local changes or unpushed commits, behind
 already. It moves `[Unreleased]` to `## [1.3.0] — <date>`, bumps the version in
 every place `bb check:versions` knows, and runs `bb release:check`: no open
 Urgent or High security issue or bug in Linear, no known vulnerability, and a
-`### Security` section. It then commits `Release 1.3.0` and pushes it. It then waits for CI on main to pass and pushes
-the tag `1.3.0` on the tip of main, which must still hold that version. Run it
-again after an interruption: once the release commit is on main it only waits
-and tags.
+`### Security` section. `main` has no bypass, so it commits `Release 1.3.0` on
+the branch `release/1.3.0`, opens a pull request with auto-merge and switches
+back to `main`. The PR touches code: a core member adds the `approved` label
+after reading it; `bb release` never adds it. Once the merge queue merged it,
+`bb release` waits for CI to pass on the PR's merge commit (its push run on
+main, or its merge-queue run when the queue landed it mid-group) and pushes the
+tag `1.3.0` there, so PRs merged after it are not in the release. Run it
+again after an interruption: while the PR is open it waits for the merge, and
+once the release commit is on main it only waits and tags.
 
 The tag starts `publish.yml`. A release manager approves the `release`
 environment; the workflow then checks that CI on main passed on the tagged
@@ -109,10 +114,14 @@ release (`{:mvn/version "1.3.0-SNAPSHOT"}`), never in production. `bb release
 
 ## When it goes wrong
 
-- **CI fails on the release commit:** no tag. Revert the change that broke it,
-  not the release commit, `git pull`, and run `bb release` again; it tags the
-  new tip.
-- **A newer push cancelled CI:** no tag. Run `bb release` again once CI ran on
-  the tip of main.
+- **CI fails on the release's merge commit:** no tag. Rerun that run
+  (`gh run rerun <id>`) and run `bb release` again. If the failure is real, fix
+  main and release the next patch.
+- **A newer push cancelled CI:** no tag. Rerun the cancelled run and run
+  `bb release` again.
+- **The release PR fails in the merge queue or conflicts:** close it,
+  `git pull`, and run `bb release` again; it opens a new one.
+- **The release PR closed without merging:** no tag. Reopen it, or run
+  `bb release` again to open a new one.
 - **Something was published broken:** a version on Clojars is never overwritten
   or deleted. Fix forward with a patch release.
