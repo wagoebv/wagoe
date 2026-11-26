@@ -31,7 +31,9 @@
 
 (deftest ^:unit a-started-release-resumes
   (testing "the release commit on main: wait and tag, though the changelog has its section"
-    (is (empty? (release/preflight (merge fresh {:released? true :in-changelog? true}))))))
+    (is (empty? (release/preflight (merge fresh {:released? true :in-changelog? true})))))
+  (testing "main moved on after the release PR merged: the tag goes on its merge commit"
+    (is (empty? (release/preflight (merge fresh {:released? true :behind 3}))))))
 
 (deftest ^:unit the-release-commit-reaches-main-through-a-pr
   ;; BOU-1120: main has no bypass, so bb release opens a PR and tags after it merged.

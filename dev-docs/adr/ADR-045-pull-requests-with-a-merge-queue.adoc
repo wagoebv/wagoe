@@ -47,7 +47,7 @@ Every change goes through a pull request again, built so it does not queue:
 
 `main` has no bypass, release managers included: `bb release` opens the
 release commit as a PR from `release/<version>` with auto-merge, a core member
-labels it `approved`, and once it merged `bb release` tags the tip of main
+labels it `approved`, and once it merged `bb release` tags its merge commit
 after CI passed there (BOU-1120).
 
 == Why the merge queue now

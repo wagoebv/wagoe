@@ -4,10 +4,10 @@
 
    From a clean, up-to-date main it moves `[Unreleased]` to the version, bumps,
    and opens `Release <version>` as a PR from `release/<version>` with
-   auto-merge (BOU-1120). Once that merged, it tags the tip of main when CI
-   passed there and the tip still holds the version. Run again, it waits for
-   the open PR or only waits and tags, so it survives red CI fixed on main and
-   runs cancelled by newer pushes."
+   auto-merge (BOU-1120). Once that merged, it tags the PR's merge commit when
+   CI on main passed there and it holds the version, so the tag holds nothing
+   the changelog does not list. Run again, it waits for the open PR or only
+   waits and tags."
   (:require [babashka.process :as process]
             [cheshire.core :as json]
             [clojure.string :as str]
@@ -43,7 +43,7 @@
                                                    "gh workflow run publish.yml --ref main"))
     (not= "main" branch)                (conj (str "on " branch ", not main"))
     dirty?                              (conj "the working tree has changes; commit or stash them")
-    (pos? behind)                       (conj "behind origin/main; git pull --rebase first")
+    (and (pos? behind) (not released?)) (conj "behind origin/main; git pull --rebase first")
     (pos? ahead)                        (conj "ahead of origin/main; open a PR for those commits first")
     tagged?                             (conj (str version " is already tagged on origin"))
     (and in-changelog? (not released?)) (conj (str "CHANGELOG.md already has a " version " section"))))
@@ -100,12 +100,11 @@
 
 (defn- wait-for-green [sha]
   (println (str "Waiting for CI on main to pass on " sha " (up to " wait-minutes " min)..."))
-  (let [again "Fix main (revert first), git pull, and run bb release again: it tags the tip of main."]
+  (let [again "Rerun its CI run on main (gh run rerun <id>), then bb release again."]
     (poll #(case (verdict (ci-runs sha))
              :green      (do (println (ansi/green "CI passed.")) :green)
              :red        (fail! (str "CI failed on " sha "; no tag.") again)
-             :superseded (fail! (str "A newer push cancelled CI on " sha "; no tag.")
-                                "git pull, and run bb release again once CI ran on the tip of main.")
+             :superseded (fail! (str "A newer push cancelled CI on " sha "; no tag.") again)
              :pending    nil)
           (str "CI reached no verdict on " sha " within " wait-minutes " min; no tag.")
           "Run bb release again once it has.")))
@@ -129,6 +128,18 @@
   (not-empty (out "gh" "pr" "list" "--head" branch "--state" "all" "--limit" "1"
                   "--json" "state" "--jq" ".[0].state // empty")))
 
+(defn- merge-commit [branch]
+  (or (not-empty (out "gh" "pr" "list" "--head" branch "--state" "merged" "--limit" "1"
+                      "--json" "mergeCommit" "--jq" ".[0].mergeCommit.oid // empty"))
+      (fail! (str "found no merged release PR from " branch "; no tag."))))
+
+(defn- version-at
+  "The suite version a commit's files name, read from git, not the working tree."
+  [sha]
+  (let [file (:file (first (check-versions/version-sources)))]
+    (:version (first (check-versions/matches-in (out "git" "show" (str sha ":" file))
+                                                #"\(def version \"[^\"]+\"")))))
+
 (defn- open-pr! [version branch]
   (process/shell "git" "switch" "--quiet" "-C" branch)
   (try (prepare! version)
@@ -143,8 +154,7 @@
   (println "It touches code, so a core member adds the `approved` label; bb release never does."))
 
 (defn- wait-for-merge
-  "Turns on auto-merge, waits for the release PR, then fast-forwards main to
-   the tip that holds it."
+  "Turns on auto-merge and waits for the release PR to merge."
   [branch]
   ;; Again on a rerun: an earlier run may have stopped before it.
   (when (= "OPEN" (pr-state branch))
@@ -152,8 +162,7 @@
   (println (str "Waiting for the release PR from " branch " to merge (up to " wait-minutes " min)..."))
   (poll #(case (pr-state branch)
            "MERGED" (do (println (ansi/green "The release PR merged."))
-                        (process/shell "git" "fetch" "--quiet" "origin" "main")
-                        (process/shell "git" "merge" "--quiet" "--ff-only" "origin/main"))
+                        (process/shell "git" "fetch" "--quiet" "origin" "main"))
            "CLOSED" (fail! (str "the release PR from " branch " closed without merging; no tag.")
                            "Reopen it, or run bb release again to open a new one.")
            nil)
@@ -182,11 +191,11 @@
       :prepare (do (open-pr! version branch) (wait-for-merge branch))
       :merge   (wait-for-merge branch)
       :tag     nil)
-    ;; The tip of main, with the version still in place: a green run there
-    ;; means check:versions passed on the code the tag names.
-    (when-not (= version (:version (first (bump/current-sources))))
-      (fail! (str "the tip of main no longer holds version " version "; no tag.")))
-    (let [sha (out "git" "rev-parse" "HEAD")]
+    ;; The release PR's own merge commit: later merges are not in its changelog.
+    ;; A green run there means check:versions passed on the code the tag names.
+    (let [sha (merge-commit branch)]
+      (when-not (= version (version-at sha))
+        (fail! (str "the merge commit " sha " does not hold version " version "; no tag.")))
       (wait-for-green sha)
       (when-not (ok? "git" "rev-parse" "-q" "--verify" (str "refs/tags/" version))
         (process/shell "git" "tag" "-a" version "-m" subject sha))
