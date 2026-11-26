@@ -24,7 +24,7 @@
    tenant-scoped. A search of one reads the request's resolved tenant, and only
    for a caller in it (`access/in-tenant-scope?`); a `tenant_id` the caller
    sends is dropped. With no tenant resolved, only a global admin may search it, with
-   whatever filters they send. Anyone else gets 403.
+   whatever filters they send and `:all-tenants? true` (BOU-1114). Anyone else gets 403.
 
    An index without that filter needs `:global? true` for a caller in a tenant,
    unless a platform admin; the admin search page too (BOU-948)."
@@ -102,25 +102,24 @@
       definition
       (throw (service/unknown-index index-id)))))
 
-(defn- tenant-filter? [k]
-  (= "tenant_id" (index/filter-key->json-key k)))
-
-(defn- scoped-filters
-  "The filters a search of `definition` runs with, or ::refused.
+(defn- scoped-opts
+  "The :filters a search of `definition` runs with, and `:all-tenants? true`
+   for a platform admin reading every tenant (BOU-1114); or ::refused.
 
    See the namespace docstring for the rule."
   [request definition caller-filters]
-  (let [own       (into {} (remove (comp tenant-filter? key)) caller-filters)
+  (let [own       (into {} (remove (comp index/tenant-key? key)) caller-filters)
         tenant-id (get-in request [:tenant :id])
-        scoped?   (some tenant-filter? (:filters definition))]
+        scoped?   (some index/tenant-key? (:filters definition))]
     (cond
       (and (not scoped?)
            (not (:global? definition))
            (or tenant-id (:tenant-id (:user request)))
            (not (access/platform-admin? (:user request)))) ::refused
-      (not scoped?)                                own
-      (and tenant-id (access/in-tenant-scope? request)) (assoc own :tenant-id tenant-id)
-      (and (nil? tenant-id) (access/platform-admin? (:user request))) (or caller-filters {})
+      (not scoped?)                                {:filters own}
+      (and tenant-id (access/in-tenant-scope? request)) {:filters (assoc own :tenant-id tenant-id)}
+      (and (nil? tenant-id) (access/platform-admin? (:user request))) {:filters      (or caller-filters {})
+                                                                       :all-tenants? true}
       :else                                        ::refused)))
 
 (defn- refused [request]
@@ -176,16 +175,16 @@
         limit      (get body :limit 20)
         offset     (get body :offset 0)
         highlight? (get body :highlight? false)
-        filters    (scoped-filters request (served! engine request index-id)
-                                   (get body :filters))]
+        scope      (scoped-opts request (served! engine request index-id)
+                                (get body :filters))]
     (log/info "Search request" {:index-id index-id :query query})
-    (if (= ::refused filters)
+    (if (= ::refused scope)
       (refused request)
       (let [response (ports/search engine index-id query
-                                   (cond-> {:limit      limit
-                                            :offset     offset
-                                            :highlight? highlight?}
-                                     (seq filters) (assoc :filters filters)))]
+                                   (merge {:limit      limit
+                                           :offset     offset
+                                           :highlight? highlight?}
+                                          scope))]
         {:status 200
          :body   {:results  (mapv (fn [r]
                                     (cond-> {:entityType (name (:entity-type r))
@@ -205,12 +204,10 @@
         body         (get-in request [:parameters :body] {})
         query        (get body :query "")
         limit        (get body :limit 5)
-        filters      (scoped-filters request (served! engine request index-id) nil)]
-    (if (= ::refused filters)
+        scope        (scoped-opts request (served! engine request index-id) nil)]
+    (if (= ::refused scope)
       (refused request)
-      (let [suggestions (ports/suggest engine index-id query
-                                       (cond-> {:limit limit}
-                                         (seq filters) (assoc :filters filters)))]
+      (let [suggestions (ports/suggest engine index-id query (assoc scope :limit limit))]
         {:status 200
          :body   {:suggestions (mapv (fn [r]
                                        {:entityType (name (:entity-type r))
@@ -299,12 +296,11 @@
         form-params (get-in request [:form-params] {})
         query       (get form-params "query" "")
         definition  (served! engine request index-id)
-        filters     (scoped-filters request definition nil)]
-    (if (= ::refused filters)
+        scope       (scoped-opts request definition nil)]
+    (if (= ::refused scope)
       (refused request)
       (let [results (ports/search engine (:id definition) query
-                                  (cond-> {:limit 20 :highlight? true}
-                                    (seq filters) (assoc :filters filters)))]
+                                  (merge {:limit 20 :highlight? true} scope))]
         {:status  200
          :headers {"Content-Type" "text/html; charset=utf-8"}
          :body    (i18n/render

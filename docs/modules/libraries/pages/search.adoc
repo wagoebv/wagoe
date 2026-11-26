@@ -86,10 +86,18 @@ ships no indexes.
    :tags  "clojure framework"}
   {:filter-values {:tenant-id tenant-id}})
 
-;; Bulk reindex: a seq of [entity-id field-values] pairs
+;; Bulk reindex: a seq of [entity-id field-values opts] triples, or pairs
+;; for an index that is not tenant-scoped
 (ports/reindex! search-engine :product-search documents)
 ;=> {:indexed 120}
+
+;; Remove a document only if it belongs to the tenant
+(ports/remove-tenant-document! search-engine :product-search product-id tenant-id)
 ----
+
+An index whose `:filters` include `:tenant-id` is tenant-scoped, unless it says
+`:global? true`. Indexing a document into one without a `:tenant-id` in
+`:filter-values` throws a `:validation-error`.
 
 == Searching
 
@@ -120,6 +128,11 @@ documents in the index; each member adds a little per matching row. The search
 API refuses a set of more than 500 members with a 400.
 On a tenant-scoped index the tenant stays the one resolved for the request: a
 set of tenant ids in a request body is dropped like any other.
+
+In process, `search` and `suggest` of a tenant-scoped index throw a
+`:validation-error` unless `:filters` name a tenant (one, or a set) or the call
+says `:all-tenants? true`. A forgotten filter no longer reads every
+organisation's documents.
 
 == Testing
 

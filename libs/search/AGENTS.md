@@ -11,7 +11,7 @@ Provides document indexing, full-text search (PostgreSQL FTS / LIKE fallback), a
 libs/search/
 ├── src/wagoe/search/
 │   ├── schema.clj          # Malli schemas: SearchDocument, SearchResult, SearchResponse, SearchDefinition (+ :filters)
-│   ├── ports.clj           # ISearchStore (persistence), ISearchEngine (orchestration), ISearchDefinitions
+│   ├── ports.clj           # ISearchStore, ISearchEngine, ISearchDefinitions, ISearchTenantRemoval, ISearchStoreTenantDeletion
 │   ├── core/
 │   │   ├── index.clj       # defsearch (data only), collect-definitions, api-enabled?, build-document* (pure)
 │   │   ├── query.clj       # SQL builders (PostgreSQL FTS + H2/SQLite LIKE fallback)
@@ -160,18 +160,32 @@ Call `ports/index-document!` from your module's service layer or event handler:
    :filter-values {:tenant-id   tenant-uuid
                    :category-id "hardware"}})
 
-;; 3. Remove a document
+;; 3. Remove a document; the second only if it belongs to the tenant
 (search-ports/remove-document! search-svc :product-search product-uuid)
+(search-ports/remove-tenant-document! search-svc :product-search product-uuid tenant-uuid)
 ```
+
+`reindex!` takes `[entity-id field-values opts]` triples; pairs only for an
+index that is not tenant-scoped.
+
+### Tenant-scoped indexes (BOU-1114)
+
+An index whose `:filters` include `:tenant-id` is tenant-scoped, unless it is
+`:global? true` (`core.index/tenant-scoped?`). On one, a call that names no
+tenant throws a `:validation-error` with `:field :tenant-id` (a 400 over HTTP):
+
+| Call | Needs |
+|------|-------|
+| `index-document!` | `:filter-values {:tenant-id t}`, one non-blank value |
+| `search`, `suggest` | `:filters {:tenant-id t}` (or a set of tenants, none blank), or `:all-tenants? true` |
+
+An empty set of tenants matches nothing. `:all-tenants? true` reads every
+tenant: only for a platform admin's view. `remove-document!` stays unscoped.
 
 ## Integration: Searching
 
 ```clojure
-;; Full-text search with pagination
-(search-ports/search search-svc :product-search "widget"
-                     {:limit 20 :offset 0 :highlight? true})
-
-;; Filter to a specific tenant or category
+;; Filter to a tenant, and a category; product-search is tenant-scoped
 (search-ports/search search-svc :product-search "widget"
                      {:limit 20 :offset 0
                       :filters {:tenant-id tenant-uuid
@@ -180,7 +194,8 @@ Call `ports/index-document!` from your module's service layer or event handler:
 ;;     :total 42 :query "widget" :took-ms 5}
 
 ;; Autocomplete / suggestions
-(search-ports/suggest search-svc :product-search "wid" {:limit 5})
+(search-ports/suggest search-svc :product-search "wid"
+                      {:limit 5 :filters {:tenant-id tenant-uuid}})
 ;; => [{:entity-type :product :entity-id uuid ...}]
 ```
 
@@ -196,7 +211,8 @@ An index with `:tenant-id` in its `:filters` is tenant-scoped. Search and
 suggest then filter on the request's resolved tenant, and only for an active
 member of it; a `tenant_id` the caller sends is ignored. With no tenant
 resolved, only a global admin may search it (across tenants, with their own
-filters); anyone else gets 403.
+filters, so the handler passes `:all-tenants? true`); anyone else gets 403.
+Indexing a document into one without a `tenant_id` in `filterValues` is a 400.
 
 An index without `:tenant-id` in its `:filters` is refused (403) to a caller in a
 tenant, resolved or their own, unless it says it holds no tenant's data with
@@ -349,4 +365,4 @@ The search module auto-detects the database type from the shared
 
 ---
 
-**Last Updated**: 2026-03-12
+**Last Updated**: 2026-11-26

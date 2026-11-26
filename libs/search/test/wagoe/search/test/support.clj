@@ -53,3 +53,14 @@
                      :count   (ports/count-results store :product "ID" {:index-id :product-search})
                      :suggest (map :entity-id (ports/suggest-documents suggest-store :product-search
                                                                        :product "ID" {:limit 5}))))]))
+
+(defn delete-within-a-tenant
+  "Index a document of tenant-1, then delete it as tenant-2 and as tenant-1
+   (BOU-1114). Returns the document count after each."
+  [store]
+  (let [doc (make-doc {:filters {:tenant-id "tenant-1"}})
+        after-delete-as (fn [tenant]
+                          (ports/delete-tenant-document! store :product-search (:entity-id doc) tenant)
+                          (ports/count-documents store :product-search))]
+    (ports/upsert-document! store doc)
+    {:as-another (after-delete-as "tenant-2") :as-its-own (after-delete-as "tenant-1")}))

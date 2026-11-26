@@ -276,3 +276,16 @@
    pg_trgm (BOU-661). Same arguments as build-fallback-suggest-sql."
   [index-id entity-type match limit filters]
   (like-suggest-sql build-filter-sql-postgres index-id entity-type match limit filters))
+
+(defn build-tenant-delete-sql
+  "DELETE of one document only when its tenant_id filter is `tenant-id`, with
+   the filter SQL a search uses (BOU-1114). Only PostgreSQL takes the `d`
+   alias its filter names; SQLite refuses one in a DELETE."
+  [full-text? index-id entity-id tenant-id]
+  (let [[filter-sql & params] (if full-text?
+                                (build-filter-sql-postgres {:tenant-id tenant-id})
+                                (build-filter-sql-fallback {:tenant-id tenant-id}))]
+    (into [(str "DELETE FROM search_documents" (when full-text? " d")
+                " WHERE index_id = ? AND entity_id = ? " filter-sql)
+           index-id entity-id]
+          params)))
