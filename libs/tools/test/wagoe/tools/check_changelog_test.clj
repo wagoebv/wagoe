@@ -261,4 +261,16 @@
       "a comment in fenced code is no heading")
   (is (= 1 (count (changes/problems [["changes/A.md" "### Fixed\n\n- a:\n\n```md\n### Example\n```\n"]])))
       "a ### line in fenced code, which the merge would split on")
-  (is (= 1 (count (changes/problems [["changes/A.md" "### Fixed\n\n- a\n## [1.0.0]\n"]]))) "a release heading"))
+  (is (= 1 (count (changes/problems [["changes/A.md" "### Fixed\n\n- a\nloose line\n"]])))
+      "a line that would join the entry above it")
+  (is (empty? (changes/problems [["changes/A.md" "### Fixed\n\n- a\n  continued\n- b\n"]])))
+  (is (some #(str/includes? % "## heading")
+            (changes/problems [["changes/A.md" "### Fixed\n\n- a\n## [1.0.0]\n"]]))
+      "a release heading"))
+
+(deftest ^:unit a-fragment-merged-after-the-release-pr-was-cut-is-caught
+  (let [fragments [["changes/X-9.md" "### Fixed\n\n- x\n"]]]
+    (is (empty? (changes/unreleased-fragments "1.4.0-SNAPSHOT" fragments)) "an ordinary PR on main")
+    (is (empty? (changes/unreleased-fragments "1.4.0" [])) "the release PR, its fragments merged")
+    (is (= ["changes/X-9.md"] (changes/unreleased-fragments "1.4.0" fragments)))
+    (is (= ["changes/X-9.md"] (changes/unreleased-fragments "1.4.0-rc-1" fragments)))))

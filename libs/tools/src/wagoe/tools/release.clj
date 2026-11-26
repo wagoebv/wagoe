@@ -198,7 +198,8 @@
       :prepare (do (open-pr! version branch) (wait-for-merge branch))
       :merge   (wait-for-merge branch)
       :tag     nil)
-    ;; The release PR's own merge commit: later merges are not in its changelog.
+    ;; The release PR's own merge commit. A fragment merged while it was open
+    ;; fails check:changelog in its merge group, since the version is no -SNAPSHOT.
     ;; A green run there means check:versions passed on the code the tag names.
     (let [sha (merge-commit branch)]
       (process/shell "git" "fetch" "--quiet" "origin" "main")

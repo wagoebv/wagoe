@@ -3,7 +3,8 @@
    `### Added`-style sections and an optional `## Upgrading` part, so parallel
    pull requests do not conflict in CHANGELOG.md. `bb release` merges them."
   (:require [babashka.fs :as fs]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [wagoe.tools.check-versions :as check-versions]))
 
 (def ^:private order ["Breaking" "Security" "Added" "Changed" "Deprecated" "Removed" "Fixed"])
 
@@ -51,6 +52,9 @@
                   (when (seq preamble) ["text before the first ### heading"])
                   (when (empty? secs) ["no ### section, so nothing for CHANGELOG.md"])
                   (for [[h b] secs :when (empty? b)] (str "### " h " has no entry"))
+                  (for [[h b] secs
+                        :when (some #(not (or (str/blank? %) (re-find #"^(\s|- )" %))) (str/split-lines b))]
+                    (str "### " h " has a line that is neither a `- ` entry nor indented under one"))
                   (when (re-find #"(?m)^#{1,2} " (str entries "\n" notes))
                     ["a # or ## heading other than ## Upgrading"])
                   (for [[h] secs :when (not (headings h))]
@@ -62,7 +66,8 @@
 
 (defn with-fragments
   "`changelog` with each fragment's entries appended to the same `### ` section
-   of `[Unreleased]`; sections it lacks follow its own, Breaking first."
+   of `[Unreleased]`, its sections in Keep a Changelog order with Breaking
+   first and legacy headings last."
   [changelog fragments]
   (if (empty? fragments)
     changelog
@@ -70,12 +75,19 @@
                                  (throw (ex-info "CHANGELOG.md has no ## [Unreleased] heading" {})))
           [preamble secs] (sections body)
           all    (concat secs (mapcat #(second (sections (first (split-fragment (second %))))) fragments))
-          merged (for [h (distinct (concat (map first secs)
-                                           (sort-by #(.indexOf ^java.util.List order %) (map first all))))]
+          rank   #(let [i (.indexOf ^java.util.List order %)] (if (neg? i) (count order) i))
+          merged (for [h (sort-by rank (distinct (map first all)))]
                    (str "### " h "\n\n" (str/join "\n" (for [[h' b] all :when (= h h')] b))))]
       (str head "\n"
            (str/join (for [part (cons preamble merged) :when (seq part)] (str part "\n\n")))
            (str/triml tail)))))
+
+(defn unreleased-fragments
+  "The fragments on a tree whose `version` is a release, not a -SNAPSHOT: they
+   merged after its release PR was cut, so the release would ship them unannounced."
+  [version fragments]
+  (when-not (check-versions/snapshot? version)
+    (map first fragments)))
 
 (defn changelog
   "CHANGELOG.md as it reads with the fragments merged in."

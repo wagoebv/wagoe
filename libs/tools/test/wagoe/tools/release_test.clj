@@ -83,14 +83,18 @@
    ["changes/BOU-3.md" "### Fixed\n\n- D (BOU-3).\n\n## Upgrading\n\n### 1. Do d (BOU-3)\n\nRun d.\n"]])
 
 (deftest ^:unit fragments-join-their-sections-of-unreleased
-  (is (= (str "# Changelog\n\n## [Unreleased]\n\n### Fixed\n\n- A (BOU-1).\n- C (BOU-2).\n- D (BOU-3).\n\n"
-              "### Added\n\n- B (BOU-2).\n\n## [1.2.0] — x\n\n- Old.\n")
+  (is (= (str "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- B (BOU-2).\n\n"
+              "### Fixed\n\n- A (BOU-1).\n- C (BOU-2).\n- D (BOU-3).\n\n## [1.2.0] — x\n\n- Old.\n")
          (changes/with-fragments
            "# Changelog\n\n## [Unreleased]\n\n### Fixed\n\n- A (BOU-1).\n\n## [1.2.0] — x\n\n- Old.\n" fragments)))
   (testing "new sections go in Keep a Changelog order, Breaking first"
     (is (= "## [Unreleased]\n\n### Breaking\n\n- X.\n\n### Fixed\n\n- Y.\n\n"
            (changes/with-fragments "## [Unreleased]\n"
-             [["changes/A.md" "### Fixed\n\n- Y.\n"] ["changes/B.md" "### Breaking\n\n- X.\n"]]))))
+             [["changes/A.md" "### Fixed\n\n- Y.\n"] ["changes/B.md" "### Breaking\n\n- X.\n"]])))
+    (is (= "## [Unreleased]\n\n### Security\n\n- S.\n\n### Fixed\n\n- Y.\n\n### Tests\n\n- T.\n\n"
+           (changes/with-fragments "## [Unreleased]\n\n### Tests\n\n- T.\n\n### Fixed\n\n- Y.\n"
+             [["changes/A.md" "### Security\n\n- S.\n"]]))
+        "an existing section moves into order too, a legacy heading last"))
   (testing "no fragments leave the changelog as it is"
     (let [text (slurp "CHANGELOG.md")]
       (is (= text (changes/with-fragments text []))))))

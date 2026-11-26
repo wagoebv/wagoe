@@ -22,7 +22,8 @@
             [clojure.edn :as edn]
             [edamame.core :as e]
             [wagoe.tools.ansi :as ansi]
-            [wagoe.tools.changes :as changes]))
+            [wagoe.tools.changes :as changes]
+            [wagoe.tools.deploy :as deploy]))
 
 (def changelog-path "CHANGELOG.md")
 
@@ -440,7 +441,13 @@
           unupgraded  (report-upgrades)
           misfiled    (report-findings "Fragments a release would drop or misfile:"
                                        (changes/problems (changes/read-fragments))
-                                       "Put every entry under a ### heading from that list.")]
+                                       "Put every entry under a ### heading from that list.")
+          version     (deploy/read-version "core")
+          stale       (report-findings (str "Fragments on a tree at release version " version ":")
+                                       (changes/unreleased-fragments version (changes/read-fragments))
+                                       "They merged after the release PR was cut and would miss its changelog."
+                                       "Close the release PR, git pull, and run bb release again. If the version"
+                                       "is already tagged, bb bump the next -SNAPSHOT on main first.")]
       (when missing
         (let [{:keys [files]} missing]
           (when undocumented (println))
@@ -454,7 +461,7 @@
           (println (str "framework will notice. If they will notice nothing, say so with "
                         opt-out-marker))
           (println "in a commit message on this branch.")))
-      (if (or missing undocumented unstable unupgraded misfiled)
+      (if (or missing undocumented unstable unupgraded misfiled stale)
         (System/exit 1)
         (do
           (println (ansi/green (str changelog-path " and changes/ are up to date with this branch, "
