@@ -14,6 +14,9 @@
 
   (upsert-document! [this doc]
     "Insert or update a search document (upsert on index_id + entity_id).
+     A doc whose :filters name a :tenant-id replaces only a row of that tenant
+     or of none; over another tenant's it throws a :conflict (BOU-1121).
+     A store of an app's own must keep this too.
 
      Args:
        doc - SearchDocument map
@@ -92,7 +95,9 @@
        opts         - optional map with :metadata and :filter-values. On a
                       tenant-scoped index (`core.index/tenant-scoped?`)
                       :filter-values must hold a :tenant-id, or this throws a
-                      :validation-error (BOU-1114).
+                      :validation-error (BOU-1114). An entity id whose
+                      document is another tenant's throws a :conflict
+                      (BOU-1121).
 
      Returns:
        SearchDocument map")
