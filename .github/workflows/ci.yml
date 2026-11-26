@@ -14,6 +14,8 @@ on:
     branches: [main]
   pull_request:
     types: [opened, synchronize, reopened]
+  # The merge queue runs the full suite on each group before it lands (BOU-1117).
+  merge_group:
 
 # Read-only by default; a job that writes declares it (tag-green, announce-main).
 permissions:
@@ -21,7 +23,8 @@ permissions:
 
 # `github.event.pull_request.number` was dead under a push-only trigger and
 # always fell through to github.ref. With pull_request wired up it finally does
-# what it says: successive pushes to one PR cancel the previous run.
+# what it says: successive pushes to one PR cancel the previous run. Each
+# merge-queue group has its own ref, so the queue cancels nothing.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -46,7 +49,8 @@ jobs:
   # =============================================================================
   # Docs-only pull requests skip the code jobs (BOU-615). Only files no code
   # test reads count as docs (wagoe.tools.ci-changes); the gates, docs lint and
-  # tools tests, which do read docs, always run. A push to main runs everything.
+  # tools tests, which do read docs, always run. A push to main and a merge-queue
+  # group run everything.
   #
   # A library's own test job runs only when the PR touches a library its test
   # run loads (`libs`); jobs spanning libraries run on any code change.
@@ -54,10 +58,15 @@ jobs:
   changes:
     name: Changed Files
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Finds the merge queue's run of this commit.
+      actions: read
     outputs:
       code: ${{ steps.classify.outputs.code }}
       libs: ${{ steps.classify.outputs.libs }}
-      # A push to main; jobs gated on it are skipped on a pull request (BOU-1026).
+      # A push to main or a merge-queue group; jobs gated on it are skipped on
+      # a pull request (BOU-1026, BOU-1117).
       full: ${{ steps.classify.outputs.full }}
       skip-jobs: ${{ steps.classify.outputs.skip-jobs }}
     steps:
@@ -70,11 +79,29 @@ jobs:
         with:
           bb: 1.13.229
 
+      # A push the merge queue made is the tree its group tested: main then
+      # skips the jobs gated here instead of running them all again (BOU-1117).
+      # A push that bypassed the queue finds no run and gets the full suite.
       - name: Code or docs only
         id: classify
         env:
-          BASE_REF: ${{ github.base_ref }}
-        run: bb ci:changes "$BASE_REF"
+          # Empty on a push and in the merge queue, so everything runs.
+          BASE_REF: ${{ github.event_name == 'pull_request' && github.base_ref || '' }}
+          EVENT: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          tested=0
+          if [ "$EVENT" = push ]; then
+            tested="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=merge_group&head_sha=$SHA&status=success" \
+              --jq .total_count || echo 0)"
+          fi
+          if [ "$tested" -gt 0 ]; then
+            echo "The merge queue passed $SHA; skipping its tests."
+            printf 'code=false\nlibs=\nfull=false\nskip-jobs=\n' >> "$GITHUB_OUTPUT"
+          else
+            bb ci:changes "$BASE_REF"
+          fi
 
   warm-deps:
     name: Warm Dependency Cache

@@ -114,7 +114,7 @@
     (is (= 1 (count uses)))))
 
 (deftest ^:unit pull-requests-skip-the-main-only-jobs
-  ;; A pull request runs the fast layer; these run on a push to main (BOU-1026).
+  ;; A pull request runs the fast layer; the merge queue and main run these (BOU-1026).
   (is (= #{"check-isolation-matrix" "example-smoke" "test-mysql-suites" "mysql-smoke"
            "web-crawl-smoke" "e2e" "build-uberjar" "first-run-smoke"}
          (set (sut/main-only-jobs (jobs (slurp (str root "/.github/workflows/ci.yml"))))))))
@@ -124,7 +124,7 @@
                         "  test-geo:\n    if: contains(format(' {0} ', needs.changes.outputs.libs), ' geo ')\n"
                       "  test-search:\n    if: contains(format(' {0} ', needs.changes.outputs.libs), ' search ')\n"
                       "  e2e:\n    if: needs.changes.outputs.full == 'true'\n"))]
-    (testing "a push to main runs every library and skips nothing"
+    (testing "the merge queue or a push to main runs every library and skips nothing"
       (is (= {:code true :libs (set (keys graph)) :full true :skip-jobs #{}}
              (sut/plan graph ci nil))))
     (testing "a pull request skips the main-only jobs and the untouched libraries"
