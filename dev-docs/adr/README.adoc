@@ -459,10 +459,16 @@ An effect is observational when the application has no read path to its sink:
 logs, metrics, traces. Writes to the app's own store never are, so they stay
 shell. Core still does not log in 1.2, for want of an observation channel.
 
-==== ADR-044: Trunk-Based Development [Proposed]
+==== ADR-044: Trunk-Based Development [Superseded]
 ADR-044-trunk-based-development.adoc
 
-The core team commits to `main` behind a local gate (review trailers and
-`bb check`); CI on `main` detects and a red `main` is reverted first. A release
-tag lands only on a commit CI passed on `main`. External contributors keep
-pull requests.
+The core team committed to `main` behind a local gate (review trailers and
+`bb check`). Superseded by ADR-045.
+
+==== ADR-045: Pull Requests with a Merge Queue [Accepted]
+ADR-045-pull-requests-with-a-merge-queue.adoc
+
+One small pull request per ticket, reviewed before it opens. Auto-merge and a
+merge queue that runs the full suite keep `main` green without rebasing by
+hand; an `approval-gate` check lets docs- and test-only PRs merge without a
+human.

@@ -1,12 +1,12 @@
 = ADR-044: Trunk-Based Development
-:status: Proposed
+:status: Superseded
 :date: 2026-11-20
 :deciders: wagoe-team
 
 == Status
 
-Proposed (BOU-1036), for the core team to read and accept before the cut-over
-(BOU-1042).
+Superseded by ADR-045 on 26 November 2026: conflicts went up and the work got
+slower. Proposed in BOU-1036, in use from 20 November.
 
 == Context
 

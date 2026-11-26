@@ -1,0 +1,74 @@
+= ADR-045: Pull Requests with a Merge Queue
+:status: Accepted
+:date: 2026-11-26
+:deciders: wagoe-team
+
+== Status
+
+Accepted (BOU-1115). Supersedes ADR-044.
+
+== Context
+
+ADR-044 moved the core team to trunk-based development on 20 November 2026 to
+end the rebase loop of pull requests that went stale after every merge. In
+practice the work got slower:
+
+* Conflicts went up, not down. Every branch still rebased on `main` before its
+  push, and almost every change touched the same files: `CHANGELOG.md` was in
+  118 commits since 12 November, `UPGRADING.md` in 19.
+* A push waited for `bb check` in the pre-push hook, and the working tree was
+  blocked while it ran. Parallel work on one machine queued behind it.
+* Review was a trailer recorded on the author's machine. Nobody read the change
+  before it reached `main`.
+
+== Decision
+
+Every change goes through a pull request again, built so it does not queue:
+
+. *One small pull request per Linear ticket*, from its own worktree, so several
+  tickets run side by side. The ticket is claimed in Linear before work starts.
+. *Before the PR opens*, the author runs `simplify` and `review-pr`, as before;
+  the findings are fixed, ticketed or rejected in the PR.
+. *Auto-merge and a merge queue.* The author enables auto-merge. The queue tests
+  each PR on top of the ones ahead of it, in groups, with the full suite, and
+  merges it. Nobody rebases a green PR by hand, and `main` stays green.
+. *CI holds the heavy checks.* A PR runs the fast layer; the queue runs
+  everything `main` used to run after the push. The pre-push hook is gone.
+. *Approval by risk.* A required `approval-gate` check passes when the PR
+  touches only docs and tests, judged by its changed paths, or when a core
+  member put the `approved` label on it. A label, not a review: agents open PRs
+  under the developer's account, and GitHub refuses a review of one's own PR.
+  A new push removes the label.
+. *Fragments for shared files.* A change adds its own changelog and upgrade
+  fragment instead of editing `CHANGELOG.md` and `UPGRADING.md`; `bb release`
+  merges them (BOU-1118).
+. *Linear follows GitHub* through Linear's GitHub integration: a branch moves its
+  issue to In Progress, a PR to In Review, the merge to Done.
+
+Release managers still push the release commit to `main` and tag it, as
+`bb release` does; the tag lands only on a commit CI passed.
+
+== Why the merge queue now
+
+ADR-044 rejected the merge queue because a red entry stalls the queue behind
+it. That risk is smaller than the cost we measured without one:
+
+* The queue tests groups and removes a failing entry; the PRs behind it are
+  retested without it, which costs one rerun, not a stalled queue.
+* A flaky or environment failure removes one PR, which its author queues
+  again. It does not hold up the team.
+* The rebase loop that made pull requests expensive came from the up-to-date
+  rule, which the queue replaces.
+
+== Consequences
+
+* Review happens before the merge again, where the reader sees diff, findings
+  and CI together.
+* `main` is green at every merge, so the "main is red" issue and the
+  revert-first rule matter only for what the queue cannot run (nightly and
+  canary jobs).
+* A change waits for one PR run and one queue run instead of one local
+  `bb check`. That is minutes of CI, not minutes of a blocked working tree.
+* Docs-only and test-only PRs merge without a human. A wrong path rule there
+  would let code through unreviewed, so the rule lives in one place and lists
+  what counts as low risk, not what doesn't.

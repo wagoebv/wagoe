@@ -68,7 +68,7 @@ Only if step 3 produced changes:
 
 ```bash
 git add AGENTS.md libs/wagoe-cli/resources/wagoe/cli/templates/AGENTS.md.tmpl examples/shop test/snapshots
-git commit -m "Regenerate derived files after rebase (BOU-123)" -m "Review-skipped: generated files"
+git commit -m "Regenerate derived files after rebase (BOU-123)"
 ```
 
 ### 6. Hand off to user

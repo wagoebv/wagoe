@@ -4,7 +4,7 @@
 ;; Unified Quality Check — aggregates all quality checks into one command.
 ;;
 ;; Usage (via bb.edn task):
-;;   bb check                      # Every check: the pre-push gate
+;;   bb check                      # Every check: the gate before a PR
 ;;   bb check --quick              # Run only FC/IS and dependency checks
 ;;   bb check --gates              # Every check except the test rows
 ;;   bb check --fix                # Pass --fix to kondo linter
@@ -230,7 +230,7 @@
     :scope :any
     :label "Config doctor"
     :cmd   ["bb" "doctor" "--ci"]}
-   ;; :test rows make `bb check` the pre-push gate: what CI would fail, found
+   ;; :test rows make `bb check` the gate before a PR: what CI would fail, found
    ;; before the push (BOU-1024). `--gates` leaves them out.
    {:id    :css
     :scope :monorepo

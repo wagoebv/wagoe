@@ -93,8 +93,7 @@ the classpath. Sibling libraries resolve from the same sha.
 ## Snapshots
 
 Between releases `main` carries the next minor with `-SNAPSHOT`: after
-`1.2.0`, `bb bump 1.3.0-SNAPSHOT`, committed with `Review-skipped: version
-bump`. A release manager publishes a green `main` as that snapshot:
+`1.2.0`, `bb bump 1.3.0-SNAPSHOT` in a pull request. A release manager publishes a green `main` as that snapshot:
 
 ```bash
 gh workflow run publish.yml --ref main
