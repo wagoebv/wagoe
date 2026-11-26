@@ -66,7 +66,10 @@
     (testing "a failed or cancelled queue run decides nothing"
       (is (= :pending (release/verdict [(queue "failure")])))
       (is (= :pending (release/verdict [(queue "cancelled")])))
-      (is (= :green (release/verdict [(queue "failure") {:event "push" :status "completed" :conclusion "success"}]))))))
+      (is (= :green (release/verdict [(queue "failure") {:event "push" :status "completed" :conclusion "success"}]))))
+    (is (= :green (release/verdict [(queue "success") {:event "push" :status "completed" :conclusion "failure"}]))
+        "the push run skipped its tests and reused the queue run")
+    (is (= :pending (release/verdict [{:event "merge_group" :status "in_progress"}])) "a queue run still running")))
 
 (deftest ^:unit a-snapshot-is-never-released-by-tag
   ;; BOU-1057: a snapshot is published by dispatch, and tags are immutable.

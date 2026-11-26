@@ -106,7 +106,7 @@
 
 (defn- wait-for-green [sha]
   (println (str "Waiting for CI on main to pass on " sha " (up to " wait-minutes " min)..."))
-  (let [again "Rerun its CI run on main (gh run rerun <id>), then bb release again."]
+  (let [again "Rerun that ci.yml run (gh run rerun <id>), then bb release again."]
     (poll #(case (verdict (ci-runs sha))
              :green      (do (println (ansi/green "CI passed.")) :green)
              :red        (fail! (str "CI failed on " sha "; no tag.") again)
