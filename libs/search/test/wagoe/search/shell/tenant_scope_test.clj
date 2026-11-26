@@ -1,9 +1,11 @@
 (ns wagoe.search.shell.tenant-scope-test
   "A search of a tenant-scoped index reads the caller's tenant and nothing else,
    whatever filter the caller sends (BOU-568)."
-  (:require [clojure.string :as str]
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [support.test-db :as test-db]
+            [wagoe.platform.shell.http.reitit-router :as reitit-router]
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.http :as sut]
             [wagoe.search.shell.persistence :as persistence]
@@ -75,6 +77,12 @@
   (testing "suggestions are scoped too"
     (is (= #{(str doc-a)} (ids (call :suggest :scoped-items member-of-a {}))))))
 
+(deftest ^:unit ^:security a-body-cannot-ask-for-every-tenant
+  ;; :all-tenants? is the platform admin's, set by the handler (BOU-1114).
+  (let [body {:all-tenants? true :all_tenants true :allTenants true}]
+    (is (= #{(str doc-a)} (ids (call :search :scoped-items member-of-a body))))
+    (is (= #{(str doc-a)} (ids (call :suggest :scoped-items member-of-a body))))))
+
 (deftest ^:unit ^:security a-set-filter-cannot-widen-the-tenant
   ;; A filter value may be a set (BOU-1055); the tenant stays the resolved one.
   (testing "a set of tenant ids, in either spelling, reads only the caller's"
@@ -110,7 +118,8 @@
     (let [admin {:user {:id (UUID/randomUUID) :role :admin}}]
       (is (= #{(str doc-a) (str doc-b)} (ids (call :search :scoped-items admin {}))))
       (is (= #{(str doc-b)} (ids (call :search :scoped-items admin
-                                       {:filters {:tenant_id (str tenant-b)}})))))))
+                                       {:filters {:tenant_id (str tenant-b)}}))))
+      (is (= #{(str doc-a) (str doc-b)} (ids (call :suggest :scoped-items admin {})))))))
 
 (deftest ^:unit ^:security an-index-without-a-tenant-filter-is-refused-to-a-caller-in-a-tenant
   (testing "a member of a resolved tenant, or a user of one, is refused"
@@ -157,3 +166,30 @@
                                      {})))))
   (testing "a platform admin may"
     (is (= 200 (:status (write {:id (UUID/randomUUID) :role :admin}))))))
+
+(deftest ^:unit ^:security in-process-a-scoped-index-is-read-within-a-tenant
+  ;; BOU-1114: over HTTP the tenant is forced; in process a forgotten filter read every tenant.
+  (testing "a search or suggest naming no tenant is refused"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"tenant-scoped"
+                          (ports/search *engine* :scoped-items "widget" {})))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"tenant-scoped"
+                          (ports/suggest *engine* :scoped-items "widget" {}))))
+  (testing "one naming a tenant reads that tenant, and :all-tenants? true every one"
+    (is (= [doc-a] (map :entity-id (:results (ports/search *engine* :scoped-items "widget"
+                                                           {:filters {:tenant-id tenant-a}})))))
+    (is (= #{doc-a doc-b} (set (map :entity-id (:results (ports/search *engine* :scoped-items "widget"
+                                                                       {:all-tenants? true})))))))
+  (testing "a document is removed only within its tenant"
+    (ports/remove-tenant-document! *engine* :scoped-items doc-a tenant-b)
+    (is (= 1 (:total (ports/search *engine* :scoped-items "widget" {:filters {:tenant-id tenant-a}}))))
+    (ports/remove-tenant-document! *engine* :scoped-items doc-a tenant-a)
+    (is (= 0 (:total (ports/search *engine* :scoped-items "widget" {:filters {:tenant-id tenant-a}}))))))
+
+(deftest ^:unit indexing-a-scoped-document-without-a-tenant-is-a-400
+  (let [routes (reitit-router/compile-routes (sut/search-routes *engine*) {:swagger-enabled false})
+        body   (json/generate-string {:indexId "scoped-items" :entityId (str (UUID/randomUUID))
+                                      :fields {:title "widget"}})]
+    (is (= 400 (:status (routes {:request-method :post :uri "/search/documents"
+                                 :user {:id (UUID/randomUUID) :role :admin}
+                                 :headers {"content-type" "application/json" "accept" "application/json"}
+                                 :body (java.io.ByteArrayInputStream. (.getBytes ^String body))}))))))

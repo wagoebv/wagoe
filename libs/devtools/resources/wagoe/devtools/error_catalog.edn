@@ -38,7 +38,7 @@
  "WGE-107" {:code        "WGE-107"
             :category    :config
             :title       "Component Lacks a Newer Protocol"
-            :description "A component the config hands Wagoe, such as your own repository or service, implements a stable protocol but not one added beside it after 1.0, which this Wagoe calls. The boot stops rather than fail on that first call."
+            :description "A component the config hands Wagoe, such as your own repository or service, implements a stable protocol but not one added beside it after 1.0, which this Wagoe calls. The boot stops rather than fail on that first call; one you build yourself, such as a search store passed to create-search-service, fails on the call."
             :fix         "Implement the protocol the message names on your record (its methods are in :missing), or wire Wagoe's own component."}
 
  "WGE-108" {:code        "WGE-108"

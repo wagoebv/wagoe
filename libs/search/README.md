@@ -56,20 +56,24 @@ index answers 404.
   {:title "Widget Pro"
    :description "A professional widget"
    :tags ["tools" "hardware"]}
-  {:metadata {:sku "WGT-001"}})
+  {:metadata      {:sku "WGT-001"}
+   :filter-values {:tenant-id tenant-uuid}})  ; required on a tenant-scoped index
 ```
 
 ### 3. Search and Suggest
 
 ```clojure
-;; Full-text search
+;; Full-text search. On a tenant-scoped index (:filters with :tenant-id, not
+;; :global? true) name the tenant, or pass :all-tenants? true; else it throws.
 (search-ports/search search-svc :product-search "widget"
-                     {:limit 20 :offset 0 :highlight? true})
+                     {:limit 20 :offset 0 :highlight? true
+                      :filters {:tenant-id tenant-uuid}})
 ;; => {:results [{:entity-type :product :entity-id uuid :rank 0.9 :snippet "..."}]
 ;;     :total 42 :query "widget" :took-ms 5}
 
 ;; Autocomplete suggestions
-(search-ports/suggest search-svc :product-search "wid" {:limit 5})
+(search-ports/suggest search-svc :product-search "wid"
+                      {:limit 5 :filters {:tenant-id tenant-uuid}})
 ;; => [{:entity-type :product :entity-id uuid ...}]
 ```
 
@@ -77,6 +81,9 @@ index answers 404.
 
 ```clojure
 (search-ports/remove-document! search-svc :product-search product-uuid)
+
+;; Only if it belongs to the tenant
+(search-ports/remove-tenant-document! search-svc :product-search product-uuid tenant-uuid)
 ```
 
 ---

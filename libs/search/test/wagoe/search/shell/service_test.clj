@@ -82,7 +82,13 @@
   (count-documents [_ index-id]
     (->> @documents
          (filter (fn [[_ doc]] (= index-id (:index-id doc))))
-         count)))
+         count))
+
+  ports/ISearchStoreTenantDeletion
+  (delete-tenant-document! [_ index-id entity-id tenant-id]
+    (when (= (str tenant-id) (str (get-in @documents [[index-id entity-id] :filters :tenant-id])))
+      (swap! documents dissoc [index-id entity-id]))
+    nil))
 
 (defn- create-memory-store []
   (->MemorySearchStore (atom {})))
@@ -232,3 +238,83 @@
           result    (ports/reindex! *service* :product-search documents)]
       (is (= {:indexed 5} result))
       (is (= 5 (:doc-count (first (ports/list-indices *service*))))))))
+
+;; =============================================================================
+;; Tenant-scoped indexes (BOU-1114)
+;; =============================================================================
+
+(defn- tenant-service
+  "A service on `store` holding :notes, tenant-scoped, and :shared, which
+   filters on :tenant-id but says it is global."
+  [store]
+  (service/create-search-service
+   store
+   {:notes  {:id :notes :entity-type :note :fields [{:name :title :weight :a}]
+             :filters [:tenant-id]}
+    :shared {:id :shared :entity-type :note :fields [{:name :title :weight :a}]
+             :filters [:tenant-id] :global? true}}))
+
+(defn- refused?
+  "Whether `f` throws the :validation-error on :tenant-id."
+  [f]
+  (try (f) false
+       (catch clojure.lang.ExceptionInfo e
+         (= {:type :validation-error :field :tenant-id}
+            (select-keys (ex-data e) [:type :field])))))
+
+(deftest ^:unit ^:security a-tenant-scoped-index-needs-a-tenant
+  (let [svc    (tenant-service (create-memory-store))
+        tenant (str (UUID/randomUUID))
+        index  #(ports/index-document! svc :notes (UUID/randomUUID) {:title "widget"} %)]
+    (testing "indexing names one tenant in :filter-values"
+      (doseq [opts [{} {:filter-values {}} {:filter-values {:tenant-id nil}}
+                    {:filter-values {:tenant-id " "}} {:filter-values {:tenant-id #{tenant}}}
+                    {:filter-values {:tenant-id tenant :tenant_id nil}}]]
+        (is (refused? #(index opts)) (pr-str opts)))
+      (is (= {:tenant-id tenant} (:filters (index {:filter-values {:tenant-id tenant}})))))
+
+    (testing "search and suggest name a tenant in :filters, or say :all-tenants? true"
+      (doseq [opts [{} {:filters {:tenant-id nil}} {:filters {:tenant-id ""}}
+                    {:filters {:tenant-id #{tenant nil}}} {:all-tenants? "yes"}]]
+        (is (refused? #(ports/search svc :notes "widget" opts)) (pr-str opts))
+        (is (refused? #(ports/suggest svc :notes "wid" opts)) (pr-str opts)))
+      (is (refused? #(ports/search svc :notes "" {})) "an empty query too")
+      (doseq [opts [{:filters {:tenant-id tenant}} {:filters {:tenant_id tenant}}
+                    {:filters {:tenant-id [tenant]}} {:all-tenants? true}]]
+        (is (= 1 (:total (ports/search svc :notes "widget" opts))) (pr-str opts))
+        (is (seq (ports/suggest svc :notes "wid" opts)) (pr-str opts))))
+
+    (testing "an empty set of tenants is a tenant filter matching nothing, not every tenant"
+      (is (not (refused? #(ports/search svc :notes "widget" {:filters {:tenant-id #{}}})))))
+
+    (testing "a :global? true index needs none"
+      (ports/index-document! svc :shared (UUID/randomUUID) {:title "widget"} {})
+      (is (= 1 (:total (ports/search svc :shared "widget" {})))))))
+
+(deftest ^:unit reindex-carries-each-documents-opts
+  (let [svc    (tenant-service (create-memory-store))
+        tenant (str (UUID/randomUUID))]
+    (is (= {:indexed 2}
+           (ports/reindex! svc :notes [[(UUID/randomUUID) {:title "widget"} {:filter-values {:tenant-id tenant}}]
+                                       [(UUID/randomUUID) {:title "widget"} {:filter-values {:tenant-id tenant}}]])))
+    (is (refused? #(ports/reindex! svc :notes [[(UUID/randomUUID) {:title "widget"}]]))
+        "a pair has no tenant")))
+
+(deftest ^:unit ^:security a-document-is-removed-within-its-tenant
+  (let [svc    (tenant-service (create-memory-store))
+        [a b]  [(str (UUID/randomUUID)) (str (UUID/randomUUID))]
+        id     (UUID/randomUUID)
+        total  #(:total (ports/search svc :notes "widget" {:filters {:tenant-id a}}))]
+    (ports/index-document! svc :notes id {:title "widget"} {:filter-values {:tenant-id a}})
+    (ports/remove-tenant-document! svc :notes id b)
+    (is (= 1 (total)) "another tenant's id leaves it")
+    (is (refused? #(ports/remove-tenant-document! svc :notes id nil)))
+    (ports/remove-tenant-document! svc :notes id a)
+    (is (= 0 (total)))))
+
+(deftest ^:unit a-store-without-tenant-deletion-is-a-configuration-error
+  (let [store (reify ports/ISearchStore)
+        svc   (service/create-search-service store {})]
+    (is (= "WGE-107"
+           (try (ports/remove-tenant-document! svc :notes (UUID/randomUUID) "t")
+                (catch clojure.lang.ExceptionInfo e (:wagoe/error-code (ex-data e))))))))

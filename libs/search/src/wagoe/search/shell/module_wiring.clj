@@ -30,11 +30,22 @@
       (throw (ex-info (:message error) error)))
     definitions))
 
+(defn- warn-global-tenant-filters!
+  "HTTP still forces the tenant on an index with a :tenant-id filter, while in
+   process `:global? true` lifts the requirement (BOU-1114); say so at boot."
+  [definitions]
+  (doseq [[id d] definitions
+          :when (and (:global? d) (some index/tenant-key? (:filters d)))]
+    (log/warn "Search index is :global? true but filters on :tenant-id: HTTP scopes it to the tenant, in-process calls need none"
+              {:index-id id})))
+
 (defmethod ig/init-key :wagoe/search
   [_ {:keys [db-ctx indexes contributed]}]
   (log/info "Initializing search component")
-  (let [store  (persistence/create-search-store (:datasource db-ctx) (:adapter db-ctx))
-        engine (service/create-search-service store (definitions! indexes contributed))]
+  (let [definitions (definitions! indexes contributed)
+        _           (warn-global-tenant-filters! definitions)
+        store       (persistence/create-search-store (:datasource db-ctx) (:adapter db-ctx))
+        engine      (service/create-search-service store definitions)]
     (log/info "Search component initialized" (select-keys store [:full-text? :on-conflict?]))
     {:store  store
      :engine engine}))

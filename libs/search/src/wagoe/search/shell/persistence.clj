@@ -215,7 +215,16 @@
                             :from   [:search_documents]
                             :where  [:= :index_id (kw->str index-id)]})
                {:builder-fn rs/as-unqualified-lower-maps})]
-      (int (or (first (vals row)) 0)))))
+      (int (or (first (vals row)) 0))))
+
+  ports/ISearchStoreTenantDeletion
+  (delete-tenant-document! [_ index-id entity-id tenant-id]
+    (log/debug "Deleting tenant search document"
+               {:index-id index-id :entity-id entity-id})
+    (jdbc/execute-one!
+     datasource
+     (query-sql/build-tenant-delete-sql full-text? (kw->str index-id) (uuid->str entity-id) tenant-id))
+    nil))
 
 (defn create-search-store
   "Create a SearchStore backed by a JDBC datasource.

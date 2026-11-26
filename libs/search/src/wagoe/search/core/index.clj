@@ -6,7 +6,8 @@
    - collect-definitions   — the definitions a :wagoe/search component holds
    - api-enabled?          — whether the generic search API serves an index
    - build-document*       — construct a SearchDocument from field values
-   - filter-key->json-key  — convert a filter keyword to a snake_case JSON key"
+   - filter-key->json-key  — convert a filter keyword to a snake_case JSON key
+   - tenant-scoped?, names-tenant? — whether a call must name a tenant, and does"
   (:require [wagoe.core.utils.text :as text]
             [clojure.string :as str]))
 
@@ -66,6 +67,32 @@
    query builders (retrieval) so that stored and queried keys always match."
   [k]
   (str/replace (name k) "-" "_"))
+
+(defn tenant-key?
+  "Whether filter key `k` is the tenant's, in either spelling."
+  [k]
+  (= "tenant_id" (filter-key->json-key k)))
+
+(defn tenant-scoped?
+  "Whether a call on `definition` must name a tenant: it lists a :tenant-id
+   filter and is not `:global? true` (BOU-1114)."
+  [definition]
+  (and (not (:global? definition))
+       (boolean (some tenant-key? (:filters definition)))))
+
+(defn- blank-value? [v] (or (nil? v) (and (string? v) (str/blank? v))))
+
+(defn names-tenant?
+  "Whether the filter map `values` has a :tenant-id key, and a tenant under
+   each one. `many?` lets a value be a set or vector of tenants, none blank;
+   an empty one matches nothing."
+  [values many?]
+  (let [vs  (filter (comp tenant-key? key) values)
+        ok? (fn [v]
+              (if (and many? (or (set? v) (sequential? v)))
+                (not-any? blank-value? v)
+                (not (or (coll? v) (blank-value? v)))))]
+    (boolean (and (seq vs) (every? (comp ok? val) vs)))))
 
 ;; =============================================================================
 ;; Document Construction

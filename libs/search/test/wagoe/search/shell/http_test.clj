@@ -69,7 +69,7 @@
     (remove-document! [_ index-id entity-id]
       (swap! calls conj [:remove index-id entity-id]))
     (search [_ index-id query opts]
-      (swap! calls conj (cond-> [:search index-id query] (:filters opts) (conj (:filters opts))))
+      (swap! calls conj (cond-> [:search index-id query] (seq (:filters opts)) (conj (:filters opts))))
       {:results [] :total 0 :query query :took-ms 0})
     (suggest [_ index-id _ _]
       (swap! calls conj [:suggest index-id])

@@ -11,8 +11,8 @@
    - suggest-documents (pg_trgm on PostgreSQL, LIKE without it)
    - count-documents"
   (:require [clojure.test :refer [deftest testing is use-fixtures]]
-            [wagoe.search.test.support :refer [find-ID-under-a-turkish-locale
-                                                create-search-documents-table! make-doc]]
+            [wagoe.search.test.support :refer [find-ID-under-a-turkish-locale delete-within-a-tenant
+                                               create-search-documents-table! make-doc]]
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.persistence :as persistence]
             [wagoe.search.shell.trigram :as trigram]
@@ -80,6 +80,9 @@
 
   (testing "delete of non-existent document is a no-op"
     (is (nil? (ports/delete-document! @test-store :product-search (UUID/randomUUID))))))
+
+(deftest ^:integration ^:security delete-tenant-document-test
+  (is (= {:as-another 1 :as-its-own 0} (delete-within-a-tenant @test-store))))
 
 ;; =============================================================================
 ;; search-documents (LIKE fallback)

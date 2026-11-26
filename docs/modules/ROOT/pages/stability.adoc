@@ -479,6 +479,11 @@ more breaks in a release than this list gives it.
   so an app could run in production without metrics or error reports. Outside
   dev, test and local it now refuses to boot; a missing `:provider` is still
   no-op.
+* *`1.4.0`, in-process search of a tenant-scoped index.* `search`, `suggest`,
+  `index-document!` and `reindex!` on an index filtering on `:tenant-id` worked across
+  every organisation when the caller forgot that filter. They now refuse a call
+  naming no tenant, unless a search says `:all-tenants? true` or the index is
+  `:global? true`.
 
 == HTTP API versioning is a separate thing
 

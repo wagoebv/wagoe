@@ -10,8 +10,8 @@
             [wagoe.platform.shell.adapters.database.factory :as db-factory]
             [wagoe.search.ports :as ports]
             [wagoe.search.shell.persistence :as persistence]
-            [wagoe.search.test.support :refer [find-ID-under-a-turkish-locale
-                                                create-search-documents-table! make-doc]])
+            [wagoe.search.test.support :refer [find-ID-under-a-turkish-locale delete-within-a-tenant
+                                               create-search-documents-table! make-doc]])
   (:import [java.io File]
            [java.util UUID]))
 
@@ -51,3 +51,9 @@
     (fn [_ store]
       (let [[id found] (find-ID-under-a-turkish-locale store store)]
         (is (= {:search [id] :count 1 :suggest [id]} found))))))
+
+(deftest ^:integration ^:security a-tenant-deletes-only-its-own-document-on-sqlite
+  ;; SQLite takes no alias in a DELETE (BOU-1114).
+  (with-sqlite-store
+    (fn [_ store]
+      (is (= {:as-another 1 :as-its-own 0} (delete-within-a-tenant store))))))
