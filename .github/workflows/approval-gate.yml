@@ -2,7 +2,7 @@ name: Approval gate
 
 # The required `approval-gate` check (BOU-1117): docs and tests merge on green
 # CI alone; anything else needs the `approved` label, newer than the last
-# push (scripts/approval-gate.sh).
+# push and retarget (scripts/approval-gate.sh).
 #
 # pull_request_target, so the gate is main's version, never the pull request's:
 # a PR could otherwise edit the gate to pass itself. It checks out only main's
@@ -17,9 +17,9 @@ on:
 permissions:
   contents: read
   pull-requests: read
-  # When the head commit arrived: its check suites.
-  checks: read
-  # Removes `approved` after a new push.
+  # When the head arrived: ci.yml's latest run for it.
+  actions: read
+  # Removes `approved` after a new push or retarget.
   issues: write
 
 concurrency:
@@ -48,5 +48,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           EVENT: ${{ github.event.action }}
+          BASE_CHANGED: ${{ github.event.changes.base && 'true' || '' }}
         run: ./scripts/approval-gate.sh

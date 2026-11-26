@@ -1,32 +1,33 @@
 #!/usr/bin/env bash
 # approval-gate (BOU-1117): a pull request may merge when it changes only docs
-# and tests, or when someone with write access labelled it `approved` after its
-# head commit arrived. A label, not a review: agents open pull requests as the
-# developer, who cannot approve their own.
+# and tests, or when someone with write access labelled it `approved` after
+# its current head and base. A label, not a review: agents open pull requests
+# as the developer, who cannot approve their own.
 #
-# Env: GITHUB_REPOSITORY, PR (number), HEAD_SHA, EVENT (the pull_request
-# action), GH_TOKEN.
+# Env: GITHUB_REPOSITORY, PR (number), HEAD_SHA, HEAD_REF, HEAD_REPO (owner/name),
+# EVENT (the pull_request action), BASE_CHANGED (true on a retarget), GH_TOKEN.
 set -euo pipefail
-: "${GITHUB_REPOSITORY:?}" "${PR:?}" "${HEAD_SHA:?}"
+: "${GITHUB_REPOSITORY:?}" "${PR:?}" "${HEAD_SHA:?}" "${HEAD_REF:?}" "${HEAD_REPO:?}"
+export HEAD_REF HEAD_REPO
 repo=$GITHUB_REPOSITORY
 
-# Docs and tests; changes/ holds changelog fragments (BOU-1118). Through
-# ENVIRON: awk -v would read `\.` as `.`.
-# - Not the files that steer agents.
-# - No Markdown deeper than a library's root: resources ship to apps.
-# - Not user.clj or data_readers: test/ is on the classpath, and these load on
-#   every JVM start.
-export LOW_RISK='^((docs|dev-docs|changes|test)/.+|libs/[^/]+/test/.+|(libs/[^/]+/)?[^/]+\.(md|adoc))$'
-export RISKY='(^|/)(AGENTS|CLAUDE|CONTRIBUTING)\.md$|^dev-docs/agents/|(^|/)(user|data_readers)\.cljc?$'
+# Docs, tests and test data; changes/ holds changelog fragments (BOU-1118).
+# Other code under a test dir needs approval: test/ comes before src on the
+# classpath, so it can shadow a namespace or the logging config. Markdown only
+# at the root or a library's root: resources ship to apps. Through ENVIRON, as
+# awk -v would read `\.` as `.`.
+export LOW_RISK='^((docs|dev-docs|changes)/.+|(libs/[^/]+/)?test/.+(_test\.clj[cs]?|\.(edn|json|txt))|(libs/[^/]+/)?[^/]+\.(md|adoc))$'
+export RISKY='(^|/)(AGENTS|CLAUDE|CONTRIBUTING)\.md$|^dev-docs/agents/'
 
 # Tidy only: the freshness check below is what makes an old label stale, since
 # a later event can cancel this run before it gets here.
-if [ "${EVENT:-}" = synchronize ] &&
-   ! out="$(gh api -X DELETE "repos/$repo/issues/$PR/labels/approved" 2>&1)"; then
-  case "$out" in
-    *"HTTP 404"*) ;;
-    *) echo "approval-gate: could not remove the approved label: $out"; exit 1 ;;
-  esac
+if [ "${EVENT:-}" = synchronize ] || [ "${BASE_CHANGED:-}" = true ]; then
+  if ! out="$(gh api -X DELETE "repos/$repo/issues/$PR/labels/approved" 2>&1)"; then
+    case "$out" in
+      *"HTTP 404"*) ;;
+      *) echo "approval-gate: could not remove the approved label: $out"; exit 1 ;;
+    esac
+  fi
 fi
 
 # A renamed file counts under both names. The API lists at most 3000 files; a
@@ -42,14 +43,19 @@ if [ -z "$risky" ] && [ "$listed" = "$total" ]; then
   exit 0
 fi
 
-# The label counts when its latest `labeled` came after the head commit first
-# reached GitHub (server times, both UTC ISO 8601, so they compare as strings).
-# ponytail: a head reset to a commit pushed before the label still passes.
-read -r labeller labelled_at < <(gh api --paginate "repos/$repo/issues/$PR/events" \
-  --jq '.[] | select(.event == "labeled" and .label.name == "approved") | "\(.actor.login) \(.created_at)"' |
-  tail -n 1) || true
-arrived="$(gh api "repos/$repo/commits/$HEAD_SHA/check-suites" --jq '[.check_suites[].created_at] | min // ""')"
+# The label counts when its latest `labeled` is newer than the base's last
+# retarget and than the head: ci.yml starts a run for every new head, so its
+# latest run for this head on this branch is when the head arrived. Server
+# times in UTC ISO 8601 compare as strings. No run yet: not approved.
+events="$(gh api --paginate "repos/$repo/issues/$PR/events" \
+  --jq '.[] | select((.event == "labeled" and .label.name == "approved") or .event == "base_ref_changed") | "\(.event) \(.created_at) \(.actor.login)"')"
+read -r _ labelled_at labeller < <(grep '^labeled ' <<<"$events" | tail -n 1) || true
+retargeted="$( (grep '^base_ref_changed ' <<<"$events" || true) | tail -n 1 | cut -d' ' -f2)"
+arrived="$(gh api "repos/$repo/actions/workflows/ci.yml/runs?event=pull_request&head_sha=$HEAD_SHA" \
+  --jq '[.workflow_runs[] | select(.head_branch == env.HEAD_REF and .head_repository.full_name == env.HEAD_REPO) | .created_at] | max // ""')"
+
 if [ -n "${labeller:-}" ] && [ -n "$arrived" ] && [[ "$labelled_at" > "$arrived" ]] &&
+   [[ "$labelled_at" > "$retargeted" ]] &&
    gh api "repos/$repo/issues/$PR/labels" --jq '.[].name' | grep -qx approved; then
   case "$(gh api "repos/$repo/collaborators/$labeller/permission" --jq .role_name)" in
     admin | maintain | write)
@@ -58,6 +64,6 @@ if [ -n "${labeller:-}" ] && [ -n "$arrived" ] && [[ "$labelled_at" > "$arrived"
   esac
 fi
 
-echo "approval-gate: needs the 'approved' label, added after the last push by a developer with write access. It changes:"
+echo "approval-gate: needs the 'approved' label, added after the last push and retarget by a developer with write access. It changes:"
 printf '%s\n' "${risky:-(more files than the API lists)}" | sed 's/^/  /'
 exit 1
