@@ -77,6 +77,12 @@
   (testing "suggestions are scoped too"
     (is (= #{(str doc-a)} (ids (call :suggest :scoped-items member-of-a {}))))))
 
+(deftest ^:unit ^:security a-body-cannot-ask-for-every-tenant
+  ;; :all-tenants? is the platform admin's, set by the handler (BOU-1114).
+  (let [body {:all-tenants? true :all_tenants true :allTenants true}]
+    (is (= #{(str doc-a)} (ids (call :search :scoped-items member-of-a body))))
+    (is (= #{(str doc-a)} (ids (call :suggest :scoped-items member-of-a body))))))
+
 (deftest ^:unit ^:security a-set-filter-cannot-widen-the-tenant
   ;; A filter value may be a set (BOU-1055); the tenant stays the resolved one.
   (testing "a set of tenant ids, in either spelling, reads only the caller's"
