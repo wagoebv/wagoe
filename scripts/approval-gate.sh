@@ -43,19 +43,20 @@ if [ -z "$risky" ] && [ "$listed" = "$total" ]; then
   exit 0
 fi
 
-# The label counts when its latest `labeled` is newer than the base's last
-# retarget and than the head: ci.yml starts a run for every new head, so its
-# latest run for this head on this branch is when the head arrived. Server
-# times in UTC ISO 8601 compare as strings. No run yet: not approved.
+# The label counts when its latest `labeled` is newer than the last retarget
+# or force-push and than the head: ci.yml starts a run for every new head, so
+# its latest run for this head on this branch is when the head arrived. Server
+# times in UTC ISO 8601 sort and compare as strings. No run yet: not approved.
 events="$(gh api --paginate "repos/$repo/issues/$PR/events" \
-  --jq '.[] | select((.event == "labeled" and .label.name == "approved") or .event == "base_ref_changed") | "\(.event) \(.created_at) \(.actor.login)"')"
+  --jq '.[] | select((.event == "labeled" and .label.name == "approved") or .event == "base_ref_changed" or .event == "head_ref_force_pushed") | "\(.event) \(.created_at) \(.actor.login)"' |
+  sort -s -k2,2)"
 read -r _ labelled_at labeller < <(grep '^labeled ' <<<"$events" | tail -n 1) || true
-retargeted="$( (grep '^base_ref_changed ' <<<"$events" || true) | tail -n 1 | cut -d' ' -f2)"
+moved="$( (grep -E '^(base_ref_changed|head_ref_force_pushed) ' <<<"$events" || true) | tail -n 1 | cut -d' ' -f2)"
 arrived="$(gh api "repos/$repo/actions/workflows/ci.yml/runs?event=pull_request&head_sha=$HEAD_SHA" \
   --jq '[.workflow_runs[] | select(.head_branch == env.HEAD_REF and .head_repository.full_name == env.HEAD_REPO) | .created_at] | max // ""')"
 
 if [ -n "${labeller:-}" ] && [ -n "$arrived" ] && [[ "$labelled_at" > "$arrived" ]] &&
-   [[ "$labelled_at" > "$retargeted" ]] &&
+   [[ "$labelled_at" > "$moved" ]] &&
    gh api "repos/$repo/issues/$PR/labels" --jq '.[].name' | grep -qx approved; then
   case "$(gh api "repos/$repo/collaborators/$labeller/permission" --jq .role_name)" in
     admin | maintain | write)

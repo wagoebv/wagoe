@@ -117,13 +117,14 @@ jq -r \"$expr\" \"$F/$f.json\"
   (is (= 1 (:exit (gate code (assoc approved :roles {"dev" "triage"})))))
   (is (= 1 (:exit (gate code (assoc approved :labels [{:name "bug"}]))))))
 
-(deftest ^:unit the-latest-label-wins
-  (let [events [(labelled "dev" "2026-11-26T11:00:00Z")
-                {:event "unlabeled" :label {:name "approved"} :created_at "2026-11-26T11:30:00Z"}
-                (labelled "guest" "2026-11-26T12:00:00Z")]
-        roles  {"dev" "write" "guest" "read"}]
-    (is (= 1 (:exit (gate code (assoc approved :events events :roles roles)))))
-    (is (zero? (:exit (gate code (assoc approved :events (reverse events) :roles roles)))))))
+(deftest ^:unit the-latest-label-by-time-wins
+  (let [roles  {"dev" "write" "guest" "read"}
+        events (fn [dev-at guest-at] [(labelled "dev" dev-at)
+                                      {:event "unlabeled" :label {:name "approved"} :created_at "2026-11-26T11:30:00Z"}
+                                      (labelled "guest" guest-at)])]
+    (is (= 1 (:exit (gate code (assoc approved :events (events "2026-11-26T11:00:00Z" "2026-11-26T12:00:00Z") :roles roles)))))
+    (is (zero? (:exit (gate code (assoc approved :events (events "2026-11-26T12:00:00Z" "2026-11-26T11:00:00Z") :roles roles))))
+        "listed last, but labelled first")))
 
 (deftest ^:unit the-head-must-have-arrived-before-the-label
   (doseq [[why runs] {"no run"                  []
@@ -132,9 +133,10 @@ jq -r \"$expr\" \"$F/$f.json\"
                       "a run from a fork"       [(run-of "2026-11-26T10:00:00Z" :repo "fork/wagoe")]}]
     (is (= 1 (:exit (gate code (assoc approved :runs runs) {"EVENT" "reopened"}))) why)))
 
-(deftest ^:unit a-retarget-after-the-label-needs-a-new-one
-  (let [retarget {:event "base_ref_changed" :actor {:login "dev"} :created_at "2026-11-26T12:00:00Z"}]
-    (is (= 1 (:exit (gate code (update approved :events conj retarget)))))))
+(deftest ^:unit a-retarget-or-force-push-after-the-label-needs-a-new-one
+  (doseq [event ["base_ref_changed" "head_ref_force_pushed"]]
+    (let [moved {:event event :actor {:login "dev"} :created_at "2026-11-26T12:00:00Z"}]
+      (is (= 1 (:exit (gate code (update approved :events conj moved)))) event))))
 
 (deftest ^:unit an-edit-removes-the-label-only-when-the-base-changed
   (is (zero? (:exit (gate code approved {"EVENT" "edited"}))))
