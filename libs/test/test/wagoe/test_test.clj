@@ -51,6 +51,36 @@
       (is (thrown? clojure.lang.ExceptionInfo
                    (t/sign-in! (t/client sys) "signer@example.com" "wrong"))))))
 
+(deftest ^:integration ^:security a-login-form-opened-from-another-app-posts
+  ;; From WhatsApp the login page rendered without the session cookie, so its
+  ;; token was bound to csrf-session; the same-site POST then carried the
+  ;; session cookie and got 403 (BOU-1126).
+  (t/with-test-system [sys {:ig-config app/ig-config
+                            :config #(assoc-in % [:active :wagoe/http :security :csrf :enabled?] true)}]
+    (user-ports/register-user (:wagoe/user-service sys)
+                              {:email "linked@example.com" :name "Kit" :role :user
+                               :password "Kit-Passw0rd-469!"})
+    (let [signed-in (t/client sys)
+          _         (t/sign-in! signed-in "linked@example.com" "Kit-Passw0rd-469!")
+          page      (t/client sys)
+          token     (second (re-find #"name=\"__anti-forgery-token\"[^>]*value=\"([^\"]+)\""
+                                     (:body (t/request page :get "/web/login"))))
+          post      (fn [uri form]
+                      ((:wagoe/http-handler sys)
+                       {:request-method :post :uri uri :scheme :http :server-name "localhost" :server-port 80
+                        :remote-addr "127.0.0.1"
+                        :headers {"host" "localhost" "content-type" "application/x-www-form-urlencoded"
+                                  "cookie" (str "session-token=" (get @(:cookies signed-in) "session-token")
+                                                "; csrf-session=" (get @(:cookies page) "csrf-session"))}
+                        :body (java.io.ByteArrayInputStream.
+                               (.getBytes (str "__anti-forgery-token=" (java.net.URLEncoder/encode ^String token "UTF-8")
+                                               form)))}))]
+      (is (string? token) "the login page carries a token")
+      (is (= 302 (:status (post "/web/login" "&email=linked%40example.com&password=Kit-Passw0rd-469%21")))
+          "the login form posts beside the session cookie")
+      (is (= 403 (:status (post "/web/logout" "")))
+          "a pre-session token does not pass beside a session on an endpoint that is not public"))))
+
 (deftest ^:integration runs-jobs-only-when-asked
   (t/with-test-system [sys {:ig-config app/ig-config
                             :config (with-modules {:wagoe/jobs {:provider :memory :workers {:count 2}}})}]

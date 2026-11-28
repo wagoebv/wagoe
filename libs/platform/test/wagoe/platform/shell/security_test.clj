@@ -237,14 +237,18 @@
       ;; cookie away, so the form's token is bound to the pre-session cookie.
       (let [token (csrf/generate-token csrf-secret "pre-1" (nonce/random-bytes 16))
             post  {:request-method :post :uri "/web/login"
+                   :reitit.core/match {:data {:public true}}
                    :cookies {"session-token" {:value csrf-session} "csrf-session" {:value "pre-1"}}
                    :form-params {"__anti-forgery-token" token}}]
         (is (nil? (:response (run-csrf cfg post))))
         (is (= 403 (get-in (run-csrf cfg (assoc-in post [:cookies "csrf-session" :value] "pre-2"))
                            [:response :status]))
-            "but not one bound to another pre-session")))
+            "but not one bound to another pre-session")
+        (is (= 403 (get-in (run-csrf cfg (assoc post :uri "/web/admin/users" :reitit.core/match {:data {}}))
+                           [:response :status]))
+            "nor on an endpoint that is not public: a sibling subdomain can plant csrf-session")))
 
-    (testing "a cross-site GET with the session cookie is served signed in (BOU-1126)"
+    (testing "a GET with the session cookie, as a SameSite=Lax link from another app sends, is served signed in (BOU-1126)"
       (let [ctx (run-csrf-full cfg {:request-method :get :uri "/web/admin"
                                     :headers {"sec-fetch-site" "cross-site"}
                                     :cookies {"session-token" {:value csrf-session}}})]

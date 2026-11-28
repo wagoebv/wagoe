@@ -558,7 +558,9 @@ How a token reaches the browser and back:
 
 Unauthenticated flows (login, register, MFA) have no session yet, so the token is bound
 to a `SameSite=Strict` `csrf-session` cookie minted on the page GET and validated on the
-subsequent POST.
+subsequent POST. On these `:public` endpoints that token also passes beside a session
+cookie, since a login page opened from another app renders before the session cookie
+arrives; elsewhere a signed-in request needs a session-bound token.
 
 Configure under `:wagoe/http :security :csrf`:
 
