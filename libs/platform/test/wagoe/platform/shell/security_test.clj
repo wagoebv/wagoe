@@ -232,6 +232,26 @@
         (is (string? cookie-id))
         (is (nil? (:response (run-csrf cfg post))))))
 
+    (testing "with the session cookie present, a pre-session-bound token still passes (BOU-1126)"
+      ;; The login page was opened from another app: SameSite kept the session
+      ;; cookie away, so the form's token is bound to the pre-session cookie.
+      (let [token (csrf/generate-token csrf-secret "pre-1" (nonce/random-bytes 16))
+            post  {:request-method :post :uri "/web/login"
+                   :cookies {"session-token" {:value csrf-session} "csrf-session" {:value "pre-1"}}
+                   :form-params {"__anti-forgery-token" token}}]
+        (is (nil? (:response (run-csrf cfg post))))
+        (is (= 403 (get-in (run-csrf cfg (assoc-in post [:cookies "csrf-session" :value] "pre-2"))
+                           [:response :status]))
+            "but not one bound to another pre-session")))
+
+    (testing "a cross-site GET with the session cookie is served signed in (BOU-1126)"
+      (let [ctx (run-csrf-full cfg {:request-method :get :uri "/web/admin"
+                                    :headers {"sec-fetch-site" "cross-site"}
+                                    :cookies {"session-token" {:value csrf-session}}})]
+        (is (csrf/valid-token? csrf-secret csrf-session (get-in ctx [:request :anti-forgery-token]))
+            "the page's token is bound to the session")
+        (is (nil? (get-in ctx [:response :cookies "csrf-session"])) "no pre-session minted")))
+
     (testing "login POST without a token is rejected"
       (is (= 403 (get-in (run-csrf cfg {:request-method :post :uri "/web/login"
                                         :cookies {"csrf-session" {:value "abc"}}})

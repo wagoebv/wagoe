@@ -120,6 +120,15 @@
       (is (= :strict (:same-site cookie)))
       (is (true? (:http-only cookie))))))
 
+(deftest ^:security ^:unit wrap-csrf-takes-a-pre-session-token-beside-a-session
+  ;; As the interceptor (BOU-1126).
+  (let [handler (interceptors/wrap-csrf (ok-handler (atom [])) cfg)
+        token   (csrf/generate-token secret "pre-1" (nonce/random-bytes 16))
+        post    (-> (session-request :post "/web/login" :token token)
+                    (assoc-in [:cookies "csrf-session"] {:value "pre-1"}))]
+    (is (= 200 (:status (handler post))))
+    (is (= 403 (:status (handler (assoc-in post [:cookies "csrf-session" :value] "pre-2")))))))
+
 (deftest ^:security ^:unit wrap-csrf-skips-a-bearer-only-web-write
   ;; BOU-952, as the interceptor.
   (let [handler (interceptors/wrap-csrf (ok-handler (atom [])) cfg)

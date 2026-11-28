@@ -731,7 +731,7 @@
         (is (true? (cookie-secure {})))))))
 
 (deftest ^:contract ^:security login-cookie-hardening-test
-  (testing "session-token cookie is HttpOnly and SameSite=Strict (XSS/CSRF hardening)"
+  (testing "session-token cookie is HttpOnly and SameSite=Lax (XSS/CSRF hardening)"
     (let [auth-svc (reify ports/IUserService
                      (authenticate-user [_ _]
                        {:authenticated true
@@ -743,7 +743,8 @@
           cookie   (-> ((web-handlers/login-submit-handler auth-svc {}) request)
                        (get-in [:cookies "session-token"]))]
       (is (true? (:http-only cookie)) "HttpOnly blocks JS access to the session token")
-      (is (= :strict (:same-site cookie)) "SameSite=Strict mitigates CSRF")
+      (is (= :lax (:same-site cookie))
+          "Lax: a link from another app arrives signed in, a cross-site POST carries no session (BOU-1126)")
       (is (= "/" (:path cookie)) "cookie scoped to the whole app"))))
 
 (defn- policy-service

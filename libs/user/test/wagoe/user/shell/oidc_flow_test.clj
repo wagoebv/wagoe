@@ -212,7 +212,7 @@
         resp (sign-in! a)]
     (is (= 200 (:status resp)))
     (is (= "0;url=/web/admin/" (get-in resp [:headers "Refresh"])))
-    (is (= :strict (get-in resp [:cookies "session-token" :same-site])))
+    (is (= :lax (get-in resp [:cookies "session-token" :same-site])))
     (is (= "ada@example.com" (authenticated-as a (session-token resp))))
     (testing "linked by verified email to (iss, sub)"
       (is (= [(:id ada)] (map :user-id (ports/find-identities-by-user (:identities a) (:id ada))))))

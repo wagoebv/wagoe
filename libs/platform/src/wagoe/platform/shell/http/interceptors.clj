@@ -149,6 +149,14 @@
        (or session-binding (web-route? uri))
        (not (header-credential-only? request))))
 
+(defn- token-valid?
+  "Whether `submitted` is valid for the session or for the pre-session cookie.
+   A login form rendered while the session cookie stayed away (a SameSite
+   navigation from another site) carries a pre-session token, and posts with
+   the session cookie (BOU-1126)."
+  [secret session-binding pre-cookie submitted]
+  (boolean (some #(and % (csrf/valid-token? secret % submitted)) [session-binding pre-cookie])))
+
 (defn- pre-session-cookie-value
   "The pre-session cookie's attributes: Secure follows `:secure-cookies?`, true when
    unset, as the user module's auth cookies do (BOU-819)."
@@ -658,7 +666,8 @@
    binding so a forged cross-site request cannot produce a matching token:
    - Authenticated requests bind to the session (session-token cookie / header).
    - Unauthenticated /web flows (login, register, MFA) bind to a pre-session cookie
-     (csrf-session, SameSite=Strict) minted on the page GET.
+     (csrf-session, SameSite=Strict) minted on the page GET. A token bound to
+     it is also accepted beside a session (BOU-1126).
 
    A state-changing request is validated (403 on failure) when CSRF is enabled, the
    path is not in :exempt-paths, and it is either session-authenticated or a /web
@@ -701,9 +710,8 @@
                     ;; Protected: state-changing, not exempt, and either session-auth or
                     ;; a /web route (which uses the pre-session cookie binding).
                     (csrf-checked? request state-changing? exempt-paths uri session-binding)
-                    (let [binding   (or session-binding pre-cookie)
-                          submitted (csrf/extract-token request)]
-                      (if (and binding (csrf/valid-token? secret binding submitted))
+                    (let [submitted (csrf/extract-token request)]
+                      (if (token-valid? secret session-binding pre-cookie submitted)
                         ;; Valid — re-expose the just-validated token (still valid for
                         ;; this binding) for any form re-rendered in the response.
                         (assoc-in ctx [:request :anti-forgery-token] submitted)
@@ -775,9 +783,8 @@
         (cond
           ;; Protected: state-changing, not exempt, session-auth or /web route.
           (csrf-checked? request state-changing? exempt-paths uri session-binding)
-          (let [bind-val  (or session-binding pre-cookie)
-                submitted (csrf/extract-token request)]
-            (if (and bind-val (csrf/valid-token? secret bind-val submitted))
+          (let [submitted (csrf/extract-token request)]
+            (if (token-valid? secret session-binding pre-cookie submitted)
               ;; Valid — re-bind the just-validated token (still valid for this
               ;; binding) for any form re-rendered in the response.
               (binding [csrf/*token* submitted]

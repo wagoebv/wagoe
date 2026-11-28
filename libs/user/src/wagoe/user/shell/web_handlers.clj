@@ -452,8 +452,11 @@
   "How long a remembered sign-in's cookie lasts."
   (* 30 24 60 60))
 
-(defn- session-cookie [config session-token]
-  {:value session-token :http-only true :secure (secure-cookies? config) :same-site :strict :path "/"})
+(defn- session-cookie
+  "Lax, so a link from another site or app arrives signed in; a cross-site POST
+   still carries no session, and the CSRF token stays (BOU-1126)."
+  [config session-token]
+  {:value session-token :http-only true :secure (secure-cookies? config) :same-site :lax :path "/"})
 
 (def ^:private enrolment-cookie "mfa-enrolment")
 
