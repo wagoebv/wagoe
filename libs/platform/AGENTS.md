@@ -117,6 +117,9 @@ ties a token to one client so a forged cross-site request cannot produce a match
   `X-Session-Token` header).
 - **Unauthenticated `/web` flows** (login, register, MFA) bind to a `csrf-session`
   cookie (`SameSite=Strict`, `HttpOnly`) minted on the page GET and validated on POST.
+  On a `:public` endpoint such a token is also accepted beside a session cookie: a
+  login page opened from another site renders before the `SameSite=Lax` session
+  cookie is sent (BOU-1126).
 
 ### What is protected
 

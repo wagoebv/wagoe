@@ -149,6 +149,24 @@
        (or session-binding (web-route? uri))
        (not (header-credential-only? request))))
 
+(defn- public-route?
+  "Whether the matched endpoint is `:public true`, on its path or its method."
+  [request]
+  (let [data (get-in request [:reitit.core/match :data])]
+    (or (access/public? data) (access/public? (get data (:request-method request))))))
+
+(defn- token-valid?
+  "Whether `submitted` is valid for the request's binding: the session, else the
+   pre-session cookie. On a public endpoint (login, register, MFA) the
+   pre-session cookie counts beside a session too: such a form rendered while
+   the session cookie stayed away posts with it (BOU-1126). Nowhere else, as a
+   sibling subdomain can plant that cookie."
+  [secret request session-binding pre-cookie submitted]
+  (let [bindings (if (and session-binding (not (public-route? request)))
+                   [session-binding]
+                   [session-binding pre-cookie])]
+    (boolean (some #(and % (csrf/valid-token? secret % submitted)) bindings))))
+
 (defn- pre-session-cookie-value
   "The pre-session cookie's attributes: Secure follows `:secure-cookies?`, true when
    unset, as the user module's auth cookies do (BOU-819)."
@@ -658,7 +676,8 @@
    binding so a forged cross-site request cannot produce a matching token:
    - Authenticated requests bind to the session (session-token cookie / header).
    - Unauthenticated /web flows (login, register, MFA) bind to a pre-session cookie
-     (csrf-session, SameSite=Strict) minted on the page GET.
+     (csrf-session, SameSite=Strict) minted on the page GET. On a `:public`
+     endpoint a token bound to it is also accepted beside a session (BOU-1126).
 
    A state-changing request is validated (403 on failure) when CSRF is enabled, the
    path is not in :exempt-paths, and it is either session-authenticated or a /web
@@ -701,9 +720,8 @@
                     ;; Protected: state-changing, not exempt, and either session-auth or
                     ;; a /web route (which uses the pre-session cookie binding).
                     (csrf-checked? request state-changing? exempt-paths uri session-binding)
-                    (let [binding   (or session-binding pre-cookie)
-                          submitted (csrf/extract-token request)]
-                      (if (and binding (csrf/valid-token? secret binding submitted))
+                    (let [submitted (csrf/extract-token request)]
+                      (if (token-valid? secret request session-binding pre-cookie submitted)
                         ;; Valid — re-expose the just-validated token (still valid for
                         ;; this binding) for any form re-rendered in the response.
                         (assoc-in ctx [:request :anti-forgery-token] submitted)
@@ -775,9 +793,8 @@
         (cond
           ;; Protected: state-changing, not exempt, session-auth or /web route.
           (csrf-checked? request state-changing? exempt-paths uri session-binding)
-          (let [bind-val  (or session-binding pre-cookie)
-                submitted (csrf/extract-token request)]
-            (if (and bind-val (csrf/valid-token? secret bind-val submitted))
+          (let [submitted (csrf/extract-token request)]
+            (if (token-valid? secret request session-binding pre-cookie submitted)
               ;; Valid — re-bind the just-validated token (still valid for this
               ;; binding) for any form re-rendered in the response.
               (binding [csrf/*token* submitted]

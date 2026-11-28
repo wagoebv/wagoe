@@ -24,7 +24,7 @@ row with no test says so.
 | 1.0.0
 | {repo}libs/platform/test/wagoe/platform/shell/security_test.clj[`csrf-interceptor-protection-test`, `csrf-default-is-opt-in-test`, `csrf-skips-a-bearer-only-web-write`], {repo}libs/wagoe-cli/test/wagoe/cli/new_test.clj[`a-new-app-checks-csrf-in-every-profile-it-generates`]
 
-| Session cookie: `HttpOnly`, `SameSite=Strict`, `Secure`
+| Session cookie: `HttpOnly`, `SameSite=Lax`, `Secure`
 | On. `Secure` unless you turn it off; the generated dev profile does, for plain HTTP.
 | `:wagoe/settings {:secure-cookies? false}`
 | 1.0.0
